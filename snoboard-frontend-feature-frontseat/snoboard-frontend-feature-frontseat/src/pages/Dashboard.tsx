@@ -2,61 +2,14 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getDashboard } from "@/services/api";
 import { useNavigate } from "react-router-dom";
-import { Eye, Film, FileText, ExternalLink, Search } from "lucide-react";
+import { Search, TrendingUp, MoreVertical } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 
-function DonutChart({
-  reelViews, postViews, label, size = 200,
-}: { reelViews: number; postViews: number; label: string; size?: number }) {
-  const stroke = 14;
-  const radius = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const total = reelViews + postViews;
-  const gap = 0.02;
-
-  const reelFrac = total > 0 ? reelViews / total : 0;
-  const postFrac = total > 0 ? postViews / total : 0;
-  const reelLen = reelFrac * circumference * (1 - gap);
-  const postLen = postFrac * circumference * (1 - gap);
-  const gapLen = total > 0 && postViews > 0 ? circumference * gap : 0;
-
-  return (
-    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="-rotate-90">
-        <defs>
-          <linearGradient id="donut-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#7c3aed" />
-            <stop offset="100%" stopColor="#d946ef" />
-          </linearGradient>
-        </defs>
-        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#27272a" strokeWidth={stroke} />
-        {reelViews > 0 && (
-          <circle
-            cx={size / 2} cy={size / 2} r={radius}
-            fill="none" stroke="url(#donut-grad)" strokeWidth={stroke}
-            strokeLinecap="round"
-            strokeDasharray={`${reelLen} ${circumference - reelLen}`}
-            strokeDashoffset={0}
-          />
-        )}
-        {postViews > 0 && (
-          <circle
-            cx={size / 2} cy={size / 2} r={radius}
-            fill="none" stroke="#10b981" strokeWidth={stroke}
-            strokeLinecap="round"
-            strokeDasharray={`${postLen} ${circumference - postLen}`}
-            strokeDashoffset={-(reelLen + gapLen)}
-          />
-        )}
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <p className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</p>
-        <p className="text-2xl font-bold text-white tabular-nums mt-0.5">
-          {total.toLocaleString()}
-        </p>
-      </div>
-    </div>
-  );
+function formatCompact(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
+  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
+  return n.toLocaleString();
 }
 
 export default function Dashboard() {
@@ -90,146 +43,165 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-zinc-950 px-6 py-10">
-      {/* Hero */}
-      <div className="max-w-6xl mx-auto text-center mb-12">
-        <h1
-          className="text-[8rem] md:text-[10rem] font-black leading-[0.85] tracking-tighter bg-clip-text text-transparent select-none"
-          style={{
-            backgroundImage: "linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #6d28d9 100%)",
-          }}
-        >
-          FRONT
-          <br />
-          SEAT
-        </h1>
-        <div className="mt-6 w-48 h-1 bg-gradient-to-r from-violet-600 to-purple-500 mx-auto rounded-full" />
+      <div className="max-w-6xl mx-auto">
 
-        {/* Donut chart */}
-        <div className="mt-8 flex justify-center">
-          <DonutChart reelViews={stats?.total_ig_reel_views ?? 0} postViews={stats?.total_ig_post_views ?? 0} label="Total Views" size={200} />
-        </div>
-
-        <p className="text-xs text-zinc-500 mt-3 uppercase tracking-widest">
-          {currentMonth} — Dashboard Views + Post Views
-        </p>
-
-        {/* Mini stats */}
-        <div className="flex items-center justify-center gap-8 mt-5">
-          <div className="flex items-center gap-2 text-zinc-500">
-            <Film className="w-4 h-4" />
-            <span className="text-sm">{stats?.total_reels ?? 0} reels</span>
-          </div>
-          <div className="flex items-center gap-2 text-zinc-500">
-            <FileText className="w-4 h-4" />
-            <span className="text-sm">{stats?.total_posts ?? 0} posts</span>
-          </div>
-          <div className="flex items-center gap-2 text-zinc-500">
-            <Eye className="w-4 h-4" />
-            <span className="text-sm">{pages.length} pages</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Search */}
-      <div className="max-w-6xl mx-auto mb-5">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-          <Input
-            placeholder="Search pages..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10 bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-600 focus:border-violet-500/50"
-          />
-        </div>
-      </div>
-
-      {/* Bento Grid */}
-      <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {pages.map((page: any) => (
-          <div
-            key={page.id}
-            onClick={() => navigate(`/page/${page.id}`)}
-            className="group relative bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6 cursor-pointer transition-all duration-200 hover:border-violet-500/50 hover:bg-zinc-900"
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-white">@{page.handle}</h3>
-              {page.auto_scrape && (
-                <span className="text-[10px] uppercase tracking-wider bg-violet-500/20 text-violet-400 px-2 py-0.5 rounded-full font-medium">
-                  Main IP
+        {/* Top Cards Row */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-10">
+          {/* Total Ecosystem Reach */}
+          <div className="relative overflow-hidden bg-zinc-900 border border-zinc-800 rounded-2xl p-8">
+            {/* Purple glow */}
+            <div className="absolute -top-20 -left-20 w-60 h-60 bg-violet-600/20 rounded-full blur-3xl" />
+            <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-purple-600/10 rounded-full blur-3xl" />
+            <div className="relative">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-400 font-semibold mb-6">
+                Total Ecosystem Reach
+              </p>
+              <p className="text-6xl md:text-7xl font-black text-white tabular-nums tracking-tight leading-none">
+                {formatCompact(totalViews)}
+              </p>
+              <div className="flex items-center gap-3 mt-6">
+                <span className="inline-flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold px-2.5 py-1 rounded-full">
+                  <TrendingUp className="w-3 h-3" />
+                  {currentMonth}
                 </span>
-              )}
+                <span className="text-xs text-zinc-500 uppercase tracking-wider">Growth Period</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Monthly Growth Vector (visual placeholder with stats) */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8">
+            <div className="flex items-center justify-between mb-6">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-400 font-semibold">
+                Monthly Breakdown
+              </p>
+              <div className="flex items-center gap-1 bg-zinc-800 rounded-full p-0.5">
+                <span className="text-[10px] uppercase tracking-wider text-zinc-500 px-3 py-1">Reels</span>
+                <span className="text-[10px] uppercase tracking-wider bg-violet-600 text-white px-3 py-1 rounded-full">Views</span>
+              </div>
             </div>
 
-            {page.name && (
-              <p className="text-xs text-zinc-500 -mt-2 mb-4">{page.name}</p>
-            )}
-
-            {/* Stats grid */}
-            <div className="grid grid-cols-2 gap-3 mb-5">
-              <StatBox label="IG Reel Views" value={page.ig_reel_views} />
-              <StatBox label="IG Post Views" value={page.ig_post_views} />
-              <StatBox label="Scraped Reels" value={page.scraped_reel_views} />
-              <StatBox label="Total Views" value={page.total_views} highlight />
+            {/* Stats breakdown */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-gradient-to-r from-violet-500 to-pink-500" />
+                  <span className="text-sm text-zinc-400">IG Reel Views</span>
+                </div>
+                <span className="text-lg font-bold text-white tabular-nums">{formatCompact(stats?.total_ig_reel_views ?? 0)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span className="text-sm text-zinc-400">IG Post Views</span>
+                </div>
+                <span className="text-lg font-bold text-white tabular-nums">{formatCompact(stats?.total_ig_post_views ?? 0)}</span>
+              </div>
+              <div className="h-px bg-zinc-800" />
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-zinc-400">Total Reels</span>
+                <span className="text-lg font-bold text-white tabular-nums">{stats?.total_reels ?? 0}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-zinc-400">Total Posts</span>
+                <span className="text-lg font-bold text-white tabular-nums">{stats?.total_posts ?? 0}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-zinc-400">Pages</span>
+                <span className="text-lg font-bold text-white tabular-nums">{allPages.length}</span>
+              </div>
             </div>
+          </div>
+        </div>
 
-            {/* Counts */}
-            <div className="flex items-center gap-4 text-xs text-zinc-500 mb-4">
-              <span>{page.reels_count} reels</span>
-              <span>{page.posts_count} posts</span>
-            </div>
+        {/* YOUR IP'S header + Search */}
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl font-black text-white uppercase tracking-wider">Your IP's</h2>
+            <Badge variant="outline" className="border-zinc-700 text-zinc-400 text-xs font-mono">
+              {allPages.length} total
+            </Badge>
+          </div>
+        </div>
 
-            {/* Top 5 Reels */}
-            {page.top_reels?.length > 0 && (
-              <div className="border-t border-zinc-800 pt-4">
-                <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-2">
-                  Top Reels
+        {/* Search */}
+        <div className="mb-6">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+            <Input
+              placeholder="Search pages..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10 bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-600 focus:border-violet-500/50"
+            />
+          </div>
+        </div>
+
+        {/* Page Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {pages.map((page: any) => {
+            const total = page.total_views ?? 0;
+            return (
+              <div
+                key={page.id}
+                onClick={() => navigate(`/page/${page.id}`)}
+                className="group relative bg-zinc-950 border border-emerald-500/20 rounded-2xl p-6 cursor-pointer transition-all duration-200 hover:border-emerald-500/40 hover:shadow-[0_0_30px_-5px_rgba(16,185,129,0.15)]"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="text-xl font-black text-white uppercase tracking-wide">
+                    {page.name || page.handle}
+                  </h3>
+                  <MoreVertical className="w-5 h-5 text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+
+                {page.name && (
+                  <p className="text-xs text-zinc-600 mb-4">@{page.handle}</p>
+                )}
+                {!page.name && <div className="mb-4" />}
+
+                {/* Total Views Label */}
+                <p className="text-[10px] uppercase tracking-[0.15em] text-violet-400 font-bold mb-1">
+                  Total Views
                 </p>
-                <div className="space-y-1.5">
-                  {page.top_reels.map((reel: any, i: number) => (
-                    <div key={reel.id} className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-violet-400 font-mono text-xs w-4">#{i + 1}</span>
-                        <a
-                          href={reel.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-zinc-500 hover:text-violet-400 truncate max-w-[160px] inline-flex items-center gap-1"
-                        >
-                          {reel.url.replace("https://www.instagram.com", "").replace("/reel/", "/").replace("/p/", "/")}
-                          <ExternalLink className="w-2.5 h-2.5 shrink-0" />
-                        </a>
-                      </div>
-                      <span className="font-mono text-white text-xs">
-                        {(reel.views ?? 0).toLocaleString()}
-                      </span>
-                    </div>
-                  ))}
+
+                {/* View Toggle Pills */}
+                <div className="flex items-center gap-1 mb-3">
+                  <span className="text-[9px] uppercase tracking-wider text-zinc-600 bg-zinc-900 px-2 py-0.5 rounded-full">All Time</span>
+                  <span className="text-[9px] uppercase tracking-wider text-white bg-violet-600 px-2 py-0.5 rounded-full">Monthly</span>
+                  <span className="text-[9px] uppercase tracking-wider text-zinc-600 bg-zinc-900 px-2 py-0.5 rounded-full">Weekly</span>
+                </div>
+
+                {/* Big View Number */}
+                <div className="flex items-center justify-between">
+                  <p className="text-4xl font-black text-white tabular-nums tracking-tight">
+                    {formatCompact(total)}
+                  </p>
+
+                  {/* Growth badge */}
+                  {total > 0 && (
+                    <span className="inline-flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold px-2 py-1 rounded-full">
+                      <TrendingUp className="w-3 h-3" />
+                      {((page.ig_reel_views ?? 0) / Math.max(total, 1) * 100).toFixed(1)}%
+                    </span>
+                  )}
+                </div>
+
+                {/* Mini breakdown */}
+                <div className="flex items-center gap-3 mt-4 pt-3 border-t border-zinc-900">
+                  <span className="text-[10px] text-zinc-600">{page.reels_count ?? 0} reels</span>
+                  <span className="text-[10px] text-zinc-600">{page.posts_count ?? 0} posts</span>
+                  <span className="text-[10px] text-zinc-600">IG: {formatCompact((page.ig_reel_views ?? 0) + (page.ig_post_views ?? 0))}</span>
                 </div>
               </div>
-            )}
+            );
+          })}
+        </div>
 
-            {/* Hover arrow */}
-            <div className="absolute top-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity text-violet-400">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path d="M3 13L13 3M13 3H5M13 3V11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </div>
-          </div>
-        ))}
+        {pages.length === 0 && search && (
+          <p className="text-center text-zinc-500 py-12">No pages matching "{search}"</p>
+        )}
       </div>
-    </div>
-  );
-}
-
-function StatBox({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
-  return (
-    <div className={`rounded-lg px-3 py-2 ${highlight ? "bg-violet-500/10 border border-violet-500/20" : "bg-zinc-950/50"}`}>
-      <p className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</p>
-      <p className={`text-lg font-bold tabular-nums mt-0.5 ${highlight ? "text-violet-400" : "text-white"}`}>
-        {(value ?? 0).toLocaleString()}
-      </p>
     </div>
   );
 }
