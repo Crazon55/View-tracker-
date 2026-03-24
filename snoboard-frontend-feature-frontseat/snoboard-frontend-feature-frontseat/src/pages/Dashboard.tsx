@@ -86,7 +86,7 @@ export default function Dashboard() {
       ];
 
   function getPageViews(page: any, period: TimePeriod): number {
-    // all time = sum of all dashboard_views across every month
+    // all time = sum of dashboard_views across ALL months (manually entered only)
     // monthly = current month IG dashboard views
     // weekly = monthly / 4 estimate
     switch (period) {

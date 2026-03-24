@@ -130,7 +130,7 @@ async def dashboard_stats():
     total_ig_post_views = sum(d.get("post_views", 0) or 0 for d in month_dv)
     total_views = total_ig_reel_views + total_ig_post_views
 
-    # All-time dashboard views (sum across ALL months)
+    # All-time: sum dashboard_views across ALL months (manually entered only)
     all_time_totals = {}
     for d in all_dv:
         pid = d["page_id"]
