@@ -261,6 +261,8 @@ export default function ReelsStage1View() {
                     type="datetime-local"
                     value={postedAt}
                     onChange={(e) => setPostedAt(e.target.value)}
+                    onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
+                    className="cursor-pointer"
                   />
                 </div>
                 <div className="space-y-2">
