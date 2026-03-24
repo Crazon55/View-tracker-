@@ -74,7 +74,7 @@ export default function Dashboard() {
 
   const stats = data;
   const totalViews = stats?.total_views ?? 0;
-  const pages = stats?.pages ?? [];
+  const pages = [...(stats?.pages ?? [])].sort((a: any, b: any) => (b.total_views ?? 0) - (a.total_views ?? 0));
   const currentMonth = stats?.current_month
     ? new Date(stats.current_month).toLocaleString("default", { month: "long", year: "numeric" })
     : "";

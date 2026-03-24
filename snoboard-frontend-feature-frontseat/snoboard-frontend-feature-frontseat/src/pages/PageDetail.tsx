@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getPageDetail, upsertDashboardViews } from "@/services/api";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, ExternalLink, Eye, Heart, MessageCircle, Trophy, BarChart3 } from "lucide-react";
+import { ArrowLeft, ExternalLink, Eye, Heart, MessageCircle, Trophy, BarChart3, ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -86,6 +86,20 @@ export default function PageDetail() {
   const queryClient = useQueryClient();
   const [dvReelInput, setDvReelInput] = useState<string | null>(null);
   const [dvPostInput, setDvPostInput] = useState<string | null>(null);
+  const [sortCol, setSortCol] = useState<"views" | "likes" | "comments" | "posted_at">("views");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  function toggleSort(col: typeof sortCol) {
+    if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortCol(col); setSortDir("desc"); }
+  }
+
+  function SortIcon({ col }: { col: typeof sortCol }) {
+    if (sortCol !== col) return <ArrowUpDown className="w-3 h-3 ml-1 inline opacity-40" />;
+    return sortDir === "desc"
+      ? <ChevronDown className="w-3 h-3 ml-1 inline text-violet-400" />
+      : <ChevronUp className="w-3 h-3 ml-1 inline text-violet-400" />;
+  }
 
   const { data, isLoading } = useQuery({
     queryKey: ["page-detail", pageId],
@@ -278,7 +292,13 @@ export default function PageDetail() {
         )}
 
         {/* All Reels */}
-        {reels.length > 0 && (
+        {reels.length > 0 && (() => {
+          const sortedReels = [...reels].sort((a: any, b: any) => {
+            const av = sortCol === "posted_at" ? new Date(a.posted_at ?? 0).getTime() : (a[sortCol] ?? 0);
+            const bv = sortCol === "posted_at" ? new Date(b.posted_at ?? 0).getTime() : (b[sortCol] ?? 0);
+            return sortDir === "desc" ? bv - av : av - bv;
+          });
+          return (
           <div className="mb-10">
             <h2 className="text-xl font-bold text-white mb-4">
               Reels <Badge variant="secondary" className="ml-2 text-xs">{reels.length}</Badge>
@@ -289,14 +309,22 @@ export default function PageDetail() {
                   <TableRow className="border-zinc-800">
                     <TableHead className="w-12">#</TableHead>
                     <TableHead>Link</TableHead>
-                    <TableHead>Posted</TableHead>
-                    <TableHead className="text-right">Views</TableHead>
-                    <TableHead className="text-right">Likes</TableHead>
-                    <TableHead className="text-right">Comments</TableHead>
+                    <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("posted_at")}>
+                      Posted <SortIcon col="posted_at" />
+                    </TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("views")}>
+                      Views <SortIcon col="views" />
+                    </TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("likes")}>
+                      Likes <SortIcon col="likes" />
+                    </TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("comments")}>
+                      Comments <SortIcon col="comments" />
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {reels.map((reel: any, i: number) => (
+                  {sortedReels.map((reel: any, i: number) => (
                     <TableRow key={reel.id} className="border-zinc-800">
                       <TableCell className="font-mono text-zinc-600 text-xs">{i + 1}</TableCell>
                       <TableCell>
@@ -316,7 +344,8 @@ export default function PageDetail() {
               </Table>
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* All Posts */}
         {posts.length > 0 && (
