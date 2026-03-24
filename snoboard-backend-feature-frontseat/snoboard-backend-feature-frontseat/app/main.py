@@ -130,6 +130,12 @@ async def dashboard_stats():
     total_ig_post_views = sum(d.get("post_views", 0) or 0 for d in month_dv)
     total_views = total_ig_reel_views + total_ig_post_views
 
+    # All-time dashboard views (sum across ALL months)
+    all_time_totals: dict[str, int] = {}
+    for d in all_dv:
+        pid = d["page_id"]
+        all_time_totals[pid] = all_time_totals.get(pid, 0) + (d.get("reel_views", 0) or 0) + (d.get("post_views", 0) or 0)
+
     # Per-page stats
     page_stats = []
     for page in pages:
@@ -156,6 +162,7 @@ async def dashboard_stats():
             "auto_scrape": page.get("auto_scrape", False),
             "followers_count": page.get("followers_count", 0),
             "total_views": ig_reel_views + ig_post_views,
+            "all_time_views": all_time_totals.get(pid, 0),
             "scraped_reel_views": scraped_reel_views,
             "scraped_post_views": scraped_post_views,
             "ig_reel_views": ig_reel_views,
@@ -167,10 +174,13 @@ async def dashboard_stats():
             "top_reels": top_reels,
         })
 
+    total_all_time = sum(all_time_totals.values())
+
     return {
         "success": True,
         "data": {
             "total_views": total_views,
+            "total_all_time_views": total_all_time,
             "total_reel_views": total_reel_views,
             "total_ig_reel_views": total_ig_reel_views,
             "total_ig_post_views": total_ig_post_views,

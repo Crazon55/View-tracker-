@@ -86,13 +86,11 @@ export default function Dashboard() {
       ];
 
   function getPageViews(page: any, period: TimePeriod): number {
-    // monthly = current IG dashboard views (default behavior)
-    // all time = ig views + scraped reel views
-    // weekly = rough estimate (monthly / 4)
-    const igTotal = (page.ig_reel_views ?? 0) + (page.ig_post_views ?? 0);
-    const scraped = page.scraped_reel_views ?? 0;
+    // all time = sum of all dashboard_views across every month
+    // monthly = current month IG dashboard views
+    // weekly = monthly / 4 estimate
     switch (period) {
-      case "all": return igTotal + scraped;
+      case "all": return page.all_time_views ?? 0;
       case "monthly": return page.total_views ?? 0;
       case "weekly": return Math.round((page.total_views ?? 0) / 4);
     }
