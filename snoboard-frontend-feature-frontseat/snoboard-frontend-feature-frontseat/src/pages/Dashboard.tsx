@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getDashboard } from "@/services/api";
 import { useNavigate } from "react-router-dom";
-import { Eye, Film, FileText, ExternalLink } from "lucide-react";
+import { Eye, Film, FileText, ExternalLink, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
 
 function DonutChart({
   reelViews, postViews, label, size = 200,
@@ -59,6 +61,7 @@ function DonutChart({
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const [search, setSearch] = useState("");
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard"],
     queryFn: getDashboard,
@@ -74,7 +77,13 @@ export default function Dashboard() {
 
   const stats = data;
   const totalViews = stats?.total_views ?? 0;
-  const pages = [...(stats?.pages ?? [])].sort((a: any, b: any) => (b.total_views ?? 0) - (a.total_views ?? 0));
+  const allPages = [...(stats?.pages ?? [])].sort((a: any, b: any) => (b.total_views ?? 0) - (a.total_views ?? 0));
+  const pages = search.trim()
+    ? allPages.filter((p: any) =>
+        (p.handle ?? "").toLowerCase().includes(search.toLowerCase()) ||
+        (p.name ?? "").toLowerCase().includes(search.toLowerCase())
+      )
+    : allPages;
   const currentMonth = stats?.current_month
     ? new Date(stats.current_month).toLocaleString("default", { month: "long", year: "numeric" })
     : "";
@@ -118,6 +127,19 @@ export default function Dashboard() {
             <Eye className="w-4 h-4" />
             <span className="text-sm">{pages.length} pages</span>
           </div>
+        </div>
+      </div>
+
+      {/* Search */}
+      <div className="max-w-6xl mx-auto mb-5">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+          <Input
+            placeholder="Search pages..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10 bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-600 focus:border-violet-500/50"
+          />
         </div>
       </div>
 
