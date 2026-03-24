@@ -1,0 +1,28 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Environment files
+.env
+.env.local
+
+# Reports
+reports/
+
+#testing
+testing*
+snotech*
+CONTEXT.md
+PLAN.md
+migrations
+supabase_*
+scripts/test_vector_search.py
+fix_missing_post.py
+.claude

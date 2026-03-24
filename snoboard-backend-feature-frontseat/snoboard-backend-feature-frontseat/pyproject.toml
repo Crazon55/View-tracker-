@@ -1,0 +1,26 @@
+[project]
+name = "snoboard-backend"
+version = "0.1.0"
+description = "Social media post scraper backend with Apify integration"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.109.0",
+    "apify-client>=1.6.0",
+    "supabase>=2.3.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "python-dotenv>=1.0.0",
+    "functions-framework>=3.5.0",
+    "uvicorn>=0.27.0",
+    "flask>=3.0.0",
+    "google-cloud-storage>=3.9.0",
+    "python-multipart>=0.0.6",
+    "google-api-python-client>=2.192.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "httpx>=0.26.0",
+]
