@@ -4,7 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp } from "lucide-react";
+import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 
@@ -14,6 +14,7 @@ import PagesView from "./pages/PagesView";
 import PostsView from "./pages/PostsView";
 import ReelsStage1View from "./pages/ReelsStage1View";
 import GrowthView from "./pages/GrowthView";
+import MainReelsView from "./pages/MainReelsView";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,6 +23,7 @@ const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/posts", label: "Posts", icon: FileText },
   { to: "/reels/stage1", label: "Reels Stage 1", icon: Film },
+  { to: "/reels/main", label: "Main Reels", icon: Radio },
   { to: "/growth", label: "Growth", icon: TrendingUp },
   { to: "/pages", label: "Pages", icon: Users },
 ];
@@ -122,6 +124,7 @@ function AppLayout() {
           <Route path="/pages" element={<PagesView />} />
           <Route path="/posts" element={<PostsView />} />
           <Route path="/reels/stage1" element={<ReelsStage1View />} />
+          <Route path="/reels/main" element={<MainReelsView />} />
           <Route path="/growth" element={<GrowthView />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
