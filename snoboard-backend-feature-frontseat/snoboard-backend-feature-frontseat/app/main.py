@@ -131,7 +131,7 @@ async def dashboard_stats():
     total_views = total_ig_reel_views + total_ig_post_views
 
     # All-time dashboard views (sum across ALL months)
-    all_time_totals: dict[str, int] = {}
+    all_time_totals = {}
     for d in all_dv:
         pid = d["page_id"]
         all_time_totals[pid] = all_time_totals.get(pid, 0) + (d.get("reel_views", 0) or 0) + (d.get("post_views", 0) or 0)
