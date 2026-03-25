@@ -168,6 +168,66 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Leaderboard Podium */}
+        {allPages.length >= 3 && (() => {
+          const top3 = allPages.slice(0, 3);
+          const podiumOrder = [top3[1], top3[0], top3[2]]; // 2nd, 1st, 3rd
+          const heights = [140, 180, 110]; // podium step heights
+          const medals = ["🥈", "🥇", "🥉"];
+          const ranks = [2, 1, 3];
+          const borderColors = ["border-zinc-400/40", "border-yellow-500/50", "border-amber-700/40"];
+          const glowColors = ["", "shadow-[0_0_40px_-5px_rgba(234,179,8,0.2)]", ""];
+          const bgColors = ["bg-zinc-400/5", "bg-yellow-500/5", "bg-amber-700/5"];
+
+          return (
+            <div className="mb-10">
+              <div className="flex items-center gap-2 mb-6">
+                <span className="text-2xl">🏆</span>
+                <h2 className="text-xl sm:text-2xl font-black text-white uppercase tracking-wider">Leaderboard</h2>
+              </div>
+              <div className="flex items-end justify-center gap-3 sm:gap-5">
+                {podiumOrder.map((page, i) => {
+                  const views = getPageViews(page, globalPeriod);
+                  return (
+                    <div
+                      key={page.id}
+                      onClick={() => navigate(`/page/${page.id}`)}
+                      className={`cursor-pointer transition-all duration-300 hover:scale-105 flex flex-col items-center ${ranks[i] === 1 ? "w-36 sm:w-44" : "w-28 sm:w-36"}`}
+                    >
+                      {/* Medal + Name */}
+                      <span className={`text-3xl sm:text-4xl mb-2 ${ranks[i] === 1 ? "animate-bounce" : ""}`} style={ranks[i] === 1 ? { animationDuration: "2s" } : {}}>
+                        {medals[i]}
+                      </span>
+                      <p className={`font-black text-white uppercase tracking-wide text-center leading-tight mb-1 ${ranks[i] === 1 ? "text-sm sm:text-base" : "text-xs sm:text-sm"}`}>
+                        {page.name || page.handle}
+                      </p>
+                      <p className="text-[10px] text-zinc-600 mb-2">@{page.handle}</p>
+
+                      {/* Podium block */}
+                      <div
+                        className={`w-full rounded-t-xl border ${borderColors[i]} ${bgColors[i]} ${glowColors[i]} flex flex-col items-center justify-center transition-all`}
+                        style={{ height: heights[i] }}
+                      >
+                        <span className={`font-black tabular-nums text-white ${ranks[i] === 1 ? "text-2xl sm:text-3xl" : "text-lg sm:text-xl"}`}>
+                          {formatCompact(views)}
+                        </span>
+                        <span className="text-[9px] uppercase tracking-wider text-zinc-500 mt-1">views</span>
+                        <div className="mt-2 flex items-center gap-1 text-[10px] text-zinc-600">
+                          <span>{page.reels_count ?? 0} reels</span>
+                          <span>·</span>
+                          <span>{page.posts_count ?? 0} posts</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Podium base */}
+              <div className="max-w-md mx-auto h-1 bg-gradient-to-r from-transparent via-violet-500/30 to-transparent rounded-full mt-0" />
+            </div>
+          );
+        })()}
+
         {/* YOUR IP'S header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-5">
           <div className="flex items-center gap-3">
