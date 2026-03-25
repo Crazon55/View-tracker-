@@ -77,8 +77,8 @@ export default function Dashboard() {
   // Breakdown data based on toggle
   const breakdownData = breakdownMode === "views"
     ? [
-        { label: "IG Reel Views", value: stats?.total_ig_reel_views ?? 0, color: "bg-gradient-to-r from-violet-500 to-pink-500" },
-        { label: "IG Post Views", value: stats?.total_ig_post_views ?? 0, color: "bg-emerald-500" },
+        { label: "Reel Views", value: stats?.total_reel_views ?? 0, color: "bg-gradient-to-r from-violet-500 to-pink-500" },
+        { label: "Post Views", value: stats?.total_post_views ?? 0, color: "bg-emerald-500" },
       ]
     : [
         { label: "Total Reels", value: stats?.total_reels ?? 0, color: "bg-violet-500" },
@@ -205,8 +205,8 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
           {pages.map((page: any) => {
             const viewsForPeriod = getPageViews(page, globalPeriod);
-            const igTotal = (page.ig_reel_views ?? 0) + (page.ig_post_views ?? 0);
-            const reelPct = igTotal > 0 ? ((page.ig_reel_views ?? 0) / igTotal * 100) : 0;
+            const pageTotal = (page.reel_views ?? 0) + (page.post_views ?? 0);
+            const reelPct = pageTotal > 0 ? ((page.reel_views ?? 0) / pageTotal * 100) : 0;
 
             return (
               <div
@@ -266,7 +266,6 @@ export default function Dashboard() {
                 <div className="flex items-center gap-3 mt-4 pt-3 border-t border-zinc-900">
                   <span className="text-[10px] text-zinc-600">{page.reels_count ?? 0} reels</span>
                   <span className="text-[10px] text-zinc-600">{page.posts_count ?? 0} posts</span>
-                  <span className="text-[10px] text-zinc-600">IG: {formatCompact(igTotal)}</span>
                 </div>
               </div>
             );

@@ -15,7 +15,10 @@ import { toast } from "sonner";
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "-";
   try {
-    return formatDistanceToNow(new Date(dateStr), { addSuffix: true });
+    const d = new Date(dateStr);
+    const exact = d.toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+    const relative = formatDistanceToNow(d, { addSuffix: true });
+    return `${exact} (${relative})`;
   } catch {
     return dateStr;
   }
@@ -179,74 +182,41 @@ export default function PageDetail() {
           )}
         </div>
 
-        {/* Instagram Dashboard Views Section */}
+        {/* Views Breakdown */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 mb-8">
           <div className="flex items-center gap-2 mb-4">
             <BarChart3 className="w-5 h-5 text-violet-400" />
-            <h2 className="text-xl font-bold text-white">Instagram Dashboard Views</h2>
+            <h2 className="text-xl font-bold text-white">Views Breakdown</h2>
           </div>
           <p className="text-xs text-zinc-500 mb-5">
-            Enter total views from your Instagram Insights dashboard for this month.
-            This combines with Post Views for the total.
+            Total views from manually added reels and posts this month.
           </p>
 
           <div className="flex items-center gap-6">
             {/* Donut */}
-            <DonutChart reelViews={igReelViews} postViews={igPostViews} label="Total Views" />
+            <DonutChart reelViews={totalReelViews} postViews={totalPostViews} label="Total Views" />
 
             {/* Breakdown */}
             <div className="flex-1 space-y-3">
               <div className="flex items-center justify-between bg-zinc-950/50 rounded-lg px-4 py-3">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-pink-500" />
-                  <span className="text-sm text-zinc-500">IG Reel Views</span>
+                  <span className="text-sm text-zinc-500">Reel Views</span>
                 </div>
-                <span className="text-lg font-bold text-white tabular-nums">{igReelViews.toLocaleString()}</span>
+                <span className="text-lg font-bold text-white tabular-nums">{totalReelViews.toLocaleString()}</span>
               </div>
               <div className="flex items-center justify-between bg-zinc-950/50 rounded-lg px-4 py-3">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <span className="text-sm text-zinc-500">IG Post Views</span>
+                  <span className="text-sm text-zinc-500">Post Views</span>
                 </div>
-                <span className="text-lg font-bold text-white tabular-nums">{igPostViews.toLocaleString()}</span>
+                <span className="text-lg font-bold text-white tabular-nums">{totalPostViews.toLocaleString()}</span>
               </div>
               <div className="h-px bg-zinc-800 mx-1" />
               <div className="flex items-center justify-between bg-violet-500/10 border border-violet-500/20 rounded-lg px-4 py-3">
                 <span className="text-sm text-violet-400">Combined Total</span>
-                <span className="text-lg font-bold text-violet-400 tabular-nums">{combinedViews.toLocaleString()}</span>
+                <span className="text-lg font-bold text-violet-400 tabular-nums">{(totalReelViews + totalPostViews).toLocaleString()}</span>
               </div>
-              <div className="h-px bg-zinc-800 mx-1" />
-              <p className="text-[10px] uppercase tracking-wider text-zinc-600 pt-1">Update from Instagram Insights</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs text-zinc-500">Reel Views</label>
-                  <Input
-                    type="number"
-                    value={reelInputValue}
-                    onChange={(e) => setDvReelInput(e.target.value)}
-                    className="bg-zinc-950 border-zinc-700"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs text-zinc-500">Post Views</label>
-                  <Input
-                    type="number"
-                    value={postInputValue}
-                    onChange={(e) => setDvPostInput(e.target.value)}
-                    className="bg-zinc-950 border-zinc-700"
-                  />
-                </div>
-              </div>
-              <Button
-                className="w-full bg-violet-600 hover:bg-violet-700 text-white"
-                disabled={dvMutation.isPending}
-                onClick={() => dvMutation.mutate({
-                  reel_views: Number(reelInputValue) || 0,
-                  post_views: Number(postInputValue) || 0,
-                })}
-              >
-                {dvMutation.isPending ? "Saving..." : "Update Views"}
-              </Button>
             </div>
           </div>
         </div>

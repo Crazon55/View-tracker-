@@ -17,11 +17,15 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Plus, Trash2, ExternalLink, Pencil, Check, X } from "lucide-react";
+import DateRangeFilter, { filterByDateRange } from "@/components/DateRangeFilter";
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "-";
   try {
-    return formatDistanceToNow(new Date(dateStr), { addSuffix: true });
+    const d = new Date(dateStr);
+    const exact = d.toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+    const relative = formatDistanceToNow(d, { addSuffix: true });
+    return `${exact} (${relative})`;
   } catch {
     return dateStr;
   }
@@ -40,16 +44,22 @@ export default function MainReelsView() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editViews, setEditViews] = useState("");
   const [editPostedAt, setEditPostedAt] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   const { data: reels = [], isLoading } = useQuery<Reel[]>({
     queryKey: ["reels", "auto"],
     queryFn: getAutoReels,
   });
 
-  const { data: pages = [] } = useQuery<Page[]>({
+  const MAIN_IP_HANDLES = ["101xfounders", "bizzindia", "indianfoundersco", "startupcoded", "foundersinindia"];
+
+  const { data: allPages = [] } = useQuery<Page[]>({
     queryKey: ["pages"],
     queryFn: getPages,
   });
+
+  const pages = allPages.filter((p) => MAIN_IP_HANDLES.includes(p.handle.toLowerCase()));
 
   const addMutation = useMutation({
     mutationFn: createReel,
@@ -263,6 +273,21 @@ export default function MainReelsView() {
         </Dialog>
       </div>
 
+      {/* Date Range Filter */}
+      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
+        <DateRangeFilter from={dateFrom} to={dateTo} onChange={(f, t) => { setDateFrom(f); setDateTo(t); }} />
+        {(() => {
+          const filtered = filterByDateRange(reels, dateFrom, dateTo);
+          const totalViews = filtered.reduce((s, r) => s + (r.views ?? 0), 0);
+          return (
+            <div className="flex items-center gap-6 mt-3 pt-3 border-t border-zinc-800">
+              <div className="text-xs text-zinc-500"><span className="text-white font-bold">{filtered.length}</span> reels</div>
+              <div className="text-xs text-zinc-500">Total views: <span className="text-white font-bold">{totalViews.toLocaleString()}</span></div>
+            </div>
+          );
+        })()}
+      </div>
+
       <div className="border border-zinc-800 rounded-lg overflow-hidden">
         <Table>
           <TableHeader>
@@ -275,18 +300,21 @@ export default function MainReelsView() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isLoading ? (
+            {(() => {
+              const filteredReels = filterByDateRange(reels, dateFrom, dateTo);
+              if (isLoading) return (
               <TableRow>
                 <TableCell colSpan={5} className="text-center text-zinc-500 py-8">Loading...</TableCell>
               </TableRow>
-            ) : reels.length === 0 ? (
+            );
+              if (filteredReels.length === 0) return (
               <TableRow>
                 <TableCell colSpan={5} className="text-center text-zinc-500 py-8">
-                  No main reels yet. Click "Add Reel" to get started.
+                  {reels.length === 0 ? "No main reels yet. Click \"Add Reel\" to get started." : "No reels in this date range."}
                 </TableCell>
               </TableRow>
-            ) : (
-              reels.map((reel) => (
+            );
+              return filteredReels.map((reel) => (
                 <TableRow key={reel.id}>
                   <TableCell className="font-medium">{reel.pages?.handle ?? "-"}</TableCell>
                   <TableCell>
@@ -341,8 +369,8 @@ export default function MainReelsView() {
                     </>
                   )}
                 </TableRow>
-              ))
-            )}
+              ));
+            })()}
           </TableBody>
         </Table>
       </div>
