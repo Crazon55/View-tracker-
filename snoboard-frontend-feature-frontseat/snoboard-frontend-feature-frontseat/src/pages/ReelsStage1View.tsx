@@ -293,6 +293,61 @@ export default function ReelsStage1View() {
         </Dialog>
       </div>
 
+      {/* Top 3 Podium */}
+      {(() => {
+        const sorted = [...filterByDateRange(reels, dateFrom, dateTo)].sort((a, b) => (b.views ?? 0) - (a.views ?? 0));
+        if (sorted.length < 3) return null;
+        const top3 = sorted.slice(0, 3);
+        const podiumOrder = [top3[1], top3[0], top3[2]];
+        const heights = [120, 160, 95];
+        const medals = ["🥈", "🥇", "🥉"];
+        const ranks = [2, 1, 3];
+        const borderColors = ["border-zinc-400/40", "border-yellow-500/50", "border-amber-700/40"];
+        const bgColors = ["bg-zinc-400/5", "bg-yellow-500/5", "bg-amber-700/5"];
+        const glowColors = ["", "shadow-[0_0_40px_-5px_rgba(234,179,8,0.2)]", ""];
+
+        return (
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-5">
+              <span className="text-xl">🏆</span>
+              <h3 className="text-lg font-black text-white uppercase tracking-wider">Top 3 Reels</h3>
+            </div>
+            <div className="flex items-end justify-center gap-3 sm:gap-4">
+              {podiumOrder.map((reel, i) => (
+                <a
+                  key={reel.id}
+                  href={reel.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`transition-all duration-300 hover:scale-105 flex flex-col items-center ${ranks[i] === 1 ? "w-36 sm:w-44" : "w-28 sm:w-36"}`}
+                >
+                  <span className={`text-2xl sm:text-3xl mb-2 ${ranks[i] === 1 ? "animate-bounce" : ""}`} style={ranks[i] === 1 ? { animationDuration: "2s" } : {}}>
+                    {medals[i]}
+                  </span>
+                  <p className="text-[10px] text-zinc-500 mb-1 truncate max-w-full text-center">
+                    {reel.pages?.handle ?? "—"}
+                  </p>
+                  <p className="text-[9px] text-violet-400 mb-2 truncate max-w-full">
+                    {reel.url.replace("https://www.instagram.com", "").replace(/\/$/, "")}
+                  </p>
+                  <div
+                    className={`w-full rounded-t-xl border ${borderColors[i]} ${bgColors[i]} ${glowColors[i]} flex flex-col items-center justify-center`}
+                    style={{ height: heights[i] }}
+                  >
+                    <span className={`font-black tabular-nums text-white ${ranks[i] === 1 ? "text-xl sm:text-2xl" : "text-base sm:text-lg"}`}>
+                      {(reel.views ?? 0).toLocaleString()}
+                    </span>
+                    <span className="text-[9px] uppercase tracking-wider text-zinc-500 mt-1">views</span>
+                    <p className="text-[10px] text-zinc-600 mt-1.5">{formatDate(reel.posted_at).split("(")[1]?.replace(")", "") ?? ""}</p>
+                  </div>
+                </a>
+              ))}
+            </div>
+            <div className="max-w-sm mx-auto h-1 bg-gradient-to-r from-transparent via-violet-500/30 to-transparent rounded-full" />
+          </div>
+        );
+      })()}
+
       {/* Date Range Filter */}
       <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
         <DateRangeFilter from={dateFrom} to={dateTo} onChange={(f, t) => { setDateFrom(f); setDateTo(t); }} />
