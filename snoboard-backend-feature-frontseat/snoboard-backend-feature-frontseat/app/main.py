@@ -116,25 +116,25 @@ async def dashboard_stats():
     pages = get_page_repository().get_all()
     all_reels = get_reel_repository().get_all()
     all_posts = get_post_repository().get_all()
-    all_dv = get_dashboard_views_repository().get_all()
 
     # Filter to current month only
     month_reels = _filter_current_month(all_reels, "posted_at")
     month_posts = _filter_current_month(all_posts, "created_at")
     current_month = _month_start()
-    month_dv = [d for d in all_dv if d.get("month") == current_month]
 
     total_reel_views = sum(r.get("views", 0) or 0 for r in month_reels)
     total_post_views = sum(p.get("actual_views", 0) or 0 for p in month_posts)
-    total_ig_reel_views = sum(d.get("reel_views", 0) or 0 for d in month_dv)
-    total_ig_post_views = sum(d.get("post_views", 0) or 0 for d in month_dv)
-    total_views = total_ig_reel_views + total_ig_post_views
+    total_views = total_reel_views + total_post_views
 
-    # All-time: sum dashboard_views across ALL months (manually entered only)
-    all_time_totals = {}
-    for d in all_dv:
-        pid = d["page_id"]
-        all_time_totals[pid] = all_time_totals.get(pid, 0) + (d.get("reel_views", 0) or 0) + (d.get("post_views", 0) or 0)
+    # All-time: sum ALL reels + posts views (not just current month)
+    all_time_reel_totals: dict[str, int] = {}
+    all_time_post_totals: dict[str, int] = {}
+    for r in all_reels:
+        pid = r["page_id"]
+        all_time_reel_totals[pid] = all_time_reel_totals.get(pid, 0) + (r.get("views", 0) or 0)
+    for p in all_posts:
+        pid = p["page_id"]
+        all_time_post_totals[pid] = all_time_post_totals.get(pid, 0) + (p.get("actual_views", 0) or 0)
 
     # Per-page stats
     page_stats = []
@@ -142,16 +142,12 @@ async def dashboard_stats():
         pid = page["id"]
         page_reels = [r for r in month_reels if r["page_id"] == pid]
         page_posts = [p for p in month_posts if p["page_id"] == pid]
-        page_dv = next((d for d in month_dv if d["page_id"] == pid), None)
 
-        scraped_reel_views = sum(r.get("views", 0) or 0 for r in page_reels)
-        scraped_post_views = sum(p.get("actual_views", 0) or 0 for p in page_posts)
-        ig_reel_views = page_dv.get("reel_views", 0) if page_dv else 0
-        ig_post_views = page_dv.get("post_views", 0) if page_dv else 0
+        page_reel_views = sum(r.get("views", 0) or 0 for r in page_reels)
+        page_post_views = sum(p.get("actual_views", 0) or 0 for p in page_posts)
         reel_likes = sum(r.get("likes", 0) or 0 for r in page_reels)
         reel_comments = sum(r.get("comments", 0) or 0 for r in page_reels)
 
-        # Top 5 reels by views (current month)
         top_reels = sorted(page_reels, key=lambda r: r.get("views", 0) or 0, reverse=True)[:5]
 
         page_stats.append({
@@ -161,12 +157,10 @@ async def dashboard_stats():
             "profile_url": page.get("profile_url"),
             "auto_scrape": page.get("auto_scrape", False),
             "followers_count": page.get("followers_count", 0),
-            "total_views": ig_reel_views + ig_post_views,
-            "all_time_views": all_time_totals.get(pid, 0),
-            "scraped_reel_views": scraped_reel_views,
-            "scraped_post_views": scraped_post_views,
-            "ig_reel_views": ig_reel_views,
-            "ig_post_views": ig_post_views,
+            "total_views": page_reel_views + page_post_views,
+            "all_time_views": all_time_reel_totals.get(pid, 0) + all_time_post_totals.get(pid, 0),
+            "reel_views": page_reel_views,
+            "post_views": page_post_views,
             "total_likes": reel_likes,
             "total_comments": reel_comments,
             "reels_count": len(page_reels),
@@ -174,7 +168,7 @@ async def dashboard_stats():
             "top_reels": top_reels,
         })
 
-    total_all_time = sum(all_time_totals.values())
+    total_all_time = sum(all_time_reel_totals.values()) + sum(all_time_post_totals.values())
 
     return {
         "success": True,
@@ -182,8 +176,7 @@ async def dashboard_stats():
             "total_views": total_views,
             "total_all_time_views": total_all_time,
             "total_reel_views": total_reel_views,
-            "total_ig_reel_views": total_ig_reel_views,
-            "total_ig_post_views": total_ig_post_views,
+            "total_post_views": total_post_views,
             "total_reels": len(month_reels),
             "total_posts": len(month_posts),
             "current_month": current_month,
