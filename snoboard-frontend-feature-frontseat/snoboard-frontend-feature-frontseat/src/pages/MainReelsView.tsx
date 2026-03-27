@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getAutoReels, getPages, createReel, updateReel, deleteReel, createPage } from "@/services/api";
-import type { Reel, Page } from "@/types";
+import { getAutoReels, getPages, createReel, updateReel, deleteReel, createPage, getIdeas } from "@/services/api";
+import type { Reel, Page, Idea } from "@/types";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -39,6 +39,7 @@ export default function MainReelsView() {
   const [url, setUrl] = useState("");
   const [postedAt, setPostedAt] = useState("");
   const [views, setViews] = useState("");
+  const [ideaId, setIdeaId] = useState("");
   const [newHandle, setNewHandle] = useState("");
   const [showNewPage, setShowNewPage] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -61,6 +62,11 @@ export default function MainReelsView() {
   });
 
   const pages = allPages.filter((p) => MAIN_IP_HANDLES.includes(p.handle.toLowerCase()));
+
+  const { data: ideas = [] } = useQuery<Idea[]>({
+    queryKey: ["ideas"],
+    queryFn: getIdeas,
+  });
 
   const addMutation = useMutation({
     mutationFn: createReel,
@@ -126,6 +132,7 @@ export default function MainReelsView() {
     setUrl("");
     setPostedAt("");
     setViews("");
+    setIdeaId("");
     setNewHandle("");
     setShowNewPage(false);
   }
@@ -158,6 +165,7 @@ export default function MainReelsView() {
       posted_at: postedAt || undefined,
       views: views ? Number(views) : undefined,
       auto_scrape: true,
+      idea_id: ideaId || undefined,
     });
   };
 
@@ -232,6 +240,21 @@ export default function MainReelsView() {
                     </Button>
                   </div>
                 )}
+              </div>
+              <div className="space-y-2">
+                <Label>Idea</Label>
+                <Select value={ideaId} onValueChange={setIdeaId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select an idea (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ideas.map((idea) => (
+                      <SelectItem key={idea.id} value={idea.id}>
+                        {idea.idea_code} — {idea.hook}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="reel-url">URL</Label>
