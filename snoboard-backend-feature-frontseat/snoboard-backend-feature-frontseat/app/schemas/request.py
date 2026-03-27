@@ -27,11 +27,8 @@ class PostCreate(BaseModel):
     url: str
     expected_views: int = 0
     actual_views: int = 0
-
-
-class PostUpdate(BaseModel):
-    expected_views: int | None = None
-    actual_views: int | None = None
+    posted_at: str | None = None
+    idea_id: str | None = None
 
 
 class ReelCreate(BaseModel):
@@ -40,8 +37,47 @@ class ReelCreate(BaseModel):
     views: int = 0
     posted_at: str | None = None
     auto_scrape: bool = False
+    idea_id: str | None = None
 
 
 class ReelUpdate(BaseModel):
     views: int | None = None
     posted_at: str | None = None
+    idea_id: str | None = None
+
+
+class PostUpdate(BaseModel):
+    expected_views: int | None = None
+    actual_views: int | None = None
+    posted_at: str | None = None
+    idea_id: str | None = None
+
+
+# --- Content Strategists ---
+class CSCreate(BaseModel):
+    name: str
+    role: str | None = None
+
+
+class CSUpdate(BaseModel):
+    name: str | None = None
+    role: str | None = None
+
+
+# --- Ideas ---
+class IdeaCreate(BaseModel):
+    hook: str
+    cs_owner_id: str
+    format: str = "reel"
+    source: str = "original"
+    status: str = "active"
+    notes: str | None = None
+
+
+class IdeaUpdate(BaseModel):
+    hook: str | None = None
+    cs_owner_id: str | None = None
+    format: str | None = None
+    source: str | None = None
+    status: str | None = None
+    notes: str | None = None

@@ -16,6 +16,7 @@ export interface Post {
   actual_views: number;
   posted_at: string | null;
   created_at: string;
+  idea_id: string | null;
   pages?: { handle: string; name: string | null };
 }
 
@@ -28,5 +29,70 @@ export interface Reel {
   auto_scrape: boolean;
   last_scraped_at: string | null;
   created_at: string;
+  idea_id: string | null;
   pages?: { handle: string; name: string | null };
+}
+
+export interface ContentStrategist {
+  id: string;
+  name: string;
+  role: string | null;
+  created_at: string;
+}
+
+export interface Idea {
+  id: string;
+  idea_number: number;
+  idea_code: string;
+  hook: string;
+  cs_owner_id: string;
+  format: string;
+  source: string;
+  status: string;
+  notes: string | null;
+  created_at: string;
+  content_strategists?: { id: string; name: string };
+}
+
+export interface IdeaStat {
+  id: string;
+  idea_code: string;
+  hook: string;
+  format: string;
+  source: string;
+  status: string;
+  cs_owner_id: string;
+  cs_owner_name: string;
+  created_at: string;
+  total_posts: number;
+  total_views: number;
+  winners_count: number;
+  hit_rate: number;
+  best_post: { url: string; views: number; page_handle: string } | null;
+}
+
+export interface CSStat {
+  id: string;
+  name: string;
+  role: string | null;
+  ideas_created: number;
+  total_views: number;
+  total_posts: number;
+  winners_count: number;
+  hit_rate: number;
+}
+
+export interface IdeaEngineData {
+  system: {
+    active_ideas: number;
+    total_ideas: number;
+    total_posts: number;
+    total_views: number;
+    total_winners: number;
+    hit_rate: number;
+    avg_views_per_idea: number;
+    winner_threshold: number;
+  };
+  ideas: IdeaStat[];
+  cs_leaderboard: CSStat[];
 }

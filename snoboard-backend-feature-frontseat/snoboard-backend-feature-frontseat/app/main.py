@@ -8,7 +8,13 @@ from app.database.repositories.pages import get_page_repository
 from app.database.repositories.posts import get_post_repository
 from app.database.repositories.reels import get_reel_repository
 from app.database.repositories.dashboard_views import get_dashboard_views_repository
-from app.schemas.request import PageCreate, PageUpdate, PostCreate, PostUpdate, ReelCreate, ReelUpdate, ScrapeRequest
+from app.database.repositories.content_strategists import get_cs_repository
+from app.database.repositories.ideas import get_idea_repository
+from app.schemas.request import (
+    PageCreate, PageUpdate, PostCreate, PostUpdate,
+    ReelCreate, ReelUpdate, ScrapeRequest,
+    CSCreate, CSUpdate, IdeaCreate, IdeaUpdate,
+)
 from app.schemas.response import ScrapeStatusResponse
 
 app = FastAPI(title="View Tracker", version="1.0.0")
@@ -119,7 +125,7 @@ async def dashboard_stats():
 
     # Filter to current month only
     month_reels = _filter_current_month(all_reels, "posted_at")
-    month_posts = _filter_current_month(all_posts, "created_at")
+    month_posts = _filter_current_month(all_posts, "posted_at")
     current_month = _month_start()
 
     total_reel_views = sum(r.get("views", 0) or 0 for r in month_reels)
@@ -137,6 +143,16 @@ async def dashboard_stats():
         all_time_post_totals[pid] = all_time_post_totals.get(pid, 0) + (p.get("actual_views", 0) or 0)
 
     # Per-page stats
+    # Build all-time counts per page
+    all_time_reel_counts: dict[str, int] = {}
+    all_time_post_counts: dict[str, int] = {}
+    for r in all_reels:
+        pid = r["page_id"]
+        all_time_reel_counts[pid] = all_time_reel_counts.get(pid, 0) + 1
+    for p in all_posts:
+        pid = p["page_id"]
+        all_time_post_counts[pid] = all_time_post_counts.get(pid, 0) + 1
+
     page_stats = []
     for page in pages:
         pid = page["id"]
@@ -165,6 +181,8 @@ async def dashboard_stats():
             "total_comments": reel_comments,
             "reels_count": len(page_reels),
             "posts_count": len(page_posts),
+            "all_time_reels_count": all_time_reel_counts.get(pid, 0),
+            "all_time_posts_count": all_time_post_counts.get(pid, 0),
             "top_reels": top_reels,
         })
 
@@ -198,7 +216,7 @@ async def page_detail(page_id: str):
 
     # Current month filtered
     month_reels = _filter_current_month(all_reels, "posted_at")
-    month_posts = _filter_current_month(all_posts, "created_at")
+    month_posts = _filter_current_month(all_posts, "posted_at")
     current_month = _month_start()
     current_dv = next((d for d in dv_entries if d.get("month") == current_month), None)
 
@@ -265,6 +283,177 @@ async def update_reel(reel_id: str, req: ReelUpdate):
 async def delete_reel(reel_id: str):
     get_reel_repository().delete(reel_id)
     return {"success": True, "message": "Reel deleted"}
+
+
+# --- Content Strategists ---
+@app.get("/api/v1/cs")
+async def list_cs():
+    cs_list = get_cs_repository().get_all()
+    return {"success": True, "data": cs_list}
+
+@app.post("/api/v1/cs")
+async def create_cs(req: CSCreate):
+    data = req.model_dump(exclude_none=True)
+    cs = get_cs_repository().create(data)
+    return {"success": True, "data": cs}
+
+@app.put("/api/v1/cs/{cs_id}")
+async def update_cs(cs_id: str, req: CSUpdate):
+    data = req.model_dump(exclude_none=True)
+    cs = get_cs_repository().update(cs_id, data)
+    return {"success": True, "data": cs}
+
+@app.delete("/api/v1/cs/{cs_id}")
+async def delete_cs(cs_id: str):
+    get_cs_repository().delete(cs_id)
+    return {"success": True, "message": "CS deleted"}
+
+
+# --- Ideas ---
+@app.get("/api/v1/ideas")
+async def list_ideas():
+    ideas = get_idea_repository().get_all()
+    return {"success": True, "data": ideas}
+
+@app.post("/api/v1/ideas")
+async def create_idea(req: IdeaCreate):
+    data = req.model_dump(exclude_none=True)
+    idea = get_idea_repository().create(data)
+    return {"success": True, "data": idea}
+
+@app.put("/api/v1/ideas/{idea_id}")
+async def update_idea(idea_id: str, req: IdeaUpdate):
+    data = req.model_dump(exclude_none=True)
+    idea = get_idea_repository().update(idea_id, data)
+    return {"success": True, "data": idea}
+
+@app.delete("/api/v1/ideas/{idea_id}")
+async def delete_idea(idea_id: str):
+    get_idea_repository().delete(idea_id)
+    return {"success": True, "message": "Idea deleted"}
+
+
+# --- Idea Engine Dashboard ---
+@app.get("/api/v1/idea-engine")
+async def idea_engine_dashboard():
+    """Aggregated stats for the Idea Engine page:
+    - Per-idea performance (total posts, total views, best post, hit-rate)
+    - CS leaderboard (ideas created, winners, hit-rate, total views)
+    - System-level metrics (active ideas, winners today, system hit-rate)
+    """
+    ideas = get_idea_repository().get_all()
+    all_reels = get_reel_repository().get_all()
+    all_posts = get_post_repository().get_all()
+    cs_list = get_cs_repository().get_all()
+
+    # Default winner threshold
+    WINNER_THRESHOLD = 50_000
+
+    # Build lookup: idea_id -> list of content (reels + posts)
+    idea_content: dict[str, list[dict]] = {}
+    for idea in ideas:
+        idea_content[idea["id"]] = []
+
+    for reel in all_reels:
+        iid = reel.get("idea_id")
+        if iid and iid in idea_content:
+            idea_content[iid].append({
+                "type": "reel",
+                "views": reel.get("views", 0) or 0,
+                "url": reel.get("url", ""),
+                "page_handle": reel.get("pages", {}).get("handle", "") if reel.get("pages") else "",
+                "posted_at": reel.get("posted_at"),
+            })
+
+    for post in all_posts:
+        iid = post.get("idea_id")
+        if iid and iid in idea_content:
+            idea_content[iid].append({
+                "type": "post",
+                "views": post.get("actual_views", 0) or 0,
+                "url": post.get("url", ""),
+                "page_handle": post.get("pages", {}).get("handle", "") if post.get("pages") else "",
+                "posted_at": post.get("created_at"),
+            })
+
+    # Per-idea stats
+    idea_stats = []
+    for idea in ideas:
+        content = idea_content.get(idea["id"], [])
+        total_posts = len(content)
+        total_views = sum(c["views"] for c in content)
+        winners = [c for c in content if c["views"] >= WINNER_THRESHOLD]
+        hit_rate = (len(winners) / total_posts * 100) if total_posts > 0 else 0
+        best = max(content, key=lambda c: c["views"]) if content else None
+
+        idea_stats.append({
+            "id": idea["id"],
+            "idea_code": idea.get("idea_code", ""),
+            "hook": idea.get("hook", ""),
+            "format": idea.get("format", ""),
+            "source": idea.get("source", ""),
+            "status": idea.get("status", ""),
+            "cs_owner_id": idea.get("cs_owner_id", ""),
+            "cs_owner_name": idea.get("content_strategists", {}).get("name", "") if idea.get("content_strategists") else "",
+            "created_at": idea.get("created_at", ""),
+            "total_posts": total_posts,
+            "total_views": total_views,
+            "winners_count": len(winners),
+            "hit_rate": round(hit_rate, 1),
+            "best_post": {
+                "url": best["url"],
+                "views": best["views"],
+                "page_handle": best["page_handle"],
+            } if best else None,
+        })
+
+    # CS leaderboard
+    cs_stats = []
+    for cs in cs_list:
+        cs_ideas = [i for i in idea_stats if i["cs_owner_id"] == cs["id"]]
+        cs_total_views = sum(i["total_views"] for i in cs_ideas)
+        cs_total_posts = sum(i["total_posts"] for i in cs_ideas)
+        cs_winners = sum(i["winners_count"] for i in cs_ideas)
+        cs_hit_rate = (cs_winners / cs_total_posts * 100) if cs_total_posts > 0 else 0
+
+        cs_stats.append({
+            "id": cs["id"],
+            "name": cs["name"],
+            "role": cs.get("role"),
+            "ideas_created": len(cs_ideas),
+            "total_views": cs_total_views,
+            "total_posts": cs_total_posts,
+            "winners_count": cs_winners,
+            "hit_rate": round(cs_hit_rate, 1),
+        })
+
+    cs_stats.sort(key=lambda x: x["total_views"], reverse=True)
+
+    # System-level metrics
+    total_active_ideas = len([i for i in idea_stats if i["status"] == "active"])
+    system_total_posts = sum(i["total_posts"] for i in idea_stats)
+    system_total_views = sum(i["total_views"] for i in idea_stats)
+    system_winners = sum(i["winners_count"] for i in idea_stats)
+    system_hit_rate = (system_winners / system_total_posts * 100) if system_total_posts > 0 else 0
+    avg_views_per_idea = (system_total_views / len(idea_stats)) if idea_stats else 0
+
+    return {
+        "success": True,
+        "data": {
+            "system": {
+                "active_ideas": total_active_ideas,
+                "total_ideas": len(idea_stats),
+                "total_posts": system_total_posts,
+                "total_views": system_total_views,
+                "total_winners": system_winners,
+                "hit_rate": round(system_hit_rate, 1),
+                "avg_views_per_idea": round(avg_views_per_idea),
+                "winner_threshold": WINNER_THRESHOLD,
+            },
+            "ideas": idea_stats,
+            "cs_leaderboard": cs_stats,
+        },
+    }
 
 
 # --- Scrape: fetch all reels from auto_scrape pages ---
