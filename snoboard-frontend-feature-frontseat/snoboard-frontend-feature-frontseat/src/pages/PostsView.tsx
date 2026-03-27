@@ -50,15 +50,21 @@ export default function PostsView() {
   const [newHandle, setNewHandle] = useState("");
   const [showNewPage, setShowNewPage] = useState(false);
 
-  const { data: posts = [], isLoading } = useQuery<Post[]>({
+  const MAIN_IP_HANDLES = ["101xfounders", "bizzindia", "indianfoundersco", "startupcoded", "foundersinindia", "101xmarketing", "techinthelast24hrs", "101xtechnology"];
+
+  const { data: allPosts = [], isLoading } = useQuery<Post[]>({
     queryKey: ["posts"],
     queryFn: getPosts,
   });
 
-  const { data: pages = [] } = useQuery<Page[]>({
+  const { data: allPages = [] } = useQuery<Page[]>({
     queryKey: ["pages"],
     queryFn: getPages,
   });
+
+  const pages = allPages.filter((p) => MAIN_IP_HANDLES.includes(p.handle.toLowerCase()));
+  const mainPageIds = new Set(pages.map((p) => p.id));
+  const posts = allPosts.filter((p) => mainPageIds.has(p.page_id));
 
   const addPageMutation = useMutation({
     mutationFn: createPage,

@@ -52,7 +52,7 @@ export default function MainReelsView() {
     queryFn: getAutoReels,
   });
 
-  const MAIN_IP_HANDLES = ["101xfounders", "bizzindia", "indianfoundersco", "startupcoded", "foundersinindia"];
+  const MAIN_IP_HANDLES = ["101xfounders", "bizzindia", "indianfoundersco", "startupcoded", "foundersinindia", "101xmarketing", "techinthelast24hrs", "101xtechnology"];
 
   const { data: allPages = [] } = useQuery<Page[]>({
     queryKey: ["pages"],
