@@ -399,7 +399,8 @@ export default function PostsView() {
                           type="date"
                           value={editPostedAt}
                           onChange={(e) => setEditPostedAt(e.target.value)}
-                          className="h-8 w-36"
+                          onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
+                          className="h-8 w-36 cursor-pointer"
                         />
                       </TableCell>
                       <TableCell className="text-right">
