@@ -41,9 +41,7 @@ function formatDate(dateStr: string | null): string {
   if (!dateStr) return "-";
   try {
     const d = new Date(dateStr);
-    const exact = d.toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
-    const relative = formatDistanceToNow(d, { addSuffix: true });
-    return `${exact} (${relative})`;
+    return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
   } catch {
     return dateStr;
   }
@@ -182,7 +180,7 @@ export default function PostsView() {
     setEditingId(post.id);
     setEditExpected(String(post.expected_views ?? ""));
     setEditActual(String(post.actual_views ?? ""));
-    setEditPostedAt(post.posted_at ? new Date(post.posted_at).toISOString().slice(0, 16) : "");
+    setEditPostedAt(post.posted_at ? new Date(post.posted_at).toISOString().slice(0, 10) : "");
   }
 
   function saveEdit(id: string) {
@@ -301,10 +299,10 @@ export default function PostsView() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="posted-at">Time of Posting</Label>
+                <Label htmlFor="posted-at">Date of Posting</Label>
                 <Input
                   id="posted-at"
-                  type="datetime-local"
+                  type="date"
                   value={postedAt}
                   onChange={(e) => setPostedAt(e.target.value)}
                   onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
@@ -357,7 +355,7 @@ export default function PostsView() {
             <TableRow>
               <TableHead>Page</TableHead>
               <TableHead>Link</TableHead>
-              <TableHead>Time of Posting</TableHead>
+              <TableHead>Date of Posting</TableHead>
               <TableHead className="text-right">Expected Views</TableHead>
               <TableHead className="text-right">Actual Views</TableHead>
               <TableHead className="w-24"></TableHead>
@@ -398,10 +396,10 @@ export default function PostsView() {
                     <>
                       <TableCell>
                         <Input
-                          type="datetime-local"
+                          type="date"
                           value={editPostedAt}
                           onChange={(e) => setEditPostedAt(e.target.value)}
-                          className="h-8 w-44"
+                          className="h-8 w-36"
                         />
                       </TableCell>
                       <TableCell className="text-right">
