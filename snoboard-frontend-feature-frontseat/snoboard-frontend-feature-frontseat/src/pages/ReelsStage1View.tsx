@@ -61,6 +61,7 @@ export default function ReelsStage1View() {
   const [editPostedAt, setEditPostedAt] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [filterPage, setFilterPage] = useState("all");
 
   const { data: reels = [], isLoading } = useQuery<Reel[]>({
     queryKey: ["reels", "manual"],
@@ -318,7 +319,7 @@ export default function ReelsStage1View() {
 
       {/* Top 3 Podium */}
       {(() => {
-        const sorted = [...filterByDateRange(reels, dateFrom, dateTo)].sort((a, b) => (b.views ?? 0) - (a.views ?? 0));
+        const sorted = [...filterByDateRange(reels, dateFrom, dateTo)].filter((r) => filterPage === "all" || r.pages?.handle?.toLowerCase() === filterPage).sort((a, b) => (b.views ?? 0) - (a.views ?? 0));
         if (sorted.length < 3) return null;
         const top3 = sorted.slice(0, 3);
         const podiumOrder = [top3[1], top3[0], top3[2]];
@@ -371,14 +372,30 @@ export default function ReelsStage1View() {
         );
       })()}
 
-      {/* Date Range Filter */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
-        <DateRangeFilter from={dateFrom} to={dateTo} onChange={(f, t) => { setDateFrom(f); setDateTo(t); }} />
+      {/* Filters */}
+      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 space-y-3">
+        <div className="flex items-end gap-4 flex-wrap">
+          <DateRangeFilter from={dateFrom} to={dateTo} onChange={(f, t) => { setDateFrom(f); setDateTo(t); }} />
+          <div className="space-y-1">
+            <label className="text-xs text-zinc-500">Page</label>
+            <Select value={filterPage} onValueChange={setFilterPage}>
+              <SelectTrigger className="w-48 h-9">
+                <SelectValue placeholder="All pages" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All pages</SelectItem>
+                {pages.map((p) => (
+                  <SelectItem key={p.id} value={p.handle.toLowerCase()}>@{p.handle}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
         {(() => {
-          const filtered = filterByDateRange(reels, dateFrom, dateTo);
+          const filtered = filterByDateRange(reels, dateFrom, dateTo).filter((r) => filterPage === "all" || r.pages?.handle?.toLowerCase() === filterPage);
           const totalViews = filtered.reduce((s: number, r: any) => s + (r.views ?? 0), 0);
           return (
-            <div className="flex items-center gap-6 mt-3 pt-3 border-t border-zinc-800">
+            <div className="flex items-center gap-6 pt-3 border-t border-zinc-800">
               <div className="text-xs text-zinc-500"><span className="text-white font-bold">{filtered.length}</span> reels</div>
               <div className="text-xs text-zinc-500">Total views: <span className="text-white font-bold">{totalViews.toLocaleString()}</span></div>
             </div>
@@ -399,7 +416,7 @@ export default function ReelsStage1View() {
           </TableHeader>
           <TableBody>
             {(() => {
-              const filteredReels = filterByDateRange(reels, dateFrom, dateTo);
+              const filteredReels = filterByDateRange(reels, dateFrom, dateTo).filter((r) => filterPage === "all" || r.pages?.handle?.toLowerCase() === filterPage);
               if (isLoading) return (
               <TableRow>
                 <TableCell colSpan={5} className="text-center text-zinc-500 py-8">
