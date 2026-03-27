@@ -213,9 +213,9 @@ export default function Dashboard() {
                         </span>
                         <span className="text-[9px] uppercase tracking-wider text-zinc-500 mt-1">views</span>
                         <div className="mt-2 flex items-center gap-1 text-[10px] text-zinc-600">
-                          <span>{page.reels_count ?? 0} reels</span>
+                          <span>{globalPeriod === "all" ? (page.all_time_reels_count ?? page.reels_count ?? 0) : globalPeriod === "weekly" ? Math.round((page.reels_count ?? 0) / 4) : (page.reels_count ?? 0)} reels</span>
                           <span>·</span>
-                          <span>{page.posts_count ?? 0} posts</span>
+                          <span>{globalPeriod === "all" ? (page.all_time_posts_count ?? page.posts_count ?? 0) : globalPeriod === "weekly" ? Math.round((page.posts_count ?? 0) / 4) : (page.posts_count ?? 0)} posts</span>
                         </div>
                       </div>
                     </div>
@@ -267,6 +267,18 @@ export default function Dashboard() {
             const viewsForPeriod = getPageViews(page, globalPeriod);
             const pageTotal = (page.reel_views ?? 0) + (page.post_views ?? 0);
             const reelPct = pageTotal > 0 ? ((page.reel_views ?? 0) / pageTotal * 100) : 0;
+
+            // Counts that switch with the period toggle
+            const reelsCount = globalPeriod === "all"
+              ? (page.all_time_reels_count ?? page.reels_count ?? 0)
+              : globalPeriod === "weekly"
+                ? Math.round((page.reels_count ?? 0) / 4)
+                : (page.reels_count ?? 0);
+            const postsCount = globalPeriod === "all"
+              ? (page.all_time_posts_count ?? page.posts_count ?? 0)
+              : globalPeriod === "weekly"
+                ? Math.round((page.posts_count ?? 0) / 4)
+                : (page.posts_count ?? 0);
 
             return (
               <div
@@ -324,8 +336,8 @@ export default function Dashboard() {
 
                 {/* Mini breakdown */}
                 <div className="flex items-center gap-3 mt-4 pt-3 border-t border-zinc-900">
-                  <span className="text-[10px] text-zinc-600">{page.reels_count ?? 0} reels</span>
-                  <span className="text-[10px] text-zinc-600">{page.posts_count ?? 0} posts</span>
+                  <span className="text-[10px] text-zinc-600">{reelsCount} reels</span>
+                  <span className="text-[10px] text-zinc-600">{postsCount} posts</span>
                 </div>
               </div>
             );

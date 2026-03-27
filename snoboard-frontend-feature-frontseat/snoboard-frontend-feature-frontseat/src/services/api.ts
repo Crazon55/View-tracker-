@@ -25,9 +25,9 @@ export const deletePage = (id: string) =>
 
 // Posts
 export const getPosts = () => fetchApi<any[]>("/api/v1/posts");
-export const createPost = (data: { page_id: string; url: string; expected_views?: number; actual_views?: number }) =>
+export const createPost = (data: { page_id: string; url: string; expected_views?: number; actual_views?: number; posted_at?: string; idea_id?: string }) =>
   fetchApi<any>("/api/v1/posts", { method: "POST", body: JSON.stringify(data) });
-export const updatePost = (id: string, data: { expected_views?: number; actual_views?: number }) =>
+export const updatePost = (id: string, data: { expected_views?: number; actual_views?: number; posted_at?: string }) =>
   fetchApi<any>(`/api/v1/posts/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const deletePost = (id: string) =>
   fetchApi<any>(`/api/v1/posts/${id}`, { method: "DELETE" });
@@ -35,7 +35,7 @@ export const deletePost = (id: string) =>
 // Reels
 export const getManualReels = () => fetchApi<any[]>("/api/v1/reels/manual");
 export const getAutoReels = () => fetchApi<any[]>("/api/v1/reels/auto");
-export const createReel = (data: { page_id: string; url: string; views?: number; posted_at?: string; auto_scrape?: boolean }) =>
+export const createReel = (data: { page_id: string; url: string; views?: number; posted_at?: string; auto_scrape?: boolean; idea_id?: string }) =>
   fetchApi<any>("/api/v1/reels", { method: "POST", body: JSON.stringify(data) });
 export const updateReel = (id: string, data: { views?: number; posted_at?: string }) =>
   fetchApi<any>(`/api/v1/reels/${id}`, { method: "PUT", body: JSON.stringify(data) });
@@ -63,3 +63,24 @@ export const triggerScrape = (sinceDate?: string) =>
     method: "POST",
     body: JSON.stringify(sinceDate ? { since_date: sinceDate } : {}),
   });
+
+// Content Strategists
+export const getCSList = () => fetchApi<any[]>("/api/v1/cs");
+export const createCS = (data: { name: string; role?: string }) =>
+  fetchApi<any>("/api/v1/cs", { method: "POST", body: JSON.stringify(data) });
+export const updateCS = (id: string, data: { name?: string; role?: string }) =>
+  fetchApi<any>(`/api/v1/cs/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export const deleteCS = (id: string) =>
+  fetchApi<any>(`/api/v1/cs/${id}`, { method: "DELETE" });
+
+// Ideas
+export const getIdeas = () => fetchApi<any[]>("/api/v1/ideas");
+export const createIdea = (data: { hook: string; cs_owner_id: string; format?: string; source?: string; status?: string; notes?: string }) =>
+  fetchApi<any>("/api/v1/ideas", { method: "POST", body: JSON.stringify(data) });
+export const updateIdea = (id: string, data: Record<string, any>) =>
+  fetchApi<any>(`/api/v1/ideas/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export const deleteIdea = (id: string) =>
+  fetchApi<any>(`/api/v1/ideas/${id}`, { method: "DELETE" });
+
+// Idea Engine Dashboard
+export const getIdeaEngine = () => fetchApi<any>("/api/v1/idea-engine");
