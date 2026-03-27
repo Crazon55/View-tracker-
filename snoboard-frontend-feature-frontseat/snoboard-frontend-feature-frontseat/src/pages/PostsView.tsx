@@ -68,6 +68,7 @@ export default function PostsView() {
   // Date range filter
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [filterPage, setFilterPage] = useState("all");
 
   const MAIN_IP_HANDLES = ["101xfounders", "bizzindia", "indianfoundersco", "startupcoded", "foundersinindia", "101xmarketing", "techinthelast24hrs", "101xtechnology"];
 
@@ -194,7 +195,7 @@ export default function PostsView() {
     });
   }
 
-  const filteredPosts = filterByDateRange(posts, dateFrom, dateTo, "posted_at");
+  const filteredPosts = filterByDateRange(posts, dateFrom, dateTo, "posted_at").filter((p) => filterPage === "all" || p.pages?.handle?.toLowerCase() === filterPage);
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
@@ -339,10 +340,26 @@ export default function PostsView() {
         </Dialog>
       </div>
 
-      {/* Date Range Filter */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
-        <DateRangeFilter from={dateFrom} to={dateTo} onChange={(f, t) => { setDateFrom(f); setDateTo(t); }} />
-        <div className="flex items-center gap-6 mt-3 pt-3 border-t border-zinc-800">
+      {/* Filters */}
+      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 space-y-3">
+        <div className="flex items-end gap-4 flex-wrap">
+          <DateRangeFilter from={dateFrom} to={dateTo} onChange={(f, t) => { setDateFrom(f); setDateTo(t); }} />
+          <div className="space-y-1">
+            <label className="text-xs text-zinc-500">Page</label>
+            <Select value={filterPage} onValueChange={setFilterPage}>
+              <SelectTrigger className="w-48 h-9">
+                <SelectValue placeholder="All pages" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All pages</SelectItem>
+                {pages.map((p) => (
+                  <SelectItem key={p.id} value={p.handle.toLowerCase()}>@{p.handle}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="flex items-center gap-6 pt-3 border-t border-zinc-800">
           <div className="text-xs text-zinc-500"><span className="text-white font-bold">{filteredPosts.length}</span> posts</div>
           <div className="text-xs text-zinc-500">Expected: <span className="text-white font-bold">{filteredPosts.reduce((s, p) => s + (p.expected_views ?? 0), 0).toLocaleString()}</span></div>
           <div className="text-xs text-zinc-500">Actual: <span className="text-white font-bold">{filteredPosts.reduce((s, p) => s + (p.actual_views ?? 0), 0).toLocaleString()}</span></div>
