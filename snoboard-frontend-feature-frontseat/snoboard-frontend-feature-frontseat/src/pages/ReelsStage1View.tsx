@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getManualReels, getPages, createReel, updateReel, deleteReel, createPage, getIdeas } from "@/services/api";
+import { getManualReels, getPages, createReel, updateReel, deleteReel, createPage, getIdeas, createIdea } from "@/services/api";
 import type { Reel, Page, Idea } from "@/types";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
@@ -54,6 +54,8 @@ export default function ReelsStage1View() {
   const [postedAt, setPostedAt] = useState("");
   const [views, setViews] = useState("");
   const [ideaId, setIdeaId] = useState("");
+  const [newIdeaHook, setNewIdeaHook] = useState("");
+  const [showNewIdea, setShowNewIdea] = useState(false);
   const [newHandle, setNewHandle] = useState("");
   const [showNewPage, setShowNewPage] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -147,6 +149,8 @@ export default function ReelsStage1View() {
     setPostedAt("");
     setViews("");
     setIdeaId("");
+    setNewIdeaHook("");
+    setShowNewIdea(false);
     setNewHandle("");
     setShowNewPage(false);
   }
@@ -174,13 +178,26 @@ export default function ReelsStage1View() {
       return;
     }
 
+    let finalIdeaId = ideaId;
+
+    if (showNewIdea && newIdeaHook.trim() && !ideaId) {
+      try {
+        const newIdea = await createIdea({ hook: newIdeaHook.trim() });
+        finalIdeaId = newIdea.id;
+        queryClient.invalidateQueries({ queryKey: ["ideas"] });
+      } catch {
+        toast.error("Failed to create idea");
+        return;
+      }
+    }
+
     addMutation.mutate({
       page_id: finalPageId,
       url: url.trim(),
       posted_at: postedAt || undefined,
       views: views ? Number(views) : undefined,
       auto_scrape: false,
-      idea_id: ideaId || undefined,
+      idea_id: finalIdeaId || undefined,
     });
   };
 
@@ -263,18 +280,49 @@ export default function ReelsStage1View() {
               </div>
               <div className="space-y-2">
                 <Label>Idea</Label>
-                <Select value={ideaId} onValueChange={setIdeaId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select an idea (required)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ideas.map((idea) => (
-                      <SelectItem key={idea.id} value={idea.id}>
-                        {idea.idea_code} — {idea.hook}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {showNewIdea ? (
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Type idea name / hook"
+                      value={newIdeaHook}
+                      onChange={(e) => setNewIdeaHook(e.target.value)}
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { setShowNewIdea(false); setNewIdeaHook(""); }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <Select value={ideaId} onValueChange={setIdeaId}>
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Select an idea" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ideas.map((idea) => (
+                          <SelectItem key={idea.id} value={idea.id}>
+                            {idea.idea_code} — {idea.hook}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0 border-zinc-700 text-zinc-400 hover:text-white"
+                      onClick={() => { setShowNewIdea(true); setIdeaId(""); }}
+                    >
+                      <Plus className="w-3 h-3 mr-1" />
+                      New
+                    </Button>
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="reel-url">URL</Label>
