@@ -294,8 +294,11 @@ async def list_cs():
 @app.post("/api/v1/cs")
 async def create_cs(req: CSCreate):
     data = req.model_dump(exclude_none=True)
-    cs = get_cs_repository().create(data)
-    return {"success": True, "data": cs}
+    try:
+        cs = get_cs_repository().create(data)
+        return {"success": True, "data": cs}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/api/v1/cs/{cs_id}")
 async def update_cs(cs_id: str, req: CSUpdate):

@@ -136,7 +136,7 @@ export default function IdeaEngine() {
       setCsRole("");
       setCsOpen(false);
     },
-    onError: () => toast.error("Failed to add CS"),
+    onError: (err: any) => toast.error(`Failed to add CS: ${err.message}`),
   });
 
   const deleteCSMutation = useMutation({
