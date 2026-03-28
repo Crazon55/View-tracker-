@@ -270,8 +270,11 @@ async def list_auto_reels():
 @app.post("/api/v1/reels")
 async def create_reel(req: ReelCreate):
     data = req.model_dump(exclude_none=True)
-    reel = get_reel_repository().create(data)
-    return {"success": True, "data": reel}
+    try:
+        reel = get_reel_repository().create(data)
+        return {"success": True, "data": reel}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/api/v1/reels/{reel_id}")
 async def update_reel(reel_id: str, req: ReelUpdate):
@@ -321,8 +324,11 @@ async def list_ideas():
 @app.post("/api/v1/ideas")
 async def create_idea(req: IdeaCreate):
     data = req.model_dump(exclude_none=True)
-    idea = get_idea_repository().create(data)
-    return {"success": True, "data": idea}
+    try:
+        idea = get_idea_repository().create(data)
+        return {"success": True, "data": idea}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/api/v1/ideas/{idea_id}")
 async def update_idea(idea_id: str, req: IdeaUpdate):

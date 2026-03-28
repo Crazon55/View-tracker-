@@ -77,7 +77,7 @@ export default function MainReelsView() {
       toast.success("Reel added to Main Reels");
       resetForm();
     },
-    onError: () => toast.error("Failed to add reel"),
+    onError: (err: any) => toast.error(`Failed to add reel: ${err.message}`),
   });
 
   const addPageMutation = useMutation({
