@@ -9,7 +9,10 @@ async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
       ...options?.headers,
     },
   });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => null);
+    throw new Error(errBody?.detail || `API error: ${res.status}`);
+  }
   const json = await res.json();
   return json.data ?? json;
 }
