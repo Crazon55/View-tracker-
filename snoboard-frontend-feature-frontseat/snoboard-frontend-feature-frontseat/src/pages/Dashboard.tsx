@@ -249,7 +249,7 @@ export default function Dashboard() {
         </div>
 
         {/* Search */}
-        <div className="mb-5 sm:mb-6">
+        <div className="sticky top-0 z-40 bg-zinc-950/90 backdrop-blur-sm pb-4 sm:pb-5 -mx-5 sm:-mx-8 px-5 sm:px-8 pt-2">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
             <Input
