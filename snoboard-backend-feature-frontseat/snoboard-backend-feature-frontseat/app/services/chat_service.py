@@ -32,22 +32,29 @@ def _build_data_context() -> str:
 
     month_start = _month_start()
 
+    # Split reels by type
+    main_reels = [r for r in all_reels if r.get("auto_scrape")]
+    stage1_reels = [r for r in all_reels if not r.get("auto_scrape")]
+
     # Per-page stats
     page_lines = []
     for page in pages:
         pid = page["id"]
         p_reels = [r for r in all_reels if r["page_id"] == pid]
+        p_main = [r for r in main_reels if r["page_id"] == pid]
+        p_stage1 = [r for r in stage1_reels if r["page_id"] == pid]
         p_posts = [p for p in all_posts if p["page_id"] == pid]
         month_reels = [r for r in p_reels if (r.get("posted_at") or "")[:10] >= month_start]
         month_posts = [p for p in p_posts if (p.get("posted_at") or "")[:10] >= month_start]
 
         all_time_views = sum(r.get("views", 0) or 0 for r in p_reels) + sum(p.get("actual_views", 0) or 0 for p in p_posts)
         month_views = sum(r.get("views", 0) or 0 for r in month_reels) + sum(p.get("actual_views", 0) or 0 for p in month_posts)
+        reel_type = "main" if page.get("auto_scrape") else "stage1"
 
         page_lines.append(
-            f"| @{page['handle']} | {page.get('followers_count', 0):,} | "
+            f"| @{page['handle']} | {reel_type} | {page.get('followers_count', 0):,} | "
             f"{month_views:,} | {len(month_reels)} reels, {len(month_posts)} posts | "
-            f"{all_time_views:,} | {len(p_reels)} reels, {len(p_posts)} posts |"
+            f"{all_time_views:,} | {len(p_main)} main, {len(p_stage1)} stage1, {len(p_posts)} posts |"
         )
 
     # Top reels this month (with dates)
@@ -59,20 +66,22 @@ def _build_data_context() -> str:
         posted = (r.get("posted_at") or "unknown")[:10]
         top_lines.append(f"- @{handle}: {(r.get('views', 0) or 0):,} views, posted {posted} — {r.get('url', '')}")
 
-    # Per-page reel breakdown this month (aggregated by page + date)
+    # Per-page reel breakdown this month (aggregated by page + date + type)
     from collections import defaultdict
     reel_by_page_date: dict[str, dict[str, list]] = defaultdict(lambda: defaultdict(list))
     for r in month_reels_all:
         handle = r.get("pages", {}).get("handle", "?") if r.get("pages") else "?"
         date = (r.get("posted_at") or "unknown")[:10]
-        reel_by_page_date[handle][date].append(r.get("views", 0) or 0)
+        rtype = "main" if r.get("auto_scrape") else "stage1"
+        reel_by_page_date[f"{handle}|{rtype}"][date].append(r.get("views", 0) or 0)
 
     reel_detail_lines = []
-    for handle in sorted(reel_by_page_date):
-        for date in sorted(reel_by_page_date[handle]):
-            views_list = reel_by_page_date[handle][date]
+    for key in sorted(reel_by_page_date):
+        handle, rtype = key.split("|")
+        for date in sorted(reel_by_page_date[key]):
+            views_list = reel_by_page_date[key][date]
             total = sum(views_list)
-            reel_detail_lines.append(f"| @{handle} | {date} | {len(views_list)} | {total:,} |")
+            reel_detail_lines.append(f"| @{handle} | {rtype} | {date} | {len(views_list)} | {total:,} |")
 
     # Per-page post breakdown this month (aggregated by page + date)
     month_posts_all = [p for p in all_posts if (p.get("posted_at") or p.get("created_at") or "")[:10] >= month_start]
@@ -131,14 +140,14 @@ def _build_data_context() -> str:
         )
 
     return f"""## Pages (Instagram Accounts)
-| Handle | Followers | This Month Views | This Month Content | All-Time Views | All-Time Content |
+| Handle | Type | Followers | This Month Views | This Month Content | All-Time Views | All-Time Content |
 {chr(10).join(page_lines) if page_lines else "No pages yet."}
 
 ## Top 10 Reels This Month
 {chr(10).join(top_lines) if top_lines else "No reels this month."}
 
-## Reels This Month (by page and date)
-| Handle | Date | Count | Total Views |
+## Reels This Month (by page, type, and date)
+| Handle | Type | Date | Count | Total Views |
 {chr(10).join(reel_detail_lines) if reel_detail_lines else "No reels this month."}
 
 ## Posts This Month (by page and date)
@@ -173,14 +182,20 @@ For text answers:
 For answers with chart visualizations (use ONLY when comparing numbers, showing rankings, or trends):
 {{"type": "chart", "chart_type": "bar|line|pie", "title": "Chart Title", "data": [{{"name": "Label", "value": 123}}], "data_keys": {{"xKey": "name", "yKeys": ["value"]}}, "content": "Brief text summary"}}
 
+IMPORTANT CONCEPTS:
+- "Main Reels" (type=main): Reels from main IP accounts (auto-scraped), these are the primary brand accounts
+- "Stage 1 Reels" (type=stage1): Reels from secondary/growth accounts (manually tracked), these are newer/smaller accounts being grown
+- "Posts": Instagram carousel/image posts (not reels)
+- A "winner" is a reel/post with 50,000+ views
+- Idea codes follow FS-XXX format
+
 RULES:
 - Use "chart" type ONLY for comparisons, rankings, or numeric data that benefits from visualization
 - For content ideation, strategy advice, or qualitative answers, use "text" type
 - Format numbers with commas in text content
-- A "winner" is a reel/post with 50,000+ views
-- Idea codes follow FS-XXX format
 - Be concise but insightful
-- When asked for content ideas, be creative and specific to the startup/business niche
+- When asked about "stage 1" accounts, filter to type=stage1 reels only
+- When asked about "main" accounts, filter to type=main reels only
 - You can use markdown formatting (bold, lists, headers) in the content field
 
 AVAILABLE DATA:
