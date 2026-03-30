@@ -188,19 +188,19 @@ function AppLayout() {
 
   if (isFullScreen) {
     return (
-      <>
+      <div className="relative">
         <HamburgerMenu />
-        <div className="flex items-center justify-end gap-3 px-6 pt-5 pb-2">
+        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl px-4 py-2 shadow-lg">
           <AnimalPicker userId={user?.id} />
           <p className="text-sm text-zinc-400">
             {getGreeting()}, <span className="text-white font-medium">{getFirstName(user)}</span>
           </p>
           <button
             onClick={signOut}
-            className="h-7 w-7 rounded-lg hover:bg-zinc-800 flex items-center justify-center transition-colors"
+            className="h-7 w-7 rounded-lg hover:bg-white/10 flex items-center justify-center transition-colors"
             title="Sign out"
           >
-            <LogOut className="w-3.5 h-3.5 text-zinc-500 hover:text-red-400" />
+            <LogOut className="w-3.5 h-3.5 text-zinc-400 hover:text-red-400" />
           </button>
         </div>
         <Routes>
@@ -208,7 +208,7 @@ function AppLayout() {
           <Route path="/ideas" element={<IdeaEngine />} />
           <Route path="/page/:pageId" element={<PageDetail />} />
         </Routes>
-      </>
+      </div>
     );
   }
 
