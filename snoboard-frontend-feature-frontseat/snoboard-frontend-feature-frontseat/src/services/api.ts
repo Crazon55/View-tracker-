@@ -1,17 +1,18 @@
-import { supabase } from "@/lib/supabase";
-
 const BASE_URL = import.meta.env.VITE_API_URL || "";
 
-async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
-  const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token;
+// Token is set by AuthContext when session changes
+let _accessToken: string | null = null;
+export function setAccessToken(token: string | null) {
+  _accessToken = token;
+}
 
+async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
       "ngrok-skip-browser-warning": "true",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(_accessToken ? { Authorization: `Bearer ${_accessToken}` } : {}),
       ...options?.headers,
     },
   });

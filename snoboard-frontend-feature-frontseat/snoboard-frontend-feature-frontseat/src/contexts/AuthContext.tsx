@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import type { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { setAccessToken } from "@/services/api";
 
 const ALLOWED_DOMAIN = "owledmedia.com";
 
@@ -28,6 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    setAccessToken(null);
     setUser(null);
     setSession(null);
     setDomainError(false);
@@ -46,10 +48,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setDomainError(true);
       setUser(null);
       setSession(null);
+      setAccessToken(null);
       supabase.auth.signOut();
       return;
     }
 
+    setAccessToken(session.access_token);
     setUser(session.user);
     setSession(session);
     setDomainError(false);
