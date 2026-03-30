@@ -29,10 +29,16 @@ function getGreeting(): string {
   return "Good evening";
 }
 
+const NAME_OVERRIDES: Record<string, string> = {
+  "krishna.koushik@owledmedia.com": "Koushik",
+};
+
 function getFirstName(user: { user_metadata?: { full_name?: string; name?: string }; email?: string } | null): string {
+  const email = user?.email || "";
+  if (NAME_OVERRIDES[email]) return NAME_OVERRIDES[email];
   const fullName = user?.user_metadata?.full_name || user?.user_metadata?.name || "";
   if (fullName) return fullName.split(" ")[0];
-  return user?.email?.split("@")[0] || "";
+  return email.split("@")[0] || "";
 }
 
 const ANIMALS = [
