@@ -22,6 +22,19 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+function getFirstName(user: { user_metadata?: { full_name?: string; name?: string }; email?: string } | null): string {
+  const fullName = user?.user_metadata?.full_name || user?.user_metadata?.name || "";
+  if (fullName) return fullName.split(" ")[0];
+  return user?.email?.split("@")[0] || "";
+}
+
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/ideas", label: "Idea Engine", icon: Lightbulb },
@@ -95,6 +108,18 @@ function AppLayout() {
     return (
       <>
         <HamburgerMenu />
+        <div className="fixed top-5 right-5 z-50 flex items-center gap-3">
+          <p className="text-sm text-zinc-400">
+            {getGreeting()}, <span className="text-white font-medium">{getFirstName(user)}</span>
+          </p>
+          <button
+            onClick={signOut}
+            className="h-8 w-8 rounded-lg bg-zinc-900/80 border border-zinc-800 backdrop-blur-sm hover:bg-zinc-800 hover:border-red-500/50 flex items-center justify-center transition-colors"
+            title="Sign out"
+          >
+            <LogOut className="w-3.5 h-3.5 text-zinc-400 hover:text-red-400" />
+          </button>
+        </div>
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/ideas" element={<IdeaEngine />} />
@@ -136,6 +161,9 @@ function AppLayout() {
         </nav>
 
         <div className="px-3 py-4 border-t border-zinc-800">
+          <p className="px-3 text-sm text-zinc-400 truncate mb-1">
+            {getGreeting()}, <span className="text-white font-medium">{getFirstName(user)}</span>
+          </p>
           <p className="px-3 text-xs text-zinc-600 truncate mb-2">{user?.email}</p>
           <button
             onClick={signOut}
