@@ -1,9 +1,12 @@
 """Auth middleware — verifies Supabase JWT and restricts to @owledmedia.com."""
 
+import logging
 import jwt
 import requests
 from functools import lru_cache
 from fastapi import Request, HTTPException
+
+logger = logging.getLogger(__name__)
 
 from app.config import get_settings
 
@@ -41,6 +44,7 @@ def verify_token(token: str) -> dict:
             key,
             algorithms=["RS256"],
             audience="authenticated",
+            leeway=120,
         )
         return claims
     except jwt.ExpiredSignatureError:
@@ -52,11 +56,13 @@ def verify_token(token: str) -> dict:
 async def require_auth(request: Request):
     """FastAPI dependency — extracts and validates the Bearer token."""
     auth_header = request.headers.get("Authorization", "")
+    logger.info(f"Auth header present: {bool(auth_header)}, starts with Bearer: {auth_header.startswith('Bearer ')}")
     if not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing authorization token")
 
     token = auth_header.removeprefix("Bearer ")
     claims = verify_token(token)
+    logger.info(f"Auth success for: {claims.get('email', 'unknown')}")
 
     email = claims.get("email", "")
     if not email.endswith(f"@{ALLOWED_DOMAIN}"):
