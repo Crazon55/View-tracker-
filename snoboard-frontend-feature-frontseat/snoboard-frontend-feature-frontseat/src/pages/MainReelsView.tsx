@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getAutoReels, getPages, createReel, updateReel, deleteReel, createPage, getIdeas, createIdea } from "@/services/api";
-import type { Reel, Page, Idea } from "@/types";
+import { getAutoReels, getPages, createReel, updateReel, deleteReel, createPage, getIdeas, createIdea, getCSList } from "@/services/api";
+import type { Reel, Page, Idea, ContentStrategist } from "@/types";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -42,6 +42,7 @@ export default function MainReelsView() {
   const [ideaId, setIdeaId] = useState("");
   const [newIdeaHook, setNewIdeaHook] = useState("");
   const [showNewIdea, setShowNewIdea] = useState(false);
+  const [newIdeaCsId, setNewIdeaCsId] = useState("");
   const [newHandle, setNewHandle] = useState("");
   const [showNewPage, setShowNewPage] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -68,6 +69,11 @@ export default function MainReelsView() {
   const { data: ideas = [] } = useQuery<Idea[]>({
     queryKey: ["ideas"],
     queryFn: getIdeas,
+  });
+
+  const { data: csList = [] } = useQuery<ContentStrategist[]>({
+    queryKey: ["cs"],
+    queryFn: getCSList,
   });
 
   const addMutation = useMutation({
@@ -136,6 +142,7 @@ export default function MainReelsView() {
     setViews("");
     setIdeaId("");
     setNewIdeaHook("");
+    setNewIdeaCsId("");
     setShowNewIdea(false);
     setNewHandle("");
     setShowNewPage(false);
@@ -167,7 +174,10 @@ export default function MainReelsView() {
 
     if (showNewIdea && newIdeaHook.trim() && !ideaId) {
       try {
-        const newIdea = await createIdea({ hook: newIdeaHook.trim() });
+        const newIdea = await createIdea({
+          hook: newIdeaHook.trim(),
+          cs_owner_id: newIdeaCsId || undefined,
+        });
         finalIdeaId = newIdea.id;
         queryClient.invalidateQueries({ queryKey: ["ideas"] });
       } catch {
@@ -261,21 +271,35 @@ export default function MainReelsView() {
               <div className="space-y-2">
                 <Label>Idea</Label>
                 {showNewIdea ? (
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Type idea name / hook"
-                      value={newIdeaHook}
-                      onChange={(e) => setNewIdeaHook(e.target.value)}
-                      className="flex-1"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => { setShowNewIdea(false); setNewIdeaHook(""); }}
-                    >
-                      Cancel
-                    </Button>
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Type idea name / hook"
+                        value={newIdeaHook}
+                        onChange={(e) => setNewIdeaHook(e.target.value)}
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => { setShowNewIdea(false); setNewIdeaHook(""); setNewIdeaCsId(""); }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                    <Select value={newIdeaCsId} onValueChange={setNewIdeaCsId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select CS owner (optional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {csList.map((cs) => (
+                          <SelectItem key={cs.id} value={cs.id}>
+                            {cs.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 ) : (
                   <div className="flex gap-2">
