@@ -50,13 +50,23 @@ def _build_data_context() -> str:
             f"{all_time_views:,} | {len(p_reels)} reels, {len(p_posts)} posts |"
         )
 
-    # Top reels this month
+    # Top reels this month (with dates)
     month_reels_all = [r for r in all_reels if (r.get("posted_at") or "")[:10] >= month_start]
     top_reels = sorted(month_reels_all, key=lambda r: r.get("views", 0) or 0, reverse=True)[:10]
     top_lines = []
     for r in top_reels:
         handle = r.get("pages", {}).get("handle", "?") if r.get("pages") else "?"
-        top_lines.append(f"- @{handle}: {(r.get('views', 0) or 0):,} views — {r.get('url', '')}")
+        posted = (r.get("posted_at") or "unknown")[:10]
+        top_lines.append(f"- @{handle}: {(r.get('views', 0) or 0):,} views, posted {posted} — {r.get('url', '')}")
+
+    # Recent reels (last 30 with dates for time-based analysis)
+    all_reels_sorted = sorted(all_reels, key=lambda r: r.get("posted_at") or "", reverse=True)[:30]
+    recent_lines = []
+    for r in all_reels_sorted:
+        handle = r.get("pages", {}).get("handle", "?") if r.get("pages") else "?"
+        posted = (r.get("posted_at") or "unknown")[:16]
+        views = r.get("views", 0) or 0
+        recent_lines.append(f"| @{handle} | {posted} | {views:,} | {r.get('url', '')} |")
 
     # Idea stats
     idea_content: dict[str, list[dict]] = {idea["id"]: [] for idea in ideas}
@@ -105,6 +115,10 @@ def _build_data_context() -> str:
 
 ## Top 10 Reels This Month
 {chr(10).join(top_lines) if top_lines else "No reels this month."}
+
+## Recent 30 Reels (with timestamps)
+| Handle | Posted At | Views | URL |
+{chr(10).join(recent_lines) if recent_lines else "No reels yet."}
 
 ## Content Strategist Leaderboard
 {chr(10).join(cs_lines) if cs_lines else "No content strategists yet."}
