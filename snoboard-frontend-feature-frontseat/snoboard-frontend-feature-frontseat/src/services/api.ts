@@ -1,11 +1,17 @@
+import { supabase } from "@/lib/supabase";
+
 const BASE_URL = import.meta.env.VITE_API_URL || "";
 
 async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
       "ngrok-skip-browser-warning": "true",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options?.headers,
     },
   });

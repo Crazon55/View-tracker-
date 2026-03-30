@@ -1,8 +1,10 @@
 """FastAPI app for Instagram View Tracker."""
 from datetime import datetime, timezone, timedelta
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+
+from app.auth import require_auth
 
 from app.database.repositories.pages import get_page_repository
 from app.database.repositories.posts import get_post_repository
@@ -26,6 +28,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# --- Health (no auth) ---
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
 
 def _last_monday() -> str:
@@ -53,19 +61,13 @@ def _filter_current_month(items: list, date_field: str = "posted_at") -> list:
     return result
 
 
-# --- Health ---
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
-
-
 # --- Pages ---
-@app.get("/api/v1/pages")
+@app.get("/api/v1/pages", dependencies=[Depends(require_auth)])
 async def list_pages():
     pages = get_page_repository().get_all()
     return {"success": True, "data": pages}
 
-@app.post("/api/v1/pages")
+@app.post("/api/v1/pages", dependencies=[Depends(require_auth)])
 async def create_page(req: PageCreate):
     data = req.model_dump(exclude_none=True)
     handle = req.handle.lstrip("@").lower()
@@ -75,7 +77,7 @@ async def create_page(req: PageCreate):
     page = get_page_repository().create(data)
     return {"success": True, "data": page}
 
-@app.put("/api/v1/pages/{page_id}")
+@app.put("/api/v1/pages/{page_id}", dependencies=[Depends(require_auth)])
 async def update_page(page_id: str, req: PageUpdate):
     data = req.model_dump(exclude_none=True)
     if "handle" in data:
@@ -83,38 +85,38 @@ async def update_page(page_id: str, req: PageUpdate):
     page = get_page_repository().update(page_id, data)
     return {"success": True, "data": page}
 
-@app.delete("/api/v1/pages/{page_id}")
+@app.delete("/api/v1/pages/{page_id}", dependencies=[Depends(require_auth)])
 async def delete_page(page_id: str):
     get_page_repository().delete(page_id)
     return {"success": True, "message": "Page deleted"}
 
 
 # --- Posts (manual) ---
-@app.get("/api/v1/posts")
+@app.get("/api/v1/posts", dependencies=[Depends(require_auth)])
 async def list_posts():
     posts = get_post_repository().get_all()
     return {"success": True, "data": posts}
 
-@app.post("/api/v1/posts")
+@app.post("/api/v1/posts", dependencies=[Depends(require_auth)])
 async def create_post(req: PostCreate):
     data = req.model_dump(exclude_none=True)
     post = get_post_repository().create(data)
     return {"success": True, "data": post}
 
-@app.put("/api/v1/posts/{post_id}")
+@app.put("/api/v1/posts/{post_id}", dependencies=[Depends(require_auth)])
 async def update_post(post_id: str, req: PostUpdate):
     data = req.model_dump(exclude_none=True)
     post = get_post_repository().update(post_id, data)
     return {"success": True, "data": post}
 
-@app.delete("/api/v1/posts/{post_id}")
+@app.delete("/api/v1/posts/{post_id}", dependencies=[Depends(require_auth)])
 async def delete_post(post_id: str):
     get_post_repository().delete(post_id)
     return {"success": True, "message": "Post deleted"}
 
 
 # --- Dashboard stats ---
-@app.get("/api/v1/dashboard")
+@app.get("/api/v1/dashboard", dependencies=[Depends(require_auth)])
 async def dashboard_stats():
     """Aggregated stats for the dashboard hero + per-page bento cards.
     Only shows current month's data on the frontend (resets on 1st).
@@ -204,7 +206,7 @@ async def dashboard_stats():
 
 
 # --- Page detail (all reels + posts for a page) ---
-@app.get("/api/v1/pages/{page_id}/detail")
+@app.get("/api/v1/pages/{page_id}/detail", dependencies=[Depends(require_auth)])
 async def page_detail(page_id: str):
     page = get_page_repository().get_by_id(page_id)
     if not page:
@@ -236,12 +238,12 @@ async def page_detail(page_id: str):
 
 
 # --- Dashboard Views (manual Instagram dashboard view counts) ---
-@app.get("/api/v1/pages/{page_id}/dashboard-views")
+@app.get("/api/v1/pages/{page_id}/dashboard-views", dependencies=[Depends(require_auth)])
 async def list_dashboard_views(page_id: str):
     entries = get_dashboard_views_repository().get_by_page(page_id)
     return {"success": True, "data": entries}
 
-@app.post("/api/v1/pages/{page_id}/dashboard-views")
+@app.post("/api/v1/pages/{page_id}/dashboard-views", dependencies=[Depends(require_auth)])
 async def upsert_dashboard_views(page_id: str, req: dict):
     """Upsert dashboard views. Body: {reel_views?: number, post_views?: number, month?: "YYYY-MM-01"}"""
     month = req.get("month", _month_start())
@@ -255,19 +257,19 @@ async def upsert_dashboard_views(page_id: str, req: dict):
 
 
 # --- Reels (Stage 1 - manual) ---
-@app.get("/api/v1/reels/manual")
+@app.get("/api/v1/reels/manual", dependencies=[Depends(require_auth)])
 async def list_manual_reels():
     reels = get_reel_repository().get_manual()
     return {"success": True, "data": reels}
 
 # --- Reels (Main IPs - auto scraped) ---
-@app.get("/api/v1/reels/auto")
+@app.get("/api/v1/reels/auto", dependencies=[Depends(require_auth)])
 async def list_auto_reels():
     reels = get_reel_repository().get_auto()
     return {"success": True, "data": reels}
 
 # --- Reels (shared create/update/delete) ---
-@app.post("/api/v1/reels")
+@app.post("/api/v1/reels", dependencies=[Depends(require_auth)])
 async def create_reel(req: ReelCreate):
     data = req.model_dump(exclude_none=True)
     try:
@@ -276,25 +278,25 @@ async def create_reel(req: ReelCreate):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.put("/api/v1/reels/{reel_id}")
+@app.put("/api/v1/reels/{reel_id}", dependencies=[Depends(require_auth)])
 async def update_reel(reel_id: str, req: ReelUpdate):
     data = req.model_dump(exclude_none=True)
     reel = get_reel_repository().update(reel_id, data)
     return {"success": True, "data": reel}
 
-@app.delete("/api/v1/reels/{reel_id}")
+@app.delete("/api/v1/reels/{reel_id}", dependencies=[Depends(require_auth)])
 async def delete_reel(reel_id: str):
     get_reel_repository().delete(reel_id)
     return {"success": True, "message": "Reel deleted"}
 
 
 # --- Content Strategists ---
-@app.get("/api/v1/cs")
+@app.get("/api/v1/cs", dependencies=[Depends(require_auth)])
 async def list_cs():
     cs_list = get_cs_repository().get_all()
     return {"success": True, "data": cs_list}
 
-@app.post("/api/v1/cs")
+@app.post("/api/v1/cs", dependencies=[Depends(require_auth)])
 async def create_cs(req: CSCreate):
     data = req.model_dump(exclude_none=True)
     try:
@@ -303,25 +305,25 @@ async def create_cs(req: CSCreate):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.put("/api/v1/cs/{cs_id}")
+@app.put("/api/v1/cs/{cs_id}", dependencies=[Depends(require_auth)])
 async def update_cs(cs_id: str, req: CSUpdate):
     data = req.model_dump(exclude_none=True)
     cs = get_cs_repository().update(cs_id, data)
     return {"success": True, "data": cs}
 
-@app.delete("/api/v1/cs/{cs_id}")
+@app.delete("/api/v1/cs/{cs_id}", dependencies=[Depends(require_auth)])
 async def delete_cs(cs_id: str):
     get_cs_repository().delete(cs_id)
     return {"success": True, "message": "CS deleted"}
 
 
 # --- Ideas ---
-@app.get("/api/v1/ideas")
+@app.get("/api/v1/ideas", dependencies=[Depends(require_auth)])
 async def list_ideas():
     ideas = get_idea_repository().get_all()
     return {"success": True, "data": ideas}
 
-@app.post("/api/v1/ideas")
+@app.post("/api/v1/ideas", dependencies=[Depends(require_auth)])
 async def create_idea(req: IdeaCreate):
     data = req.model_dump(exclude_none=True)
     try:
@@ -330,20 +332,20 @@ async def create_idea(req: IdeaCreate):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.put("/api/v1/ideas/{idea_id}")
+@app.put("/api/v1/ideas/{idea_id}", dependencies=[Depends(require_auth)])
 async def update_idea(idea_id: str, req: IdeaUpdate):
     data = req.model_dump(exclude_none=True)
     idea = get_idea_repository().update(idea_id, data)
     return {"success": True, "data": idea}
 
-@app.delete("/api/v1/ideas/{idea_id}")
+@app.delete("/api/v1/ideas/{idea_id}", dependencies=[Depends(require_auth)])
 async def delete_idea(idea_id: str):
     get_idea_repository().delete(idea_id)
     return {"success": True, "message": "Idea deleted"}
 
 
 # --- Idea Engine Dashboard ---
-@app.get("/api/v1/idea-engine")
+@app.get("/api/v1/idea-engine", dependencies=[Depends(require_auth)])
 async def idea_engine_dashboard():
     """Aggregated stats for the Idea Engine page:
     - Per-idea performance (total posts, total views, best post, hit-rate)
@@ -466,7 +468,7 @@ async def idea_engine_dashboard():
 
 
 # --- Scrape: fetch all reels from auto_scrape pages ---
-@app.post("/api/v1/scrape/reels")
+@app.post("/api/v1/scrape/reels", dependencies=[Depends(require_auth)])
 async def scrape_reels(req: ScrapeRequest | None = None):
     """
     Scrape reels from all pages marked auto_scrape=true.
