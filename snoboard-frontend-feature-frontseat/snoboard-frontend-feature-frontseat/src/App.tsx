@@ -183,7 +183,7 @@ function AppLayout() {
     return (
       <>
         <HamburgerMenu />
-        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-zinc-900/80 border border-zinc-800 backdrop-blur-sm rounded-xl px-4 py-2">
+        <div className="flex items-center justify-end gap-3 px-6 pt-5 pb-2">
           <AnimalPicker userId={user?.id} />
           <p className="text-sm text-zinc-400">
             {getGreeting()}, <span className="text-white font-medium">{getFirstName(user)}</span>
