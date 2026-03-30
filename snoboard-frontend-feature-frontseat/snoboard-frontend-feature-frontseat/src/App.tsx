@@ -4,9 +4,11 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb } from "lucide-react";
+import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import Login from "./pages/Login";
 
 import Dashboard from "./pages/Dashboard";
 import PageDetail from "./pages/PageDetail";
@@ -33,6 +35,7 @@ const navItems = [
 function HamburgerMenu() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
+  const { user, signOut } = useAuth();
 
   return (
     <div className="fixed top-5 left-5 z-50">
@@ -46,12 +49,12 @@ function HamburgerMenu() {
             <Menu className="w-5 h-5 text-white" />
           </Button>
         </SheetTrigger>
-        <SheetContent side="left" className="w-64 bg-zinc-950 border-zinc-800 p-0">
+        <SheetContent side="left" className="w-64 bg-zinc-950 border-zinc-800 p-0 flex flex-col">
           <div className="px-5 py-6 border-b border-zinc-800">
             <h1 className="text-lg font-bold text-white tracking-tight">View Tracker</h1>
             <p className="text-xs text-muted-foreground mt-0.5">Instagram Analytics</p>
           </div>
-          <nav className="px-3 py-4 space-y-1">
+          <nav className="px-3 py-4 space-y-1 flex-1">
             {navItems.map(({ to, label, icon: Icon }) => (
               <button
                 key={to}
@@ -63,6 +66,16 @@ function HamburgerMenu() {
               </button>
             ))}
           </nav>
+          <div className="px-3 py-4 border-t border-zinc-800">
+            <p className="px-3 text-xs text-zinc-600 truncate mb-2">{user?.email}</p>
+            <button
+              onClick={signOut}
+              className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors w-full text-left text-red-400 hover:text-red-300 hover:bg-zinc-900"
+            >
+              <LogOut className="w-4 h-4" />
+              Sign out
+            </button>
+          </div>
         </SheetContent>
       </Sheet>
     </div>
@@ -71,6 +84,7 @@ function HamburgerMenu() {
 
 function AppLayout() {
   const location = useLocation();
+  const { user, signOut } = useAuth();
 
   const isFullScreen =
     location.pathname === "/" ||
@@ -120,6 +134,17 @@ function AppLayout() {
             </NavLink>
           ))}
         </nav>
+
+        <div className="px-3 py-4 border-t border-zinc-800">
+          <p className="px-3 text-xs text-zinc-600 truncate mb-2">{user?.email}</p>
+          <button
+            onClick={signOut}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors w-full text-left text-red-400 hover:text-red-300 hover:bg-zinc-900"
+          >
+            <LogOut className="w-4 h-4" />
+            Sign out
+          </button>
+        </div>
       </aside>
 
       {/* Main content */}
@@ -137,13 +162,55 @@ function AppLayout() {
   );
 }
 
+function AuthGate() {
+  const { user, loading, domainError } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <div className="text-zinc-500 text-sm">Loading...</div>
+      </div>
+    );
+  }
+
+  if (domainError) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <div className="text-center space-y-4 px-6">
+          <h1 className="text-2xl font-bold text-white">Access Denied</h1>
+          <p className="text-sm text-zinc-400">
+            Only <span className="text-violet-400">@owledmedia.com</span> email addresses are allowed.
+          </p>
+          <p className="text-xs text-zinc-600">
+            You signed in with a different email. Please try again with your Owled Media account.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm rounded-lg"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Login />;
+  }
+
+  return <AppLayout />;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <AppLayout />
+        <AuthProvider>
+          <AuthGate />
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
