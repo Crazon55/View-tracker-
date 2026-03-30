@@ -99,13 +99,13 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-zinc-950">
       {/* Banner */}
-      <div className="relative w-full h-48 sm:h-64 overflow-hidden">
+      <div className="relative w-full h-56 sm:h-72 -mt-[1px] overflow-hidden">
         <img
           src="/banner.png"
           alt=""
-          className="w-full h-full object-cover opacity-40"
+          className="w-full h-full object-cover object-center opacity-50"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/30 via-transparent to-zinc-950" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-zinc-950" />
       </div>
 
       <div className="px-4 sm:px-6 -mt-16 sm:-mt-20 relative z-10 pb-8 sm:pb-10">
