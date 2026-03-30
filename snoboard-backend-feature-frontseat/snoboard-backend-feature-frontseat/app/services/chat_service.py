@@ -49,12 +49,11 @@ def _build_data_context() -> str:
 
         all_time_views = sum(r.get("views", 0) or 0 for r in p_reels) + sum(p.get("actual_views", 0) or 0 for p in p_posts)
         month_views = sum(r.get("views", 0) or 0 for r in month_reels) + sum(p.get("actual_views", 0) or 0 for p in month_posts)
-        reel_type = "main" if page.get("auto_scrape") else "stage1"
 
         page_lines.append(
-            f"| @{page['handle']} | {reel_type} | {page.get('followers_count', 0):,} | "
+            f"| @{page['handle']} | {page.get('followers_count', 0):,} | "
             f"{month_views:,} | {len(month_reels)} reels, {len(month_posts)} posts | "
-            f"{all_time_views:,} | {len(p_main)} main, {len(p_stage1)} stage1, {len(p_posts)} posts |"
+            f"{all_time_views:,} | {len(p_main)} main-reels, {len(p_stage1)} stage1-reels, {len(p_posts)} posts |"
         )
 
     # Top reels this month (with dates)
@@ -140,7 +139,7 @@ def _build_data_context() -> str:
         )
 
     return f"""## Pages (Instagram Accounts)
-| Handle | Type | Followers | This Month Views | This Month Content | All-Time Views | All-Time Content |
+| Handle | Followers | This Month Views | This Month Content | All-Time Views | All-Time Content |
 {chr(10).join(page_lines) if page_lines else "No pages yet."}
 
 ## Top 10 Reels This Month
