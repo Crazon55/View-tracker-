@@ -97,7 +97,18 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 px-4 sm:px-6 py-8 sm:py-10">
+    <div className="min-h-screen bg-zinc-950">
+      {/* Banner */}
+      <div className="relative w-full h-48 sm:h-64 overflow-hidden">
+        <img
+          src="/banner.png"
+          alt=""
+          className="w-full h-full object-cover opacity-40"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/30 via-transparent to-zinc-950" />
+      </div>
+
+      <div className="px-4 sm:px-6 -mt-16 sm:-mt-20 relative z-10 pb-8 sm:pb-10">
       <div className="max-w-6xl mx-auto">
 
         {/* Top Cards Row */}
@@ -347,6 +358,7 @@ export default function Dashboard() {
         {pages.length === 0 && search && (
           <p className="text-center text-zinc-500 py-12">No pages matching "{search}"</p>
         )}
+      </div>
       </div>
     </div>
   );
