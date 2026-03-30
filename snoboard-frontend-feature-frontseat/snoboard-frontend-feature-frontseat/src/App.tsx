@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import Login from "./pages/Login";
+import ChatBubble from "./components/ChatBubble";
 
 import Dashboard from "./pages/Dashboard";
 import PageDetail from "./pages/PageDetail";
@@ -312,7 +313,12 @@ function AuthGate() {
     return <Login />;
   }
 
-  return <AppLayout />;
+  return (
+    <>
+      <AppLayout />
+      <ChatBubble />
+    </>
+  );
 }
 
 const App = () => (

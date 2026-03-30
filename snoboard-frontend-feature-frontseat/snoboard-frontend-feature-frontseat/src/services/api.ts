@@ -94,3 +94,24 @@ export const deleteIdea = (id: string) =>
 
 // Idea Engine Dashboard
 export const getIdeaEngine = () => fetchApi<any>("/api/v1/idea-engine");
+
+// Chat
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ChatResponseData {
+  type: "text" | "chart";
+  content: string;
+  chart_type?: "bar" | "line" | "pie";
+  title?: string;
+  data?: Record<string, any>[];
+  data_keys?: { xKey: string; yKeys: string[] };
+}
+
+export const sendChatMessage = (message: string, history: ChatMessage[]) =>
+  fetchApi<ChatResponseData>("/api/v1/chat", {
+    method: "POST",
+    body: JSON.stringify({ message, history }),
+  });

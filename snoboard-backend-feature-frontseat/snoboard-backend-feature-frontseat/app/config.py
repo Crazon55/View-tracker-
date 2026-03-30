@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     instagram_actor_id: str = "apify/instagram-post-scraper"
     instagram_profile_actor_id: str = "xMc5Ga1oCONPmWJIa"
 
+    # Anthropic (Claude AI)
+    anthropic_api_key: str = ""
+
     # Service URL (for internal self-calls)
     service_url: str = "http://localhost:8001"
 
