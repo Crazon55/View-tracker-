@@ -81,3 +81,14 @@ class IdeaUpdate(BaseModel):
     source: str | None = None
     status: str | None = None
     notes: str | None = None
+
+
+# --- Chat ---
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ChatRequest(BaseModel):
+    message: str
+    history: list[ChatMessage] = []

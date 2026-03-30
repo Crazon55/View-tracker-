@@ -14,6 +14,7 @@ from app.schemas.request import (
     PageCreate, PageUpdate, PostCreate, PostUpdate,
     ReelCreate, ReelUpdate, ScrapeRequest,
     CSCreate, CSUpdate, IdeaCreate, IdeaUpdate,
+    ChatRequest,
 )
 from app.schemas.response import ScrapeStatusResponse
 
@@ -529,3 +530,15 @@ async def scrape_reels(req: ScrapeRequest | None = None):
             errors.append(f"Failed to save reel {reel.url}: {str(e)}")
 
     return ScrapeStatusResponse(success=True, reels_updated=inserted, errors=errors)
+
+
+# --- AI Chat ---
+@app.post("/api/v1/chat")
+async def chat(req: ChatRequest):
+    from app.services.chat_service import get_chat_response
+    try:
+        history = [{"role": m.role, "content": m.content} for m in req.history]
+        result = await get_chat_response(req.message, history)
+        return {"success": True, "data": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
