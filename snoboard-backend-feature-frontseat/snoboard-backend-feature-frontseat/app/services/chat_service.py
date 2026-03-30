@@ -59,19 +59,20 @@ def _build_data_context() -> str:
         posted = (r.get("posted_at") or "unknown")[:10]
         top_lines.append(f"- @{handle}: {(r.get('views', 0) or 0):,} views, posted {posted} — {r.get('url', '')}")
 
-    # Recent reels (last 30 with dates for time-based analysis)
-    all_reels_sorted = sorted(all_reels, key=lambda r: r.get("posted_at") or "", reverse=True)[:30]
+    # All reels this month (with dates for time-based analysis)
+    month_reels_sorted = sorted(month_reels_all, key=lambda r: r.get("posted_at") or "", reverse=True)
     recent_lines = []
-    for r in all_reels_sorted:
+    for r in month_reels_sorted:
         handle = r.get("pages", {}).get("handle", "?") if r.get("pages") else "?"
         posted = (r.get("posted_at") or "unknown")[:16]
         views = r.get("views", 0) or 0
-        recent_lines.append(f"| @{handle} | {posted} | {views:,} | reel | {r.get('url', '')} |")
+        recent_lines.append(f"| @{handle} | {posted} | {views:,} | {r.get('url', '')} |")
 
-    # Recent posts (last 30 with dates)
-    all_posts_sorted = sorted(all_posts, key=lambda p: p.get("posted_at") or p.get("created_at") or "", reverse=True)[:30]
+    # All posts this month (with dates)
+    month_posts_all = [p for p in all_posts if (p.get("posted_at") or p.get("created_at") or "")[:10] >= month_start]
+    month_posts_sorted = sorted(month_posts_all, key=lambda p: p.get("posted_at") or p.get("created_at") or "", reverse=True)
     recent_post_lines = []
-    for p in all_posts_sorted:
+    for p in month_posts_sorted:
         handle = p.get("pages", {}).get("handle", "?") if p.get("pages") else "?"
         posted = (p.get("posted_at") or p.get("created_at") or "unknown")[:16]
         views = p.get("actual_views", 0) or 0
@@ -126,13 +127,13 @@ def _build_data_context() -> str:
 ## Top 10 Reels This Month
 {chr(10).join(top_lines) if top_lines else "No reels this month."}
 
-## Recent 30 Reels (with timestamps)
-| Handle | Posted At | Views | Type | URL |
-{chr(10).join(recent_lines) if recent_lines else "No reels yet."}
+## All Reels This Month (with timestamps)
+| Handle | Posted At | Views | URL |
+{chr(10).join(recent_lines) if recent_lines else "No reels this month."}
 
-## Recent 30 Posts (with timestamps)
+## All Posts This Month (with timestamps)
 | Handle | Posted At | Actual Views | Expected Views | URL |
-{chr(10).join(recent_post_lines) if recent_post_lines else "No posts yet."}
+{chr(10).join(recent_post_lines) if recent_post_lines else "No posts this month."}
 
 ## Content Strategist Leaderboard
 {chr(10).join(cs_lines) if cs_lines else "No content strategists yet."}
