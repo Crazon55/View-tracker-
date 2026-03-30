@@ -59,25 +59,35 @@ def _build_data_context() -> str:
         posted = (r.get("posted_at") or "unknown")[:10]
         top_lines.append(f"- @{handle}: {(r.get('views', 0) or 0):,} views, posted {posted} — {r.get('url', '')}")
 
-    # All reels this month (with dates for time-based analysis)
-    month_reels_sorted = sorted(month_reels_all, key=lambda r: r.get("posted_at") or "", reverse=True)
-    recent_lines = []
-    for r in month_reels_sorted:
+    # Per-page reel breakdown this month (aggregated by page + date)
+    from collections import defaultdict
+    reel_by_page_date: dict[str, dict[str, list]] = defaultdict(lambda: defaultdict(list))
+    for r in month_reels_all:
         handle = r.get("pages", {}).get("handle", "?") if r.get("pages") else "?"
-        posted = (r.get("posted_at") or "unknown")[:16]
-        views = r.get("views", 0) or 0
-        recent_lines.append(f"| @{handle} | {posted} | {views:,} | {r.get('url', '')} |")
+        date = (r.get("posted_at") or "unknown")[:10]
+        reel_by_page_date[handle][date].append(r.get("views", 0) or 0)
 
-    # All posts this month (with dates)
+    reel_detail_lines = []
+    for handle in sorted(reel_by_page_date):
+        for date in sorted(reel_by_page_date[handle]):
+            views_list = reel_by_page_date[handle][date]
+            total = sum(views_list)
+            reel_detail_lines.append(f"| @{handle} | {date} | {len(views_list)} | {total:,} |")
+
+    # Per-page post breakdown this month (aggregated by page + date)
     month_posts_all = [p for p in all_posts if (p.get("posted_at") or p.get("created_at") or "")[:10] >= month_start]
-    month_posts_sorted = sorted(month_posts_all, key=lambda p: p.get("posted_at") or p.get("created_at") or "", reverse=True)
-    recent_post_lines = []
-    for p in month_posts_sorted:
+    post_by_page_date: dict[str, dict[str, list]] = defaultdict(lambda: defaultdict(list))
+    for p in month_posts_all:
         handle = p.get("pages", {}).get("handle", "?") if p.get("pages") else "?"
-        posted = (p.get("posted_at") or p.get("created_at") or "unknown")[:16]
-        views = p.get("actual_views", 0) or 0
-        expected = p.get("expected_views", 0) or 0
-        recent_post_lines.append(f"| @{handle} | {posted} | {views:,} | expected: {expected:,} | {p.get('url', '')} |")
+        date = (p.get("posted_at") or p.get("created_at") or "unknown")[:10]
+        post_by_page_date[handle][date].append(p.get("actual_views", 0) or 0)
+
+    post_detail_lines = []
+    for handle in sorted(post_by_page_date):
+        for date in sorted(post_by_page_date[handle]):
+            views_list = post_by_page_date[handle][date]
+            total = sum(views_list)
+            post_detail_lines.append(f"| @{handle} | {date} | {len(views_list)} | {total:,} |")
 
     # Idea stats
     idea_content: dict[str, list[dict]] = {idea["id"]: [] for idea in ideas}
@@ -127,13 +137,13 @@ def _build_data_context() -> str:
 ## Top 10 Reels This Month
 {chr(10).join(top_lines) if top_lines else "No reels this month."}
 
-## All Reels This Month (with timestamps)
-| Handle | Posted At | Views | URL |
-{chr(10).join(recent_lines) if recent_lines else "No reels this month."}
+## Reels This Month (by page and date)
+| Handle | Date | Count | Total Views |
+{chr(10).join(reel_detail_lines) if reel_detail_lines else "No reels this month."}
 
-## All Posts This Month (with timestamps)
-| Handle | Posted At | Actual Views | Expected Views | URL |
-{chr(10).join(recent_post_lines) if recent_post_lines else "No posts this month."}
+## Posts This Month (by page and date)
+| Handle | Date | Count | Total Views |
+{chr(10).join(post_detail_lines) if post_detail_lines else "No posts this month."}
 
 ## Content Strategist Leaderboard
 {chr(10).join(cs_lines) if cs_lines else "No content strategists yet."}
@@ -187,16 +197,20 @@ async def get_chat_response(message: str, history: list[dict]) -> dict:
 
     # Build messages list
     messages = []
-    for msg in history[-10:]:  # last 10 messages
+    for msg in history[-4:]:  # last 4 messages to save tokens
         messages.append({"role": msg["role"], "content": msg["content"]})
     messages.append({"role": "user", "content": message})
 
-    response = await client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=2048,
-        system=system,
-        messages=messages,
-    )
+    try:
+        response = await client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1024,
+            system=system,
+            messages=messages,
+        )
+    except Exception as e:
+        logger.error(f"Claude API error: {e}")
+        raise
 
     raw_text = response.content[0].text
 
