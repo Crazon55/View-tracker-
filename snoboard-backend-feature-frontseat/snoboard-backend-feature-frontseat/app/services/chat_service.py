@@ -66,7 +66,17 @@ def _build_data_context() -> str:
         handle = r.get("pages", {}).get("handle", "?") if r.get("pages") else "?"
         posted = (r.get("posted_at") or "unknown")[:16]
         views = r.get("views", 0) or 0
-        recent_lines.append(f"| @{handle} | {posted} | {views:,} | {r.get('url', '')} |")
+        recent_lines.append(f"| @{handle} | {posted} | {views:,} | reel | {r.get('url', '')} |")
+
+    # Recent posts (last 30 with dates)
+    all_posts_sorted = sorted(all_posts, key=lambda p: p.get("posted_at") or p.get("created_at") or "", reverse=True)[:30]
+    recent_post_lines = []
+    for p in all_posts_sorted:
+        handle = p.get("pages", {}).get("handle", "?") if p.get("pages") else "?"
+        posted = (p.get("posted_at") or p.get("created_at") or "unknown")[:16]
+        views = p.get("actual_views", 0) or 0
+        expected = p.get("expected_views", 0) or 0
+        recent_post_lines.append(f"| @{handle} | {posted} | {views:,} | expected: {expected:,} | {p.get('url', '')} |")
 
     # Idea stats
     idea_content: dict[str, list[dict]] = {idea["id"]: [] for idea in ideas}
@@ -117,8 +127,12 @@ def _build_data_context() -> str:
 {chr(10).join(top_lines) if top_lines else "No reels this month."}
 
 ## Recent 30 Reels (with timestamps)
-| Handle | Posted At | Views | URL |
+| Handle | Posted At | Views | Type | URL |
 {chr(10).join(recent_lines) if recent_lines else "No reels yet."}
+
+## Recent 30 Posts (with timestamps)
+| Handle | Posted At | Actual Views | Expected Views | URL |
+{chr(10).join(recent_post_lines) if recent_post_lines else "No posts yet."}
 
 ## Content Strategist Leaderboard
 {chr(10).join(cs_lines) if cs_lines else "No content strategists yet."}
