@@ -6,6 +6,7 @@ import { Search, TrendingUp, MoreVertical } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
+import { motion, AnimatePresence } from "framer-motion";
 
 function formatCompact(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
@@ -43,7 +44,8 @@ function TogglePill({ options, value, onChange }: {
 export default function Dashboard() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
-  const [breakdownMode, setBreakdownMode] = useState<BreakdownMode>("views");
+  const [breakdownMode, setBreakdownMode] = useState<BreakdownMode>("reels");
+  const [rightCardView, setRightCardView] = useState<"donut" | "pages">("donut");
   const [globalPeriod, setGlobalPeriod] = useState<TimePeriod>("monthly");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -177,117 +179,22 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Views Donut Chart */}
+          {/* Views Distribution + Page-wise Views */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8">
-            <p className="text-[10px] sm:text-[11px] uppercase tracking-[0.2em] text-zinc-400 font-semibold mb-5 sm:mb-6">
-              Views Distribution
-            </p>
-            <div className="flex items-center justify-center gap-8">
-              {(() => {
-                const reelViews = stats?.total_reel_views ?? 0;
-                const postViews = stats?.total_post_views ?? 0;
-                const total = reelViews + postViews;
-                const size = 160;
-                const stroke = 14;
-                const radius = (size - stroke) / 2;
-                const circumference = 2 * Math.PI * radius;
-                const gap = 0.02;
-                const reelFrac = total > 0 ? reelViews / total : 0;
-                const reelLen = reelFrac * circumference * (1 - gap);
-                const postFrac = total > 0 ? postViews / total : 0;
-                const postLen = postFrac * circumference * (1 - gap);
-                const gapLen = total > 0 && postViews > 0 ? circumference * gap : 0;
-
-                return (
-                  <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
-                    <svg width={size} height={size} className="-rotate-90">
-                      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#27272a" strokeWidth={stroke} />
-                      {reelViews > 0 && (
-                        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="url(#dash-reel)" strokeWidth={stroke} strokeLinecap="round" strokeDasharray={`${reelLen} ${circumference - reelLen}`} strokeDashoffset={0} />
-                      )}
-                      {postViews > 0 && (
-                        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#10b981" strokeWidth={stroke} strokeLinecap="round" strokeDasharray={`${postLen} ${circumference - postLen}`} strokeDashoffset={-(reelLen + gapLen)} />
-                      )}
-                      <defs>
-                        <linearGradient id="dash-reel" x1="0%" y1="0%" x2="100%" y2="100%">
-                          <stop offset="0%" stopColor="#a855f7" />
-                          <stop offset="100%" stopColor="#d946ef" />
-                        </linearGradient>
-                      </defs>
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <p className="text-[9px] uppercase tracking-widest text-zinc-500">Total Views</p>
-                      <p className="text-2xl font-black text-white tabular-nums mt-1">{total.toLocaleString()}</p>
-                    </div>
-                  </div>
-                );
-              })()}
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-3 h-3 rounded-full bg-gradient-to-r from-purple-500 to-pink-500" />
-                  <div>
-                    <p className="text-xs text-zinc-500">Reel Views</p>
-                    <p className="text-lg font-bold text-white tabular-nums">{formatCompact(stats?.total_reel_views ?? 0)}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-3 h-3 rounded-full bg-emerald-500" />
-                  <div>
-                    <p className="text-xs text-zinc-500">Post Views</p>
-                    <p className="text-lg font-bold text-white tabular-nums">{formatCompact(stats?.total_post_views ?? 0)}</p>
-                  </div>
-                </div>
-                <div className="h-px bg-zinc-800" />
-                <div className="flex items-center gap-4 text-xs text-zinc-600">
-                  <span>{stats?.total_reels ?? 0} reels</span>
-                  <span>{stats?.total_posts ?? 0} posts</span>
-                  <span>{allPages.length} pages</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Page-wise View Performance */}
-        {(() => {
-          // Calculate date range based on period
-          const now = new Date();
-          let fromDate = "";
-          let toDate = now.toISOString().slice(0, 10);
-          if (breakdownMode === "reels") {
-            // Weekly: last 7 days
-            const d = new Date(now);
-            d.setDate(d.getDate() - 7);
-            fromDate = d.toISOString().slice(0, 10);
-          } else {
-            // Monthly: first of current month
-            fromDate = now.toISOString().slice(0, 8) + "01";
-          }
-          // Override with custom dates if set
-          const useFrom = customFrom || fromDate;
-          const useTo = customTo || toDate;
-
-          // Per-page views within date range
-          const pageViews = allPages.map((page: any) => {
-            const reelViews = allReels
-              .filter((r: any) => r.page_id === page.id && (r.posted_at || "").slice(0, 10) >= useFrom && (r.posted_at || "").slice(0, 10) <= useTo)
-              .reduce((s: number, r: any) => s + (r.views ?? 0), 0);
-            const postViews = allPosts
-              .filter((p: any) => p.page_id === page.id && (p.posted_at || p.created_at || "").slice(0, 10) >= useFrom && (p.posted_at || p.created_at || "").slice(0, 10) <= useTo)
-              .reduce((s: number, p: any) => s + (p.actual_views ?? 0), 0);
-            return {
-              name: (page.handle ?? "").length > 14 ? (page.handle ?? "").slice(0, 14) + ".." : (page.handle ?? ""),
-              views: reelViews + postViews,
-            };
-          }).filter((p: { views: number }) => p.views > 0).sort((a: { views: number }, b: { views: number }) => b.views - a.views);
-
-          return pageViews.length > 0 ? (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8 mb-8 sm:mb-10">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
-                <p className="text-[10px] sm:text-[11px] uppercase tracking-[0.2em] text-zinc-400 font-semibold">
-                  Page-wise Views
-                </p>
-                <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center justify-between mb-5 sm:mb-6">
+              <p className="text-[10px] sm:text-[11px] uppercase tracking-[0.2em] text-zinc-400 font-semibold">
+                {rightCardView === "donut" ? "Views Distribution" : "Page-wise Views"}
+              </p>
+              <div className="flex items-center gap-2">
+                <TogglePill
+                  options={[
+                    { label: "Distribution", value: "donut" },
+                    { label: "By Page", value: "pages" },
+                  ]}
+                  value={rightCardView}
+                  onChange={(v) => setRightCardView(v as "donut" | "pages")}
+                />
+                {rightCardView === "pages" && (
                   <TogglePill
                     options={[
                       { label: "Weekly", value: "reels" },
@@ -296,31 +203,134 @@ export default function Dashboard() {
                     value={breakdownMode}
                     onChange={(v) => setBreakdownMode(v as BreakdownMode)}
                   />
-                  <div className="flex items-center gap-2">
-                    <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)}
-                      className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500/50 cursor-pointer" />
-                    <span className="text-zinc-600 text-[10px]">to</span>
-                    <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)}
-                      className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500/50 cursor-pointer" />
-                  </div>
-                </div>
+                )}
               </div>
-              <ResponsiveContainer width="100%" height={Math.max(300, pageViews.length * 36)}>
-                <BarChart data={pageViews} layout="vertical" margin={{ top: 5, right: 30, bottom: 5, left: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" horizontal={false} />
-                  <XAxis type="number" tick={{ fill: "#71717a", fontSize: 10 }} tickFormatter={(v: number) => formatCompact(v)} />
-                  <YAxis type="category" dataKey="name" tick={{ fill: "#a1a1aa", fontSize: 11 }} width={120} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 8 }}
-                    labelStyle={{ color: "#d4d4d8", fontSize: 12 }}
-                    formatter={(value: number) => [value.toLocaleString() + " views", ""]}
-                  />
-                  <Bar dataKey="views" fill="#a855f7" radius={[0, 6, 6, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
             </div>
-          ) : null;
-        })()}
+
+            <AnimatePresence mode="wait">
+              {rightCardView === "donut" ? (
+                <motion.div
+                  key="donut"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.25 }}
+                  className="flex items-center justify-center gap-8"
+                >
+                  {(() => {
+                    const reelViews = stats?.total_reel_views ?? 0;
+                    const postViews = stats?.total_post_views ?? 0;
+                    const total = reelViews + postViews;
+                    const size = 160;
+                    const stroke = 14;
+                    const radius = (size - stroke) / 2;
+                    const circumference = 2 * Math.PI * radius;
+                    const gap = 0.02;
+                    const reelFrac = total > 0 ? reelViews / total : 0;
+                    const reelLen = reelFrac * circumference * (1 - gap);
+                    const postFrac = total > 0 ? postViews / total : 0;
+                    const postLen = postFrac * circumference * (1 - gap);
+                    const gapLen = total > 0 && postViews > 0 ? circumference * gap : 0;
+                    return (
+                      <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+                        <svg width={size} height={size} className="-rotate-90">
+                          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#27272a" strokeWidth={stroke} />
+                          {reelViews > 0 && (
+                            <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="url(#dash-reel)" strokeWidth={stroke} strokeLinecap="round" strokeDasharray={`${reelLen} ${circumference - reelLen}`} strokeDashoffset={0} />
+                          )}
+                          {postViews > 0 && (
+                            <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#10b981" strokeWidth={stroke} strokeLinecap="round" strokeDasharray={`${postLen} ${circumference - postLen}`} strokeDashoffset={-(reelLen + gapLen)} />
+                          )}
+                          <defs>
+                            <linearGradient id="dash-reel" x1="0%" y1="0%" x2="100%" y2="100%">
+                              <stop offset="0%" stopColor="#a855f7" />
+                              <stop offset="100%" stopColor="#d946ef" />
+                            </linearGradient>
+                          </defs>
+                        </svg>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                          <p className="text-[9px] uppercase tracking-widest text-zinc-500">Total Views</p>
+                          <p className="text-2xl font-black text-white tabular-nums mt-1">{total.toLocaleString()}</p>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-3 h-3 rounded-full bg-gradient-to-r from-purple-500 to-pink-500" />
+                      <div>
+                        <p className="text-xs text-zinc-500">Reel Views</p>
+                        <p className="text-lg font-bold text-white tabular-nums">{formatCompact(stats?.total_reel_views ?? 0)}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                      <div>
+                        <p className="text-xs text-zinc-500">Post Views</p>
+                        <p className="text-lg font-bold text-white tabular-nums">{formatCompact(stats?.total_post_views ?? 0)}</p>
+                      </div>
+                    </div>
+                    <div className="h-px bg-zinc-800" />
+                    <div className="flex items-center gap-4 text-xs text-zinc-600">
+                      <span>{stats?.total_reels ?? 0} reels</span>
+                      <span>{stats?.total_posts ?? 0} posts</span>
+                      <span>{allPages.length} pages</span>
+                    </div>
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="pages"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.25 }}
+                >
+                  {(() => {
+                    const now = new Date();
+                    let fromDate = "";
+                    const toDate = now.toISOString().slice(0, 10);
+                    if (breakdownMode === "reels") {
+                      const d = new Date(now); d.setDate(d.getDate() - 7); fromDate = d.toISOString().slice(0, 10);
+                    } else {
+                      fromDate = now.toISOString().slice(0, 8) + "01";
+                    }
+                    const useFrom = customFrom || fromDate;
+                    const useTo = customTo || toDate;
+                    const pageViews = allPages.map((page: any) => {
+                      const rv = allReels.filter((r: any) => r.page_id === page.id && (r.posted_at || "").slice(0, 10) >= useFrom && (r.posted_at || "").slice(0, 10) <= useTo).reduce((s: number, r: any) => s + (r.views ?? 0), 0);
+                      const pv = allPosts.filter((p: any) => p.page_id === page.id && (p.posted_at || p.created_at || "").slice(0, 10) >= useFrom && (p.posted_at || p.created_at || "").slice(0, 10) <= useTo).reduce((s: number, p: any) => s + (p.actual_views ?? 0), 0);
+                      return { name: (page.handle ?? "").length > 14 ? (page.handle ?? "").slice(0, 14) + ".." : (page.handle ?? ""), views: rv + pv };
+                    }).filter((p: { views: number }) => p.views > 0).sort((a: { views: number }, b: { views: number }) => b.views - a.views);
+
+                    return pageViews.length > 0 ? (
+                      <>
+                        {(customFrom || customTo) && (
+                          <div className="flex items-center gap-2 mb-3">
+                            <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500/50 cursor-pointer" />
+                            <span className="text-zinc-600 text-[10px]">to</span>
+                            <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500/50 cursor-pointer" />
+                          </div>
+                        )}
+                        <div className="overflow-y-auto max-h-[280px]">
+                          <ResponsiveContainer width="100%" height={Math.max(250, pageViews.length * 28)}>
+                            <BarChart data={pageViews} layout="vertical" margin={{ top: 0, right: 20, bottom: 0, left: 0 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" horizontal={false} />
+                              <XAxis type="number" tick={{ fill: "#71717a", fontSize: 9 }} tickFormatter={(v: number) => formatCompact(v)} />
+                              <YAxis type="category" dataKey="name" tick={{ fill: "#a1a1aa", fontSize: 10 }} width={110} />
+                              <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 8 }} formatter={(value: number) => [value.toLocaleString() + " views", ""]} />
+                              <Bar dataKey="views" fill="#a855f7" radius={[0, 4, 4, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </>
+                    ) : <p className="text-center text-zinc-600 py-8 text-sm">No data for this period</p>;
+                  })()}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
 
         {/* Leaderboard Podium */}
         {allPages.length >= 3 && (() => {
