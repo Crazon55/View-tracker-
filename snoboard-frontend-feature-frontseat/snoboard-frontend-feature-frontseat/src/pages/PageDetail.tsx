@@ -89,6 +89,7 @@ export default function PageDetail() {
   const queryClient = useQueryClient();
   const [dvReelInput, setDvReelInput] = useState<string | null>(null);
   const [dvPostInput, setDvPostInput] = useState<string | null>(null);
+  const [contentTab, setContentTab] = useState<"reels" | "posts">("reels");
   const [sortCol, setSortCol] = useState<"views" | "likes" | "comments" | "posted_at">("views");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
@@ -261,98 +262,123 @@ export default function PageDetail() {
           </div>
         )}
 
-        {/* All Reels */}
-        {reels.length > 0 && (() => {
-          const sortedReels = [...reels].sort((a: any, b: any) => {
-            const av = sortCol === "posted_at" ? new Date(a.posted_at ?? 0).getTime() : (a[sortCol] ?? 0);
-            const bv = sortCol === "posted_at" ? new Date(b.posted_at ?? 0).getTime() : (b[sortCol] ?? 0);
-            return sortDir === "desc" ? bv - av : av - bv;
-          });
-          return (
-          <div className="mb-10">
-            <h2 className="text-xl font-bold text-white mb-4">
-              Reels <Badge variant="secondary" className="ml-2 text-xs">{reels.length}</Badge>
-            </h2>
-            <div className="border border-zinc-800 rounded-xl overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-zinc-800">
-                    <TableHead className="w-12">#</TableHead>
-                    <TableHead>Link</TableHead>
-                    <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("posted_at")}>
-                      Posted <SortIcon col="posted_at" />
-                    </TableHead>
-                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("views")}>
-                      Views <SortIcon col="views" />
-                    </TableHead>
-                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("likes")}>
-                      Likes <SortIcon col="likes" />
-                    </TableHead>
-                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("comments")}>
-                      Comments <SortIcon col="comments" />
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sortedReels.map((reel: any, i: number) => (
-                    <TableRow key={reel.id} className="border-zinc-800">
-                      <TableCell className="font-mono text-zinc-600 text-xs">{i + 1}</TableCell>
-                      <TableCell>
-                        <a href={reel.url} target="_blank" rel="noopener noreferrer"
-                          className="text-violet-400 hover:underline inline-flex items-center gap-1 text-sm max-w-[250px] truncate">
-                          {reel.url.replace("https://www.instagram.com", "")}
-                          <ExternalLink className="w-3 h-3 shrink-0" />
-                        </a>
-                      </TableCell>
-                      <TableCell className="text-sm text-zinc-500">{formatDate(reel.posted_at)}</TableCell>
-                      <TableCell className="text-right font-mono text-sm text-white">{(reel.views ?? 0).toLocaleString()}</TableCell>
-                      <TableCell className="text-right font-mono text-sm text-zinc-500">{(reel.likes ?? 0).toLocaleString()}</TableCell>
-                      <TableCell className="text-right font-mono text-sm text-zinc-500">{(reel.comments ?? 0).toLocaleString()}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+        {/* Reels / Posts Toggle */}
+        <div className="mb-10">
+          <div className="flex items-center gap-4 mb-4">
+            <div className="inline-flex items-center bg-zinc-800/80 rounded-full p-0.5 gap-0.5">
+              <button
+                onClick={() => setContentTab("reels")}
+                className={`text-[10px] uppercase tracking-wider px-4 py-1.5 rounded-full font-medium transition-all ${
+                  contentTab === "reels"
+                    ? "bg-violet-600 text-white shadow-lg shadow-violet-600/25"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                Reels
+              </button>
+              <button
+                onClick={() => setContentTab("posts")}
+                className={`text-[10px] uppercase tracking-wider px-4 py-1.5 rounded-full font-medium transition-all ${
+                  contentTab === "posts"
+                    ? "bg-violet-600 text-white shadow-lg shadow-violet-600/25"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                Posts
+              </button>
             </div>
+            <Badge variant="secondary" className="text-xs">
+              {contentTab === "reels" ? reels.length : posts.length}
+            </Badge>
           </div>
-          );
-        })()}
 
-        {/* All Posts */}
-        {posts.length > 0 && (
-          <div className="mb-10">
-            <h2 className="text-xl font-bold text-white mb-4">
-              Posts <Badge variant="secondary" className="ml-2 text-xs">{posts.length}</Badge>
-            </h2>
-            <div className="border border-zinc-800 rounded-xl overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-zinc-800">
-                    <TableHead>#</TableHead>
-                    <TableHead>Link</TableHead>
-                    <TableHead className="text-right">Expected</TableHead>
-                    <TableHead className="text-right">Actual</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {posts.map((post: any, i: number) => (
-                    <TableRow key={post.id} className="border-zinc-800">
-                      <TableCell className="font-mono text-zinc-600 text-xs">{i + 1}</TableCell>
-                      <TableCell>
-                        <a href={post.url} target="_blank" rel="noopener noreferrer"
-                          className="text-violet-400 hover:underline inline-flex items-center gap-1 text-sm">
-                          {post.url.replace("https://www.instagram.com", "")}
-                          <ExternalLink className="w-3 h-3 shrink-0" />
-                        </a>
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm text-zinc-500">{(post.expected_views ?? 0).toLocaleString()}</TableCell>
-                      <TableCell className="text-right font-mono text-sm text-white">{(post.actual_views ?? 0).toLocaleString()}</TableCell>
+          {contentTab === "reels" && (() => {
+            const sortedReels = [...reels].sort((a: any, b: any) => {
+              const av = sortCol === "posted_at" ? new Date(a.posted_at ?? 0).getTime() : (a[sortCol] ?? 0);
+              const bv = sortCol === "posted_at" ? new Date(b.posted_at ?? 0).getTime() : (b[sortCol] ?? 0);
+              return sortDir === "desc" ? bv - av : av - bv;
+            });
+            return reels.length > 0 ? (
+              <div className="border border-zinc-800 rounded-xl overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-zinc-800">
+                      <TableHead className="w-12">#</TableHead>
+                      <TableHead>Link</TableHead>
+                      <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("posted_at")}>
+                        Posted <SortIcon col="posted_at" />
+                      </TableHead>
+                      <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("views")}>
+                        Views <SortIcon col="views" />
+                      </TableHead>
+                      <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("likes")}>
+                        Likes <SortIcon col="likes" />
+                      </TableHead>
+                      <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("comments")}>
+                        Comments <SortIcon col="comments" />
+                      </TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-        )}
+                  </TableHeader>
+                  <TableBody>
+                    {sortedReels.map((reel: any, i: number) => (
+                      <TableRow key={reel.id} className="border-zinc-800">
+                        <TableCell className="font-mono text-zinc-600 text-xs">{i + 1}</TableCell>
+                        <TableCell>
+                          <a href={reel.url} target="_blank" rel="noopener noreferrer"
+                            className="text-violet-400 hover:underline inline-flex items-center gap-1 text-sm max-w-[250px] truncate">
+                            {reel.url.replace("https://www.instagram.com", "")}
+                            <ExternalLink className="w-3 h-3 shrink-0" />
+                          </a>
+                        </TableCell>
+                        <TableCell className="text-sm text-zinc-500">{formatDate(reel.posted_at)}</TableCell>
+                        <TableCell className="text-right font-mono text-sm text-white">{(reel.views ?? 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-mono text-sm text-zinc-500">{(reel.likes ?? 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-mono text-sm text-zinc-500">{(reel.comments ?? 0).toLocaleString()}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <p className="text-center text-zinc-600 py-8">No reels yet</p>
+            );
+          })()}
+
+          {contentTab === "posts" && (
+            posts.length > 0 ? (
+              <div className="border border-zinc-800 rounded-xl overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-zinc-800">
+                      <TableHead>#</TableHead>
+                      <TableHead>Link</TableHead>
+                      <TableHead className="text-right">Expected</TableHead>
+                      <TableHead className="text-right">Actual</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {posts.map((post: any, i: number) => (
+                      <TableRow key={post.id} className="border-zinc-800">
+                        <TableCell className="font-mono text-zinc-600 text-xs">{i + 1}</TableCell>
+                        <TableCell>
+                          <a href={post.url} target="_blank" rel="noopener noreferrer"
+                            className="text-violet-400 hover:underline inline-flex items-center gap-1 text-sm">
+                            {post.url.replace("https://www.instagram.com", "")}
+                            <ExternalLink className="w-3 h-3 shrink-0" />
+                          </a>
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-sm text-zinc-500">{(post.expected_views ?? 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-mono text-sm text-white">{(post.actual_views ?? 0).toLocaleString()}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <p className="text-center text-zinc-600 py-8">No posts yet</p>
+            )
+          )}
+        </div>
       </div>
     </div>
   );
