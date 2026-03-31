@@ -180,12 +180,12 @@ export default function Dashboard() {
           </div>
 
           {/* Views Distribution + Page-wise Views */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8">
-            <div className="flex items-center justify-between mb-5 sm:mb-6">
-              <p className="text-[10px] sm:text-[11px] uppercase tracking-[0.2em] text-zinc-400 font-semibold">
-                {rightCardView === "donut" ? "Views Distribution" : "Page-wise Views"}
-              </p>
-              <div className="flex items-center gap-2">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8 overflow-hidden">
+            <div className="space-y-3 mb-5 sm:mb-6">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] sm:text-[11px] uppercase tracking-[0.2em] text-zinc-400 font-semibold">
+                  {rightCardView === "donut" ? "Views Distribution" : "Page-wise Views"}
+                </p>
                 <TogglePill
                   options={[
                     { label: "Distribution", value: "donut" },
@@ -194,26 +194,26 @@ export default function Dashboard() {
                   value={rightCardView}
                   onChange={(v) => setRightCardView(v as "donut" | "pages")}
                 />
-                {rightCardView === "pages" && (
-                  <>
-                    <TogglePill
-                      options={[
-                        { label: "Weekly", value: "reels" },
-                        { label: "Monthly", value: "views" },
-                      ]}
-                      value={breakdownMode}
-                      onChange={(v) => setBreakdownMode(v as BreakdownMode)}
-                    />
-                    <div className="flex items-center gap-1.5">
-                      <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)}
-                        className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500/50 cursor-pointer" />
-                      <span className="text-zinc-600 text-[10px]">to</span>
-                      <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)}
-                        className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500/50 cursor-pointer" />
-                    </div>
-                  </>
-                )}
               </div>
+              {rightCardView === "pages" && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <TogglePill
+                    options={[
+                      { label: "Weekly", value: "reels" },
+                      { label: "Monthly", value: "views" },
+                    ]}
+                    value={breakdownMode}
+                    onChange={(v) => setBreakdownMode(v as BreakdownMode)}
+                  />
+                  <div className="flex items-center gap-1.5">
+                    <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)}
+                      className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500/50 cursor-pointer w-[110px]" />
+                    <span className="text-zinc-600 text-[10px]">to</span>
+                    <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)}
+                      className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500/50 cursor-pointer w-[110px]" />
+                  </div>
+                </div>
+              )}
             </div>
 
             <AnimatePresence mode="wait">
