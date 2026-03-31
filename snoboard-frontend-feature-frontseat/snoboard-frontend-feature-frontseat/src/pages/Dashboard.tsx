@@ -195,14 +195,23 @@ export default function Dashboard() {
                   onChange={(v) => setRightCardView(v as "donut" | "pages")}
                 />
                 {rightCardView === "pages" && (
-                  <TogglePill
-                    options={[
-                      { label: "Weekly", value: "reels" },
-                      { label: "Monthly", value: "views" },
-                    ]}
-                    value={breakdownMode}
-                    onChange={(v) => setBreakdownMode(v as BreakdownMode)}
-                  />
+                  <>
+                    <TogglePill
+                      options={[
+                        { label: "Weekly", value: "reels" },
+                        { label: "Monthly", value: "views" },
+                      ]}
+                      value={breakdownMode}
+                      onChange={(v) => setBreakdownMode(v as BreakdownMode)}
+                    />
+                    <div className="flex items-center gap-1.5">
+                      <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)}
+                        className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500/50 cursor-pointer" />
+                      <span className="text-zinc-600 text-[10px]">to</span>
+                      <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)}
+                        className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500/50 cursor-pointer" />
+                    </div>
+                  </>
                 )}
               </div>
             </div>
@@ -305,13 +314,6 @@ export default function Dashboard() {
 
                     return pageViews.length > 0 ? (
                       <>
-                        {(customFrom || customTo) && (
-                          <div className="flex items-center gap-2 mb-3">
-                            <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500/50 cursor-pointer" />
-                            <span className="text-zinc-600 text-[10px]">to</span>
-                            <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500/50 cursor-pointer" />
-                          </div>
-                        )}
                         <div className="overflow-y-auto max-h-[280px]">
                           <ResponsiveContainer width="100%" height={Math.max(250, pageViews.length * 28)}>
                             <BarChart data={pageViews} layout="vertical" margin={{ top: 0, right: 20, bottom: 0, left: 0 }}>
