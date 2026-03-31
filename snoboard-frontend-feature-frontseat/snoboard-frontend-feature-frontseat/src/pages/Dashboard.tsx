@@ -302,7 +302,7 @@ export default function Dashboard() {
             <TogglePill
               options={[
                 { label: "All", value: "all" },
-                { label: "Main", value: "main" },
+                { label: "Stage 3", value: "main" },
                 { label: "Stage 1", value: "stage1" },
               ]}
               value={ipFilter}
