@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getDashboard } from "@/services/api";
+import { getDashboard, getAutoReels, getManualReels, getPosts } from "@/services/api";
 import { useNavigate } from "react-router-dom";
 import { Search, TrendingUp, MoreVertical } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,7 @@ function formatCompact(n: number): string {
 }
 
 type BreakdownMode = "reels" | "views";
-type TimePeriod = "all" | "monthly" | "weekly";
+type TimePeriod = "all" | "monthly" | "custom";
 
 function TogglePill({ options, value, onChange }: {
   options: { label: string; value: string }[];
@@ -44,11 +44,23 @@ export default function Dashboard() {
   const [search, setSearch] = useState("");
   const [breakdownMode, setBreakdownMode] = useState<BreakdownMode>("views");
   const [globalPeriod, setGlobalPeriod] = useState<TimePeriod>("monthly");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [ipFilter, setIpFilter] = useState<"all" | "main" | "stage1">("all");
+
+  const MAIN_IP_HANDLES = ["101xfounders", "bizzindia", "indianfoundersco", "startupcoded", "foundersinindia", "101xmarketing", "techinthelast24hrs", "101xtechnology"];
 
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard"],
     queryFn: getDashboard,
   });
+
+  // Fetch all reels + posts for custom date filtering
+  const { data: autoReels = [] } = useQuery({ queryKey: ["reels", "auto"], queryFn: getAutoReels, enabled: globalPeriod === "custom" });
+  const { data: manualReels = [] } = useQuery({ queryKey: ["reels", "manual"], queryFn: getManualReels, enabled: globalPeriod === "custom" });
+  const { data: allPosts = [] } = useQuery({ queryKey: ["posts"], queryFn: getPosts, enabled: globalPeriod === "custom" });
+
+  const allReels = [...autoReels, ...manualReels];
 
   if (isLoading) {
     return (
@@ -64,12 +76,17 @@ export default function Dashboard() {
   const stats = data;
   const totalViews = stats?.total_views ?? 0;
   const allPages = [...(stats?.pages ?? [])].sort((a: any, b: any) => (b.total_views ?? 0) - (a.total_views ?? 0));
+  const filteredByType = ipFilter === "all"
+    ? allPages
+    : ipFilter === "main"
+      ? allPages.filter((p: any) => MAIN_IP_HANDLES.includes((p.handle ?? "").toLowerCase()))
+      : allPages.filter((p: any) => !MAIN_IP_HANDLES.includes((p.handle ?? "").toLowerCase()));
   const pages = search.trim()
-    ? allPages.filter((p: any) =>
+    ? filteredByType.filter((p: any) =>
         (p.handle ?? "").toLowerCase().includes(search.toLowerCase()) ||
         (p.name ?? "").toLowerCase().includes(search.toLowerCase())
       )
-    : allPages;
+    : filteredByType;
   const currentMonth = stats?.current_month
     ? new Date(stats.current_month).toLocaleString("default", { month: "long", year: "numeric" })
     : "";
@@ -86,14 +103,50 @@ export default function Dashboard() {
       ];
 
   function getPageViews(page: any, period: TimePeriod): number {
-    // all time = sum of dashboard_views across ALL months (manually entered only)
-    // monthly = current month IG dashboard views
-    // weekly = monthly / 4 estimate
     switch (period) {
       case "all": return page.all_time_views ?? 0;
       case "monthly": return page.total_views ?? 0;
-      case "weekly": return Math.round((page.total_views ?? 0) / 4);
+      case "custom": {
+        if (!customFrom && !customTo) return page.all_time_views ?? 0;
+        const from = customFrom || "0000-00-00";
+        const to = customTo || "9999-99-99";
+        const pageReels = allReels.filter((r: any) => r.page_id === page.id);
+        const pagePosts = allPosts.filter((p: any) => p.page_id === page.id);
+        const filteredReels = pageReels.filter((r: any) => {
+          const d = (r.posted_at || "")?.slice(0, 10);
+          return d >= from && d <= to;
+        });
+        const filteredPosts = pagePosts.filter((p: any) => {
+          const d = (p.posted_at || p.created_at || "")?.slice(0, 10);
+          return d >= from && d <= to;
+        });
+        return filteredReels.reduce((s: number, r: any) => s + (r.views ?? 0), 0)
+             + filteredPosts.reduce((s: number, p: any) => s + (p.actual_views ?? 0), 0);
+      }
     }
+  }
+
+  function getPageCounts(page: any, period: TimePeriod): { reelsCount: number; postsCount: number } {
+    if (period !== "custom") {
+      return {
+        reelsCount: period === "all" ? (page.all_time_reels_count ?? page.reels_count ?? 0) : (page.reels_count ?? 0),
+        postsCount: period === "all" ? (page.all_time_posts_count ?? page.posts_count ?? 0) : (page.posts_count ?? 0),
+      };
+    }
+    if (!customFrom && !customTo) {
+      return { reelsCount: page.all_time_reels_count ?? 0, postsCount: page.all_time_posts_count ?? 0 };
+    }
+    const from = customFrom || "0000-00-00";
+    const to = customTo || "9999-99-99";
+    const reelsCount = allReels.filter((r: any) => {
+      const d = (r.posted_at || "")?.slice(0, 10);
+      return r.page_id === page.id && d >= from && d <= to;
+    }).length;
+    const postsCount = allPosts.filter((p: any) => {
+      const d = (p.posted_at || p.created_at || "")?.slice(0, 10);
+      return p.page_id === page.id && d >= from && d <= to;
+    }).length;
+    return { reelsCount, postsCount };
   }
 
   return (
@@ -244,19 +297,47 @@ export default function Dashboard() {
           <div className="flex items-center gap-3">
             <h2 className="text-xl sm:text-2xl font-black text-white uppercase tracking-wider">Your IP's</h2>
             <Badge variant="outline" className="border-zinc-700 text-zinc-400 text-xs font-mono">
-              {allPages.length} total
+              {pages.length} total
             </Badge>
+            <TogglePill
+              options={[
+                { label: "All", value: "all" },
+                { label: "Main", value: "main" },
+                { label: "Stage 1", value: "stage1" },
+              ]}
+              value={ipFilter}
+              onChange={(v) => setIpFilter(v as "all" | "main" | "stage1")}
+            />
           </div>
           {/* Global period toggle */}
-          <TogglePill
-            options={[
-              { label: "All Time", value: "all" },
-              { label: "Monthly", value: "monthly" },
-              { label: "Weekly", value: "weekly" },
-            ]}
-            value={globalPeriod}
-            onChange={(v) => setGlobalPeriod(v as TimePeriod)}
-          />
+          <div className="flex items-center gap-3">
+            <TogglePill
+              options={[
+                { label: "All Time", value: "all" },
+                { label: "Monthly", value: "monthly" },
+                { label: "Custom", value: "custom" },
+              ]}
+              value={globalPeriod}
+              onChange={(v) => setGlobalPeriod(v as TimePeriod)}
+            />
+            {globalPeriod === "custom" && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={customFrom}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500/50 cursor-pointer"
+                />
+                <span className="text-zinc-600 text-xs">to</span>
+                <input
+                  type="date"
+                  value={customTo}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500/50 cursor-pointer"
+                />
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Search */}
@@ -278,18 +359,7 @@ export default function Dashboard() {
             const viewsForPeriod = getPageViews(page, globalPeriod);
             const pageTotal = (page.reel_views ?? 0) + (page.post_views ?? 0);
             const reelPct = pageTotal > 0 ? ((page.reel_views ?? 0) / pageTotal * 100) : 0;
-
-            // Counts that switch with the period toggle
-            const reelsCount = globalPeriod === "all"
-              ? (page.all_time_reels_count ?? page.reels_count ?? 0)
-              : globalPeriod === "weekly"
-                ? Math.round((page.reels_count ?? 0) / 4)
-                : (page.reels_count ?? 0);
-            const postsCount = globalPeriod === "all"
-              ? (page.all_time_posts_count ?? page.posts_count ?? 0)
-              : globalPeriod === "weekly"
-                ? Math.round((page.posts_count ?? 0) / 4)
-                : (page.posts_count ?? 0);
+            const { reelsCount, postsCount } = getPageCounts(page, globalPeriod);
 
             return (
               <div
@@ -317,7 +387,7 @@ export default function Dashboard() {
 
                 {/* Period indicator */}
                 <div className="flex items-center gap-1 mb-3">
-                  {(["all", "monthly", "weekly"] as TimePeriod[]).map((p) => (
+                  {(["all", "monthly", "custom"] as TimePeriod[]).map((p) => (
                     <span
                       key={p}
                       className={`text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full transition-colors ${
@@ -326,7 +396,7 @@ export default function Dashboard() {
                           : "text-zinc-600 bg-zinc-900"
                       }`}
                     >
-                      {p === "all" ? "All Time" : p === "monthly" ? "Monthly" : "Weekly"}
+                      {p === "all" ? "All Time" : p === "monthly" ? "Monthly" : "Custom"}
                     </span>
                   ))}
                 </div>
