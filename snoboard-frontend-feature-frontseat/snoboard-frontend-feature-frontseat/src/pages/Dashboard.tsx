@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { Search, TrendingUp, MoreVertical } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 
 function formatCompact(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
@@ -13,7 +14,6 @@ function formatCompact(n: number): string {
 }
 
 type BreakdownMode = "reels" | "views";
-type BreakdownView = "stats" | "chart";
 type TimePeriod = "all" | "monthly" | "custom";
 
 function TogglePill({ options, value, onChange }: {
@@ -44,7 +44,6 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [breakdownMode, setBreakdownMode] = useState<BreakdownMode>("views");
-  const [breakdownView, setBreakdownView] = useState<BreakdownView>("stats");
   const [globalPeriod, setGlobalPeriod] = useState<TimePeriod>("monthly");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -92,17 +91,6 @@ export default function Dashboard() {
   const currentMonth = stats?.current_month
     ? new Date(stats.current_month).toLocaleString("default", { month: "long", year: "numeric" })
     : "";
-
-  // Breakdown data based on toggle
-  const breakdownData = breakdownMode === "views"
-    ? [
-        { label: "Reel Views", value: stats?.total_reel_views ?? 0, color: "bg-gradient-to-r from-violet-500 to-pink-500" },
-        { label: "Post Views", value: stats?.total_post_views ?? 0, color: "bg-emerald-500" },
-      ]
-    : [
-        { label: "Total Reels", value: stats?.total_reels ?? 0, color: "bg-violet-500" },
-        { label: "Total Posts", value: stats?.total_posts ?? 0, color: "bg-emerald-500" },
-      ];
 
   function getPageViews(page: any, period: TimePeriod): number {
     switch (period) {
@@ -189,145 +177,116 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Monthly Breakdown */}
+          {/* Views Donut Chart */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8">
-            <div className="flex items-center justify-between mb-5 sm:mb-6">
-              <p className="text-[10px] sm:text-[11px] uppercase tracking-[0.2em] text-zinc-400 font-semibold">
-                Monthly Breakdown
-              </p>
-              <div className="flex items-center gap-2">
-                <TogglePill
-                  options={[
-                    { label: "Stats", value: "stats" },
-                    { label: "Chart", value: "chart" },
-                  ]}
-                  value={breakdownView}
-                  onChange={(v) => setBreakdownView(v as BreakdownView)}
-                />
-                {breakdownView === "stats" && (
-                  <TogglePill
-                    options={[
-                      { label: "Reels", value: "reels" },
-                      { label: "Views", value: "views" },
-                    ]}
-                    value={breakdownMode}
-                    onChange={(v) => setBreakdownMode(v as BreakdownMode)}
-                  />
-                )}
+            <p className="text-[10px] sm:text-[11px] uppercase tracking-[0.2em] text-zinc-400 font-semibold mb-5 sm:mb-6">
+              Views Distribution
+            </p>
+            <div className="flex items-center justify-center gap-8">
+              {(() => {
+                const reelViews = stats?.total_reel_views ?? 0;
+                const postViews = stats?.total_post_views ?? 0;
+                const total = reelViews + postViews;
+                const size = 160;
+                const stroke = 14;
+                const radius = (size - stroke) / 2;
+                const circumference = 2 * Math.PI * radius;
+                const gap = 0.02;
+                const reelFrac = total > 0 ? reelViews / total : 0;
+                const reelLen = reelFrac * circumference * (1 - gap);
+                const postFrac = total > 0 ? postViews / total : 0;
+                const postLen = postFrac * circumference * (1 - gap);
+                const gapLen = total > 0 && postViews > 0 ? circumference * gap : 0;
+
+                return (
+                  <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+                    <svg width={size} height={size} className="-rotate-90">
+                      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#27272a" strokeWidth={stroke} />
+                      {reelViews > 0 && (
+                        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="url(#dash-reel)" strokeWidth={stroke} strokeLinecap="round" strokeDasharray={`${reelLen} ${circumference - reelLen}`} strokeDashoffset={0} />
+                      )}
+                      {postViews > 0 && (
+                        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#10b981" strokeWidth={stroke} strokeLinecap="round" strokeDasharray={`${postLen} ${circumference - postLen}`} strokeDashoffset={-(reelLen + gapLen)} />
+                      )}
+                      <defs>
+                        <linearGradient id="dash-reel" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" stopColor="#a855f7" />
+                          <stop offset="100%" stopColor="#d946ef" />
+                        </linearGradient>
+                      </defs>
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <p className="text-[9px] uppercase tracking-widest text-zinc-500">Total Views</p>
+                      <p className="text-2xl font-black text-white tabular-nums mt-1">{total.toLocaleString()}</p>
+                    </div>
+                  </div>
+                );
+              })()}
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-3 h-3 rounded-full bg-gradient-to-r from-purple-500 to-pink-500" />
+                  <div>
+                    <p className="text-xs text-zinc-500">Reel Views</p>
+                    <p className="text-lg font-bold text-white tabular-nums">{formatCompact(stats?.total_reel_views ?? 0)}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                  <div>
+                    <p className="text-xs text-zinc-500">Post Views</p>
+                    <p className="text-lg font-bold text-white tabular-nums">{formatCompact(stats?.total_post_views ?? 0)}</p>
+                  </div>
+                </div>
+                <div className="h-px bg-zinc-800" />
+                <div className="flex items-center gap-4 text-xs text-zinc-600">
+                  <span>{stats?.total_reels ?? 0} reels</span>
+                  <span>{stats?.total_posts ?? 0} posts</span>
+                  <span>{allPages.length} pages</span>
+                </div>
               </div>
             </div>
-
-            {breakdownView === "stats" ? (
-              <div className="space-y-4">
-                {breakdownData.map((item) => (
-                  <div key={item.label} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className={`w-2.5 h-2.5 rounded-full ${item.color}`} />
-                      <span className="text-sm text-zinc-400">{item.label}</span>
-                    </div>
-                    <span className="text-lg font-bold text-white tabular-nums">{formatCompact(item.value)}</span>
-                  </div>
-                ))}
-
-                <div className="h-px bg-zinc-800" />
-
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-zinc-400">Total Reels</span>
-                  <span className="text-lg font-bold text-white tabular-nums">{stats?.total_reels ?? 0}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-zinc-400">Total Posts</span>
-                  <span className="text-lg font-bold text-white tabular-nums">{stats?.total_posts ?? 0}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-zinc-400">Pages</span>
-                  <span className="text-lg font-bold text-white tabular-nums">{allPages.length}</span>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center justify-center gap-8">
-                {/* Donut Chart */}
-                {(() => {
-                  const reelViews = stats?.total_reel_views ?? 0;
-                  const postViews = stats?.total_post_views ?? 0;
-                  const total = reelViews + postViews;
-                  const size = 180;
-                  const stroke = 14;
-                  const radius = (size - stroke) / 2;
-                  const circumference = 2 * Math.PI * radius;
-                  const gap = 0.02;
-                  const reelFrac = total > 0 ? reelViews / total : 0;
-                  const postFrac = total > 0 ? postViews / total : 0;
-                  const reelLen = reelFrac * circumference * (1 - gap);
-                  const postLen = postFrac * circumference * (1 - gap);
-                  const gapLen = total > 0 && postViews > 0 ? circumference * gap : 0;
-
-                  return (
-                    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
-                      <svg width={size} height={size} className="-rotate-90">
-                        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#27272a" strokeWidth={stroke} />
-                        {reelViews > 0 && (
-                          <circle
-                            cx={size / 2} cy={size / 2} r={radius}
-                            fill="none" stroke="url(#dash-reel)" strokeWidth={stroke}
-                            strokeLinecap="round"
-                            strokeDasharray={`${reelLen} ${circumference - reelLen}`}
-                            strokeDashoffset={0}
-                          />
-                        )}
-                        {postViews > 0 && (
-                          <circle
-                            cx={size / 2} cy={size / 2} r={radius}
-                            fill="none" stroke="#10b981" strokeWidth={stroke}
-                            strokeLinecap="round"
-                            strokeDasharray={`${postLen} ${circumference - postLen}`}
-                            strokeDashoffset={-(reelLen + gapLen)}
-                          />
-                        )}
-                        <defs>
-                          <linearGradient id="dash-reel" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stopColor="#a855f7" />
-                            <stop offset="100%" stopColor="#d946ef" />
-                          </linearGradient>
-                        </defs>
-                      </svg>
-                      <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <p className="text-[9px] uppercase tracking-widest text-zinc-500">Total Views</p>
-                        <p className="text-2xl font-black text-white tabular-nums mt-1">
-                          {total.toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Legend */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-3 h-3 rounded-full bg-gradient-to-r from-purple-500 to-pink-500" />
-                    <div>
-                      <p className="text-sm text-zinc-400">Reel Views</p>
-                      <p className="text-xl font-bold text-white tabular-nums">{formatCompact(stats?.total_reel_views ?? 0)}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="w-3 h-3 rounded-full bg-emerald-500" />
-                    <div>
-                      <p className="text-sm text-zinc-400">Post Views</p>
-                      <p className="text-xl font-bold text-white tabular-nums">{formatCompact(stats?.total_post_views ?? 0)}</p>
-                    </div>
-                  </div>
-                  <div className="h-px bg-zinc-800 w-full" />
-                  <div className="flex items-center gap-6 text-xs text-zinc-500">
-                    <span>{stats?.total_reels ?? 0} reels</span>
-                    <span>{stats?.total_posts ?? 0} posts</span>
-                    <span>{allPages.length} pages</span>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
+
+        {/* Page Growth Chart */}
+        {allPages.length > 0 && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8 mb-8 sm:mb-10">
+            <div className="flex items-center justify-between mb-5">
+              <p className="text-[10px] sm:text-[11px] uppercase tracking-[0.2em] text-zinc-400 font-semibold">
+                Page Performance
+              </p>
+              <TogglePill
+                options={[
+                  { label: "Reels", value: "reels" },
+                  { label: "Views", value: "views" },
+                ]}
+                value={breakdownMode}
+                onChange={(v) => setBreakdownMode(v as BreakdownMode)}
+              />
+            </div>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart
+                data={allPages.slice(0, 15).map((p: any) => ({
+                  name: p.handle?.length > 10 ? p.handle.slice(0, 10) + ".." : p.handle,
+                  reels: breakdownMode === "views" ? (p.reel_views ?? 0) : (p.reels_count ?? 0),
+                  posts: breakdownMode === "views" ? (p.post_views ?? 0) : (p.posts_count ?? 0),
+                }))}
+                margin={{ top: 5, right: 5, bottom: 5, left: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                <XAxis dataKey="name" tick={{ fill: "#71717a", fontSize: 10 }} angle={-35} textAnchor="end" height={60} />
+                <YAxis tick={{ fill: "#71717a", fontSize: 10 }} tickFormatter={(v) => formatCompact(v)} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 8 }}
+                  labelStyle={{ color: "#d4d4d8", fontSize: 12 }}
+                  formatter={(value: number) => [value.toLocaleString(), ""]}
+                />
+                <Bar dataKey="reels" name="Reels" fill="#a855f7" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="posts" name="Posts" fill="#10b981" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
 
         {/* Leaderboard Podium */}
         {allPages.length >= 3 && (() => {
