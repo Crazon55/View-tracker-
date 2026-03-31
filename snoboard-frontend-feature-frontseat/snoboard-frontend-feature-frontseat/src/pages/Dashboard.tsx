@@ -376,7 +376,13 @@ export default function Dashboard() {
                 </div>
 
                 {page.name && (
-                  <p className="text-xs text-zinc-600 mb-4">@{page.handle}</p>
+                  <a
+                    href={`https://www.instagram.com/${page.handle}/`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-xs text-zinc-600 hover:text-violet-400 transition-colors mb-4 block"
+                  >@{page.handle}</a>
                 )}
                 {!page.name && <div className="mb-4" />}
 
