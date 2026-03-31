@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getPageDetail, upsertDashboardViews } from "@/services/api";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, ExternalLink, Eye, Heart, MessageCircle, Trophy, BarChart3, ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react";
+import { ArrowLeft, ExternalLink, Eye, Heart, MessageCircle, Trophy, ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -183,40 +183,24 @@ export default function PageDetail() {
           )}
         </div>
 
-        {/* Views Breakdown */}
+        {/* Views Donut */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 mb-8">
-          <div className="flex items-center gap-2 mb-4">
-            <BarChart3 className="w-5 h-5 text-violet-400" />
-            <h2 className="text-xl font-bold text-white">Views Breakdown</h2>
-          </div>
-          <p className="text-xs text-zinc-500 mb-5">
-            Total views from manually added reels and posts this month.
-          </p>
-
-          <div className="flex items-center gap-6">
-            {/* Donut */}
-            <DonutChart reelViews={totalReelViews} postViews={totalPostViews} label="Total Views" />
-
-            {/* Breakdown */}
-            <div className="flex-1 space-y-3">
-              <div className="flex items-center justify-between bg-zinc-950/50 rounded-lg px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-pink-500" />
-                  <span className="text-sm text-zinc-500">Reel Views</span>
+          <div className="flex items-center justify-center gap-8">
+            <DonutChart reelViews={totalReelViews} postViews={totalPostViews} label="Total Views" size={200} />
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 rounded-full bg-pink-500" />
+                <div>
+                  <p className="text-xs text-zinc-500">Reel Views</p>
+                  <p className="text-xl font-bold text-white tabular-nums">{totalReelViews.toLocaleString()}</p>
                 </div>
-                <span className="text-lg font-bold text-white tabular-nums">{totalReelViews.toLocaleString()}</span>
               </div>
-              <div className="flex items-center justify-between bg-zinc-950/50 rounded-lg px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <span className="text-sm text-zinc-500">Post Views</span>
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                <div>
+                  <p className="text-xs text-zinc-500">Post Views</p>
+                  <p className="text-xl font-bold text-white tabular-nums">{totalPostViews.toLocaleString()}</p>
                 </div>
-                <span className="text-lg font-bold text-white tabular-nums">{totalPostViews.toLocaleString()}</span>
-              </div>
-              <div className="h-px bg-zinc-800 mx-1" />
-              <div className="flex items-center justify-between bg-violet-500/10 border border-violet-500/20 rounded-lg px-4 py-3">
-                <span className="text-sm text-violet-400">Combined Total</span>
-                <span className="text-lg font-bold text-violet-400 tabular-nums">{(totalReelViews + totalPostViews).toLocaleString()}</span>
               </div>
             </div>
           </div>
