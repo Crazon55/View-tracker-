@@ -56,10 +56,10 @@ export default function Dashboard() {
     queryFn: getDashboard,
   });
 
-  // Fetch all reels + posts for custom date filtering
-  const { data: autoReels = [] } = useQuery({ queryKey: ["reels", "auto"], queryFn: getAutoReels, enabled: globalPeriod === "custom" });
-  const { data: manualReels = [] } = useQuery({ queryKey: ["reels", "manual"], queryFn: getManualReels, enabled: globalPeriod === "custom" });
-  const { data: allPosts = [] } = useQuery({ queryKey: ["posts"], queryFn: getPosts, enabled: globalPeriod === "custom" });
+  // Fetch all reels + posts for charts and custom date filtering
+  const { data: autoReels = [] } = useQuery({ queryKey: ["reels", "auto"], queryFn: getAutoReels });
+  const { data: manualReels = [] } = useQuery({ queryKey: ["reels", "manual"], queryFn: getManualReels });
+  const { data: allPosts = [] } = useQuery({ queryKey: ["posts"], queryFn: getPosts });
 
   const allReels = [...autoReels, ...manualReels];
 
@@ -248,45 +248,89 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Page Growth Chart */}
-        {allPages.length > 0 && (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8 mb-8 sm:mb-10">
-            <div className="flex items-center justify-between mb-5">
-              <p className="text-[10px] sm:text-[11px] uppercase tracking-[0.2em] text-zinc-400 font-semibold">
-                Page Performance
-              </p>
-              <TogglePill
-                options={[
-                  { label: "Reels", value: "reels" },
-                  { label: "Views", value: "views" },
-                ]}
-                value={breakdownMode}
-                onChange={(v) => setBreakdownMode(v as BreakdownMode)}
-              />
-            </div>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart
-                data={allPages.slice(0, 15).map((p: any) => ({
-                  name: p.handle?.length > 10 ? p.handle.slice(0, 10) + ".." : p.handle,
-                  reels: breakdownMode === "views" ? (p.reel_views ?? 0) : (p.reels_count ?? 0),
-                  posts: breakdownMode === "views" ? (p.post_views ?? 0) : (p.posts_count ?? 0),
-                }))}
-                margin={{ top: 5, right: 5, bottom: 5, left: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                <XAxis dataKey="name" tick={{ fill: "#71717a", fontSize: 10 }} angle={-35} textAnchor="end" height={60} />
-                <YAxis tick={{ fill: "#71717a", fontSize: 10 }} tickFormatter={(v) => formatCompact(v)} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 8 }}
-                  labelStyle={{ color: "#d4d4d8", fontSize: 12 }}
-                  formatter={(value: number) => [value.toLocaleString(), ""]}
+        {/* View Performance Chart */}
+        {(() => {
+          // Aggregate views by date from all reels + posts
+          const viewsByDate: Record<string, { reels: number; posts: number }> = {};
+          for (const r of allReels) {
+            const d = (r.posted_at || "")?.slice(0, 10);
+            if (!d) continue;
+            if (!viewsByDate[d]) viewsByDate[d] = { reels: 0, posts: 0 };
+            viewsByDate[d].reels += r.views ?? 0;
+          }
+          for (const p of allPosts) {
+            const d = (p.posted_at || p.created_at || "")?.slice(0, 10);
+            if (!d) continue;
+            if (!viewsByDate[d]) viewsByDate[d] = { reels: 0, posts: 0 };
+            viewsByDate[d].posts += p.actual_views ?? 0;
+          }
+
+          // Group by week or month
+          const groupByWeek = (date: string) => {
+            const d = new Date(date);
+            const day = d.getDay();
+            const monday = new Date(d);
+            monday.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+            return monday.toISOString().slice(0, 10);
+          };
+          const groupByMonth = (date: string) => date.slice(0, 7);
+
+          const grouped: Record<string, { reels: number; posts: number }> = {};
+          const groupFn = breakdownMode === "reels" ? groupByWeek : groupByWeek;
+          const periodLabel = breakdownMode === "reels" ? "Weekly" : "Monthly";
+          const gFn = breakdownMode === "reels" ? groupByWeek : groupByMonth;
+
+          for (const [date, val] of Object.entries(viewsByDate)) {
+            const key = gFn(date);
+            if (!grouped[key]) grouped[key] = { reels: 0, posts: 0 };
+            grouped[key].reels += val.reels;
+            grouped[key].posts += val.posts;
+          }
+
+          const chartData = Object.entries(grouped)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .slice(-12)
+            .map(([key, val]) => ({
+              name: breakdownMode === "reels"
+                ? new Date(key).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })
+                : new Date(key + "-01").toLocaleDateString("en-GB", { month: "short", year: "2-digit" }),
+              reels: val.reels,
+              posts: val.posts,
+              total: val.reels + val.posts,
+            }));
+
+          return chartData.length > 0 ? (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8 mb-8 sm:mb-10">
+              <div className="flex items-center justify-between mb-5">
+                <p className="text-[10px] sm:text-[11px] uppercase tracking-[0.2em] text-zinc-400 font-semibold">
+                  View Performance
+                </p>
+                <TogglePill
+                  options={[
+                    { label: "Weekly", value: "reels" },
+                    { label: "Monthly", value: "views" },
+                  ]}
+                  value={breakdownMode}
+                  onChange={(v) => setBreakdownMode(v as BreakdownMode)}
                 />
-                <Bar dataKey="reels" name="Reels" fill="#a855f7" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="posts" name="Posts" fill="#10b981" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        )}
+              </div>
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                  <XAxis dataKey="name" tick={{ fill: "#71717a", fontSize: 10 }} />
+                  <YAxis tick={{ fill: "#71717a", fontSize: 10 }} tickFormatter={(v) => formatCompact(v)} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 8 }}
+                    labelStyle={{ color: "#d4d4d8", fontSize: 12 }}
+                    formatter={(value: number, name: string) => [value.toLocaleString(), name === "reels" ? "Reel Views" : "Post Views"]}
+                  />
+                  <Bar dataKey="reels" name="reels" stackId="views" fill="#a855f7" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="posts" name="posts" stackId="views" fill="#10b981" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : null;
+        })()}
 
         {/* Leaderboard Podium */}
         {allPages.length >= 3 && (() => {
