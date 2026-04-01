@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  getIdeaEngine, getCSList, getPages, createIdea, updateIdea, deleteIdea,
+  getIdeaEngine, getCSList, getPages, createIdea, updateIdea, deleteIdea, createCS,
 } from "@/services/api";
 import type { IdeaEngineData, IdeaStat, ContentStrategist, Page } from "@/types";
 import { toast } from "sonner";
@@ -18,7 +18,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, Trophy, Search, Pencil, Check, X, Swords } from "lucide-react";
+import { Plus, Trash2, Trophy, Search, Check, X, Swords, UserPlus } from "lucide-react";
 
 function formatCompact(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
@@ -34,6 +34,10 @@ export default function CompetitorIdeas() {
   const [editStatus, setEditStatus] = useState("");
   const [editingDistId, setEditingDistId] = useState<string | null>(null);
   const [editDistPages, setEditDistPages] = useState<string[]>([]);
+
+  // CDI form
+  const [cdiOpen, setCdiOpen] = useState(false);
+  const [cdiName, setCdiName] = useState("");
 
   // Idea form
   const [hook, setHook] = useState("");
@@ -92,6 +96,17 @@ export default function CompetitorIdeas() {
       toast.success("Idea deleted");
     },
     onError: () => toast.error("Failed to delete idea"),
+  });
+
+  const createCDIMutation = useMutation({
+    mutationFn: createCS,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cs"] });
+      toast.success("CDI member added");
+      setCdiName("");
+      setCdiOpen(false);
+    },
+    onError: (err: any) => toast.error(`Failed to add CDI: ${err.message}`),
   });
 
   function resetForm() {
@@ -162,6 +177,42 @@ export default function CompetitorIdeas() {
             </h1>
             <p className="text-sm text-zinc-500 mt-1">Track competitor-inspired content ideas</p>
           </div>
+          <div className="flex gap-2">
+          <Dialog open={cdiOpen} onOpenChange={setCdiOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="border-zinc-700 text-zinc-400 hover:text-white">
+                <UserPlus className="w-4 h-4 mr-2" />
+                Add CDI
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="bg-zinc-900 border-zinc-800">
+              <DialogHeader>
+                <DialogTitle>Add CDI Member</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={(e) => { e.preventDefault(); if (cdiName.trim()) createCDIMutation.mutate({ name: cdiName.trim(), role: "CDI" }); }} className="space-y-4 mt-2">
+                <div className="space-y-2">
+                  <Label>Name</Label>
+                  <Input placeholder="e.g. Priya" value={cdiName} onChange={(e) => setCdiName(e.target.value)} required />
+                </div>
+                <Button type="submit" className="w-full" disabled={createCDIMutation.isPending}>
+                  {createCDIMutation.isPending ? "Adding..." : "Add CDI Member"}
+                </Button>
+                {cdiMembers.length > 0 && (
+                  <div className="pt-4 border-t border-zinc-800">
+                    <p className="text-xs text-zinc-500 mb-2 uppercase tracking-wider">Current CDI Team</p>
+                    <div className="space-y-1">
+                      {cdiMembers.map((cdi) => (
+                        <div key={cdi.id} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-zinc-800/50">
+                          <span className="text-sm text-white">{cdi.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </form>
+            </DialogContent>
+          </Dialog>
+
           <Dialog open={ideaOpen} onOpenChange={setIdeaOpen}>
             <DialogTrigger asChild>
               <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white">
@@ -236,6 +287,7 @@ export default function CompetitorIdeas() {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         {/* Ideas heading */}
