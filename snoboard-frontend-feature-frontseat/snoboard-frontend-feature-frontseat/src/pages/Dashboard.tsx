@@ -78,18 +78,20 @@ export default function Dashboard() {
 
   const stats = data;
   const totalViews = stats?.total_views ?? 0;
-  const allPages = [...(stats?.pages ?? [])].sort((a: any, b: any) => (b.total_views ?? 0) - (a.total_views ?? 0));
+  const allPagesRaw = stats?.pages ?? [];
+  const allPages = [...allPagesRaw];
   const filteredByType = ipFilter === "all"
     ? allPages
     : ipFilter === "main"
       ? allPages.filter((p: any) => MAIN_IP_HANDLES.includes((p.handle ?? "").toLowerCase()))
       : allPages.filter((p: any) => !MAIN_IP_HANDLES.includes((p.handle ?? "").toLowerCase()));
-  const pages = search.trim()
+  const pages = (search.trim()
     ? filteredByType.filter((p: any) =>
         (p.handle ?? "").toLowerCase().includes(search.toLowerCase()) ||
         (p.name ?? "").toLowerCase().includes(search.toLowerCase())
       )
-    : filteredByType;
+    : filteredByType
+  ).sort((a: any, b: any) => getPageViews(b, globalPeriod) - getPageViews(a, globalPeriod));
   const currentMonth = stats?.current_month
     ? new Date(stats.current_month).toLocaleString("default", { month: "long", year: "numeric" })
     : "";
@@ -379,9 +381,9 @@ export default function Dashboard() {
                         </span>
                         <span className="text-[9px] uppercase tracking-wider text-zinc-500 mt-1">views</span>
                         <div className="mt-2 flex items-center gap-1 text-[10px] text-zinc-600">
-                          <span>{globalPeriod === "all" ? (page.all_time_reels_count ?? page.reels_count ?? 0) : globalPeriod === "weekly" ? Math.round((page.reels_count ?? 0) / 4) : (page.reels_count ?? 0)} reels</span>
+                          <span>{globalPeriod === "all" ? (page.all_time_reels_count ?? page.reels_count ?? 0) : (page.reels_count ?? 0)} reels</span>
                           <span>·</span>
-                          <span>{globalPeriod === "all" ? (page.all_time_posts_count ?? page.posts_count ?? 0) : globalPeriod === "weekly" ? Math.round((page.posts_count ?? 0) / 4) : (page.posts_count ?? 0)} posts</span>
+                          <span>{globalPeriod === "all" ? (page.all_time_posts_count ?? page.posts_count ?? 0) : (page.posts_count ?? 0)} posts</span>
                         </div>
                       </div>
                     </div>
