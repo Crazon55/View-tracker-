@@ -73,7 +73,7 @@ export default function IdeaEngine() {
   const [editStatus, setEditStatus] = useState("");
   const [editingDistId, setEditingDistId] = useState<string | null>(null);
   const [editDistPages, setEditDistPages] = useState<string[]>([]);
-  const [sourceTab, setSourceTab] = useState<"original" | "repurposed">("original");
+  // sourceTab removed — this page only shows original ideas
 
   // Idea form
   const [hook, setHook] = useState("");
@@ -214,8 +214,8 @@ export default function IdeaEngine() {
     return b.winners_count - a.winners_count;
   });
 
-  // Filter ideas by source tab, then search
-  const tabIdeas = ideas.filter((i) => i.source === sourceTab);
+  // Only show original ideas on this page
+  const tabIdeas = ideas.filter((i) => i.source === "original");
   const filteredIdeas = search.trim()
     ? tabIdeas.filter(
         (i) =>
@@ -537,20 +537,7 @@ export default function IdeaEngine() {
             <Badge variant="outline" className="border-zinc-700 text-zinc-400 text-xs font-mono">
               {tabIdeas.length}
             </Badge>
-            <div className="inline-flex items-center bg-zinc-800/80 rounded-full p-0.5 gap-0.5">
-              <button
-                onClick={() => setSourceTab("original")}
-                className={`text-[10px] uppercase tracking-wider px-3 py-1 rounded-full font-medium transition-all ${
-                  sourceTab === "original" ? "bg-violet-600 text-white shadow-lg shadow-violet-600/25" : "text-zinc-500 hover:text-zinc-300"
-                }`}
-              >Original</button>
-              <button
-                onClick={() => setSourceTab("repurposed")}
-                className={`text-[10px] uppercase tracking-wider px-3 py-1 rounded-full font-medium transition-all ${
-                  sourceTab === "repurposed" ? "bg-violet-600 text-white shadow-lg shadow-violet-600/25" : "text-zinc-500 hover:text-zinc-300"
-                }`}
-              >Competitors</button>
-            </div>
+            <Badge className="bg-violet-500/20 text-violet-400 border-violet-500/30 text-[10px] uppercase">Original</Badge>
           </div>
         </div>
 
