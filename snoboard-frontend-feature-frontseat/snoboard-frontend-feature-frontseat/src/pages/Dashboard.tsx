@@ -51,7 +51,7 @@ export default function Dashboard() {
   const [customTo, setCustomTo] = useState("");
   const [ipFilter, setIpFilter] = useState<"all" | "main" | "stage1">("all");
 
-  const MAIN_IP_HANDLES = ["101xfounders", "bizzindia", "indianfoundersco", "startupcoded", "foundersinindia", "101xmarketing", "techinthelast24hrs", "101xtechnology"];
+  // Stage-based filtering (stage 3 = main/stage3, stage 1 = stage1)
 
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard"],
@@ -83,8 +83,8 @@ export default function Dashboard() {
   const filteredByType = ipFilter === "all"
     ? allPages
     : ipFilter === "main"
-      ? allPages.filter((p: any) => MAIN_IP_HANDLES.includes((p.handle ?? "").toLowerCase()))
-      : allPages.filter((p: any) => !MAIN_IP_HANDLES.includes((p.handle ?? "").toLowerCase()));
+      ? allPages.filter((p: any) => (p.stage ?? 1) === 3)
+      : allPages.filter((p: any) => (p.stage ?? 1) === 1);
   const pages = (search.trim()
     ? filteredByType.filter((p: any) =>
         (p.handle ?? "").toLowerCase().includes(search.toLowerCase()) ||

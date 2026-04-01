@@ -5,6 +5,7 @@ export interface Page {
   profile_url: string | null;
   profile_image_url: string | null;
   followers_count: number;
+  stage: number;
   created_at: string;
 }
 

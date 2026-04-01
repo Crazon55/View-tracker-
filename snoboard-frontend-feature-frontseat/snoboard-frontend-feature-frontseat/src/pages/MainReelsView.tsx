@@ -57,14 +57,12 @@ export default function MainReelsView() {
     queryFn: getAutoReels,
   });
 
-  const MAIN_IP_HANDLES = ["101xfounders", "bizzindia", "indianfoundersco", "startupcoded", "foundersinindia", "101xmarketing", "techinthelast24hrs", "101xtechnology"];
-
   const { data: allPages = [] } = useQuery<Page[]>({
     queryKey: ["pages"],
     queryFn: getPages,
   });
 
-  const pages = allPages.filter((p) => MAIN_IP_HANDLES.includes(p.handle.toLowerCase()));
+  const pages = allPages.filter((p) => (p.stage ?? 1) === 3);
 
   const { data: ideas = [] } = useQuery<Idea[]>({
     queryKey: ["ideas"],

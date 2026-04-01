@@ -8,6 +8,7 @@ class PageCreate(BaseModel):
     name: str | None = None
     profile_url: str | None = None
     auto_scrape: bool = False
+    stage: int = 1
 
 
 class PageUpdate(BaseModel):
@@ -16,6 +17,7 @@ class PageUpdate(BaseModel):
     profile_url: str | None = None
     followers_count: int | None = None
     auto_scrape: bool | None = None
+    stage: int | None = None
 
 
 class ScrapeRequest(BaseModel):

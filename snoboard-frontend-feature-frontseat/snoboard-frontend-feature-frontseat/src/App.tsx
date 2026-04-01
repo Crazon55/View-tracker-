@@ -126,7 +126,7 @@ const navItems = [
   { to: "/reels/stage1", label: "Reels Stage 1", icon: Film },
   { to: "/reels/main", label: "Main Reels", icon: Radio },
   { to: "/growth", label: "Growth", icon: TrendingUp },
-  { to: "/pages", label: "Pages", icon: Users },
+  { to: "/pages", label: "IP's", icon: Users },
 ];
 
 function HamburgerMenu() {
