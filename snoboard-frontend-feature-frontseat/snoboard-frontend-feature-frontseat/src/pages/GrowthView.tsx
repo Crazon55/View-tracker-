@@ -64,7 +64,7 @@ export default function GrowthView() {
 
   // Build chart data
   const pageHandles = selectedPage === "all"
-    ? [...handleSet].slice(0, 10)
+    ? [...handleSet]
     : [allPages.find((p) => p.id === selectedPage)?.handle || ""];
 
   const chartData = sortedMonths.map((month) => {
@@ -112,7 +112,7 @@ export default function GrowthView() {
               <SelectValue placeholder="All pages" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All pages (top 10)</SelectItem>
+              <SelectItem value="all">All pages</SelectItem>
               {allPages.map((p) => (
                 <SelectItem key={p.id} value={p.id}>@{p.handle}</SelectItem>
               ))}
