@@ -545,3 +545,12 @@ async def chat(req: ChatRequest):
         return {"success": True, "data": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
+
+
+# --- Growth Data ---
+@app.get("/api/v1/growth")
+async def get_growth_data():
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    data = client.table("growth_data").select("*").order("month", desc=True).execute().data
+    return {"success": True, "data": data}
