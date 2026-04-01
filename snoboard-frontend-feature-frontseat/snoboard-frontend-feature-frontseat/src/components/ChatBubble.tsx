@@ -187,7 +187,7 @@ export default function ChatBubble() {
             <div className="px-5 py-4 border-b border-zinc-800 bg-zinc-900/50">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-violet-400" />
-                <h3 className="text-sm font-semibold text-white">View Tracker AI</h3>
+                <h3 className="text-sm font-semibold text-white">FSBOARD AI</h3>
               </div>
               <p className="text-[11px] text-zinc-500 mt-0.5">Ask about performance, trends, or content ideas</p>
             </div>
