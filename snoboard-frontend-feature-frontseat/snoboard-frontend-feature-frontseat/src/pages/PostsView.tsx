@@ -70,8 +70,6 @@ export default function PostsView() {
   const [dateTo, setDateTo] = useState("");
   const [filterPage, setFilterPage] = useState("all");
 
-  const MAIN_IP_HANDLES = ["101xfounders", "bizzindia", "indianfoundersco", "startupcoded", "foundersinindia", "101xmarketing", "techinthelast24hrs", "101xtechnology"];
-
   const { data: allPosts = [], isLoading } = useQuery<Post[]>({
     queryKey: ["posts"],
     queryFn: getPosts,
@@ -82,7 +80,7 @@ export default function PostsView() {
     queryFn: getPages,
   });
 
-  const pages = allPages.filter((p) => MAIN_IP_HANDLES.includes(p.handle.toLowerCase()));
+  const pages = allPages.filter((p) => (p.stage ?? 1) === 3);
   const mainPageIds = new Set(pages.map((p) => p.id));
   const posts = allPosts.filter((p) => mainPageIds.has(p.page_id));
 
