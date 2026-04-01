@@ -68,6 +68,7 @@ class CSUpdate(BaseModel):
 class IdeaCreate(BaseModel):
     hook: str
     cs_owner_id: str | None = None
+    cdi_owner_id: str | None = None
     format: str = "reel"
     source: str = "original"
     status: str = "active"
@@ -78,6 +79,7 @@ class IdeaCreate(BaseModel):
 class IdeaUpdate(BaseModel):
     hook: str | None = None
     cs_owner_id: str | None = None
+    cdi_owner_id: str | None = None
     format: str | None = None
     source: str | None = None
     status: str | None = None

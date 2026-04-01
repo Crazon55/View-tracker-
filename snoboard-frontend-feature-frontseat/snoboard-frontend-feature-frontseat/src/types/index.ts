@@ -64,6 +64,8 @@ export interface IdeaStat {
   status: string;
   cs_owner_id: string;
   cs_owner_name: string;
+  cdi_owner_id: string;
+  cdi_owner_name: string;
   distributed_to: string[] | null;
   created_at: string;
   total_posts: number;

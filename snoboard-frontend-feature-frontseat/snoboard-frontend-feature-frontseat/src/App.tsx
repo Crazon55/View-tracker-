@@ -4,7 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut } from "lucide-react";
+import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -19,6 +19,7 @@ import ReelsStage1View from "./pages/ReelsStage1View";
 import GrowthView from "./pages/GrowthView";
 import MainReelsView from "./pages/MainReelsView";
 import IdeaEngine from "./pages/IdeaEngine";
+import CompetitorIdeas from "./pages/CompetitorIdeas";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -120,6 +121,7 @@ function AnimalPicker({ userId }: { userId: string | undefined }) {
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/ideas", label: "Original Ideas", icon: Lightbulb },
+  { to: "/competitor-ideas", label: "Competitor Ideas", icon: Swords },
   { to: "/posts", label: "Posts", icon: FileText },
   { to: "/reels/stage1", label: "Reels Stage 1", icon: Film },
   { to: "/reels/main", label: "Main Reels", icon: Radio },
@@ -184,6 +186,7 @@ function AppLayout() {
   const isFullScreen =
     location.pathname === "/" ||
     location.pathname === "/ideas" ||
+    location.pathname === "/competitor-ideas" ||
     location.pathname.startsWith("/page/");
 
   if (isFullScreen) {
@@ -206,6 +209,7 @@ function AppLayout() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/ideas" element={<IdeaEngine />} />
+          <Route path="/competitor-ideas" element={<CompetitorIdeas />} />
           <Route path="/page/:pageId" element={<PageDetail />} />
         </Routes>
       </div>
