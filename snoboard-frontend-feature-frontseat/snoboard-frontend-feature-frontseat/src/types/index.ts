@@ -50,6 +50,7 @@ export interface Idea {
   source: string;
   status: string;
   notes: string | null;
+  distributed_to: string[] | null;
   created_at: string;
   content_strategists?: { id: string; name: string };
 }
@@ -63,6 +64,7 @@ export interface IdeaStat {
   status: string;
   cs_owner_id: string;
   cs_owner_name: string;
+  distributed_to: string[] | null;
   created_at: string;
   total_posts: number;
   total_views: number;

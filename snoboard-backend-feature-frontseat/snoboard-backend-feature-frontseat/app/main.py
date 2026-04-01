@@ -405,6 +405,7 @@ async def idea_engine_dashboard():
             "status": idea.get("status", ""),
             "cs_owner_id": idea.get("cs_owner_id", ""),
             "cs_owner_name": idea.get("content_strategists", {}).get("name", "") if idea.get("content_strategists") else "",
+            "distributed_to": idea.get("distributed_to") or [],
             "created_at": idea.get("created_at", ""),
             "total_posts": total_posts,
             "total_views": total_views,

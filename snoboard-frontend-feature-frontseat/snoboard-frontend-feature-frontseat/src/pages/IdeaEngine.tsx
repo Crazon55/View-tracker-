@@ -4,13 +4,14 @@ import {
   getIdeaEngine,
   getCSList,
   getIdeas,
+  getPages,
   createCS,
   deleteCS,
   createIdea,
   updateIdea,
   deleteIdea,
 } from "@/services/api";
-import type { IdeaEngineData, CSStat, IdeaStat, ContentStrategist, Idea } from "@/types";
+import type { IdeaEngineData, CSStat, IdeaStat, ContentStrategist, Idea, Page } from "@/types";
 import { toast } from "sonner";
 import {
   Table,
@@ -70,12 +71,14 @@ export default function IdeaEngine() {
   const [csOpen, setCsOpen] = useState(false);
   const [editingIdeaId, setEditingIdeaId] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState("");
+  const [sourceTab, setSourceTab] = useState<"original" | "repurposed">("original");
 
   // Idea form
   const [hook, setHook] = useState("");
   const [csOwnerId, setCsOwnerId] = useState("");
   const [format, setFormat] = useState("reel");
   const [source, setSource] = useState("original");
+  const [distributedTo, setDistributedTo] = useState<string[]>([]);
 
   // CS form
   const [csName, setCsName] = useState("");
@@ -90,6 +93,11 @@ export default function IdeaEngine() {
   const { data: csList = [] } = useQuery<ContentStrategist[]>({
     queryKey: ["cs"],
     queryFn: getCSList,
+  });
+
+  const { data: allPages = [] } = useQuery<Page[]>({
+    queryKey: ["pages"],
+    queryFn: getPages,
   });
 
   // Mutations
@@ -155,13 +163,26 @@ export default function IdeaEngine() {
     setCsOwnerId("");
     setFormat("reel");
     setSource("original");
+    setDistributedTo([]);
   }
 
   const handleCreateIdea = (e: React.FormEvent) => {
     e.preventDefault();
     if (!hook.trim() || !csOwnerId) return;
-    createIdeaMutation.mutate({ hook: hook.trim(), cs_owner_id: csOwnerId, format, source });
+    createIdeaMutation.mutate({
+      hook: hook.trim(),
+      cs_owner_id: csOwnerId,
+      format,
+      source,
+      distributed_to: distributedTo.length > 0 ? distributedTo : undefined,
+    });
   };
+
+  function togglePageSelection(pageId: string) {
+    setDistributedTo((prev) =>
+      prev.includes(pageId) ? prev.filter((id) => id !== pageId) : [...prev, pageId]
+    );
+  }
 
   const handleCreateCS = (e: React.FormEvent) => {
     e.preventDefault();
@@ -191,15 +212,25 @@ export default function IdeaEngine() {
     return b.winners_count - a.winners_count;
   });
 
-  // Filter ideas by search
+  // Filter ideas by source tab, then search
+  const tabIdeas = ideas.filter((i) => i.source === sourceTab);
   const filteredIdeas = search.trim()
-    ? ideas.filter(
+    ? tabIdeas.filter(
         (i) =>
           i.idea_code.toLowerCase().includes(search.toLowerCase()) ||
           i.hook.toLowerCase().includes(search.toLowerCase()) ||
           i.cs_owner_name.toLowerCase().includes(search.toLowerCase())
       )
-    : ideas;
+    : tabIdeas;
+
+  // Helper to get page handles from IDs
+  function getPageHandles(pageIds: string[] | null): string[] {
+    if (!pageIds) return [];
+    return pageIds.map((id) => {
+      const page = allPages.find((p) => p.id === id);
+      return page ? `@${page.handle}` : "";
+    }).filter(Boolean);
+  }
 
   // Status badge colors
   const statusColors: Record<string, string> = {
@@ -324,6 +355,30 @@ export default function IdeaEngine() {
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Distribute to Pages</Label>
+                    <div className="max-h-36 overflow-y-auto bg-zinc-950 border border-zinc-800 rounded-lg p-2 space-y-1">
+                      {allPages.map((page) => (
+                        <label
+                          key={page.id}
+                          className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${
+                            distributedTo.includes(page.id) ? "bg-violet-500/10 text-white" : "text-zinc-400 hover:bg-zinc-800"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={distributedTo.includes(page.id)}
+                            onChange={() => togglePageSelection(page.id)}
+                            className="rounded border-zinc-700 bg-zinc-800 text-violet-500 focus:ring-violet-500"
+                          />
+                          <span className="text-sm">@{page.handle}</span>
+                        </label>
+                      ))}
+                    </div>
+                    {distributedTo.length > 0 && (
+                      <p className="text-xs text-violet-400">{distributedTo.length} page{distributedTo.length > 1 ? "s" : ""} selected</p>
+                    )}
                   </div>
                   <Button type="submit" className="w-full" disabled={createIdeaMutation.isPending || !csOwnerId}>
                     {createIdeaMutation.isPending ? "Creating..." : "Create Idea"}
@@ -490,8 +545,22 @@ export default function IdeaEngine() {
           <div className="flex items-center gap-3">
             <h2 className="text-xl font-black text-white uppercase tracking-wider">Ideas</h2>
             <Badge variant="outline" className="border-zinc-700 text-zinc-400 text-xs font-mono">
-              {ideas.length} total
+              {tabIdeas.length}
             </Badge>
+            <div className="inline-flex items-center bg-zinc-800/80 rounded-full p-0.5 gap-0.5">
+              <button
+                onClick={() => setSourceTab("original")}
+                className={`text-[10px] uppercase tracking-wider px-3 py-1 rounded-full font-medium transition-all ${
+                  sourceTab === "original" ? "bg-violet-600 text-white shadow-lg shadow-violet-600/25" : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >Original</button>
+              <button
+                onClick={() => setSourceTab("repurposed")}
+                className={`text-[10px] uppercase tracking-wider px-3 py-1 rounded-full font-medium transition-all ${
+                  sourceTab === "repurposed" ? "bg-violet-600 text-white shadow-lg shadow-violet-600/25" : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >Competitors</button>
+            </div>
           </div>
         </div>
 
@@ -519,6 +588,7 @@ export default function IdeaEngine() {
                 <TableHead className="text-right">Views</TableHead>
                 <TableHead className="text-center">Winners</TableHead>
                 <TableHead className="text-center">Hit Rate</TableHead>
+                <TableHead>Distributed To</TableHead>
                 <TableHead className="w-24">Status</TableHead>
                 <TableHead className="w-20"></TableHead>
               </TableRow>
@@ -526,7 +596,7 @@ export default function IdeaEngine() {
             <TableBody>
               {filteredIdeas.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center text-zinc-500 py-8">
+                  <TableCell colSpan={11} className="text-center text-zinc-500 py-8">
                     {ideas.length === 0
                       ? "No ideas yet. Click \"New Idea\" to create your first one."
                       : "No ideas matching your search."}
@@ -563,6 +633,16 @@ export default function IdeaEngine() {
                       <span className={`text-sm font-bold ${idea.hit_rate > 0 ? "text-emerald-400" : "text-zinc-600"}`}>
                         {idea.hit_rate}%
                       </span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1 max-w-[180px]">
+                        {getPageHandles(idea.distributed_to).length > 0
+                          ? getPageHandles(idea.distributed_to).map((h) => (
+                              <span key={h} className="text-[10px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">{h}</span>
+                            ))
+                          : <span className="text-[10px] text-zinc-600">—</span>
+                        }
+                      </div>
                     </TableCell>
                     <TableCell>
                       {editingIdeaId === idea.id ? (
