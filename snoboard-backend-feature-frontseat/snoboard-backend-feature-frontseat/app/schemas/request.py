@@ -72,6 +72,7 @@ class IdeaCreate(BaseModel):
     source: str = "original"
     status: str = "active"
     notes: str | None = None
+    distributed_to: list[str] | None = None
 
 
 class IdeaUpdate(BaseModel):
@@ -81,6 +82,7 @@ class IdeaUpdate(BaseModel):
     source: str | None = None
     status: str | None = None
     notes: str | None = None
+    distributed_to: list[str] | None = None
 
 
 # --- Chat ---
