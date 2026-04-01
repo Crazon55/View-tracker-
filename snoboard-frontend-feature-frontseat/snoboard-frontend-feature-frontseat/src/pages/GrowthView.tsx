@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getPages, getDashboard } from "@/services/api";
+import { getPages } from "@/services/api";
 import type { Page } from "@/types";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, LineChart, Line, Legend,
@@ -8,6 +8,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { ChevronDown, ChevronRight, TrendingUp } from "lucide-react";
 
 function formatCompact(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
@@ -15,12 +16,11 @@ function formatCompact(n: number): string {
   return n.toLocaleString();
 }
 
-const COLORS = ["#a855f7", "#10b981", "#f59e0b", "#ec4899", "#06b6d4", "#f43f5e", "#8b5cf6", "#14b8a6", "#f97316", "#6366f1"];
+const COLORS = ["#a855f7", "#10b981", "#f59e0b", "#ec4899", "#06b6d4", "#f43f5e", "#8b5cf6", "#14b8a6", "#f97316", "#6366f1", "#84cc16", "#e879f9"];
 
 const BASE_URL = import.meta.env.VITE_API_URL || "";
 
 async function fetchAllDashboardViews(): Promise<any[]> {
-  // Fetch dashboard views for all pages
   const pagesRes = await fetch(`${BASE_URL}/api/v1/pages`, {
     headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
   });
@@ -35,17 +35,182 @@ async function fetchAllDashboardViews(): Promise<any[]> {
     const data = await res.json();
     const views = data.data ?? data ?? [];
     for (const v of views) {
-      allViews.push({ ...v, handle: page.handle, page_name: page.name });
+      allViews.push({ ...v, handle: page.handle, page_name: page.name, stage: page.stage ?? 1 });
     }
   }
   return allViews;
 }
 
-type ViewMode = "chart" | "table";
+function MonthSection({ month, views, allPages }: { month: string; views: any[]; allPages: Page[] }) {
+  const [expanded, setExpanded] = useState(true);
+  const monthLabel = new Date(month + "-01").toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+  const totalViews = views.reduce((s, v) => s + (v.reel_views ?? 0) + (v.post_views ?? 0), 0);
+
+  // Split by stage
+  const stage3 = views.filter((v) => v.stage === 3).sort((a: any, b: any) => ((b.reel_views ?? 0) + (b.post_views ?? 0)) - ((a.reel_views ?? 0) + (a.post_views ?? 0)));
+  const stage1 = views.filter((v) => v.stage === 1).sort((a: any, b: any) => ((b.reel_views ?? 0) + (b.post_views ?? 0)) - ((a.reel_views ?? 0) + (a.post_views ?? 0)));
+  const stage2 = views.filter((v) => v.stage === 2).sort((a: any, b: any) => ((b.reel_views ?? 0) + (b.post_views ?? 0)) - ((a.reel_views ?? 0) + (a.post_views ?? 0)));
+
+  return (
+    <div className="border border-zinc-800 rounded-2xl overflow-hidden">
+      {/* Month header */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-8 py-6 bg-zinc-900 hover:bg-zinc-800/50 transition-colors"
+      >
+        <div className="flex items-center gap-4">
+          {expanded ? <ChevronDown className="w-5 h-5 text-zinc-500" /> : <ChevronRight className="w-5 h-5 text-zinc-500" />}
+          <h2 className="text-2xl font-black text-white uppercase tracking-wider">{monthLabel}</h2>
+        </div>
+        <div className="flex items-center gap-3">
+          <TrendingUp className="w-5 h-5 text-violet-400" />
+          <span className="text-2xl font-black text-violet-400 tabular-nums">{formatCompact(totalViews)}</span>
+          <span className="text-sm text-zinc-500">total views</span>
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="px-8 py-8 space-y-10">
+
+          {/* Stage 3 — Main IPs */}
+          {stage3.length > 0 && (
+            <div>
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                <h3 className="text-lg font-bold text-white">Stage 3 — Main IPs</h3>
+                <span className="text-sm text-zinc-500">
+                  {formatCompact(stage3.reduce((s, v) => s + (v.reel_views ?? 0) + (v.post_views ?? 0), 0))} views
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-zinc-800">
+                      <th className="text-left text-zinc-500 text-xs uppercase tracking-wider py-3 px-4 w-64">IP</th>
+                      <th className="text-right text-zinc-500 text-xs uppercase tracking-wider py-3 px-4">Reel Views</th>
+                      <th className="text-right text-zinc-500 text-xs uppercase tracking-wider py-3 px-4">Post Views</th>
+                      <th className="text-right text-zinc-500 text-xs uppercase tracking-wider py-3 px-4">Total</th>
+                      <th className="text-right text-zinc-500 text-xs uppercase tracking-wider py-3 px-4 w-28">% Share</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stage3.map((v) => {
+                      const total = (v.reel_views ?? 0) + (v.post_views ?? 0);
+                      return (
+                        <tr key={v.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/20 transition-colors">
+                          <td className="py-4 px-4">
+                            <span className="text-base font-semibold text-white">@{v.handle}</span>
+                          </td>
+                          <td className="py-4 px-4 text-right font-mono text-base text-zinc-300 tabular-nums">{(v.reel_views ?? 0).toLocaleString()}</td>
+                          <td className="py-4 px-4 text-right font-mono text-base text-zinc-300 tabular-nums">{(v.post_views ?? 0).toLocaleString()}</td>
+                          <td className="py-4 px-4 text-right font-mono text-base font-bold text-white tabular-nums">{total.toLocaleString()}</td>
+                          <td className="py-4 px-4 text-right text-sm text-zinc-500">
+                            {totalViews > 0 ? ((total / totalViews) * 100).toFixed(1) + "%" : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-zinc-700">
+                      <td className="py-4 px-4 text-sm font-bold text-zinc-400">Total</td>
+                      <td className="py-4 px-4 text-right font-mono text-sm font-bold text-zinc-400 tabular-nums">
+                        {stage3.reduce((s, v) => s + (v.reel_views ?? 0), 0).toLocaleString()}
+                      </td>
+                      <td className="py-4 px-4 text-right font-mono text-sm font-bold text-zinc-400 tabular-nums">
+                        {stage3.reduce((s, v) => s + (v.post_views ?? 0), 0).toLocaleString()}
+                      </td>
+                      <td className="py-4 px-4 text-right font-mono text-sm font-bold text-white tabular-nums">
+                        {stage3.reduce((s, v) => s + (v.reel_views ?? 0) + (v.post_views ?? 0), 0).toLocaleString()}
+                      </td>
+                      <td className="py-4 px-4 text-right text-sm text-zinc-500">
+                        {totalViews > 0 ? ((stage3.reduce((s, v) => s + (v.reel_views ?? 0) + (v.post_views ?? 0), 0) / totalViews) * 100).toFixed(1) + "%" : "—"}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Stage 2 */}
+          {stage2.length > 0 && (
+            <div>
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-3 h-3 rounded-full bg-amber-500" />
+                <h3 className="text-lg font-bold text-white">Stage 2</h3>
+                <span className="text-sm text-zinc-500">
+                  {formatCompact(stage2.reduce((s, v) => s + (v.reel_views ?? 0) + (v.post_views ?? 0), 0))} views
+                </span>
+              </div>
+              <StageTable views={stage2} totalViews={totalViews} />
+            </div>
+          )}
+
+          {/* Stage 1 */}
+          {stage1.length > 0 && (
+            <div>
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-3 h-3 rounded-full bg-blue-500" />
+                <h3 className="text-lg font-bold text-white">Stage 1</h3>
+                <span className="text-sm text-zinc-500">
+                  {formatCompact(stage1.reduce((s, v) => s + (v.reel_views ?? 0) + (v.post_views ?? 0), 0))} views
+                </span>
+              </div>
+              <StageTable views={stage1} totalViews={totalViews} />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StageTable({ views, totalViews }: { views: any[]; totalViews: number }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full">
+        <thead>
+          <tr className="border-b border-zinc-800">
+            <th className="text-left text-zinc-500 text-xs uppercase tracking-wider py-3 px-4 w-64">IP</th>
+            <th className="text-right text-zinc-500 text-xs uppercase tracking-wider py-3 px-4">Views</th>
+            <th className="text-right text-zinc-500 text-xs uppercase tracking-wider py-3 px-4 w-28">% Share</th>
+          </tr>
+        </thead>
+        <tbody>
+          {views.map((v) => {
+            const total = (v.reel_views ?? 0) + (v.post_views ?? 0);
+            return (
+              <tr key={v.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/20 transition-colors">
+                <td className="py-4 px-4">
+                  <span className="text-base font-semibold text-white">@{v.handle}</span>
+                </td>
+                <td className="py-4 px-4 text-right font-mono text-base font-bold text-white tabular-nums">{total.toLocaleString()}</td>
+                <td className="py-4 px-4 text-right text-sm text-zinc-500">
+                  {totalViews > 0 ? ((total / totalViews) * 100).toFixed(1) + "%" : "—"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot>
+          <tr className="border-t border-zinc-700">
+            <td className="py-4 px-4 text-sm font-bold text-zinc-400">Total</td>
+            <td className="py-4 px-4 text-right font-mono text-sm font-bold text-white tabular-nums">
+              {views.reduce((s, v) => s + (v.reel_views ?? 0) + (v.post_views ?? 0), 0).toLocaleString()}
+            </td>
+            <td className="py-4 px-4 text-right text-sm text-zinc-500">
+              {totalViews > 0 ? ((views.reduce((s, v) => s + (v.reel_views ?? 0) + (v.post_views ?? 0), 0) / totalViews) * 100).toFixed(1) + "%" : "—"}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
 
 export default function GrowthView() {
   const [selectedPage, setSelectedPage] = useState<string>("all");
-  const [viewMode, setViewMode] = useState<ViewMode>("chart");
 
   const { data: allPages = [] } = useQuery<Page[]>({ queryKey: ["pages"], queryFn: getPages });
   const { data: dashboardViews = [], isLoading } = useQuery({
@@ -60,29 +225,31 @@ export default function GrowthView() {
     if (v.month) months.add(v.month.slice(0, 7));
     if (v.handle) handleSet.add(v.handle);
   }
-  const sortedMonths = [...months].sort();
+  const sortedMonths = [...months].sort().reverse();
 
-  // Build chart data
+  // Filter views by selected page
+  const filteredViews = selectedPage === "all"
+    ? dashboardViews
+    : dashboardViews.filter((v) => {
+        const page = allPages.find((p) => p.id === selectedPage);
+        return page && v.handle === page.handle;
+      });
+
+  // Chart data
   const pageHandles = selectedPage === "all"
     ? [...handleSet]
     : [allPages.find((p) => p.id === selectedPage)?.handle || ""];
 
-  const chartData = sortedMonths.map((month) => {
+  const chartData = [...months].sort().map((month) => {
     const row: any = {
       name: new Date(month + "-01").toLocaleDateString("en-GB", { month: "short", year: "2-digit" }),
-      month,
     };
     for (const handle of pageHandles) {
-      const entry = dashboardViews.find((v) => v.month?.slice(0, 7) === month && v.handle === handle);
+      const entry = filteredViews.find((v) => v.month?.slice(0, 7) === month && v.handle === handle);
       row[handle] = entry ? (entry.reel_views ?? 0) + (entry.post_views ?? 0) : 0;
     }
     return row;
   });
-
-  // Table data: per page, per month
-  const tablePages = selectedPage === "all"
-    ? allPages.filter((p) => handleSet.has(p.handle))
-    : allPages.filter((p) => p.id === selectedPage);
 
   if (isLoading) {
     return (
@@ -95,135 +262,95 @@ export default function GrowthView() {
     );
   }
 
+  // Total across all months
+  const grandTotal = filteredViews.reduce((s, v) => s + (v.reel_views ?? 0) + (v.post_views ?? 0), 0);
+
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-white">Growth</h2>
-          <p className="text-sm text-zinc-500 mt-1">Monthly views per page over time</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="inline-flex items-center bg-zinc-800/80 rounded-full p-0.5 gap-0.5">
-            <button onClick={() => setViewMode("chart")} className={`text-[10px] uppercase tracking-wider px-3 py-1 rounded-full font-medium transition-all ${viewMode === "chart" ? "bg-violet-600 text-white" : "text-zinc-500 hover:text-zinc-300"}`}>Chart</button>
-            <button onClick={() => setViewMode("table")} className={`text-[10px] uppercase tracking-wider px-3 py-1 rounded-full font-medium transition-all ${viewMode === "table" ? "bg-violet-600 text-white" : "text-zinc-500 hover:text-zinc-300"}`}>Table</button>
+    <div className="min-h-screen bg-zinc-950 px-6 py-10">
+      <div className="max-w-7xl mx-auto space-y-10">
+
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-black text-white uppercase tracking-wider">Growth</h1>
+            <p className="text-sm text-zinc-500 mt-2">Monthly views breakdown by page and stage</p>
           </div>
-          <Select value={selectedPage} onValueChange={setSelectedPage}>
-            <SelectTrigger className="w-52">
-              <SelectValue placeholder="All pages" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All pages</SelectItem>
-              {allPages.map((p) => (
-                <SelectItem key={p.id} value={p.id}>@{p.handle}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <p className="text-xs text-zinc-500 uppercase tracking-wider">All Time Total</p>
+              <p className="text-3xl font-black text-violet-400 tabular-nums">{formatCompact(grandTotal)}</p>
+            </div>
+            <Select value={selectedPage} onValueChange={setSelectedPage}>
+              <SelectTrigger className="w-56">
+                <SelectValue placeholder="All pages" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All pages</SelectItem>
+                {allPages.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>@{p.handle}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-      </div>
 
-      {viewMode === "chart" ? (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-          {chartData.length > 0 ? (
-            <>
-              <ResponsiveContainer width="100%" height={400}>
-                {selectedPage === "all" ? (
-                  <BarChart data={chartData} margin={{ top: 10, right: 20, bottom: 10, left: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                    <XAxis dataKey="name" tick={{ fill: "#71717a", fontSize: 11 }} />
-                    <YAxis tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => formatCompact(v)} />
-                    <Tooltip
-                      contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 8 }}
-                      labelStyle={{ color: "#d4d4d8", fontSize: 12 }}
-                      formatter={(value: number, name: string) => [formatCompact(value), `@${name}`]}
-                    />
-                    <Legend formatter={(value) => `@${value}`} />
-                    {pageHandles.map((handle, i) => (
-                      <Bar key={handle} dataKey={handle} fill={COLORS[i % COLORS.length]} radius={[4, 4, 0, 0]} />
-                    ))}
-                  </BarChart>
-                ) : (
-                  <LineChart data={chartData} margin={{ top: 10, right: 20, bottom: 10, left: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                    <XAxis dataKey="name" tick={{ fill: "#71717a", fontSize: 11 }} />
-                    <YAxis tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => formatCompact(v)} />
-                    <Tooltip
-                      contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 8 }}
-                      labelStyle={{ color: "#d4d4d8", fontSize: 12 }}
-                      formatter={(value: number) => [formatCompact(value), "Views"]}
-                    />
-                    {pageHandles.map((handle, i) => (
-                      <Line key={handle} type="monotone" dataKey={handle} stroke={COLORS[i % COLORS.length]} strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                    ))}
-                  </LineChart>
-                )}
-              </ResponsiveContainer>
-              {selectedPage === "all" && (
-                <div className="flex items-center gap-4 mt-4 flex-wrap justify-center">
+        {/* Overview Chart */}
+        {chartData.length > 0 && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8">
+            <h2 className="text-sm uppercase tracking-[0.2em] text-zinc-400 font-semibold mb-6">
+              {selectedPage === "all" ? "All Pages — Monthly Comparison" : `@${pageHandles[0]} — Monthly Trend`}
+            </h2>
+            <ResponsiveContainer width="100%" height={450}>
+              {selectedPage === "all" ? (
+                <BarChart data={chartData} margin={{ top: 10, right: 20, bottom: 10, left: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                  <XAxis dataKey="name" tick={{ fill: "#71717a", fontSize: 12 }} />
+                  <YAxis tick={{ fill: "#71717a", fontSize: 12 }} tickFormatter={(v) => formatCompact(v)} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 12, padding: "12px 16px" }}
+                    labelStyle={{ color: "#d4d4d8", fontSize: 13, fontWeight: "bold", marginBottom: 8 }}
+                    formatter={(value: number, name: string) => [formatCompact(value), `@${name}`]}
+                  />
+                  <Legend formatter={(value) => `@${value}`} wrapperStyle={{ fontSize: 11, paddingTop: 16 }} />
                   {pageHandles.map((handle, i) => (
-                    <div key={handle} className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                      <span className="text-xs text-zinc-400">@{handle}</span>
-                    </div>
+                    <Bar key={handle} dataKey={handle} fill={COLORS[i % COLORS.length]} radius={[4, 4, 0, 0]} />
                   ))}
-                </div>
+                </BarChart>
+              ) : (
+                <LineChart data={chartData} margin={{ top: 10, right: 20, bottom: 10, left: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                  <XAxis dataKey="name" tick={{ fill: "#71717a", fontSize: 12 }} />
+                  <YAxis tick={{ fill: "#71717a", fontSize: 12 }} tickFormatter={(v) => formatCompact(v)} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 12, padding: "12px 16px" }}
+                    labelStyle={{ color: "#d4d4d8", fontSize: 13, fontWeight: "bold" }}
+                    formatter={(value: number) => [formatCompact(value), "Views"]}
+                  />
+                  {pageHandles.map((handle, i) => (
+                    <Line key={handle} type="monotone" dataKey={handle} stroke={COLORS[i % COLORS.length]} strokeWidth={3} dot={{ r: 5, strokeWidth: 2 }} activeDot={{ r: 7 }} />
+                  ))}
+                </LineChart>
               )}
-            </>
-          ) : (
-            <p className="text-center text-zinc-500 py-12">No growth data yet.</p>
-          )}
-        </div>
-      ) : (
-        /* Table view */
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* Monthly Sections */}
         <div className="space-y-6">
-          {sortedMonths.slice().reverse().map((month) => {
-            const monthLabel = new Date(month + "-01").toLocaleDateString("en-GB", { month: "long", year: "numeric" });
-            const monthViews = dashboardViews.filter((v) => v.month?.slice(0, 7) === month);
-            const filteredViews = selectedPage === "all"
-              ? monthViews
-              : monthViews.filter((v) => {
-                  const page = allPages.find((p) => p.id === selectedPage);
-                  return page && v.handle === page.handle;
-                });
-            const totalViews = filteredViews.reduce((s, v) => s + (v.reel_views ?? 0) + (v.post_views ?? 0), 0);
-
-            if (filteredViews.length === 0) return null;
-
-            return (
-              <div key={month} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-bold text-white">{monthLabel}</h3>
-                  <span className="text-sm font-bold text-violet-400">{formatCompact(totalViews)} total</span>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-zinc-800">
-                        <th className="text-left text-zinc-500 text-xs uppercase tracking-wider py-2 px-3">IP</th>
-                        <th className="text-right text-zinc-500 text-xs uppercase tracking-wider py-2 px-3">Views</th>
-                        <th className="text-right text-zinc-500 text-xs uppercase tracking-wider py-2 px-3">% of Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredViews
-                        .map((v) => ({ ...v, total: (v.reel_views ?? 0) + (v.post_views ?? 0) }))
-                        .sort((a, b) => b.total - a.total)
-                        .map((v) => (
-                          <tr key={v.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30">
-                            <td className="py-2.5 px-3 font-semibold text-white">@{v.handle}</td>
-                            <td className="py-2.5 px-3 text-right font-mono text-white tabular-nums">{v.total.toLocaleString()}</td>
-                            <td className="py-2.5 px-3 text-right text-zinc-500">
-                              {totalViews > 0 ? ((v.total / totalViews) * 100).toFixed(1) + "%" : "—"}
-                            </td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            );
+          {sortedMonths.map((month) => {
+            const monthViews = filteredViews.filter((v) => v.month?.slice(0, 7) === month);
+            if (monthViews.length === 0) return null;
+            return <MonthSection key={month} month={month} views={monthViews} allPages={allPages} />;
           })}
         </div>
-      )}
+
+        {sortedMonths.length === 0 && (
+          <div className="text-center py-20">
+            <p className="text-zinc-500 text-lg">No growth data yet.</p>
+            <p className="text-zinc-600 text-sm mt-2">Add dashboard views for pages to see growth trends here.</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
