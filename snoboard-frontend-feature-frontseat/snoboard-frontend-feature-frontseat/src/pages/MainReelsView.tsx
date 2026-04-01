@@ -310,7 +310,12 @@ export default function MainReelsView() {
                       <SelectContent>
                         {ideas.map((idea) => (
                           <SelectItem key={idea.id} value={idea.id}>
-                            {idea.idea_code} — {idea.hook}
+                            <span className="flex items-center gap-2">
+                              {idea.idea_code} — {idea.hook}
+                              <span className={`text-[9px] uppercase px-1.5 py-0.5 rounded font-medium ${idea.source === "original" ? "bg-violet-500/20 text-violet-400" : "bg-amber-500/20 text-amber-400"}`}>
+                                {idea.source === "original" ? "OG" : "COMP"}
+                              </span>
+                            </span>
                           </SelectItem>
                         ))}
                       </SelectContent>
