@@ -7,10 +7,10 @@ class IdeaRepository:
         self._client = get_supabase_client()
 
     def get_all(self):
-        """Get all ideas with CS owner info."""
+        """Get all ideas with CS and CDI owner info."""
         return (
             self._client.table("ideas")
-            .select("*, content_strategists(id, name)")
+            .select("*, content_strategists!cs_owner_id(id, name), cdi:content_strategists!cdi_owner_id(id, name)")
             .order("idea_number", desc=True)
             .execute()
             .data
@@ -19,7 +19,7 @@ class IdeaRepository:
     def get_by_id(self, idea_id: str):
         result = (
             self._client.table("ideas")
-            .select("*, content_strategists(id, name)")
+            .select("*, content_strategists!cs_owner_id(id, name), cdi:content_strategists!cdi_owner_id(id, name)")
             .eq("id", idea_id)
             .execute()
             .data
