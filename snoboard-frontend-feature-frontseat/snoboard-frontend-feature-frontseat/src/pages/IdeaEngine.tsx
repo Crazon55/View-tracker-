@@ -71,6 +71,8 @@ export default function IdeaEngine() {
   const [csOpen, setCsOpen] = useState(false);
   const [editingIdeaId, setEditingIdeaId] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState("");
+  const [editingDistId, setEditingDistId] = useState<string | null>(null);
+  const [editDistPages, setEditDistPages] = useState<string[]>([]);
   const [sourceTab, setSourceTab] = useState<"original" | "repurposed">("original");
 
   // Idea form
@@ -635,14 +637,35 @@ export default function IdeaEngine() {
                       </span>
                     </TableCell>
                     <TableCell>
-                      <div className="flex flex-wrap gap-1 max-w-[180px]">
-                        {getPageHandles(idea.distributed_to).length > 0
-                          ? getPageHandles(idea.distributed_to).map((h) => (
-                              <span key={h} className="text-[10px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">{h}</span>
-                            ))
-                          : <span className="text-[10px] text-zinc-600">—</span>
-                        }
-                      </div>
+                      {editingDistId === idea.id ? (
+                        <div className="space-y-2">
+                          <div className="max-h-32 overflow-y-auto bg-zinc-950 border border-zinc-700 rounded-lg p-1.5 space-y-0.5 w-44">
+                            {allPages.map((page) => (
+                              <label key={page.id} className={`flex items-center gap-1.5 px-1.5 py-1 rounded cursor-pointer text-[11px] ${editDistPages.includes(page.id) ? "bg-violet-500/10 text-white" : "text-zinc-400 hover:bg-zinc-800"}`}>
+                                <input type="checkbox" checked={editDistPages.includes(page.id)} onChange={() => setEditDistPages((prev) => prev.includes(page.id) ? prev.filter((id) => id !== page.id) : [...prev, page.id])} className="rounded border-zinc-700 bg-zinc-800 text-violet-500 w-3 h-3" />
+                                @{page.handle}
+                              </label>
+                            ))}
+                          </div>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-violet-400" onClick={() => { updateIdeaMutation.mutate({ id: idea.id, data: { distributed_to: editDistPages } }); setEditingDistId(null); }}>
+                              <Check className="w-3 h-3" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-zinc-500" onClick={() => setEditingDistId(null)}>
+                              <X className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap gap-1 max-w-[180px] cursor-pointer" onClick={() => { setEditingDistId(idea.id); setEditDistPages(idea.distributed_to || []); }}>
+                          {getPageHandles(idea.distributed_to).length > 0
+                            ? getPageHandles(idea.distributed_to).map((h) => (
+                                <span key={h} className="text-[10px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded hover:bg-zinc-700">{h}</span>
+                              ))
+                            : <span className="text-[10px] text-zinc-600 hover:text-zinc-400">+ Add pages</span>
+                          }
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell>
                       {editingIdeaId === idea.id ? (
