@@ -148,8 +148,8 @@ function HamburgerMenu() {
         </SheetTrigger>
         <SheetContent side="left" className="w-64 bg-zinc-950 border-zinc-800 p-0 flex flex-col">
           <div className="px-5 py-6 border-b border-zinc-800">
-            <h1 className="text-lg font-bold text-white tracking-tight">View Tracker</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">Instagram Analytics</p>
+            <h1 className="text-lg font-bold text-white tracking-tight">FSBOARD</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">Frontseat Media</p>
           </div>
           <nav className="px-3 py-4 space-y-1 flex-1">
             {navItems.map(({ to, label, icon: Icon }) => (
@@ -222,9 +222,9 @@ function AppLayout() {
       <aside className="w-60 shrink-0 border-r border-zinc-800 bg-zinc-950 flex flex-col">
         <div className="px-5 py-5 border-b border-zinc-800">
           <h1 className="text-lg font-bold tracking-tight text-white">
-            View Tracker
+            FSBOARD
           </h1>
-          <p className="text-xs text-zinc-500 mt-0.5">Instagram Analytics</p>
+          <p className="text-xs text-zinc-500 mt-0.5">Frontseat Media</p>
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1">
