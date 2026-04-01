@@ -251,7 +251,7 @@ export default function IdeaEngine() {
           <div>
             <h1 className="text-2xl sm:text-3xl font-black text-white uppercase tracking-wider flex items-center gap-3">
               <Lightbulb className="w-7 h-7 text-amber-400" />
-              Idea Engine
+              Original Ideas
             </h1>
             <p className="text-sm text-zinc-500 mt-1">Track ideas, measure hit-rate, rank your CS team</p>
           </div>
@@ -334,29 +334,17 @@ export default function IdeaEngine() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Format</Label>
-                      <Select value={format} onValueChange={setFormat}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="reel">Reel</SelectItem>
-                          <SelectItem value="carousel">Carousel</SelectItem>
-                          <SelectItem value="static">Static</SelectItem>
-                          <SelectItem value="story">Story</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Source</Label>
-                      <Select value={source} onValueChange={setSource}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="original">Original</SelectItem>
-                          <SelectItem value="repurposed">Repurposed</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                  <div className="space-y-2">
+                    <Label>Format</Label>
+                    <Select value={format} onValueChange={setFormat}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="reel">Reel</SelectItem>
+                        <SelectItem value="carousel">Carousel</SelectItem>
+                        <SelectItem value="static">Static</SelectItem>
+                        <SelectItem value="story">Story</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label>Distribute to Pages</Label>

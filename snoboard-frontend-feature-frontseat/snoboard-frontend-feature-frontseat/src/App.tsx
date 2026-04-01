@@ -119,7 +119,7 @@ function AnimalPicker({ userId }: { userId: string | undefined }) {
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/ideas", label: "Idea Engine", icon: Lightbulb },
+  { to: "/ideas", label: "Original Ideas", icon: Lightbulb },
   { to: "/posts", label: "Posts", icon: FileText },
   { to: "/reels/stage1", label: "Reels Stage 1", icon: Film },
   { to: "/reels/main", label: "Main Reels", icon: Radio },
