@@ -49,6 +49,9 @@ export default function PageDetail() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
 
+  // Table month filter
+  const [tableMonth, setTableMonth] = useState("all");
+
   // Form state
   const [form, setForm] = useState({
     idea_name: "", content_type: "reel", idea_status: "draft",
@@ -408,7 +411,39 @@ export default function PageDetail() {
         })()}
 
         {/* TABLE VIEW */}
-        {viewMode === "table" && (
+        {viewMode === "table" && (() => {
+          // Get available months from entries
+          const entryMonths = new Set<string>();
+          for (const e of entries) {
+            const m = (e.upload_date || e.created_at || "")?.slice(0, 7);
+            if (m) entryMonths.add(m);
+          }
+          const sortedEntryMonths = [...entryMonths].sort().reverse();
+
+          // Filter entries by selected month
+          const filteredEntries = tableMonth === "all"
+            ? entries
+            : entries.filter((e: any) => (e.upload_date || e.created_at || "")?.slice(0, 7) === tableMonth);
+
+          const filteredViews = filteredEntries.reduce((s: number, e: any) => s + (e.views ?? 0), 0);
+
+          return (
+          <>
+          {/* Month filter */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button onClick={() => setTableMonth("all")} className={`text-[10px] uppercase tracking-wider px-3 py-1 rounded-full font-medium transition-all ${tableMonth === "all" ? "bg-violet-600 text-white" : "text-zinc-500 bg-zinc-800/80 hover:text-zinc-300"}`}>All</button>
+              {sortedEntryMonths.map((m) => (
+                <button key={m} onClick={() => setTableMonth(m)} className={`text-[10px] uppercase tracking-wider px-3 py-1 rounded-full font-medium transition-all ${tableMonth === m ? "bg-violet-600 text-white" : "text-zinc-500 bg-zinc-800/80 hover:text-zinc-300"}`}>
+                  {new Date(m + "-01").toLocaleDateString("en-GB", { month: "short", year: "2-digit" })}
+                </button>
+              ))}
+            </div>
+            <div className="text-xs text-zinc-500">
+              <span className="text-white font-bold">{filteredEntries.length}</span> entries · <span className="text-white font-bold">{filteredViews.toLocaleString()}</span> views
+            </div>
+          </div>
+
           <div className="border border-zinc-800 rounded-xl overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -426,9 +461,9 @@ export default function PageDetail() {
                 </tr>
               </thead>
               <tbody>
-                {entries.length === 0 ? (
-                  <tr><td colSpan={10} className="text-center text-zinc-500 py-12">No entries yet. Click "New Entry" to add content.</td></tr>
-                ) : entries.map((entry: any) => (
+                {filteredEntries.length === 0 ? (
+                  <tr><td colSpan={10} className="text-center text-zinc-500 py-12">{entries.length === 0 ? 'No entries yet. Click "New Entry" to add content.' : "No entries for this month."}</td></tr>
+                ) : filteredEntries.map((entry: any) => (
                   <tr key={entry.id} className="border-b border-zinc-800/50 hover:bg-zinc-900/30 transition-colors">
                     <td className="py-3 px-4 font-medium text-white max-w-[200px] truncate">{entry.idea_name}</td>
                     <td className="py-3 px-4 text-xs uppercase text-zinc-500">{entry.content_type}</td>
@@ -490,7 +525,9 @@ export default function PageDetail() {
               </tbody>
             </table>
           </div>
-        )}
+          </>
+          );
+        })()}
 
         {/* CALENDAR VIEW */}
         {viewMode === "calendar" && (
