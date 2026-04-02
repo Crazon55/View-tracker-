@@ -50,7 +50,11 @@ export default function PageDetail() {
   });
 
   // Table month filter
-  const [tableMonth, setTableMonth] = useState("all");
+  const [tableMonthDate, setTableMonthDate] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() };
+  });
+  const tableMonth = `${tableMonthDate.year}-${String(tableMonthDate.month + 1).padStart(2, "0")}`;
 
   // Form state
   const [form, setForm] = useState({
@@ -412,34 +416,36 @@ export default function PageDetail() {
 
         {/* TABLE VIEW */}
         {viewMode === "table" && (() => {
-          // Generate all months for current year and previous year
-          const now = new Date();
-          const allMonths: string[] = [];
-          for (let y = now.getFullYear(); y >= now.getFullYear() - 1; y--) {
-            const maxM = y === now.getFullYear() ? now.getMonth() + 1 : 12;
-            for (let m = maxM; m >= 1; m--) {
-              allMonths.push(`${y}-${String(m).padStart(2, "0")}`);
-            }
-          }
-
           // Filter entries by selected month
-          const filteredEntries = tableMonth === "all"
-            ? entries
-            : entries.filter((e: any) => (e.upload_date || e.created_at || "")?.slice(0, 7) === tableMonth);
-
+          const filteredEntries = entries.filter((e: any) => (e.upload_date || e.created_at || "")?.slice(0, 7) === tableMonth);
           const filteredViews = filteredEntries.reduce((s: number, e: any) => s + (e.views ?? 0), 0);
+          const tableMonthLabel = new Date(tableMonthDate.year, tableMonthDate.month).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+
+          function prevTableMonth() {
+            setTableMonthDate((prev) => {
+              if (prev.month === 0) return { year: prev.year - 1, month: 11 };
+              return { ...prev, month: prev.month - 1 };
+            });
+          }
+          function nextTableMonth() {
+            setTableMonthDate((prev) => {
+              if (prev.month === 11) return { year: prev.year + 1, month: 0 };
+              return { ...prev, month: prev.month + 1 };
+            });
+          }
 
           return (
           <>
           {/* Month filter */}
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2 flex-wrap">
-              <button onClick={() => setTableMonth("all")} className={`text-[10px] uppercase tracking-wider px-3 py-1 rounded-full font-medium transition-all ${tableMonth === "all" ? "bg-violet-600 text-white" : "text-zinc-500 bg-zinc-800/80 hover:text-zinc-300"}`}>All</button>
-              {allMonths.map((m) => (
-                <button key={m} onClick={() => setTableMonth(m)} className={`text-[10px] uppercase tracking-wider px-3 py-1 rounded-full font-medium transition-all ${tableMonth === m ? "bg-violet-600 text-white" : "text-zinc-500 bg-zinc-800/80 hover:text-zinc-300"}`}>
-                  {new Date(m + "-01").toLocaleDateString("en-GB", { month: "short", year: "2-digit" })}
-                </button>
-              ))}
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={prevTableMonth}>
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <span className="text-sm font-bold text-white min-w-[140px] text-center">{tableMonthLabel}</span>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={nextTableMonth}>
+                <ChevronRight className="w-4 h-4" />
+              </Button>
             </div>
             <div className="text-xs text-zinc-500">
               <span className="text-white font-bold">{filteredEntries.length}</span> entries · <span className="text-white font-bold">{filteredViews.toLocaleString()}</span> views
