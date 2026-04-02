@@ -148,8 +148,14 @@ export default function PageDetail() {
 
   const totalViews = entries.reduce((s: number, e: any) => s + (e.views ?? 0), 0);
 
-  // Top 3 reels
-  const top3 = [...reels].sort((a: any, b: any) => (b.views ?? 0) - (a.views ?? 0)).slice(0, 3);
+  // Top 3 — from content entries filtered by chart month, fallback to reels
+  const chartMonthEntries = entries.filter((e: any) => (e.upload_date || "")?.slice(0, 7) === chartMonth);
+  const chartMonthReels = reels.filter((r: any) => (r.posted_at || "")?.slice(0, 7) === chartMonth);
+  const allForTop3 = [
+    ...chartMonthEntries.map((e: any) => ({ id: e.id, url: e.url, views: e.views ?? 0, posted_at: e.upload_date })),
+    ...chartMonthReels.map((r: any) => ({ id: r.id, url: r.url, views: r.views ?? 0, posted_at: r.posted_at })),
+  ];
+  const top3 = [...allForTop3].sort((a, b) => (b.views ?? 0) - (a.views ?? 0)).slice(0, 3);
 
   // Calendar helpers
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
@@ -328,9 +334,14 @@ export default function PageDetail() {
         })()}
 
         {/* Views per day line chart */}
-        {reels.length > 0 && (() => {
-          // Aggregate views by date from reels
+        {(reels.length > 0 || entries.length > 0) && (() => {
+          // Aggregate views by date from content entries + legacy reels/posts
           const viewsByDate: Record<string, number> = {};
+          for (const e of entries) {
+            const d = (e.upload_date || "")?.slice(0, 10);
+            if (!d || !d.startsWith(chartMonth)) continue;
+            viewsByDate[d] = (viewsByDate[d] || 0) + (e.views ?? 0);
+          }
           for (const r of reels) {
             const d = (r.posted_at || "")?.slice(0, 10);
             if (!d || !d.startsWith(chartMonth)) continue;
