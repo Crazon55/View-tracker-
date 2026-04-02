@@ -582,6 +582,34 @@ async def delete_content_entry(entry_id: str):
     return {"success": True, "message": "Entry deleted"}
 
 
+# --- Migrate reels to content entries ---
+@app.post("/api/v1/migrate-reels")
+async def migrate_reels():
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    reels = get_reel_repository().get_all()
+    migrated = 0
+    skipped = 0
+    for reel in reels:
+        # Check if already migrated (by url)
+        existing = client.table("content_entries").select("id").eq("url", reel["url"]).execute().data
+        if existing:
+            skipped += 1
+            continue
+        handle = reel.get("pages", {}).get("handle", "") if reel.get("pages") else ""
+        client.table("content_entries").insert({
+            "page_id": reel["page_id"],
+            "idea_name": handle + " reel",
+            "content_type": "reel",
+            "idea_status": "posted",
+            "upload_date": reel.get("posted_at"),
+            "views": reel.get("views", 0) or 0,
+            "url": reel.get("url", ""),
+        }).execute()
+        migrated += 1
+    return {"success": True, "migrated": migrated, "skipped": skipped}
+
+
 # --- Growth Data ---
 @app.get("/api/v1/growth")
 async def get_growth_data():
