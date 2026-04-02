@@ -123,46 +123,8 @@ export default function PageDetail() {
 
   const page = pageData?.page;
   const reels = pageData?.all_reels ?? [];
-  const posts = pageData?.all_posts ?? [];
 
-  // Merge existing reels/posts into a unified list with content entries
-  const reelRows = reels.map((r: any) => ({
-    id: r.id,
-    idea_name: r.url?.replace("https://www.instagram.com", "") || "Reel",
-    content_type: "reel",
-    idea_status: "posted",
-    upload_date: r.posted_at,
-    views: r.views ?? 0,
-    url: r.url,
-    created_by: "",
-    ips: "",
-    content_buckets: "",
-    frame_link: "",
-    comp_link: "",
-    _source: "reel",
-  }));
-  const postRows = posts.map((p: any) => ({
-    id: p.id,
-    idea_name: p.url?.replace("https://www.instagram.com", "") || "Post",
-    content_type: "post",
-    idea_status: "posted",
-    upload_date: p.posted_at || p.created_at,
-    views: p.actual_views ?? 0,
-    url: p.url,
-    created_by: "",
-    ips: "",
-    content_buckets: "",
-    frame_link: "",
-    comp_link: "",
-    _source: "post",
-  }));
-  const allRows = [...entries, ...reelRows, ...postRows].sort((a: any, b: any) => {
-    const da = a.upload_date || a.created_at || "";
-    const db = b.upload_date || b.created_at || "";
-    return db.localeCompare(da);
-  });
-
-  const totalViews = allRows.reduce((s: number, e: any) => s + (e.views ?? 0), 0);
+  const totalViews = entries.reduce((s: number, e: any) => s + (e.views ?? 0), 0);
 
   // Top 3 reels
   const top3 = [...reels].sort((a: any, b: any) => (b.views ?? 0) - (a.views ?? 0)).slice(0, 3);
@@ -178,7 +140,7 @@ export default function PageDetail() {
 
   function getEntriesForDay(day: number) {
     const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    return allRows.filter((e: any) => (e.upload_date || "")?.slice(0, 10) === dateStr);
+    return entries.filter((e: any) => (e.upload_date || "")?.slice(0, 10) === dateStr);
   }
 
   return (
@@ -366,9 +328,9 @@ export default function PageDetail() {
                 </tr>
               </thead>
               <tbody>
-                {allRows.length === 0 ? (
+                {entries.length === 0 ? (
                   <tr><td colSpan={10} className="text-center text-zinc-500 py-12">No entries yet. Click "New Entry" to add content.</td></tr>
-                ) : allRows.map((entry: any) => (
+                ) : entries.map((entry: any) => (
                   <tr key={entry.id} className="border-b border-zinc-800/50 hover:bg-zinc-900/30 transition-colors">
                     <td className="py-3 px-4 font-medium text-white max-w-[200px] truncate">{entry.idea_name}</td>
                     <td className="py-3 px-4 text-xs uppercase text-zinc-500">{entry.content_type}</td>
@@ -409,11 +371,7 @@ export default function PageDetail() {
                       </div>
                     </td>
                     <td className="py-3 px-4">
-                      {entry._source ? (
-                        <span className={`text-[9px] uppercase px-1.5 py-0.5 rounded ${entry._source === "reel" ? "bg-violet-500/20 text-violet-400" : "bg-emerald-500/20 text-emerald-400"}`}>
-                          {entry._source}
-                        </span>
-                      ) : editingId === entry.id ? (
+                      {editingId === entry.id ? (
                         <div className="flex items-center gap-1">
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-violet-400" onClick={() => updateMut.mutate({ id: entry.id, data: editData })}><Check className="w-3.5 h-3.5" /></Button>
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-500" onClick={() => setEditingId(null)}><X className="w-3.5 h-3.5" /></Button>
@@ -490,13 +448,12 @@ export default function PageDetail() {
         )}
 
         {/* Summary footer */}
-        {allRows.length > 0 && (
+        {entries.length > 0 && (
           <div className="flex items-center gap-8 mt-6 text-xs text-zinc-600">
-            <span>Total entries: <span className="text-white font-bold">{allRows.length}</span></span>
+            <span>Total entries: <span className="text-white font-bold">{entries.length}</span></span>
             <span>Total views: <span className="text-white font-bold">{totalViews.toLocaleString()}</span></span>
-            <span>Reels: <span className="text-violet-400 font-bold">{reels.length}</span></span>
-            <span>Posts: <span className="text-emerald-400 font-bold">{posts.length}</span></span>
-            <span>Content entries: <span className="text-blue-400 font-bold">{entries.length}</span></span>
+            <span>Scheduled: <span className="text-blue-400 font-bold">{entries.filter((e: any) => e.idea_status === "scheduled").length}</span></span>
+            <span>Posted: <span className="text-emerald-400 font-bold">{entries.filter((e: any) => e.idea_status === "posted").length}</span></span>
           </div>
         )}
       </div>
