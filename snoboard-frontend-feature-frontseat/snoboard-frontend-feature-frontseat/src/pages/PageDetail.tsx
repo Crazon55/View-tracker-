@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getPageDetail, getContentEntries, createContentEntry, updateContentEntry, deleteContentEntry, getPages } from "@/services/api";
 import { useParams, useNavigate } from "react-router-dom";
 import type { Page } from "@/types";
-import { ArrowLeft, ExternalLink, Plus, Trash2, Pencil, Check, X, Calendar, Table2, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ExternalLink, Plus, Trash2, Pencil, Check, X, Calendar, Table2, ChevronLeft, ChevronRight, TrendingUp } from "lucide-react";
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -305,6 +306,56 @@ export default function PageDetail() {
                 ))}
               </div>
               <div className="max-w-sm mx-auto h-1 bg-gradient-to-r from-transparent via-violet-500/30 to-transparent rounded-full" />
+            </div>
+          );
+        })()}
+
+        {/* Views per day line chart */}
+        {reels.length > 0 && (() => {
+          // Aggregate views by date from reels
+          const viewsByDate: Record<string, number> = {};
+          for (const r of reels) {
+            const d = (r.posted_at || "")?.slice(0, 10);
+            if (!d) continue;
+            viewsByDate[d] = (viewsByDate[d] || 0) + (r.views ?? 0);
+          }
+          // Also add post views from pageData
+          const pagePosts = pageData?.all_posts ?? [];
+          for (const p of pagePosts) {
+            const d = (p.posted_at || p.created_at || "")?.slice(0, 10);
+            if (!d) continue;
+            viewsByDate[d] = (viewsByDate[d] || 0) + (p.actual_views ?? 0);
+          }
+
+          const chartData = Object.entries(viewsByDate)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .slice(-30)
+            .map(([date, views]) => ({
+              name: new Date(date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }),
+              views,
+            }));
+
+          if (chartData.length < 2) return null;
+
+          return (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 mb-8">
+              <div className="flex items-center gap-2 mb-4">
+                <TrendingUp className="w-5 h-5 text-violet-400" />
+                <h3 className="text-sm uppercase tracking-[0.2em] text-zinc-400 font-semibold">Views per Day</h3>
+              </div>
+              <ResponsiveContainer width="100%" height={280}>
+                <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                  <XAxis dataKey="name" tick={{ fill: "#71717a", fontSize: 10 }} />
+                  <YAxis tick={{ fill: "#71717a", fontSize: 10 }} tickFormatter={(v) => formatCompact(v)} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 8 }}
+                    labelStyle={{ color: "#d4d4d8", fontSize: 12 }}
+                    formatter={(value: number) => [value.toLocaleString() + " views", ""]}
+                  />
+                  <Line type="monotone" dataKey="views" stroke="#a855f7" strokeWidth={2.5} dot={{ r: 3, fill: "#a855f7" }} activeDot={{ r: 5 }} />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
           );
         })()}
