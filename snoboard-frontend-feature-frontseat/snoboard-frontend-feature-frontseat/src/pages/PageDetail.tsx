@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getPageDetail, getContentEntries, createContentEntry, updateContentEntry, deleteContentEntry, getPages } from "@/services/api";
 import { useParams, useNavigate } from "react-router-dom";
 import type { Page } from "@/types";
+import { useAuth } from "@/contexts/AuthContext";
 import { ArrowLeft, ExternalLink, Plus, Trash2, Pencil, Check, X, Calendar, Table2, ChevronLeft, ChevronRight, TrendingUp } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Button } from "@/components/ui/button";
@@ -23,17 +24,25 @@ function formatCompact(n: number): string {
   return n.toLocaleString();
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  draft: "bg-zinc-700 text-zinc-300",
-  scheduled: "bg-blue-500/20 text-blue-400",
-  posted: "bg-emerald-500/20 text-emerald-400",
-  complete: "bg-violet-500/20 text-violet-400",
-};
+const IDEA_STATUSES = [
+  { value: "idea", label: "Idea", color: "bg-zinc-600/30 text-zinc-300" },
+  { value: "approved", label: "Approved", color: "bg-amber-700/30 text-amber-400" },
+  { value: "edited", label: "Edited", color: "bg-zinc-500/30 text-zinc-300" },
+  { value: "ready_to_upload", label: "Ready to upload", color: "bg-yellow-500/30 text-yellow-400" },
+  { value: "scheduled", label: "Scheduled", color: "bg-green-500/30 text-green-400" },
+  { value: "uploaded", label: "Uploaded", color: "bg-purple-500/30 text-purple-400" },
+  { value: "skipped", label: "Skipped", color: "bg-red-500/30 text-red-400" },
+  { value: "posted", label: "Posted", color: "bg-emerald-500/20 text-emerald-400" },
+];
+
+const STATUS_COLORS: Record<string, string> = Object.fromEntries(IDEA_STATUSES.map((s) => [s.value, s.color]));
 
 export default function PageDetail() {
   const { pageId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const userName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "";
   const [viewMode, setViewMode] = useState<"table" | "calendar">("table");
   const [addOpen, setAddOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -58,9 +67,9 @@ export default function PageDetail() {
 
   // Form state
   const [form, setForm] = useState({
-    idea_name: "", content_type: "reel", idea_status: "draft",
-    upload_date: "", created_by: "", frame_link: "", comp_link: "",
-    content_buckets: "", views: "", url: "", notes: "", ips: "",
+    idea_name: "", content_type: "reel", idea_status: "idea",
+    upload_date: "", frame_link: "", comp_link: "",
+    views: "", url: "", notes: "", ips: "",
   });
 
   const { data: pageData, isLoading: pageLoading } = useQuery({
@@ -83,7 +92,7 @@ export default function PageDetail() {
       queryClient.invalidateQueries({ queryKey: ["content-entries", pageId] });
       toast.success("Entry added");
       setAddOpen(false);
-      setForm({ idea_name: "", content_type: "reel", idea_status: "draft", upload_date: "", created_by: "", frame_link: "", comp_link: "", content_buckets: "", views: "", url: "", notes: "", ips: "" });
+      setForm({ idea_name: "", content_type: "reel", idea_status: "idea", upload_date: "", frame_link: "", comp_link: "", views: "", url: "", notes: "", ips: "" });
     },
     onError: () => toast.error("Failed to add entry"),
   });
@@ -116,10 +125,9 @@ export default function PageDetail() {
       content_type: form.content_type,
       idea_status: form.idea_status,
       upload_date: form.upload_date || undefined,
-      created_by: form.created_by || undefined,
+      created_by: userName,
       frame_link: form.frame_link || undefined,
       comp_link: form.comp_link || undefined,
-      content_buckets: form.content_buckets || undefined,
       views: form.views ? Number(form.views) : 0,
       url: form.url || undefined,
       notes: form.notes || undefined,
@@ -226,31 +234,27 @@ export default function PageDetail() {
                       <Select value={form.idea_status} onValueChange={(v) => setForm({ ...form, idea_status: v })}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="draft">Draft</SelectItem>
-                          <SelectItem value="scheduled">Scheduled</SelectItem>
-                          <SelectItem value="posted">Posted</SelectItem>
-                          <SelectItem value="complete">Complete</SelectItem>
+                          {IDEA_STATUSES.map((s) => (
+                            <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label>Upload Date</Label>
-                      <Input type="date" value={form.upload_date} onChange={(e) => setForm({ ...form, upload_date: e.target.value })} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>Created By</Label>
-                      <Input value={form.created_by} onChange={(e) => setForm({ ...form, created_by: e.target.value })} />
-                    </div>
+                  <div className="space-y-1.5">
+                    <Label>Upload Date</Label>
+                    <Input type="date" value={form.upload_date} onChange={(e) => setForm({ ...form, upload_date: e.target.value })} onClick={(e) => (e.target as HTMLInputElement).showPicker?.()} className="cursor-pointer" />
                   </div>
                   <div className="space-y-1.5">
                     <Label>IPs</Label>
-                    <Input placeholder="Related IPs" value={form.ips} onChange={(e) => setForm({ ...form, ips: e.target.value })} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Content Buckets</Label>
-                    <Input value={form.content_buckets} onChange={(e) => setForm({ ...form, content_buckets: e.target.value })} />
+                    <Select value={form.ips} onValueChange={(v) => setForm({ ...form, ips: v })}>
+                      <SelectTrigger><SelectValue placeholder="Select IP" /></SelectTrigger>
+                      <SelectContent>
+                        {allPages.map((p) => (
+                          <SelectItem key={p.id} value={p.handle}>@{p.handle}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
@@ -462,7 +466,6 @@ export default function PageDetail() {
                   <th className="text-left text-zinc-500 text-xs uppercase tracking-wider py-3 px-4">Upload Date</th>
                   <th className="text-left text-zinc-500 text-xs uppercase tracking-wider py-3 px-4">Created By</th>
                   <th className="text-left text-zinc-500 text-xs uppercase tracking-wider py-3 px-4">IPs</th>
-                  <th className="text-left text-zinc-500 text-xs uppercase tracking-wider py-3 px-4">Buckets</th>
                   <th className="text-right text-zinc-500 text-xs uppercase tracking-wider py-3 px-4">Views</th>
                   <th className="text-left text-zinc-500 text-xs uppercase tracking-wider py-3 px-4">Links</th>
                   <th className="text-left text-zinc-500 text-xs uppercase tracking-wider py-3 px-4 w-20"></th>
@@ -478,25 +481,23 @@ export default function PageDetail() {
                     <td className="py-3 px-4">
                       {editingId === entry.id ? (
                         <Select value={editData.idea_status || entry.idea_status} onValueChange={(v) => setEditData({ ...editData, idea_status: v })}>
-                          <SelectTrigger className="h-7 text-xs w-28"><SelectValue /></SelectTrigger>
+                          <SelectTrigger className="h-7 text-xs w-32"><SelectValue /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="draft">Draft</SelectItem>
-                            <SelectItem value="scheduled">Scheduled</SelectItem>
-                            <SelectItem value="posted">Posted</SelectItem>
-                            <SelectItem value="complete">Complete</SelectItem>
+                            {IDEA_STATUSES.map((s) => (
+                              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       ) : (
-                        <Badge variant="outline" className={`text-[10px] uppercase cursor-pointer ${STATUS_COLORS[entry.idea_status] ?? ""}`}
+                        <Badge variant="outline" className={`text-[10px] cursor-pointer ${STATUS_COLORS[entry.idea_status] ?? ""}`}
                           onClick={() => { setEditingId(entry.id); setEditData({ idea_status: entry.idea_status, views: entry.views }); }}>
-                          {entry.idea_status}
+                          {IDEA_STATUSES.find((s) => s.value === entry.idea_status)?.label || entry.idea_status}
                         </Badge>
                       )}
                     </td>
                     <td className="py-3 px-4 text-zinc-400 text-xs">{entry.upload_date?.slice(0, 10) || "—"}</td>
                     <td className="py-3 px-4 text-zinc-400 text-xs">{entry.created_by || "—"}</td>
                     <td className="py-3 px-4 text-zinc-400 text-xs max-w-[120px] truncate">{entry.ips || "—"}</td>
-                    <td className="py-3 px-4 text-zinc-400 text-xs max-w-[120px] truncate">{entry.content_buckets || "—"}</td>
                     <td className="py-3 px-4 text-right font-mono font-bold text-white tabular-nums">
                       {editingId === entry.id ? (
                         <Input type="number" className="h-7 w-24 text-right text-xs" value={editData.views ?? entry.views} onChange={(e) => setEditData({ ...editData, views: Number(e.target.value) })} />
