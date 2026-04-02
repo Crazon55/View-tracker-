@@ -293,7 +293,9 @@ export default function Dashboard() {
                 >
                   {(() => {
                     const GCOLORS = ["#a855f7", "#10b981", "#f59e0b", "#ec4899", "#06b6d4", "#f43f5e", "#8b5cf6", "#14b8a6", "#f97316", "#6366f1"];
-                    const stage3Data = growthData.filter((v: any) => v.stage === 3 && v.handle !== "total");
+                    const allGrowth = growthData.filter((v: any) => v.handle !== "total");
+                    const growthTotal = allGrowth.reduce((s: number, v: any) => s + (v.views ?? 0), 0);
+                    const stage3Data = allGrowth.filter((v: any) => v.stage === 3);
                     const months = [...new Set(stage3Data.map((v: any) => v.month?.slice(0, 7)))].sort();
                     const handles = [...new Set(stage3Data.map((v: any) => v.handle))];
                     const chartData = months.map((month: string) => {
@@ -307,6 +309,12 @@ export default function Dashboard() {
 
                     return chartData.length > 0 ? (
                       <div className="overflow-hidden">
+                        <div className="flex items-center justify-end mb-3">
+                          <div className="text-right">
+                            <p className="text-[9px] uppercase tracking-widest text-zinc-500">All Time Total</p>
+                            <p className="text-xl font-black text-violet-400 tabular-nums">{formatCompact(growthTotal)}</p>
+                          </div>
+                        </div>
                         <ResponsiveContainer width="100%" height={280}>
                           <BarChart data={chartData} margin={{ top: 0, right: 5, bottom: 0, left: 5 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
