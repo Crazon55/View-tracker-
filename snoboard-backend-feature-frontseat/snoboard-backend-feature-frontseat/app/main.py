@@ -14,7 +14,7 @@ from app.schemas.request import (
     PageCreate, PageUpdate, PostCreate, PostUpdate,
     ReelCreate, ReelUpdate, ScrapeRequest,
     CSCreate, CSUpdate, IdeaCreate, IdeaUpdate,
-    ChatRequest,
+    ChatRequest, ContentEntryCreate, ContentEntryUpdate,
 )
 from app.schemas.response import ScrapeStatusResponse
 
@@ -545,6 +545,41 @@ async def chat(req: ChatRequest):
         return {"success": True, "data": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
+
+
+# --- Content Entries ---
+@app.get("/api/v1/pages/{page_id}/content-entries")
+async def list_content_entries(page_id: str):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    data = client.table("content_entries").select("*").eq("page_id", page_id).order("upload_date", desc=True).execute().data
+    return {"success": True, "data": data}
+
+
+@app.post("/api/v1/content-entries")
+async def create_content_entry(req: ContentEntryCreate):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    data = req.model_dump(exclude_none=True)
+    entry = client.table("content_entries").insert(data).execute().data[0]
+    return {"success": True, "data": entry}
+
+
+@app.put("/api/v1/content-entries/{entry_id}")
+async def update_content_entry(entry_id: str, req: ContentEntryUpdate):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    data = req.model_dump(exclude_none=True)
+    entry = client.table("content_entries").update(data).eq("id", entry_id).execute().data[0]
+    return {"success": True, "data": entry}
+
+
+@app.delete("/api/v1/content-entries/{entry_id}")
+async def delete_content_entry(entry_id: str):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    client.table("content_entries").delete().eq("id", entry_id).execute()
+    return {"success": True, "message": "Entry deleted"}
 
 
 # --- Growth Data ---

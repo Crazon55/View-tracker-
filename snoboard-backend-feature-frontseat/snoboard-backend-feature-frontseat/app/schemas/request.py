@@ -89,6 +89,40 @@ class IdeaUpdate(BaseModel):
     distributed_to: list[str] | None = None
 
 
+# --- Content Entries ---
+class ContentEntryCreate(BaseModel):
+    page_id: str
+    idea_name: str
+    ips: str | None = None
+    ips_to_distribute: list[str] | None = None
+    content_type: str = "reel"
+    created_by: str | None = None
+    idea_status: str = "draft"
+    upload_date: str | None = None
+    frame_link: str | None = None
+    content_buckets: str | None = None
+    comp_link: str | None = None
+    views: int = 0
+    url: str | None = None
+    notes: str | None = None
+
+
+class ContentEntryUpdate(BaseModel):
+    idea_name: str | None = None
+    ips: str | None = None
+    ips_to_distribute: list[str] | None = None
+    content_type: str | None = None
+    created_by: str | None = None
+    idea_status: str | None = None
+    upload_date: str | None = None
+    frame_link: str | None = None
+    content_buckets: str | None = None
+    comp_link: str | None = None
+    views: int | None = None
+    url: str | None = None
+    notes: str | None = None
+
+
 # --- Chat ---
 class ChatMessage(BaseModel):
     role: str
