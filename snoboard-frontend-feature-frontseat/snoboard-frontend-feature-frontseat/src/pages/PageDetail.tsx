@@ -43,6 +43,12 @@ export default function PageDetail() {
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
   const [calYear, setCalYear] = useState(new Date().getFullYear());
 
+  // Chart month filter
+  const [chartMonth, setChartMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
+
   // Form state
   const [form, setForm] = useState({
     idea_name: "", content_type: "reel", idea_status: "draft",
@@ -316,44 +322,85 @@ export default function PageDetail() {
           const viewsByDate: Record<string, number> = {};
           for (const r of reels) {
             const d = (r.posted_at || "")?.slice(0, 10);
-            if (!d) continue;
+            if (!d || !d.startsWith(chartMonth)) continue;
             viewsByDate[d] = (viewsByDate[d] || 0) + (r.views ?? 0);
           }
-          // Also add post views from pageData
           const pagePosts = pageData?.all_posts ?? [];
           for (const p of pagePosts) {
             const d = (p.posted_at || p.created_at || "")?.slice(0, 10);
-            if (!d) continue;
+            if (!d || !d.startsWith(chartMonth)) continue;
             viewsByDate[d] = (viewsByDate[d] || 0) + (p.actual_views ?? 0);
           }
 
-          const chartData = Object.entries(viewsByDate)
-            .sort(([a], [b]) => a.localeCompare(b))
-            .slice(-30)
-            .map(([date, views]) => ({
-              name: new Date(date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }),
-              views,
-            }));
+          // Fill all days of the month
+          const [cy, cm] = chartMonth.split("-").map(Number);
+          const daysCount = new Date(cy, cm, 0).getDate();
+          const chartData = [];
+          for (let day = 1; day <= daysCount; day++) {
+            const dateStr = `${chartMonth}-${String(day).padStart(2, "0")}`;
+            chartData.push({
+              name: new Date(dateStr).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }),
+              views: viewsByDate[dateStr] || 0,
+            });
+          }
 
-          if (chartData.length < 2) return null;
+          const chartMonthLabel = new Date(cy, cm - 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+          const monthTotal = chartData.reduce((s, d) => s + d.views, 0);
+
+          // Get available months
+          const availableMonths = new Set<string>();
+          for (const r of reels) {
+            const m = (r.posted_at || "")?.slice(0, 7);
+            if (m) availableMonths.add(m);
+          }
+          for (const p of pagePosts) {
+            const m = (p.posted_at || p.created_at || "")?.slice(0, 7);
+            if (m) availableMonths.add(m);
+          }
+          const sortedAvailMonths = [...availableMonths].sort();
+
+          function prevMonth() {
+            const [y, m] = chartMonth.split("-").map(Number);
+            const d = new Date(y, m - 2, 1);
+            setChartMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+          }
+          function nextMonth() {
+            const [y, m] = chartMonth.split("-").map(Number);
+            const d = new Date(y, m, 1);
+            setChartMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+          }
 
           return (
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 mb-8">
-              <div className="flex items-center gap-2 mb-4">
-                <TrendingUp className="w-5 h-5 text-violet-400" />
-                <h3 className="text-sm uppercase tracking-[0.2em] text-zinc-400 font-semibold">Views per Day</h3>
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-violet-400" />
+                  <h3 className="text-sm uppercase tracking-[0.2em] text-zinc-400 font-semibold">Views per Day</h3>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-zinc-500">{formatCompact(monthTotal)} total</span>
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={prevMonth}>
+                      <ChevronLeft className="w-4 h-4" />
+                    </Button>
+                    <span className="text-sm font-medium text-white min-w-[120px] text-center">{chartMonthLabel}</span>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={nextMonth}>
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
               </div>
               <ResponsiveContainer width="100%" height={280}>
                 <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                  <XAxis dataKey="name" tick={{ fill: "#71717a", fontSize: 10 }} />
+                  <XAxis dataKey="name" tick={{ fill: "#71717a", fontSize: 9 }} interval={1} />
                   <YAxis tick={{ fill: "#71717a", fontSize: 10 }} tickFormatter={(v) => formatCompact(v)} />
                   <Tooltip
                     contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 8 }}
                     labelStyle={{ color: "#d4d4d8", fontSize: 12 }}
                     formatter={(value: number) => [value.toLocaleString() + " views", ""]}
                   />
-                  <Line type="monotone" dataKey="views" stroke="#a855f7" strokeWidth={2.5} dot={{ r: 3, fill: "#a855f7" }} activeDot={{ r: 5 }} />
+                  <Line type="monotone" dataKey="views" stroke="#a855f7" strokeWidth={2.5} dot={{ r: 2, fill: "#a855f7" }} activeDot={{ r: 5 }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
