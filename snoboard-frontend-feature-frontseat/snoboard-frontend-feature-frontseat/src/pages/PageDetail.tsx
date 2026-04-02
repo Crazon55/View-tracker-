@@ -412,13 +412,15 @@ export default function PageDetail() {
 
         {/* TABLE VIEW */}
         {viewMode === "table" && (() => {
-          // Get available months from entries
-          const entryMonths = new Set<string>();
-          for (const e of entries) {
-            const m = (e.upload_date || e.created_at || "")?.slice(0, 7);
-            if (m) entryMonths.add(m);
+          // Generate all months for current year and previous year
+          const now = new Date();
+          const allMonths: string[] = [];
+          for (let y = now.getFullYear(); y >= now.getFullYear() - 1; y--) {
+            const maxM = y === now.getFullYear() ? now.getMonth() + 1 : 12;
+            for (let m = maxM; m >= 1; m--) {
+              allMonths.push(`${y}-${String(m).padStart(2, "0")}`);
+            }
           }
-          const sortedEntryMonths = [...entryMonths].sort().reverse();
 
           // Filter entries by selected month
           const filteredEntries = tableMonth === "all"
@@ -433,7 +435,7 @@ export default function PageDetail() {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2 flex-wrap">
               <button onClick={() => setTableMonth("all")} className={`text-[10px] uppercase tracking-wider px-3 py-1 rounded-full font-medium transition-all ${tableMonth === "all" ? "bg-violet-600 text-white" : "text-zinc-500 bg-zinc-800/80 hover:text-zinc-300"}`}>All</button>
-              {sortedEntryMonths.map((m) => (
+              {allMonths.map((m) => (
                 <button key={m} onClick={() => setTableMonth(m)} className={`text-[10px] uppercase tracking-wider px-3 py-1 rounded-full font-medium transition-all ${tableMonth === m ? "bg-violet-600 text-white" : "text-zinc-500 bg-zinc-800/80 hover:text-zinc-300"}`}>
                   {new Date(m + "-01").toLocaleDateString("en-GB", { month: "short", year: "2-digit" })}
                 </button>
