@@ -65,6 +65,19 @@ export default function Dashboard() {
 
   const allReels = [...autoReels, ...manualReels];
 
+  // Fetch growth data for the growth chart
+  const { data: growthData = [] } = useQuery({
+    queryKey: ["growth-data"],
+    queryFn: async () => {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || ""}/api/v1/growth`, {
+        headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
+      });
+      const data = await res.json();
+      return data.data ?? [];
+    },
+    enabled: rightCardView === "pages",
+  });
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-950">
@@ -186,36 +199,17 @@ export default function Dashboard() {
             <div className="space-y-3 mb-5 sm:mb-6">
               <div className="flex items-center justify-between">
                 <p className="text-[10px] sm:text-[11px] uppercase tracking-[0.2em] text-zinc-400 font-semibold">
-                  {rightCardView === "donut" ? "Views Distribution" : "Page-wise Views"}
+                  {rightCardView === "donut" ? "Views Distribution" : "Monthly Growth"}
                 </p>
                 <TogglePill
                   options={[
                     { label: "Distribution", value: "donut" },
-                    { label: "By Page", value: "pages" },
+                    { label: "Growth", value: "pages" },
                   ]}
                   value={rightCardView}
                   onChange={(v) => setRightCardView(v as "donut" | "pages")}
                 />
               </div>
-              {rightCardView === "pages" && (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <TogglePill
-                    options={[
-                      { label: "Weekly", value: "reels" },
-                      { label: "Monthly", value: "views" },
-                    ]}
-                    value={breakdownMode}
-                    onChange={(v) => setBreakdownMode(v as BreakdownMode)}
-                  />
-                  <div className="flex items-center gap-1.5">
-                    <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)}
-                      className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500/50 cursor-pointer w-[110px]" />
-                    <span className="text-zinc-600 text-[10px]">to</span>
-                    <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)}
-                      className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500/50 cursor-pointer w-[110px]" />
-                  </div>
-                </div>
-              )}
             </div>
 
             <AnimatePresence mode="wait">
@@ -298,37 +292,37 @@ export default function Dashboard() {
                   transition={{ duration: 0.25 }}
                 >
                   {(() => {
-                    const now = new Date();
-                    let fromDate = "";
-                    const toDate = now.toISOString().slice(0, 10);
-                    if (breakdownMode === "reels") {
-                      const d = new Date(now); d.setDate(d.getDate() - 7); fromDate = d.toISOString().slice(0, 10);
-                    } else {
-                      fromDate = now.toISOString().slice(0, 8) + "01";
-                    }
-                    const useFrom = customFrom || fromDate;
-                    const useTo = customTo || toDate;
-                    const pageViews = allPages.map((page: any) => {
-                      const rv = allReels.filter((r: any) => r.page_id === page.id && (r.posted_at || "").slice(0, 10) >= useFrom && (r.posted_at || "").slice(0, 10) <= useTo).reduce((s: number, r: any) => s + (r.views ?? 0), 0);
-                      const pv = allPosts.filter((p: any) => p.page_id === page.id && (p.posted_at || p.created_at || "").slice(0, 10) >= useFrom && (p.posted_at || p.created_at || "").slice(0, 10) <= useTo).reduce((s: number, p: any) => s + (p.actual_views ?? 0), 0);
-                      return { name: (page.handle ?? "").length > 14 ? (page.handle ?? "").slice(0, 14) + ".." : (page.handle ?? ""), views: rv + pv };
-                    }).filter((p: { views: number }) => p.views > 0).sort((a: { views: number }, b: { views: number }) => b.views - a.views);
+                    const GCOLORS = ["#a855f7", "#10b981", "#f59e0b", "#ec4899", "#06b6d4", "#f43f5e", "#8b5cf6", "#14b8a6", "#f97316", "#6366f1"];
+                    const stage3Data = growthData.filter((v: any) => v.stage === 3 && v.handle !== "total");
+                    const months = [...new Set(stage3Data.map((v: any) => v.month?.slice(0, 7)))].sort();
+                    const handles = [...new Set(stage3Data.map((v: any) => v.handle))];
+                    const chartData = months.map((month: string) => {
+                      const row: any = { name: new Date(month + "-01").toLocaleDateString("en-GB", { month: "short", year: "2-digit" }) };
+                      for (const h of handles) {
+                        const entry = stage3Data.find((v: any) => v.month?.slice(0, 7) === month && v.handle === h);
+                        row[h] = entry ? (entry.views ?? 0) : 0;
+                      }
+                      return row;
+                    });
 
-                    return pageViews.length > 0 ? (
-                      <>
-                        <div className="overflow-y-auto max-h-[280px]">
-                          <ResponsiveContainer width="100%" height={Math.max(250, pageViews.length * 28)}>
-                            <BarChart data={pageViews} layout="vertical" margin={{ top: 0, right: 20, bottom: 0, left: 0 }}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" horizontal={false} />
-                              <XAxis type="number" tick={{ fill: "#71717a", fontSize: 9 }} tickFormatter={(v: number) => formatCompact(v)} />
-                              <YAxis type="category" dataKey="name" tick={{ fill: "#a1a1aa", fontSize: 10 }} width={110} />
-                              <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 8 }} formatter={(value: number) => [value.toLocaleString() + " views", ""]} />
-                              <Bar dataKey="views" fill="#a855f7" radius={[0, 4, 4, 0]} />
-                            </BarChart>
-                          </ResponsiveContainer>
-                        </div>
-                      </>
-                    ) : <p className="text-center text-zinc-600 py-8 text-sm">No data for this period</p>;
+                    return chartData.length > 0 ? (
+                      <div className="overflow-hidden">
+                        <ResponsiveContainer width="100%" height={280}>
+                          <BarChart data={chartData} margin={{ top: 0, right: 5, bottom: 0, left: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                            <XAxis dataKey="name" tick={{ fill: "#71717a", fontSize: 10 }} />
+                            <YAxis tick={{ fill: "#71717a", fontSize: 9 }} tickFormatter={(v: number) => formatCompact(v)} />
+                            <Tooltip
+                              contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 8 }}
+                              formatter={(value: number, name: string) => [formatCompact(value), `@${name}`]}
+                            />
+                            {handles.map((h: string, i: number) => (
+                              <Bar key={h} dataKey={h} fill={GCOLORS[i % GCOLORS.length]} radius={[3, 3, 0, 0]} />
+                            ))}
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    ) : <p className="text-center text-zinc-600 py-8 text-sm">No growth data yet</p>;
                   })()}
                 </motion.div>
               )}
