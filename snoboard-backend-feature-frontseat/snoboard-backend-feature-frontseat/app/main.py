@@ -117,55 +117,62 @@ async def delete_post(post_id: str):
 # --- Dashboard stats ---
 @app.get("/api/v1/dashboard")
 async def dashboard_stats():
-    """Aggregated stats for the dashboard hero + per-page bento cards.
-    Only shows current month's data on the frontend (resets on 1st).
-    """
+    """Aggregated stats from content_entries + legacy reels/posts."""
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+
     pages = get_page_repository().get_all()
+    current_month = _month_start()
+
+    # Fetch all content entries
+    all_entries = client.table("content_entries").select("*").execute().data or []
+    month_entries = [e for e in all_entries if (e.get("upload_date") or "")[:10] >= current_month]
+
+    # Also include legacy reels/posts
     all_reels = get_reel_repository().get_all()
     all_posts = get_post_repository().get_all()
 
-    # Filter to current month only
+    # Current month views from content entries
+    total_entry_views = sum(e.get("views", 0) or 0 for e in month_entries)
+    # Legacy current month
     month_reels = _filter_current_month(all_reels, "posted_at")
     month_posts = _filter_current_month(all_posts, "posted_at")
-    current_month = _month_start()
-
-    total_reel_views = sum(r.get("views", 0) or 0 for r in month_reels)
-    total_post_views = sum(p.get("actual_views", 0) or 0 for p in month_posts)
+    total_reel_views = sum(r.get("views", 0) or 0 for r in month_reels) + sum(e.get("views", 0) or 0 for e in month_entries if e.get("content_type") == "reel")
+    total_post_views = sum(p.get("actual_views", 0) or 0 for p in month_posts) + sum(e.get("views", 0) or 0 for e in month_entries if e.get("content_type") != "reel")
     total_views = total_reel_views + total_post_views
 
-    # All-time: sum ALL reels + posts views (not just current month)
-    all_time_reel_totals: dict[str, int] = {}
-    all_time_post_totals: dict[str, int] = {}
-    for r in all_reels:
-        pid = r["page_id"]
-        all_time_reel_totals[pid] = all_time_reel_totals.get(pid, 0) + (r.get("views", 0) or 0)
-    for p in all_posts:
-        pid = p["page_id"]
-        all_time_post_totals[pid] = all_time_post_totals.get(pid, 0) + (p.get("actual_views", 0) or 0)
-
-    # Per-page stats
-    # Build all-time counts per page
-    all_time_reel_counts: dict[str, int] = {}
-    all_time_post_counts: dict[str, int] = {}
-    for r in all_reels:
-        pid = r["page_id"]
-        all_time_reel_counts[pid] = all_time_reel_counts.get(pid, 0) + 1
-    for p in all_posts:
-        pid = p["page_id"]
-        all_time_post_counts[pid] = all_time_post_counts.get(pid, 0) + 1
-
+    # All-time per page
     page_stats = []
     for page in pages:
         pid = page["id"]
-        page_reels = [r for r in month_reels if r["page_id"] == pid]
-        page_posts = [p for p in month_posts if p["page_id"] == pid]
+        # Content entries for this page
+        page_entries = [e for e in all_entries if e.get("page_id") == pid]
+        page_month_entries = [e for e in page_entries if (e.get("upload_date") or "")[:10] >= current_month]
+        # Legacy
+        page_reels = [r for r in all_reels if r["page_id"] == pid]
+        page_posts = [p for p in all_posts if p["page_id"] == pid]
+        page_month_reels = [r for r in month_reels if r["page_id"] == pid]
+        page_month_posts = [p for p in month_posts if p["page_id"] == pid]
 
-        page_reel_views = sum(r.get("views", 0) or 0 for r in page_reels)
-        page_post_views = sum(p.get("actual_views", 0) or 0 for p in page_posts)
-        reel_likes = sum(r.get("likes", 0) or 0 for r in page_reels)
-        reel_comments = sum(r.get("comments", 0) or 0 for r in page_reels)
+        # Monthly views (content entries + legacy)
+        month_views = (
+            sum(e.get("views", 0) or 0 for e in page_month_entries) +
+            sum(r.get("views", 0) or 0 for r in page_month_reels) +
+            sum(p.get("actual_views", 0) or 0 for p in page_month_posts)
+        )
+        # All time views
+        all_time_views = (
+            sum(e.get("views", 0) or 0 for e in page_entries) +
+            sum(r.get("views", 0) or 0 for r in page_reels) +
+            sum(p.get("actual_views", 0) or 0 for p in page_posts)
+        )
 
-        top_reels = sorted(page_reels, key=lambda r: r.get("views", 0) or 0, reverse=True)[:5]
+        reel_views = sum(r.get("views", 0) or 0 for r in page_month_reels) + sum(e.get("views", 0) or 0 for e in page_month_entries if e.get("content_type") == "reel")
+        post_views = sum(p.get("actual_views", 0) or 0 for p in page_month_posts) + sum(e.get("views", 0) or 0 for e in page_month_entries if e.get("content_type") != "reel")
+
+        entry_count = len(page_month_entries)
+        reels_count = len(page_month_reels) + len([e for e in page_month_entries if e.get("content_type") == "reel"])
+        posts_count = len(page_month_posts) + len([e for e in page_month_entries if e.get("content_type") != "reel"])
 
         page_stats.append({
             "id": pid,
@@ -174,20 +181,21 @@ async def dashboard_stats():
             "profile_url": page.get("profile_url"),
             "auto_scrape": page.get("auto_scrape", False),
             "followers_count": page.get("followers_count", 0),
-            "total_views": page_reel_views + page_post_views,
-            "all_time_views": all_time_reel_totals.get(pid, 0) + all_time_post_totals.get(pid, 0),
-            "reel_views": page_reel_views,
-            "post_views": page_post_views,
-            "total_likes": reel_likes,
-            "total_comments": reel_comments,
-            "reels_count": len(page_reels),
-            "posts_count": len(page_posts),
-            "all_time_reels_count": all_time_reel_counts.get(pid, 0),
-            "all_time_posts_count": all_time_post_counts.get(pid, 0),
-            "top_reels": top_reels,
+            "stage": page.get("stage", 1),
+            "total_views": month_views,
+            "all_time_views": all_time_views,
+            "reel_views": reel_views,
+            "post_views": post_views,
+            "total_likes": 0,
+            "total_comments": 0,
+            "reels_count": reels_count,
+            "posts_count": posts_count,
+            "all_time_reels_count": len(page_reels) + len([e for e in page_entries if e.get("content_type") == "reel"]),
+            "all_time_posts_count": len(page_posts) + len([e for e in page_entries if e.get("content_type") != "reel"]),
+            "top_reels": [],
         })
 
-    total_all_time = sum(all_time_reel_totals.values()) + sum(all_time_post_totals.values())
+    total_all_time = sum(p["all_time_views"] for p in page_stats)
 
     return {
         "success": True,
@@ -196,8 +204,8 @@ async def dashboard_stats():
             "total_all_time_views": total_all_time,
             "total_reel_views": total_reel_views,
             "total_post_views": total_post_views,
-            "total_reels": len(month_reels),
-            "total_posts": len(month_posts),
+            "total_reels": len(month_reels) + len([e for e in month_entries if e.get("content_type") == "reel"]),
+            "total_posts": len(month_posts) + len([e for e in month_entries if e.get("content_type") != "reel"]),
             "current_month": current_month,
             "pages": page_stats,
         },
