@@ -1,381 +1,415 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getPageDetail, upsertDashboardViews } from "@/services/api";
+import { getPageDetail, getContentEntries, createContentEntry, updateContentEntry, deleteContentEntry, getPages } from "@/services/api";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, ExternalLink, Eye, Heart, MessageCircle, Trophy, ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react";
+import type { Page } from "@/types";
+import { ArrowLeft, ExternalLink, Plus, Trash2, Pencil, Check, X, Calendar, Table2, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-import { formatDistanceToNow } from "date-fns";
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return "-";
-  try {
-    const d = new Date(dateStr);
-    const exact = d.toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
-    const relative = formatDistanceToNow(d, { addSuffix: true });
-    return `${exact} (${relative})`;
-  } catch {
-    return dateStr;
-  }
+function formatCompact(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
+  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
+  return n.toLocaleString();
 }
 
-function DonutChart({
-  reelViews, postViews, label, size = 160,
-}: { reelViews: number; postViews: number; label: string; size?: number }) {
-  const stroke = 12;
-  const radius = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const total = reelViews + postViews;
-  const gap = 0.02; // small gap between segments
-
-  // If no views, show empty ring
-  const reelFrac = total > 0 ? reelViews / total : 0;
-  const postFrac = total > 0 ? postViews / total : 0;
-
-  const reelLen = reelFrac * circumference * (1 - gap);
-  const postLen = postFrac * circumference * (1 - gap);
-  const gapLen = total > 0 && postViews > 0 ? circumference * gap : 0;
-
-  return (
-    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="-rotate-90">
-        {/* Background ring */}
-        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#27272a" strokeWidth={stroke} />
-        {/* Reel views arc (pink → violet) */}
-        {reelViews > 0 && (
-          <circle
-            cx={size / 2} cy={size / 2} r={radius}
-            fill="none" stroke="url(#donut-reel)" strokeWidth={stroke}
-            strokeLinecap="round"
-            strokeDasharray={`${reelLen} ${circumference - reelLen}`}
-            strokeDashoffset={0}
-          />
-        )}
-        {/* Post views arc (emerald) */}
-        {postViews > 0 && (
-          <circle
-            cx={size / 2} cy={size / 2} r={radius}
-            fill="none" stroke="#10b981" strokeWidth={stroke}
-            strokeLinecap="round"
-            strokeDasharray={`${postLen} ${circumference - postLen}`}
-            strokeDashoffset={-(reelLen + gapLen)}
-          />
-        )}
-        <defs>
-          <linearGradient id="donut-reel" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#7c3aed" />
-            <stop offset="100%" stopColor="#d946ef" />
-          </linearGradient>
-        </defs>
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <p className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</p>
-        <p className="text-xl font-bold text-white tabular-nums mt-0.5">
-          {total.toLocaleString()}
-        </p>
-      </div>
-    </div>
-  );
-}
+const STATUS_COLORS: Record<string, string> = {
+  draft: "bg-zinc-700 text-zinc-300",
+  scheduled: "bg-blue-500/20 text-blue-400",
+  posted: "bg-emerald-500/20 text-emerald-400",
+  complete: "bg-violet-500/20 text-violet-400",
+};
 
 export default function PageDetail() {
   const { pageId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [dvReelInput, setDvReelInput] = useState<string | null>(null);
-  const [dvPostInput, setDvPostInput] = useState<string | null>(null);
-  const [contentTab, setContentTab] = useState<"reels" | "posts">("reels");
-  const [sortCol, setSortCol] = useState<"views" | "likes" | "comments" | "posted_at">("views");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [viewMode, setViewMode] = useState<"table" | "calendar">("table");
+  const [addOpen, setAddOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editData, setEditData] = useState<any>({});
 
-  function toggleSort(col: typeof sortCol) {
-    if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc");
-    else { setSortCol(col); setSortDir("desc"); }
-  }
+  // Calendar state
+  const [calMonth, setCalMonth] = useState(new Date().getMonth());
+  const [calYear, setCalYear] = useState(new Date().getFullYear());
 
-  function SortIcon({ col }: { col: typeof sortCol }) {
-    if (sortCol !== col) return <ArrowUpDown className="w-3 h-3 ml-1 inline opacity-40" />;
-    return sortDir === "desc"
-      ? <ChevronDown className="w-3 h-3 ml-1 inline text-violet-400" />
-      : <ChevronUp className="w-3 h-3 ml-1 inline text-violet-400" />;
-  }
+  // Form state
+  const [form, setForm] = useState({
+    idea_name: "", content_type: "reel", idea_status: "draft",
+    upload_date: "", created_by: "", frame_link: "", comp_link: "",
+    content_buckets: "", views: "", url: "", notes: "", ips: "",
+  });
 
-  const { data, isLoading } = useQuery({
+  const { data: pageData, isLoading: pageLoading } = useQuery({
     queryKey: ["page-detail", pageId],
     queryFn: () => getPageDetail(pageId!),
     enabled: !!pageId,
   });
 
-  // Pre-fill inputs with current values when data loads
-  const currentDVData = data?.current_dashboard_views;
-  const reelInputValue = dvReelInput ?? String(currentDVData?.reel_views ?? 0);
-  const postInputValue = dvPostInput ?? String(currentDVData?.post_views ?? 0);
+  const { data: entries = [], isLoading: entriesLoading } = useQuery({
+    queryKey: ["content-entries", pageId],
+    queryFn: () => getContentEntries(pageId!),
+    enabled: !!pageId,
+  });
 
-  const dvMutation = useMutation({
-    mutationFn: (d: { reel_views: number; post_views: number }) =>
-      upsertDashboardViews(pageId!, d),
+  const { data: allPages = [] } = useQuery<Page[]>({ queryKey: ["pages"], queryFn: getPages });
+
+  const createMut = useMutation({
+    mutationFn: createContentEntry,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["page-detail", pageId] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-      toast.success("Instagram Dashboard Views updated");
-      setDvReelInput(null);
-      setDvPostInput(null);
+      queryClient.invalidateQueries({ queryKey: ["content-entries", pageId] });
+      toast.success("Entry added");
+      setAddOpen(false);
+      setForm({ idea_name: "", content_type: "reel", idea_status: "draft", upload_date: "", created_by: "", frame_link: "", comp_link: "", content_buckets: "", views: "", url: "", notes: "", ips: "" });
+    },
+    onError: () => toast.error("Failed to add entry"),
+  });
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => updateContentEntry(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["content-entries", pageId] });
+      toast.success("Updated");
+      setEditingId(null);
     },
     onError: () => toast.error("Failed to update"),
   });
 
-  if (isLoading) {
+  const deleteMut = useMutation({
+    mutationFn: deleteContentEntry,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["content-entries", pageId] });
+      toast.success("Deleted");
+    },
+    onError: () => toast.error("Failed to delete"),
+  });
+
+  const handleCreate = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.idea_name.trim()) return;
+    createMut.mutate({
+      page_id: pageId,
+      idea_name: form.idea_name.trim(),
+      content_type: form.content_type,
+      idea_status: form.idea_status,
+      upload_date: form.upload_date || undefined,
+      created_by: form.created_by || undefined,
+      frame_link: form.frame_link || undefined,
+      comp_link: form.comp_link || undefined,
+      content_buckets: form.content_buckets || undefined,
+      views: form.views ? Number(form.views) : 0,
+      url: form.url || undefined,
+      notes: form.notes || undefined,
+      ips: form.ips || undefined,
+    });
+  };
+
+  if (pageLoading || entriesLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-950">
-        <p className="text-zinc-500">Loading...</p>
+        <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
-  const page = data?.page;
-  const reels = data?.reels ?? [];
-  const posts = data?.posts ?? [];
-  const currentDV = data?.current_dashboard_views;
-  const currentMonth = data?.current_month
-    ? new Date(data.current_month).toLocaleString("default", { month: "long", year: "numeric" })
-    : "";
+  const page = pageData?.page;
+  const totalViews = entries.reduce((s: number, e: any) => s + (e.views ?? 0), 0);
 
-  const totalReelViews = reels.reduce((s: number, r: any) => s + (r.views ?? 0), 0);
-  const totalLikes = reels.reduce((s: number, r: any) => s + (r.likes ?? 0), 0);
-  const totalComments = reels.reduce((s: number, r: any) => s + (r.comments ?? 0), 0);
-  const totalPostViews = posts.reduce((s: number, p: any) => s + (p.actual_views ?? 0), 0);
-  const igReelViews = currentDV?.reel_views ?? 0;
-  const igPostViews = currentDV?.post_views ?? 0;
-  const combinedViews = igReelViews + igPostViews;
+  // Calendar helpers
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const firstDay = new Date(calYear, calMonth, 1).getDay();
+  const monthName = new Date(calYear, calMonth).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
 
-  // Top 5 reels
-  const top5 = [...reels].sort((a: any, b: any) => (b.views ?? 0) - (a.views ?? 0)).slice(0, 5);
+  const calendarDays: (number | null)[] = [];
+  for (let i = 0; i < firstDay; i++) calendarDays.push(null);
+  for (let i = 1; i <= daysInMonth; i++) calendarDays.push(i);
+
+  function getEntriesForDay(day: number) {
+    const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return entries.filter((e: any) => e.upload_date?.slice(0, 10) === dateStr);
+  }
 
   return (
     <div className="min-h-screen bg-zinc-950 px-6 py-8">
-      <div className="max-w-6xl mx-auto">
-        {/* Back + Header */}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="mb-6 text-zinc-500 hover:text-white"
-          onClick={() => navigate("/")}
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Dashboard
+      <div className="max-w-7xl mx-auto">
+
+        {/* Header */}
+        <Button variant="ghost" size="sm" className="mb-4 text-zinc-500 hover:text-white" onClick={() => navigate("/pages")}>
+          <ArrowLeft className="w-4 h-4 mr-2" /> Back to IP's
         </Button>
 
-        <div className="flex items-center gap-4 mb-8">
-          <div>
-            <h1 className="text-4xl font-black text-white">@{page?.handle}</h1>
-            {page?.name && <p className="text-zinc-500 mt-1">{page.name}</p>}
-            <p className="text-xs text-zinc-600 mt-1">{currentMonth} (resets on the 1st)</p>
-          </div>
-          {page?.profile_url && (
-            <a href={page.profile_url} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-300">
-              <ExternalLink className="w-5 h-5" />
-            </a>
-          )}
-        </div>
-
-        {/* Views Donut */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 mb-8">
-          <div className="flex items-center justify-center gap-8">
-            <DonutChart reelViews={totalReelViews} postViews={totalPostViews} label="Total Views" size={200} />
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 rounded-full bg-pink-500" />
-                <div>
-                  <p className="text-xs text-zinc-500">Reel Views</p>
-                  <p className="text-xl font-bold text-white tabular-nums">{totalReelViews.toLocaleString()}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 rounded-full bg-emerald-500" />
-                <div>
-                  <p className="text-xs text-zinc-500">Post Views</p>
-                  <p className="text-xl font-bold text-white tabular-nums">{totalPostViews.toLocaleString()}</p>
-                </div>
-              </div>
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-4">
+            <div>
+              <h1 className="text-3xl font-black text-white">@{page?.handle}</h1>
+              {page?.name && <p className="text-zinc-500 mt-1">{page.name}</p>}
             </div>
+            {page?.profile_url && (
+              <a href={page.profile_url} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-300">
+                <ExternalLink className="w-5 h-5" />
+              </a>
+            )}
+            <Badge className="bg-zinc-800 text-zinc-400">{entries.length} entries</Badge>
+            <Badge className="bg-violet-500/20 text-violet-400">{formatCompact(totalViews)} views</Badge>
           </div>
-        </div>
 
-        {/* Stats row */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
-          <StatCard icon={Eye} label="Reel Views" value={totalReelViews} color="text-violet-400" />
-          <StatCard icon={Heart} label="Total Likes" value={totalLikes} color="text-pink-400" />
-          <StatCard icon={MessageCircle} label="Total Comments" value={totalComments} color="text-blue-400" />
-          <StatCard icon={Eye} label="Post Views" value={totalPostViews} color="text-emerald-400" />
-        </div>
-
-        {/* Top 5 Reels */}
-        {top5.length > 0 && (
-          <div className="mb-10">
-            <div className="flex items-center gap-2 mb-4">
-              <Trophy className="w-5 h-5 text-yellow-400" />
-              <h2 className="text-xl font-bold text-white">Top 5 Reels</h2>
+          <div className="flex items-center gap-3">
+            {/* View toggle */}
+            <div className="inline-flex items-center bg-zinc-800/80 rounded-full p-0.5 gap-0.5">
+              <button onClick={() => setViewMode("table")} className={`flex items-center gap-1.5 text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-full font-medium transition-all ${viewMode === "table" ? "bg-violet-600 text-white" : "text-zinc-500 hover:text-zinc-300"}`}>
+                <Table2 className="w-3.5 h-3.5" /> Table
+              </button>
+              <button onClick={() => setViewMode("calendar")} className={`flex items-center gap-1.5 text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-full font-medium transition-all ${viewMode === "calendar" ? "bg-violet-600 text-white" : "text-zinc-500 hover:text-zinc-300"}`}>
+                <Calendar className="w-3.5 h-3.5" /> Calendar
+              </button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-              {top5.map((reel: any, i: number) => (
-                <a
-                  key={reel.id}
-                  href={reel.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 hover:border-violet-500/50 transition-colors"
-                >
-                  <span className="text-2xl font-black text-violet-400">#{i + 1}</span>
-                  <p className="text-2xl font-bold text-white tabular-nums mt-2">
-                    {(reel.views ?? 0).toLocaleString()}
-                  </p>
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-500 mt-1">views</p>
-                  <div className="flex items-center gap-3 mt-2 text-xs text-zinc-500">
-                    <span>{(reel.likes ?? 0).toLocaleString()} likes</span>
-                    <span>{(reel.comments ?? 0).toLocaleString()} cmts</span>
+
+            {/* Add new */}
+            <Dialog open={addOpen} onOpenChange={setAddOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" className="bg-violet-600 hover:bg-violet-700 text-white">
+                  <Plus className="w-4 h-4 mr-2" /> New Entry
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="bg-zinc-900 border-zinc-800 max-w-lg max-h-[85vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Add Content Entry</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleCreate} className="space-y-3 mt-2">
+                  <div className="space-y-1.5">
+                    <Label>Idea Name</Label>
+                    <Input value={form.idea_name} onChange={(e) => setForm({ ...form, idea_name: e.target.value })} required />
                   </div>
-                  <p className="text-xs text-zinc-600 mt-2">{formatDate(reel.posted_at)}</p>
-                </a>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label>Content Type</Label>
+                      <Select value={form.content_type} onValueChange={(v) => setForm({ ...form, content_type: v })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="reel">Reel</SelectItem>
+                          <SelectItem value="carousel">Carousel</SelectItem>
+                          <SelectItem value="static">Static</SelectItem>
+                          <SelectItem value="story">Story</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Status</Label>
+                      <Select value={form.idea_status} onValueChange={(v) => setForm({ ...form, idea_status: v })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="draft">Draft</SelectItem>
+                          <SelectItem value="scheduled">Scheduled</SelectItem>
+                          <SelectItem value="posted">Posted</SelectItem>
+                          <SelectItem value="complete">Complete</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label>Upload Date</Label>
+                      <Input type="date" value={form.upload_date} onChange={(e) => setForm({ ...form, upload_date: e.target.value })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Created By</Label>
+                      <Input value={form.created_by} onChange={(e) => setForm({ ...form, created_by: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>IPs</Label>
+                    <Input placeholder="Related IPs" value={form.ips} onChange={(e) => setForm({ ...form, ips: e.target.value })} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Content Buckets</Label>
+                    <Input value={form.content_buckets} onChange={(e) => setForm({ ...form, content_buckets: e.target.value })} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label>Frame Link</Label>
+                      <Input value={form.frame_link} onChange={(e) => setForm({ ...form, frame_link: e.target.value })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Comp Link</Label>
+                      <Input value={form.comp_link} onChange={(e) => setForm({ ...form, comp_link: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label>Views</Label>
+                      <Input type="number" value={form.views} onChange={(e) => setForm({ ...form, views: e.target.value })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Instagram URL</Label>
+                      <Input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
+                    </div>
+                  </div>
+                  <Button type="submit" className="w-full" disabled={createMut.isPending}>
+                    {createMut.isPending ? "Adding..." : "Add Entry"}
+                  </Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </div>
+
+        {/* TABLE VIEW */}
+        {viewMode === "table" && (
+          <div className="border border-zinc-800 rounded-xl overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-800 bg-zinc-900/50">
+                  <th className="text-left text-zinc-500 text-xs uppercase tracking-wider py-3 px-4">Idea Name</th>
+                  <th className="text-left text-zinc-500 text-xs uppercase tracking-wider py-3 px-4">Type</th>
+                  <th className="text-left text-zinc-500 text-xs uppercase tracking-wider py-3 px-4">Status</th>
+                  <th className="text-left text-zinc-500 text-xs uppercase tracking-wider py-3 px-4">Upload Date</th>
+                  <th className="text-left text-zinc-500 text-xs uppercase tracking-wider py-3 px-4">Created By</th>
+                  <th className="text-left text-zinc-500 text-xs uppercase tracking-wider py-3 px-4">IPs</th>
+                  <th className="text-left text-zinc-500 text-xs uppercase tracking-wider py-3 px-4">Buckets</th>
+                  <th className="text-right text-zinc-500 text-xs uppercase tracking-wider py-3 px-4">Views</th>
+                  <th className="text-left text-zinc-500 text-xs uppercase tracking-wider py-3 px-4">Links</th>
+                  <th className="text-left text-zinc-500 text-xs uppercase tracking-wider py-3 px-4 w-20"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.length === 0 ? (
+                  <tr><td colSpan={10} className="text-center text-zinc-500 py-12">No entries yet. Click "New Entry" to add content.</td></tr>
+                ) : entries.map((entry: any) => (
+                  <tr key={entry.id} className="border-b border-zinc-800/50 hover:bg-zinc-900/30 transition-colors">
+                    <td className="py-3 px-4 font-medium text-white max-w-[200px] truncate">{entry.idea_name}</td>
+                    <td className="py-3 px-4 text-xs uppercase text-zinc-500">{entry.content_type}</td>
+                    <td className="py-3 px-4">
+                      {editingId === entry.id ? (
+                        <Select value={editData.idea_status || entry.idea_status} onValueChange={(v) => setEditData({ ...editData, idea_status: v })}>
+                          <SelectTrigger className="h-7 text-xs w-28"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="draft">Draft</SelectItem>
+                            <SelectItem value="scheduled">Scheduled</SelectItem>
+                            <SelectItem value="posted">Posted</SelectItem>
+                            <SelectItem value="complete">Complete</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Badge variant="outline" className={`text-[10px] uppercase cursor-pointer ${STATUS_COLORS[entry.idea_status] ?? ""}`}
+                          onClick={() => { setEditingId(entry.id); setEditData({ idea_status: entry.idea_status, views: entry.views }); }}>
+                          {entry.idea_status}
+                        </Badge>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-zinc-400 text-xs">{entry.upload_date?.slice(0, 10) || "—"}</td>
+                    <td className="py-3 px-4 text-zinc-400 text-xs">{entry.created_by || "—"}</td>
+                    <td className="py-3 px-4 text-zinc-400 text-xs max-w-[120px] truncate">{entry.ips || "—"}</td>
+                    <td className="py-3 px-4 text-zinc-400 text-xs max-w-[120px] truncate">{entry.content_buckets || "—"}</td>
+                    <td className="py-3 px-4 text-right font-mono font-bold text-white tabular-nums">
+                      {editingId === entry.id ? (
+                        <Input type="number" className="h-7 w-24 text-right text-xs" value={editData.views ?? entry.views} onChange={(e) => setEditData({ ...editData, views: Number(e.target.value) })} />
+                      ) : (
+                        (entry.views ?? 0).toLocaleString()
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-1">
+                        {entry.url && <a href={entry.url} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-300"><ExternalLink className="w-3.5 h-3.5" /></a>}
+                        {entry.frame_link && <a href={entry.frame_link} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 text-[9px]">Frame</a>}
+                        {entry.comp_link && <a href={entry.comp_link} target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:text-amber-300 text-[9px]">Comp</a>}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      {editingId === entry.id ? (
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-violet-400" onClick={() => updateMut.mutate({ id: entry.id, data: editData })}><Check className="w-3.5 h-3.5" /></Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-500" onClick={() => setEditingId(null)}><X className="w-3.5 h-3.5" /></Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-600 hover:text-white" onClick={() => { setEditingId(entry.id); setEditData({ idea_status: entry.idea_status, views: entry.views }); }}>
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-600 hover:text-red-400" onClick={() => deleteMut.mutate(entry.id)}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* CALENDAR VIEW */}
+        {viewMode === "calendar" && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+            {/* Calendar header */}
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-white">{monthName}</h2>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { if (calMonth === 0) { setCalMonth(11); setCalYear(calYear - 1); } else setCalMonth(calMonth - 1); }}>
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="sm" className="text-xs text-zinc-400" onClick={() => { setCalMonth(new Date().getMonth()); setCalYear(new Date().getFullYear()); }}>Today</Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { if (calMonth === 11) { setCalMonth(0); setCalYear(calYear + 1); } else setCalMonth(calMonth + 1); }}>
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Day headers */}
+            <div className="grid grid-cols-7 gap-px mb-1">
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+                <div key={d} className="text-center text-xs text-zinc-500 font-medium py-2">{d}</div>
               ))}
+            </div>
+
+            {/* Calendar grid */}
+            <div className="grid grid-cols-7 gap-px">
+              {calendarDays.map((day, i) => {
+                if (day === null) return <div key={`empty-${i}`} className="min-h-[100px] bg-zinc-950/30 rounded-lg" />;
+                const dayEntries = getEntriesForDay(day);
+                const isToday = day === new Date().getDate() && calMonth === new Date().getMonth() && calYear === new Date().getFullYear();
+
+                return (
+                  <div key={day} className={`min-h-[100px] bg-zinc-950/30 rounded-lg p-2 ${isToday ? "ring-1 ring-violet-500" : ""}`}>
+                    <span className={`text-xs font-medium ${isToday ? "text-violet-400" : "text-zinc-500"}`}>{day}</span>
+                    <div className="mt-1 space-y-1">
+                      {dayEntries.map((entry: any) => (
+                        <div key={entry.id} className="bg-zinc-800/80 rounded px-2 py-1 cursor-pointer hover:bg-zinc-700/80 transition-colors"
+                          onClick={() => { setEditingId(entry.id); setEditData({ idea_status: entry.idea_status, views: entry.views }); setViewMode("table"); }}>
+                          <p className="text-[10px] font-medium text-white truncate">{entry.idea_name}</p>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <span className={`w-1.5 h-1.5 rounded-full ${entry.idea_status === "scheduled" ? "bg-blue-400" : entry.idea_status === "posted" ? "bg-emerald-400" : entry.idea_status === "complete" ? "bg-violet-400" : "bg-zinc-500"}`} />
+                            <span className="text-[9px] text-zinc-500">{entry.idea_status}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
 
-        {/* Reels / Posts Toggle */}
-        <div className="mb-10">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="inline-flex items-center bg-zinc-800/80 rounded-full p-0.5 gap-0.5">
-              <button
-                onClick={() => setContentTab("reels")}
-                className={`text-[10px] uppercase tracking-wider px-4 py-1.5 rounded-full font-medium transition-all ${
-                  contentTab === "reels"
-                    ? "bg-violet-600 text-white shadow-lg shadow-violet-600/25"
-                    : "text-zinc-500 hover:text-zinc-300"
-                }`}
-              >
-                Reels
-              </button>
-              <button
-                onClick={() => setContentTab("posts")}
-                className={`text-[10px] uppercase tracking-wider px-4 py-1.5 rounded-full font-medium transition-all ${
-                  contentTab === "posts"
-                    ? "bg-violet-600 text-white shadow-lg shadow-violet-600/25"
-                    : "text-zinc-500 hover:text-zinc-300"
-                }`}
-              >
-                Posts
-              </button>
-            </div>
-            <Badge variant="secondary" className="text-xs">
-              {contentTab === "reels" ? reels.length : posts.length}
-            </Badge>
+        {/* Summary footer */}
+        {entries.length > 0 && (
+          <div className="flex items-center gap-8 mt-6 text-xs text-zinc-600">
+            <span>Total entries: <span className="text-white font-bold">{entries.length}</span></span>
+            <span>Total views: <span className="text-white font-bold">{totalViews.toLocaleString()}</span></span>
+            <span>Scheduled: <span className="text-blue-400 font-bold">{entries.filter((e: any) => e.idea_status === "scheduled").length}</span></span>
+            <span>Posted: <span className="text-emerald-400 font-bold">{entries.filter((e: any) => e.idea_status === "posted").length}</span></span>
           </div>
-
-          {contentTab === "reels" && (() => {
-            const sortedReels = [...reels].sort((a: any, b: any) => {
-              const av = sortCol === "posted_at" ? new Date(a.posted_at ?? 0).getTime() : (a[sortCol] ?? 0);
-              const bv = sortCol === "posted_at" ? new Date(b.posted_at ?? 0).getTime() : (b[sortCol] ?? 0);
-              return sortDir === "desc" ? bv - av : av - bv;
-            });
-            return reels.length > 0 ? (
-              <div className="border border-zinc-800 rounded-xl overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-zinc-800">
-                      <TableHead className="w-12">#</TableHead>
-                      <TableHead>Link</TableHead>
-                      <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("posted_at")}>
-                        Posted <SortIcon col="posted_at" />
-                      </TableHead>
-                      <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("views")}>
-                        Views <SortIcon col="views" />
-                      </TableHead>
-                      <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("likes")}>
-                        Likes <SortIcon col="likes" />
-                      </TableHead>
-                      <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("comments")}>
-                        Comments <SortIcon col="comments" />
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {sortedReels.map((reel: any, i: number) => (
-                      <TableRow key={reel.id} className="border-zinc-800">
-                        <TableCell className="font-mono text-zinc-600 text-xs">{i + 1}</TableCell>
-                        <TableCell>
-                          <a href={reel.url} target="_blank" rel="noopener noreferrer"
-                            className="text-violet-400 hover:underline inline-flex items-center gap-1 text-sm max-w-[250px] truncate">
-                            {reel.url.replace("https://www.instagram.com", "")}
-                            <ExternalLink className="w-3 h-3 shrink-0" />
-                          </a>
-                        </TableCell>
-                        <TableCell className="text-sm text-zinc-500">{formatDate(reel.posted_at)}</TableCell>
-                        <TableCell className="text-right font-mono text-sm text-white">{(reel.views ?? 0).toLocaleString()}</TableCell>
-                        <TableCell className="text-right font-mono text-sm text-zinc-500">{(reel.likes ?? 0).toLocaleString()}</TableCell>
-                        <TableCell className="text-right font-mono text-sm text-zinc-500">{(reel.comments ?? 0).toLocaleString()}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            ) : (
-              <p className="text-center text-zinc-600 py-8">No reels yet</p>
-            );
-          })()}
-
-          {contentTab === "posts" && (
-            posts.length > 0 ? (
-              <div className="border border-zinc-800 rounded-xl overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-zinc-800">
-                      <TableHead>#</TableHead>
-                      <TableHead>Link</TableHead>
-                      <TableHead className="text-right">Expected</TableHead>
-                      <TableHead className="text-right">Actual</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {posts.map((post: any, i: number) => (
-                      <TableRow key={post.id} className="border-zinc-800">
-                        <TableCell className="font-mono text-zinc-600 text-xs">{i + 1}</TableCell>
-                        <TableCell>
-                          <a href={post.url} target="_blank" rel="noopener noreferrer"
-                            className="text-violet-400 hover:underline inline-flex items-center gap-1 text-sm">
-                            {post.url.replace("https://www.instagram.com", "")}
-                            <ExternalLink className="w-3 h-3 shrink-0" />
-                          </a>
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-sm text-zinc-500">{(post.expected_views ?? 0).toLocaleString()}</TableCell>
-                        <TableCell className="text-right font-mono text-sm text-white">{(post.actual_views ?? 0).toLocaleString()}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            ) : (
-              <p className="text-center text-zinc-600 py-8">No posts yet</p>
-            )
-          )}
-        </div>
+        )}
       </div>
-    </div>
-  );
-}
-
-function StatCard({ icon: Icon, label, value, color }: { icon: any; label: string; value: number; color: string }) {
-  return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-      <div className="flex items-center gap-2 mb-2">
-        <Icon className={`w-4 h-4 ${color}`} />
-        <p className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</p>
-      </div>
-      <p className="text-3xl font-bold text-white tabular-nums">{value.toLocaleString()}</p>
     </div>
   );
 }

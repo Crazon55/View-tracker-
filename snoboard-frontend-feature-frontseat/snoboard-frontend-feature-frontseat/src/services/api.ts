@@ -95,6 +95,12 @@ export const deleteIdea = (id: string) =>
 // Idea Engine Dashboard
 export const getIdeaEngine = () => fetchApi<any>("/api/v1/idea-engine");
 
+// Content Entries
+export const getContentEntries = (pageId: string) => fetchApi<any[]>(`/api/v1/pages/${pageId}/content-entries`);
+export const createContentEntry = (data: any) => fetchApi<any>("/api/v1/content-entries", { method: "POST", body: JSON.stringify(data) });
+export const updateContentEntry = (id: string, data: any) => fetchApi<any>(`/api/v1/content-entries/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export const deleteContentEntry = (id: string) => fetchApi<any>(`/api/v1/content-entries/${id}`, { method: "DELETE" });
+
 // Chat
 export interface ChatMessage {
   role: "user" | "assistant";
