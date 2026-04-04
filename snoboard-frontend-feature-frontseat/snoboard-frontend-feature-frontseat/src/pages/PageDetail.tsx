@@ -544,7 +544,10 @@ export default function PageDetail() {
                     </td>
                     <td className="py-3 px-4">
                       {isEditing ? (
-                        <Select value={editData.ips ?? entry.ips ?? ""} onValueChange={(v) => setEditData({ ...editData, ips: v })}>
+                        <Select value={editData.ips ?? entry.ips ?? ""} onValueChange={(v) => {
+                          const matchedPage = allPages.find((p) => p.handle === v);
+                          setEditData({ ...editData, ips: v, page_id: matchedPage?.id || editData.page_id });
+                        }}>
                           <SelectTrigger className="h-7 text-xs w-32"><SelectValue placeholder="Select IP" /></SelectTrigger>
                           <SelectContent>
                             {allPages.map((p) => (
