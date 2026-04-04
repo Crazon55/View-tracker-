@@ -236,7 +236,10 @@ export default function IdeaEngine() {
 
   const system = engineData?.system;
   const ideas = engineData?.ideas ?? [];
-  const csLeaderboard = engineData?.cs_leaderboard ?? [];
+  const csLeaderboard = (engineData?.cs_leaderboard ?? []).filter((cs: any) => {
+    const member = csList.find((c) => c.id === cs.id);
+    return !member?.role || member.role.toLowerCase() !== "cdi";
+  });
 
   // Sort CS leaderboard
   const sortedCS = [...csLeaderboard].sort((a, b) => {
