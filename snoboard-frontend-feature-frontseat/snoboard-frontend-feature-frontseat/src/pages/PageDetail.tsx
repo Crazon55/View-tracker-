@@ -78,11 +78,14 @@ export default function PageDetail() {
     enabled: !!pageId,
   });
 
-  const { data: entries = [], isLoading: entriesLoading } = useQuery({
+  const { data: allEntries = [], isLoading: entriesLoading } = useQuery({
     queryKey: ["content-entries", pageId],
     queryFn: () => getContentEntries(pageId!),
     enabled: !!pageId,
   });
+
+  // Filter out carousel/static (those live in Post IPs now)
+  const entries = allEntries.filter((e: any) => e.content_type !== "carousel" && e.content_type !== "static");
 
   const { data: allPages = [] } = useQuery<Page[]>({ queryKey: ["pages"], queryFn: getPages });
 
