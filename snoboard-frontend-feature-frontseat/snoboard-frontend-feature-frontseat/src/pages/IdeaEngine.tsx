@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import PageDistributionSelect from "@/components/PageDistributionSelect";
 import {
   getIdeaEngine,
   getCSList,
@@ -348,27 +349,11 @@ export default function IdeaEngine() {
                   </div>
                   <div className="space-y-2">
                     <Label>Distribute to Pages</Label>
-                    <div className="max-h-36 overflow-y-auto bg-zinc-950 border border-zinc-800 rounded-lg p-2 space-y-1">
-                      {allPages.map((page) => (
-                        <label
-                          key={page.id}
-                          className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${
-                            distributedTo.includes(page.id) ? "bg-violet-500/10 text-white" : "text-zinc-400 hover:bg-zinc-800"
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={distributedTo.includes(page.id)}
-                            onChange={() => togglePageSelection(page.id)}
-                            className="rounded border-zinc-700 bg-zinc-800 text-violet-500 focus:ring-violet-500"
-                          />
-                          <span className="text-sm">@{page.handle}</span>
-                        </label>
-                      ))}
-                    </div>
-                    {distributedTo.length > 0 && (
-                      <p className="text-xs text-violet-400">{distributedTo.length} page{distributedTo.length > 1 ? "s" : ""} selected</p>
-                    )}
+                    <PageDistributionSelect
+                      pages={allPages}
+                      selected={distributedTo}
+                      onChange={setDistributedTo}
+                    />
                   </div>
                   <Button type="submit" className="w-full" disabled={createIdeaMutation.isPending || !csOwnerId}>
                     {createIdeaMutation.isPending ? "Creating..." : "Create Idea"}
