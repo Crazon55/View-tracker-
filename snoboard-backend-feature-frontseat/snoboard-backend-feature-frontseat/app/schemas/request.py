@@ -49,6 +49,7 @@ class ReelUpdate(BaseModel):
 
 
 class PostUpdate(BaseModel):
+    page_id: str | None = None
     expected_views: int | None = None
     actual_views: int | None = None
     posted_at: str | None = None

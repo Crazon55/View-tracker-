@@ -37,7 +37,7 @@ export const deletePage = (id: string) =>
 export const getPosts = () => fetchApi<any[]>("/api/v1/posts");
 export const createPost = (data: { page_id: string; url: string; expected_views?: number; actual_views?: number; posted_at?: string; idea_id?: string }) =>
   fetchApi<any>("/api/v1/posts", { method: "POST", body: JSON.stringify(data) });
-export const updatePost = (id: string, data: { expected_views?: number; actual_views?: number; posted_at?: string }) =>
+export const updatePost = (id: string, data: { page_id?: string; expected_views?: number; actual_views?: number; posted_at?: string }) =>
   fetchApi<any>(`/api/v1/posts/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const deletePost = (id: string) =>
   fetchApi<any>(`/api/v1/posts/${id}`, { method: "DELETE" });
