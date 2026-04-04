@@ -26,13 +26,12 @@ function formatCompact(n: number): string {
 
 const IDEA_STATUSES = [
   { value: "idea", label: "Idea", color: "bg-zinc-600/30 text-zinc-300" },
-  { value: "approved", label: "Approved", color: "bg-amber-700/30 text-amber-400" },
-  { value: "edited", label: "Edited", color: "bg-zinc-500/30 text-zinc-300" },
-  { value: "ready_to_upload", label: "Ready to upload", color: "bg-yellow-500/30 text-yellow-400" },
+  { value: "hooks_written", label: "Hooks Written", color: "bg-blue-500/20 text-blue-400" },
+  { value: "base_cut_edited", label: "Base Cut / Edited", color: "bg-amber-500/20 text-amber-400" },
+  { value: "captions_written", label: "Captions Written", color: "bg-yellow-500/30 text-yellow-400" },
   { value: "scheduled", label: "Scheduled", color: "bg-green-500/30 text-green-400" },
-  { value: "uploaded", label: "Uploaded", color: "bg-purple-500/30 text-purple-400" },
-  { value: "skipped", label: "Skipped", color: "bg-red-500/30 text-red-400" },
   { value: "posted", label: "Posted", color: "bg-emerald-500/20 text-emerald-400" },
+  { value: "skipped", label: "Skipped", color: "bg-red-500/30 text-red-400" },
 ];
 
 const STATUS_COLORS: Record<string, string> = Object.fromEntries(IDEA_STATUSES.map((s) => [s.value, s.color]));
