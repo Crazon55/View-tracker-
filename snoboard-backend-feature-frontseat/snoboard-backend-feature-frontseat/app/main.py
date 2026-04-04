@@ -636,34 +636,42 @@ async def migrate_reels():
 
 # --- Migrate posts to content entries ---
 @app.post("/api/v1/migrate-posts")
-async def migrate_posts():
+async def migrate_posts(fresh: bool = True):
+    import re
     from app.database.client import get_supabase_client
     client = get_supabase_client()
+
+    # If fresh, delete all previously migrated post entries (carousel type) first
+    if fresh:
+        client.table("content_entries").delete().eq("content_type", "carousel").execute()
+
     posts = get_post_repository().get_all()
-    # Also fetch ideas for idea_name lookup
     ideas = get_idea_repository().get_all()
     idea_map = {i["id"]: i for i in ideas}
     migrated = 0
     skipped = 0
     for post in posts:
-        # Check if already migrated (by url)
         url = post.get("url", "")
-        if url:
-            existing = client.table("content_entries").select("id").eq("url", url).execute().data
-            if existing:
-                skipped += 1
-                continue
         handle = ""
         if post.get("pages"):
             handle = post["pages"].get("handle", "")
-        # Determine idea name
+
+        # Build a good idea name: linked idea > URL shortcode > fallback
         idea_id = post.get("idea_id")
         idea_name = ""
         if idea_id and idea_id in idea_map:
             idea = idea_map[idea_id]
-            idea_name = f"{idea.get('idea_code', '')} — {idea.get('hook', '')}".strip(" —")
+            code = idea.get("idea_code", "")
+            hook = idea.get("hook", "")
+            idea_name = f"{code} — {hook}".strip(" —") if (code or hook) else ""
+        if not idea_name and url:
+            # Extract shortcode from URL like /p/ABC123/
+            m = re.search(r"/p/([^/?]+)", url)
+            if m:
+                idea_name = m.group(1)
         if not idea_name:
-            idea_name = handle + " post" if handle else "Post"
+            idea_name = f"@{handle} post" if handle else "Post"
+
         client.table("content_entries").insert({
             "page_id": post["page_id"],
             "idea_name": idea_name,
