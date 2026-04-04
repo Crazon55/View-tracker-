@@ -556,6 +556,22 @@ async def chat(req: ChatRequest):
 
 
 # --- Content Entries ---
+@app.get("/api/v1/content-entries")
+async def list_all_content_entries(content_type: str | None = None):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    query = client.table("content_entries").select("*")
+    if content_type:
+        # Support comma-separated types e.g. "carousel,static"
+        types = [t.strip() for t in content_type.split(",")]
+        if len(types) == 1:
+            query = query.eq("content_type", types[0])
+        else:
+            query = query.in_("content_type", types)
+    data = query.order("upload_date", desc=True).execute().data
+    return {"success": True, "data": data}
+
+
 @app.get("/api/v1/pages/{page_id}/content-entries")
 async def list_content_entries(page_id: str):
     from app.database.client import get_supabase_client

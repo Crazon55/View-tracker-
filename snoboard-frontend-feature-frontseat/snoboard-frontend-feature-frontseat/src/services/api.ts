@@ -96,6 +96,8 @@ export const deleteIdea = (id: string) =>
 export const getIdeaEngine = () => fetchApi<any>("/api/v1/idea-engine");
 
 // Content Entries
+export const getAllContentEntries = (contentType?: string) =>
+  fetchApi<any[]>(`/api/v1/content-entries${contentType ? `?content_type=${contentType}` : ""}`);
 export const getContentEntries = (pageId: string) => fetchApi<any[]>(`/api/v1/pages/${pageId}/content-entries`);
 export const createContentEntry = (data: any) => fetchApi<any>("/api/v1/content-entries", { method: "POST", body: JSON.stringify(data) });
 export const updateContentEntry = (id: string, data: any) => fetchApi<any>(`/api/v1/content-entries/${id}`, { method: "PUT", body: JSON.stringify(data) });
