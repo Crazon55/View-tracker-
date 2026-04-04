@@ -195,22 +195,14 @@ export default function GrowthView() {
     ? growthData.filter((v: any) => v.handle !== "total")
     : growthData.filter((v: any) => v.handle === (allPages.find((p) => p.id === selectedPage)?.handle || ""));
 
-  // Chart data — only stage 3 for the overview chart
-  const stage3Handles = [...new Set(growthData.filter((v: any) => v.stage === 3).map((v: any) => v.handle))];
-  const chartHandles = selectedPage === "all" ? stage3Handles : [allPages.find((p) => p.id === selectedPage)?.handle || ""];
-
+  // Chart data — total views + followers per month
   const chartData = [...months].sort().map((month) => {
-    const row: any = {
+    const monthEntries = filteredViews.filter((v: any) => v.month?.slice(0, 7) === month);
+    return {
       name: new Date(month + "-01").toLocaleDateString("en-GB", { month: "short", year: "2-digit" }),
+      views: monthEntries.reduce((s: number, v: any) => s + (v.views ?? 0), 0),
+      followers: monthEntries.reduce((s: number, v: any) => s + (v.followers_gained ?? 0), 0),
     };
-    for (const handle of chartHandles) {
-      const entry = filteredViews.find((v: any) => v.month?.slice(0, 7) === month && v.handle === handle);
-      row[handle] = entry ? (entry.views ?? 0) : 0;
-      if (selectedPage !== "all") {
-        row["followers"] = entry ? (entry.followers_gained ?? 0) : 0;
-      }
-    }
-    return row;
   });
 
   if (isLoading) {
@@ -256,46 +248,27 @@ export default function GrowthView() {
           </div>
         </div>
 
-        {/* Overview Chart */}
+        {/* Overview Chart — Total Views + Followers Line Graph */}
         {chartData.length > 0 && (
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8">
             <h2 className="text-sm uppercase tracking-[0.2em] text-zinc-400 font-semibold mb-6">
-              {selectedPage === "all" ? "All Pages — Monthly Comparison" : `@${chartHandles[0]} — Monthly Trend`}
+              Total Monthly Views & Followers Gained
             </h2>
             <ResponsiveContainer width="100%" height={450}>
-              {selectedPage === "all" ? (
-                <BarChart data={chartData} margin={{ top: 10, right: 20, bottom: 10, left: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                  <XAxis dataKey="name" tick={{ fill: "#71717a", fontSize: 12 }} />
-                  <YAxis tick={{ fill: "#71717a", fontSize: 12 }} tickFormatter={(v) => formatCompact(v)} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 12, padding: "12px 16px" }}
-                    labelStyle={{ color: "#d4d4d8", fontSize: 13, fontWeight: "bold", marginBottom: 8 }}
-                    formatter={(value: number, name: string) => [formatCompact(value), `@${name}`]}
-                  />
-                  <Legend formatter={(value) => `@${value}`} wrapperStyle={{ fontSize: 11, paddingTop: 16 }} />
-                  {chartHandles.map((handle, i) => (
-                    <Bar key={handle} dataKey={handle} fill={COLORS[i % COLORS.length]} radius={[4, 4, 0, 0]} />
-                  ))}
-                </BarChart>
-              ) : (
-                <LineChart data={chartData} margin={{ top: 10, right: 60, bottom: 10, left: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                  <XAxis dataKey="name" tick={{ fill: "#71717a", fontSize: 12 }} />
-                  <YAxis yAxisId="views" tick={{ fill: "#a855f7", fontSize: 12 }} tickFormatter={(v) => formatCompact(v)} />
-                  <YAxis yAxisId="followers" orientation="right" tick={{ fill: "#10b981", fontSize: 12 }} tickFormatter={(v) => formatCompact(v)} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 12, padding: "12px 16px" }}
-                    labelStyle={{ color: "#d4d4d8", fontSize: 13, fontWeight: "bold" }}
-                    formatter={(value: number, name: string) => [value.toLocaleString(), name === "followers" ? "Followers Gained" : "Views"]}
-                  />
-                  <Legend formatter={(value) => value === "followers" ? "Followers Gained" : "Views"} />
-                  {chartHandles.map((handle, i) => (
-                    <Line key={handle} yAxisId="views" type="monotone" dataKey={handle} stroke="#a855f7" strokeWidth={3} dot={{ r: 5, strokeWidth: 2 }} activeDot={{ r: 7 }} />
-                  ))}
-                  <Line yAxisId="followers" type="monotone" dataKey="followers" stroke="#10b981" strokeWidth={2.5} dot={{ r: 4, fill: "#10b981" }} activeDot={{ r: 6 }} strokeDasharray="5 3" />
-                </LineChart>
-              )}
+              <LineChart data={chartData} margin={{ top: 10, right: 60, bottom: 10, left: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                <XAxis dataKey="name" tick={{ fill: "#71717a", fontSize: 12 }} />
+                <YAxis yAxisId="views" tick={{ fill: "#a855f7", fontSize: 12 }} tickFormatter={(v) => formatCompact(v)} />
+                <YAxis yAxisId="followers" orientation="right" tick={{ fill: "#10b981", fontSize: 12 }} tickFormatter={(v) => formatCompact(v)} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 12, padding: "12px 16px" }}
+                  labelStyle={{ color: "#d4d4d8", fontSize: 13, fontWeight: "bold" }}
+                  formatter={(value: number, name: string) => [value.toLocaleString(), name === "followers" ? "Followers Gained" : "Total Views"]}
+                />
+                <Legend formatter={(value) => value === "followers" ? "Followers Gained" : "Total Views"} />
+                <Line yAxisId="views" type="monotone" dataKey="views" stroke="#a855f7" strokeWidth={3} dot={{ r: 5, fill: "#a855f7", stroke: "#18181b", strokeWidth: 2 }} activeDot={{ r: 7 }} />
+                <Line yAxisId="followers" type="monotone" dataKey="followers" stroke="#10b981" strokeWidth={2.5} dot={{ r: 4, fill: "#10b981", stroke: "#18181b", strokeWidth: 2 }} activeDot={{ r: 6 }} strokeDasharray="5 3" />
+              </LineChart>
             </ResponsiveContainer>
           </div>
         )}
