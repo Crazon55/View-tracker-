@@ -109,6 +109,7 @@ class ContentEntryCreate(BaseModel):
 
 
 class ContentEntryUpdate(BaseModel):
+    page_id: str | None = None
     idea_name: str | None = None
     ips: str | None = None
     ips_to_distribute: list[str] | None = None
