@@ -5,7 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { getDeadlines } from "@/services/api";
 import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image } from "lucide-react";
+import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -22,6 +22,7 @@ import MainReelsView from "./pages/MainReelsView";
 import IdeaEngine from "./pages/IdeaEngine";
 import CompetitorIdeas from "./pages/CompetitorIdeas";
 import PostIPsView from "./pages/PostIPsView";
+import PipelineView from "./pages/PipelineView";
 import RoleSelect from "./pages/RoleSelect";
 import NotFound from "./pages/NotFound";
 
@@ -201,6 +202,7 @@ const navItems = [
   { to: "/ideas", label: "Original Ideas", icon: Lightbulb },
   { to: "/competitor-ideas", label: "Competitor Ideas", icon: Swords },
   { to: "/post-ips", label: "Post IPs", icon: Image },
+  { to: "/pipeline", label: "Pipeline", icon: Kanban },
   { to: "/growth", label: "Growth", icon: TrendingUp },
   { to: "/pages", label: "IP's", icon: Users },
 ];
@@ -264,6 +266,7 @@ function AppLayout() {
     location.pathname === "/ideas" ||
     location.pathname === "/competitor-ideas" ||
     location.pathname === "/post-ips" ||
+    location.pathname === "/pipeline" ||
     location.pathname.startsWith("/post-ips/") ||
     location.pathname.startsWith("/page/");
 
@@ -291,6 +294,7 @@ function AppLayout() {
           <Route path="/page/:pageId" element={<PageDetail />} />
           <Route path="/post-ips" element={<PostIPsView />} />
           <Route path="/post-ips/:pageId" element={<PageDetail />} />
+          <Route path="/pipeline" element={<PipelineView />} />
         </Routes>
       </div>
     );
