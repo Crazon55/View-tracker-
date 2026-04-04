@@ -106,6 +106,8 @@ class ContentEntryCreate(BaseModel):
     views: int = 0
     url: str | None = None
     notes: str | None = None
+    deadline: str | None = None
+    assigned_role: str | None = None
 
 
 class ContentEntryUpdate(BaseModel):
@@ -123,6 +125,8 @@ class ContentEntryUpdate(BaseModel):
     views: int | None = None
     url: str | None = None
     notes: str | None = None
+    deadline: str | None = None
+    assigned_role: str | None = None
 
 
 # --- Chat ---
