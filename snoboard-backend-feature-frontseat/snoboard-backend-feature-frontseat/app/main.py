@@ -713,6 +713,52 @@ async def fix_upload_dates():
 @app.get("/api/v1/growth")
 async def get_growth_data():
     from app.database.client import get_supabase_client
+    from datetime import datetime
     client = get_supabase_client()
-    data = client.table("growth_data").select("*").order("month", desc=True).execute().data
+    data = client.table("growth_data").select("*").order("month", desc=True).execute().data or []
+
+    # Add current month live data from content_entries + reels
+    now = datetime.utcnow()
+    current_month = f"{now.year}-{now.month:02d}-01"
+    current_month_prefix = f"{now.year}-{now.month:02d}"
+
+    # Check if current month already has growth_data entries
+    existing_months = {d.get("month", "")[:7] for d in data}
+    if current_month_prefix not in existing_months:
+        # Fetch all pages
+        pages = client.table("pages").select("id,handle,name,stage,followers_count").execute().data or []
+        # Fetch content_entries for current month
+        entries = client.table("content_entries").select("page_id,views,upload_date,created_at").execute().data or []
+        # Fetch reels for current month
+        all_reels = get_reel_repository().get_all()
+
+        for page in pages:
+            page_id = page["id"]
+            handle = page.get("handle", "")
+            stage = page.get("stage", 1)
+
+            # Views from content_entries this month
+            entry_views = sum(
+                (e.get("views") or 0) for e in entries
+                if e.get("page_id") == page_id
+                and ((e.get("upload_date") or e.get("created_at") or "")[:7] == current_month_prefix)
+            )
+            # Views from reels this month
+            reel_views = sum(
+                (r.get("views") or 0) for r in all_reels
+                if r.get("page_id") == page_id
+                and ((r.get("posted_at") or "")[:7] == current_month_prefix)
+            )
+            total_views = entry_views + reel_views
+            if total_views > 0:
+                data.append({
+                    "id": f"live-{page_id}",
+                    "handle": handle,
+                    "stage": stage,
+                    "month": current_month,
+                    "views": total_views,
+                    "followers_gained": 0,
+                    "category": page.get("category", ""),
+                })
+
     return {"success": True, "data": data}
