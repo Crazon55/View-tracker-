@@ -362,12 +362,14 @@ export default function IdeaEngine() {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <Label>CS Owner *</Label>
+                      <Label>Created by *</Label>
                       <Select value={csOwnerId} onValueChange={setCsOwnerId}>
-                        <SelectTrigger><SelectValue placeholder="Select CS" /></SelectTrigger>
+                        <SelectTrigger><SelectValue placeholder="Select creator" /></SelectTrigger>
                         <SelectContent>
-                          {csOnly.map((cs) => (
-                            <SelectItem key={cs.id} value={cs.id}>{cs.name}</SelectItem>
+                          {csList.map((cs) => (
+                            <SelectItem key={cs.id} value={cs.id}>
+                              {cs.name} <span className="text-zinc-500">({cs.role || "CS"})</span>
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -378,7 +380,9 @@ export default function IdeaEngine() {
                         <SelectTrigger><SelectValue placeholder="Select executor" /></SelectTrigger>
                         <SelectContent>
                           {csList.map((cs) => (
-                            <SelectItem key={cs.id} value={cs.name}>{cs.name} {cs.role ? `(${cs.role})` : ""}</SelectItem>
+                            <SelectItem key={cs.id} value={cs.name}>
+                              {cs.name} <span className="text-zinc-500">({cs.role || "CS"})</span>
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>

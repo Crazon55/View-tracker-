@@ -276,36 +276,27 @@ export default function CompetitorIdeas() {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label>CS Owner</Label>
-                    <Select value={csOwnerId} onValueChange={setCsOwnerId}>
-                      <SelectTrigger><SelectValue placeholder="Select CS" /></SelectTrigger>
+                    <Label>Created by *</Label>
+                    <Select value={csOwnerId} onValueChange={(v) => { setCsOwnerId(v); const member = csList.find((c) => c.id === v); if (member?.role?.toLowerCase() === "cdi") setCdiOwnerId(v); else setCdiOwnerId(""); }}>
+                      <SelectTrigger><SelectValue placeholder="Select creator" /></SelectTrigger>
                       <SelectContent>
-                        {csMembers.map((cs) => (
-                          <SelectItem key={cs.id} value={cs.id}>{cs.name}</SelectItem>
+                        {csList.map((cs) => (
+                          <SelectItem key={cs.id} value={cs.id}>
+                            {cs.name} <span className="text-zinc-500">({cs.role || "CS"})</span>
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label>CDI Owner</Label>
-                    <Select value={cdiOwnerId} onValueChange={setCdiOwnerId}>
-                      <SelectTrigger><SelectValue placeholder="Select CDI" /></SelectTrigger>
-                      <SelectContent>
-                        {cdiMembers.map((cdi) => (
-                          <SelectItem key={cdi.id} value={cdi.id}>{cdi.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label>Executor *</Label>
                     <Select value={executorName} onValueChange={setExecutorName}>
                       <SelectTrigger><SelectValue placeholder="Select executor" /></SelectTrigger>
                       <SelectContent>
                         {csList.map((cs) => (
-                          <SelectItem key={cs.id} value={cs.name}>{cs.name} {cs.role ? `(${cs.role})` : ""}</SelectItem>
+                          <SelectItem key={cs.id} value={cs.name}>
+                            {cs.name} <span className="text-zinc-500">({cs.role || "CS"})</span>
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
