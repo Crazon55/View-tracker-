@@ -72,6 +72,7 @@ export default function PageDetail() {
     idea_name: "", content_type: isPostMode ? "carousel" : "reel", idea_status: "idea",
     upload_date: "", frame_link: "", comp_link: "",
     views: "", url: "", notes: "", ips: "",
+    deadline: "", assigned_role: "",
   });
 
   const { data: pageData, isLoading: pageLoading } = useQuery({
@@ -139,6 +140,8 @@ export default function PageDetail() {
       url: form.url || undefined,
       notes: form.notes || undefined,
       ips: form.ips || undefined,
+      deadline: form.deadline || undefined,
+      assigned_role: form.assigned_role || undefined,
     });
   };
 
@@ -296,6 +299,28 @@ export default function PageDetail() {
                     <div className="space-y-1.5">
                       <Label>Instagram URL</Label>
                       <Input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label>Deadline</Label>
+                      <Input type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} onClick={(e) => (e.target as HTMLInputElement).showPicker?.()} className="cursor-pointer" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Assign to Role</Label>
+                      <Select value={form.assigned_role} onValueChange={(v) => setForm({ ...form, assigned_role: v })}>
+                        <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cs">CS</SelectItem>
+                          <SelectItem value="cdi">CDI</SelectItem>
+                          <SelectItem value="design">Design</SelectItem>
+                          <SelectItem value="ai_automations">AI / Automations</SelectItem>
+                          <SelectItem value="ops_manager">Ops Manager</SelectItem>
+                          <SelectItem value="cw">Content Writers</SelectItem>
+                          <SelectItem value="editors">Editors</SelectItem>
+                          <SelectItem value="content_creators">Content Creators</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                   <Button type="submit" className="w-full" disabled={createMut.isPending}>

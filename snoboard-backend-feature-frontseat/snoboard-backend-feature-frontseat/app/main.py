@@ -720,6 +720,42 @@ async def get_user_role(email: str):
     return {"success": True, "data": None}
 
 
+@app.get("/api/v1/deadlines/{role}")
+async def get_deadlines(role: str):
+    """Get upcoming deadlines for a role (entries with deadline set and assigned_role matching)."""
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    # Get entries with deadline >= today and assigned_role matching
+    entries = (
+        client.table("content_entries")
+        .select("id,idea_name,content_type,idea_status,deadline,assigned_role,ips,page_id,upload_date")
+        .eq("assigned_role", role)
+        .gte("deadline", today)
+        .order("deadline", desc=False)
+        .execute()
+        .data or []
+    )
+    return {"success": True, "data": entries}
+
+
+@app.get("/api/v1/deadlines")
+async def get_all_deadlines():
+    """Get all upcoming deadlines."""
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    entries = (
+        client.table("content_entries")
+        .select("id,idea_name,content_type,idea_status,deadline,assigned_role,ips,page_id,upload_date")
+        .gte("deadline", today)
+        .order("deadline", desc=False)
+        .execute()
+        .data or []
+    )
+    return {"success": True, "data": entries}
+
+
 @app.post("/api/v1/user-role")
 async def set_user_role(req: dict):
     from app.database.client import get_supabase_client

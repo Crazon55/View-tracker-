@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { getDeadlines } from "@/services/api";
 import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -76,44 +77,119 @@ function useAnimalAvatar(userId: string | undefined) {
 
 function AnimalPicker({ userId }: { userId: string | undefined }) {
   const { animal, pickAnimal, hasChosen } = useAnimalAvatar(userId);
-  const [showPicker, setShowPicker] = useState(false);
+  const { role } = useAuth();
+  const [showPanel, setShowPanel] = useState(false);
+  const [panelTab, setPanelTab] = useState<"deadlines" | "avatar">("deadlines");
   const ref = useRef<HTMLDivElement>(null);
 
+  const { data: deadlines = [] } = useQuery<any[]>({
+    queryKey: ["deadlines", role],
+    queryFn: () => getDeadlines(role || undefined),
+    enabled: !!role,
+    refetchInterval: 60_000,
+  });
+
   useEffect(() => {
-    if (!hasChosen) setShowPicker(true);
+    if (!hasChosen) { setShowPanel(true); setPanelTab("avatar"); }
   }, [hasChosen]);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setShowPicker(false);
+      if (ref.current && !ref.current.contains(e.target as Node)) setShowPanel(false);
     }
-    if (showPicker) document.addEventListener("mousedown", handleClick);
+    if (showPanel) document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
-  }, [showPicker]);
+  }, [showPanel]);
+
+  const urgentCount = deadlines.filter((d: any) => {
+    const dl = d.deadline?.slice(0, 10);
+    if (!dl) return false;
+    const today = new Date().toISOString().slice(0, 10);
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    return dl <= tomorrow;
+  }).length;
 
   return (
     <div className="relative" ref={ref}>
       <button
-        onClick={() => setShowPicker(!showPicker)}
-        className="text-xl hover:scale-110 transition-transform cursor-pointer"
-        title="Pick your avatar"
+        onClick={() => { setShowPanel(!showPanel); setPanelTab("deadlines"); }}
+        className="text-xl hover:scale-110 transition-transform cursor-pointer relative"
+        title="Notifications & Avatar"
       >
         {animal || "\u{2753}"}
+        {deadlines.length > 0 && (
+          <span className={`absolute -top-1 -right-1 min-w-[16px] h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 ${urgentCount > 0 ? "bg-red-500 animate-pulse" : "bg-violet-500"}`}>
+            {deadlines.length}
+          </span>
+        )}
       </button>
-      {showPicker && (
-        <div className="absolute top-full right-0 mt-2 bg-zinc-900 border border-zinc-700 rounded-xl p-3 shadow-xl z-[100] w-64">
-          <p className="text-xs text-zinc-400 mb-2">Pick your buddy</p>
-          <div className="grid grid-cols-6 gap-1">
-            {ANIMALS.map((a) => (
-              <button
-                key={a}
-                onClick={() => { pickAnimal(a); setShowPicker(false); }}
-                className={`text-xl p-1.5 rounded-lg hover:bg-zinc-800 transition-colors ${animal === a ? "bg-violet-500/20 ring-1 ring-violet-500" : ""}`}
-              >
-                {a}
-              </button>
-            ))}
+      {showPanel && (
+        <div className="absolute top-full right-0 mt-2 bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl z-[100] w-80 overflow-hidden">
+          {/* Tabs */}
+          <div className="flex border-b border-zinc-800">
+            <button
+              onClick={() => setPanelTab("deadlines")}
+              className={`flex-1 text-xs font-medium py-2.5 transition-colors ${panelTab === "deadlines" ? "text-violet-400 border-b-2 border-violet-500" : "text-zinc-500 hover:text-zinc-300"}`}
+            >
+              Deadlines {deadlines.length > 0 && `(${deadlines.length})`}
+            </button>
+            <button
+              onClick={() => setPanelTab("avatar")}
+              className={`flex-1 text-xs font-medium py-2.5 transition-colors ${panelTab === "avatar" ? "text-violet-400 border-b-2 border-violet-500" : "text-zinc-500 hover:text-zinc-300"}`}
+            >
+              Avatar
+            </button>
           </div>
+
+          {panelTab === "deadlines" && (
+            <div className="max-h-64 overflow-y-auto">
+              {deadlines.length === 0 ? (
+                <p className="text-xs text-zinc-600 text-center py-6">No upcoming deadlines</p>
+              ) : (
+                <div className="p-2 space-y-1">
+                  {deadlines.map((d: any) => {
+                    const dl = d.deadline?.slice(0, 10) || "";
+                    const today = new Date().toISOString().slice(0, 10);
+                    const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+                    const isUrgent = dl <= tomorrow;
+                    const isOverdue = dl < today;
+                    return (
+                      <div key={d.id} className={`rounded-lg px-3 py-2 ${isOverdue ? "bg-red-500/10 border border-red-500/30" : isUrgent ? "bg-amber-500/10 border border-amber-500/30" : "bg-zinc-800/50"}`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium text-white truncate max-w-[180px]">{d.idea_name}</span>
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${isOverdue ? "bg-red-500/20 text-red-400" : isUrgent ? "bg-amber-500/20 text-amber-400" : "bg-zinc-700 text-zinc-400"}`}>
+                            {isOverdue ? "OVERDUE" : isUrgent ? "TOMORROW" : dl}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[9px] text-zinc-500 uppercase">{d.content_type}</span>
+                          <span className="text-[9px] text-zinc-600">{d.ips || ""}</span>
+                          <span className="text-[9px] text-zinc-600 ml-auto">{d.idea_status}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {panelTab === "avatar" && (
+            <div className="p-3">
+              <p className="text-xs text-zinc-400 mb-2">Pick your buddy</p>
+              <div className="grid grid-cols-6 gap-1">
+                {ANIMALS.map((a) => (
+                  <button
+                    key={a}
+                    onClick={() => { pickAnimal(a); setShowPanel(false); }}
+                    className={`text-xl p-1.5 rounded-lg hover:bg-zinc-800 transition-colors ${animal === a ? "bg-violet-500/20 ring-1 ring-violet-500" : ""}`}
+                  >
+                    {a}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

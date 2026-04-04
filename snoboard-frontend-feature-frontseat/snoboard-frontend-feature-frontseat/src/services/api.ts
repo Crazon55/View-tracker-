@@ -103,6 +103,10 @@ export const createContentEntry = (data: any) => fetchApi<any>("/api/v1/content-
 export const updateContentEntry = (id: string, data: any) => fetchApi<any>(`/api/v1/content-entries/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const deleteContentEntry = (id: string) => fetchApi<any>(`/api/v1/content-entries/${id}`, { method: "DELETE" });
 
+// Deadlines
+export const getDeadlines = (role?: string) =>
+  fetchApi<any[]>(role ? `/api/v1/deadlines/${encodeURIComponent(role)}` : "/api/v1/deadlines");
+
 // User Roles
 export const getUserRole = (email: string) => fetchApi<any>(`/api/v1/user-role/${encodeURIComponent(email)}`);
 export const setUserRole = (data: { email: string; role: string; name?: string }) =>
