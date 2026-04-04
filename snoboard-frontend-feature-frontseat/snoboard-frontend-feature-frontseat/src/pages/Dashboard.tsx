@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { Search, TrendingUp, MoreVertical } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
+import { ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { motion, AnimatePresence } from "framer-motion";
 
 function formatCompact(n: number): string {
@@ -178,27 +178,25 @@ export default function Dashboard() {
             <div className="absolute -top-20 -left-20 w-60 h-60 bg-violet-600/20 rounded-full blur-3xl pointer-events-none" />
             <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
             <div className="relative">
-              <p className="text-[10px] sm:text-[11px] uppercase tracking-[0.2em] text-zinc-400 font-semibold mb-4 sm:mb-6">
+              <p className="text-[10px] sm:text-[11px] uppercase tracking-[0.2em] text-zinc-400 font-semibold mb-3">
                 Total Ecosystem Reach
               </p>
-              <div className="flex items-center justify-between gap-6">
-                <div>
+              <div className="flex items-center justify-between">
+                <div className="space-y-3">
                   <p className="text-5xl sm:text-6xl lg:text-7xl font-black text-white tabular-nums tracking-tight leading-none">
                     {formatCompact(totalViews)}
                   </p>
-                  <div className="flex items-center gap-3 mt-5 sm:mt-6">
-                    <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold px-3 py-1.5 rounded-full">
-                      <TrendingUp className="w-3.5 h-3.5" />
-                      {(() => {
-                        const now = new Date();
-                        const monthName = now.toLocaleString("default", { month: "long" });
-                        const day = now.getDate();
-                        const year = now.getFullYear();
-                        return `${monthName} 1 — ${monthName} ${day}, ${year}`;
-                      })()}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-4 mt-4">
+                  <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold px-3 py-1.5 rounded-full">
+                    <TrendingUp className="w-3.5 h-3.5" />
+                    {(() => {
+                      const now = new Date();
+                      const monthName = now.toLocaleString("default", { month: "long" });
+                      const day = now.getDate();
+                      const year = now.getFullYear();
+                      return `${monthName} 1 — ${monthName} ${day}, ${year}`;
+                    })()}
+                  </span>
+                  <div className="flex items-center gap-5">
                     <div className="flex items-center gap-2">
                       <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-r from-purple-500 to-pink-500" />
                       <span className="text-xs text-zinc-500">Reels</span>
@@ -216,8 +214,8 @@ export default function Dashboard() {
                   const reelViews = stats?.total_reel_views ?? 0;
                   const postViews = stats?.total_post_views ?? 0;
                   const total = reelViews + postViews;
-                  const size = 140;
-                  const stroke = 12;
+                  const size = 170;
+                  const stroke = 16;
                   const radius = (size - stroke) / 2;
                   const circumference = 2 * Math.PI * radius;
                   const gap = 0.02;
@@ -245,7 +243,7 @@ export default function Dashboard() {
                       </svg>
                       <div className="absolute inset-0 flex flex-col items-center justify-center">
                         <p className="text-[8px] uppercase tracking-widest text-zinc-500">Total</p>
-                        <p className="text-lg font-black text-white tabular-nums">{formatCompact(total)}</p>
+                        <p className="text-xl font-black text-white tabular-nums">{formatCompact(total)}</p>
                       </div>
                     </div>
                   );
@@ -254,53 +252,51 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Monthly Growth Chart */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8 overflow-hidden">
-            <div className="mb-5 sm:mb-6">
-              <p className="text-[10px] sm:text-[11px] uppercase tracking-[0.2em] text-zinc-400 font-semibold">
-                Monthly Growth
-              </p>
-            </div>
+          {/* Monthly Growth — total views line chart */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8 overflow-hidden flex flex-col">
             {(() => {
-              const GCOLORS = ["#a855f7", "#10b981", "#f59e0b", "#ec4899", "#06b6d4", "#f43f5e", "#8b5cf6", "#14b8a6", "#f97316", "#6366f1"];
               const allGrowth = growthData.filter((v: any) => v.handle !== "total");
-              const growthTotal = allGrowth.reduce((s: number, v: any) => s + (v.views ?? 0), 0);
-              const stage3Data = allGrowth.filter((v: any) => v.stage === 3);
-              const months = [...new Set(stage3Data.map((v: any) => v.month?.slice(0, 7)))].sort();
-              const handles = [...new Set(stage3Data.map((v: any) => v.handle))];
+              const months = [...new Set(allGrowth.map((v: any) => v.month?.slice(0, 7)))].sort();
               const chartData = months.map((month: string) => {
-                const row: any = { name: new Date(month + "-01").toLocaleDateString("en-GB", { month: "short", year: "2-digit" }) };
-                for (const h of handles) {
-                  const entry = stage3Data.find((v: any) => v.month?.slice(0, 7) === month && v.handle === h);
-                  row[h] = entry ? (entry.views ?? 0) : 0;
-                }
-                return row;
+                const monthEntries = allGrowth.filter((v: any) => v.month?.slice(0, 7) === month);
+                const totalViews = monthEntries.reduce((s: number, v: any) => s + (v.views ?? 0), 0);
+                return {
+                  name: new Date(month + "-01").toLocaleDateString("en-GB", { month: "short", year: "2-digit" }),
+                  views: totalViews,
+                };
               });
+              const allTimeTotal = chartData.reduce((s, d) => s + d.views, 0);
 
-              return chartData.length > 0 ? (
-                <div className="overflow-hidden">
-                  <div className="flex items-center justify-end mb-3">
+              return (
+                <>
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-[10px] sm:text-[11px] uppercase tracking-[0.2em] text-zinc-400 font-semibold">
+                      Monthly Growth
+                    </p>
                     <div className="text-right">
-                      <p className="text-[9px] uppercase tracking-widest text-zinc-500">All Time Total</p>
-                      <p className="text-xl font-black text-violet-400 tabular-nums">{formatCompact(growthTotal)}</p>
+                      <p className="text-[9px] uppercase tracking-widest text-zinc-500">All Time</p>
+                      <p className="text-lg font-black text-violet-400 tabular-nums">{formatCompact(allTimeTotal)}</p>
                     </div>
                   </div>
-                  <ResponsiveContainer width="100%" height={280}>
-                    <BarChart data={chartData} margin={{ top: 0, right: 5, bottom: 0, left: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                      <XAxis dataKey="name" tick={{ fill: "#71717a", fontSize: 10 }} />
-                      <YAxis tick={{ fill: "#71717a", fontSize: 9 }} tickFormatter={(v: number) => formatCompact(v)} />
-                      <Tooltip
-                        contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 8 }}
-                        formatter={(value: number, name: string) => [formatCompact(value), `@${name}`]}
-                      />
-                      {handles.map((h: string, i: number) => (
-                        <Bar key={h} dataKey={h} fill={GCOLORS[i % GCOLORS.length]} radius={[3, 3, 0, 0]} />
-                      ))}
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : <p className="text-center text-zinc-600 py-8 text-sm">No growth data yet</p>;
+                  {chartData.length > 0 ? (
+                    <div className="flex-1 min-h-0">
+                      <ResponsiveContainer width="100%" height="100%" minHeight={220}>
+                        <LineChart data={chartData} margin={{ top: 5, right: 10, bottom: 5, left: 10 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                          <XAxis dataKey="name" tick={{ fill: "#71717a", fontSize: 10 }} />
+                          <YAxis tick={{ fill: "#71717a", fontSize: 9 }} tickFormatter={(v: number) => formatCompact(v)} />
+                          <Tooltip
+                            contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 8 }}
+                            labelStyle={{ color: "#d4d4d8", fontSize: 12 }}
+                            formatter={(value: number) => [formatCompact(value) + " views", "Total"]}
+                          />
+                          <Line type="monotone" dataKey="views" stroke="#a855f7" strokeWidth={3} dot={{ r: 4, fill: "#a855f7", stroke: "#18181b", strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : <p className="text-center text-zinc-600 py-8 text-sm">No growth data yet</p>}
+                </>
+              );
             })()}
           </div>
         </div>
