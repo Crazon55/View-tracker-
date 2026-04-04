@@ -174,6 +174,7 @@ function GrowthTable({ views, totalViews, showFollowers = false }: { views: any[
 
 export default function GrowthView() {
   const [selectedPage, setSelectedPage] = useState<string>("all");
+  const [drillMonth, setDrillMonth] = useState<string | null>(null);
 
   const { data: allPages = [] } = useQuery<Page[]>({ queryKey: ["pages"], queryFn: getPages });
   const { data: growthData = [], isLoading } = useQuery({
@@ -199,6 +200,7 @@ export default function GrowthView() {
   const chartData = [...months].sort().map((month) => {
     const monthEntries = filteredViews.filter((v: any) => v.month?.slice(0, 7) === month);
     return {
+      month,
       name: new Date(month + "-01").toLocaleDateString("en-GB", { month: "short", year: "2-digit" }),
       views: monthEntries.reduce((s: number, v: any) => s + (v.views ?? 0), 0),
       followers: monthEntries.reduce((s: number, v: any) => s + (v.followers_gained ?? 0), 0),
@@ -254,8 +256,15 @@ export default function GrowthView() {
             <h2 className="text-sm uppercase tracking-[0.2em] text-zinc-400 font-semibold mb-6">
               Total Monthly Views & Followers Gained
             </h2>
+            <p className="text-xs text-zinc-600 mb-4">Click a data point to see page-wise breakdown</p>
             <ResponsiveContainer width="100%" height={450}>
-              <LineChart data={chartData} margin={{ top: 10, right: 60, bottom: 10, left: 10 }}>
+              <LineChart data={chartData} margin={{ top: 10, right: 60, bottom: 10, left: 10 }}
+                onClick={(e: any) => {
+                  if (e?.activePayload?.[0]?.payload?.month) {
+                    setDrillMonth(e.activePayload[0].payload.month);
+                  }
+                }}
+              >
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                 <XAxis dataKey="name" tick={{ fill: "#71717a", fontSize: 12 }} />
                 <YAxis yAxisId="views" tick={{ fill: "#a855f7", fontSize: 12 }} tickFormatter={(v) => formatCompact(v)} />
@@ -266,12 +275,46 @@ export default function GrowthView() {
                   formatter={(value: number, name: string) => [value.toLocaleString(), name === "followers" ? "Followers Gained" : "Total Views"]}
                 />
                 <Legend formatter={(value) => value === "followers" ? "Followers Gained" : "Total Views"} />
-                <Line yAxisId="views" type="monotone" dataKey="views" stroke="#a855f7" strokeWidth={3} dot={{ r: 5, fill: "#a855f7", stroke: "#18181b", strokeWidth: 2 }} activeDot={{ r: 7 }} />
-                <Line yAxisId="followers" type="monotone" dataKey="followers" stroke="#10b981" strokeWidth={2.5} dot={{ r: 4, fill: "#10b981", stroke: "#18181b", strokeWidth: 2 }} activeDot={{ r: 6 }} strokeDasharray="5 3" />
+                <Line yAxisId="views" type="monotone" dataKey="views" stroke="#a855f7" strokeWidth={3} dot={{ r: 5, fill: "#a855f7", stroke: "#18181b", strokeWidth: 2 }} activeDot={{ r: 7, cursor: "pointer" }} />
+                <Line yAxisId="followers" type="monotone" dataKey="followers" stroke="#10b981" strokeWidth={2.5} dot={{ r: 4, fill: "#10b981", stroke: "#18181b", strokeWidth: 2 }} activeDot={{ r: 6, cursor: "pointer" }} strokeDasharray="5 3" />
               </LineChart>
             </ResponsiveContainer>
           </div>
         )}
+
+        {/* Drill-down bar chart for selected month */}
+        {drillMonth && (() => {
+          const monthLabel = new Date(drillMonth + "-01").toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+          const monthViews = filteredViews
+            .filter((v: any) => v.month?.slice(0, 7) === drillMonth)
+            .sort((a: any, b: any) => (b.views ?? 0) - (a.views ?? 0));
+          const barData = monthViews.map((v: any) => ({ handle: `@${v.handle}`, views: v.views ?? 0 }));
+
+          return (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-sm uppercase tracking-[0.2em] text-zinc-400 font-semibold">
+                  {monthLabel} — Page Breakdown
+                </h2>
+                <button onClick={() => setDrillMonth(null)} className="text-xs text-zinc-500 hover:text-white transition-colors">Close</button>
+              </div>
+              {barData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={Math.max(300, barData.length * 40)}>
+                  <BarChart data={barData} layout="vertical" margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" horizontal={false} />
+                    <XAxis type="number" tick={{ fill: "#71717a", fontSize: 10 }} tickFormatter={(v) => formatCompact(v)} />
+                    <YAxis type="category" dataKey="handle" tick={{ fill: "#d4d4d8", fontSize: 11 }} width={140} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 8 }}
+                      formatter={(value: number) => [value.toLocaleString() + " views", ""]}
+                    />
+                    <Bar dataKey="views" fill="#a855f7" radius={[0, 6, 6, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : <p className="text-center text-zinc-600 py-8">No data for this month</p>}
+            </div>
+          );
+        })()}
 
         {/* Monthly Sections */}
         <div className="space-y-6">
