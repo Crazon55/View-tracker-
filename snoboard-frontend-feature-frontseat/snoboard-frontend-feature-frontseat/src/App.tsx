@@ -21,6 +21,7 @@ import MainReelsView from "./pages/MainReelsView";
 import IdeaEngine from "./pages/IdeaEngine";
 import CompetitorIdeas from "./pages/CompetitorIdeas";
 import PostIPsView from "./pages/PostIPsView";
+import RoleSelect from "./pages/RoleSelect";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -284,7 +285,7 @@ function AppLayout() {
 }
 
 function AuthGate() {
-  const { user, loading, domainError } = useAuth();
+  const { user, loading, domainError, needsRole } = useAuth();
 
   if (loading) {
     return (
@@ -318,6 +319,10 @@ function AuthGate() {
 
   if (!user) {
     return <Login />;
+  }
+
+  if (needsRole) {
+    return <RoleSelect />;
   }
 
   return (

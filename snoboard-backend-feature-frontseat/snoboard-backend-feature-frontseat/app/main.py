@@ -709,6 +709,35 @@ async def fix_upload_dates():
     return {"success": True, "fixed": fixed, "checked": len(entries)}
 
 
+# --- User Roles ---
+@app.get("/api/v1/user-role/{email}")
+async def get_user_role(email: str):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    data = client.table("user_roles").select("*").eq("email", email).execute().data
+    if data:
+        return {"success": True, "data": data[0]}
+    return {"success": True, "data": None}
+
+
+@app.post("/api/v1/user-role")
+async def set_user_role(req: dict):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    email = req.get("email")
+    role = req.get("role")
+    name = req.get("name", "")
+    if not email or not role:
+        raise HTTPException(status_code=400, detail="email and role required")
+    # Upsert
+    existing = client.table("user_roles").select("id").eq("email", email).execute().data
+    if existing:
+        entry = client.table("user_roles").update({"role": role, "name": name}).eq("email", email).execute().data[0]
+    else:
+        entry = client.table("user_roles").insert({"email": email, "role": role, "name": name}).execute().data[0]
+    return {"success": True, "data": entry}
+
+
 # --- Growth Data ---
 @app.get("/api/v1/growth")
 async def get_growth_data():
