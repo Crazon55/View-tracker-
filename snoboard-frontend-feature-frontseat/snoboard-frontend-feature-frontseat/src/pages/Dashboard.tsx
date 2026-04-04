@@ -457,22 +457,6 @@ export default function Dashboard() {
                   Total Views
                 </p>
 
-                {/* Period indicator */}
-                <div className="flex items-center gap-1 mb-3">
-                  {(["all", "monthly", "custom"] as TimePeriod[]).map((p) => (
-                    <span
-                      key={p}
-                      className={`text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full transition-colors ${
-                        globalPeriod === p
-                          ? "text-white bg-violet-600"
-                          : "text-zinc-600 bg-zinc-900"
-                      }`}
-                    >
-                      {p === "all" ? "All Time" : p === "monthly" ? "Monthly" : "Custom"}
-                    </span>
-                  ))}
-                </div>
-
                 {/* Big View Number + Growth */}
                 <div className="flex items-end justify-between">
                   <p className="text-3xl sm:text-4xl font-black text-white tabular-nums tracking-tight">
