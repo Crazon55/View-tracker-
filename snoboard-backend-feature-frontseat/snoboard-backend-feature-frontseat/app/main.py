@@ -641,9 +641,9 @@ async def migrate_posts(fresh: bool = True):
     from app.database.client import get_supabase_client
     client = get_supabase_client()
 
-    # If fresh, delete all previously migrated post entries (carousel type) first
+    # If fresh, delete only migrated entries (no created_by), keep manually entered ones
     if fresh:
-        client.table("content_entries").delete().eq("content_type", "carousel").execute()
+        client.table("content_entries").delete().eq("content_type", "carousel").is_("created_by", "null").execute()
 
     posts = get_post_repository().get_all()
     ideas = get_idea_repository().get_all()
