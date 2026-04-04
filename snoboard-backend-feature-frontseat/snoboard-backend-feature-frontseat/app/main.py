@@ -689,6 +689,26 @@ async def migrate_posts(fresh: bool = True):
     return {"success": True, "migrated": migrated, "skipped": skipped}
 
 
+@app.post("/api/v1/fix-upload-dates")
+async def fix_upload_dates():
+    """Copy posted_at from posts table to content_entries upload_date where missing."""
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    # Get all carousel entries without upload_date
+    entries = client.table("content_entries").select("id,url,upload_date").eq("content_type", "carousel").is_("upload_date", "null").execute().data or []
+    posts = get_post_repository().get_all()
+    post_map = {p["url"]: p for p in posts if p.get("url")}
+    fixed = 0
+    for entry in entries:
+        url = entry.get("url", "")
+        if url and url in post_map:
+            posted_at = post_map[url].get("posted_at")
+            if posted_at:
+                client.table("content_entries").update({"upload_date": posted_at}).eq("id", entry["id"]).execute()
+                fixed += 1
+    return {"success": True, "fixed": fixed, "checked": len(entries)}
+
+
 # --- Growth Data ---
 @app.get("/api/v1/growth")
 async def get_growth_data():
