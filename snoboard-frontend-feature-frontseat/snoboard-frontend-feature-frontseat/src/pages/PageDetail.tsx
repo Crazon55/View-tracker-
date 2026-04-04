@@ -379,7 +379,7 @@ export default function PageDetail() {
             const m = (p.posted_at || p.created_at || "")?.slice(0, 7);
             if (m) availableMonths.add(m);
           }
-          const sortedAvailMonths = [...availableMonths].sort();
+
 
           function prevMonth() {
             const [y, m] = chartMonth.split("-").map(Number);
@@ -485,13 +485,35 @@ export default function PageDetail() {
               <tbody>
                 {filteredEntries.length === 0 ? (
                   <tr><td colSpan={10} className="text-center text-zinc-500 py-12">{entries.length === 0 ? 'No entries yet. Click "New Entry" to add content.' : "No entries for this month."}</td></tr>
-                ) : filteredEntries.map((entry: any) => (
+                ) : filteredEntries.map((entry: any) => {
+                  const isEditing = editingId === entry.id;
+                  return (
                   <tr key={entry.id} className="border-b border-zinc-800/50 hover:bg-zinc-900/30 transition-colors">
-                    <td className="py-3 px-4 font-medium text-white max-w-[200px] truncate">{entry.idea_name}</td>
-                    <td className="py-3 px-4 text-xs uppercase text-zinc-500">{entry.content_type}</td>
                     <td className="py-3 px-4">
-                      {editingId === entry.id ? (
-                        <Select value={editData.idea_status || entry.idea_status} onValueChange={(v) => setEditData({ ...editData, idea_status: v })}>
+                      {isEditing ? (
+                        <Input className="h-7 text-xs w-40" value={editData.idea_name ?? entry.idea_name} onChange={(e) => setEditData({ ...editData, idea_name: e.target.value })} />
+                      ) : (
+                        <span className="font-medium text-white max-w-[200px] truncate block">{entry.idea_name}</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      {isEditing ? (
+                        <Select value={editData.content_type ?? entry.content_type} onValueChange={(v) => setEditData({ ...editData, content_type: v })}>
+                          <SelectTrigger className="h-7 text-xs w-24"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="reel">Reel</SelectItem>
+                            <SelectItem value="carousel">Carousel</SelectItem>
+                            <SelectItem value="static">Static</SelectItem>
+                            <SelectItem value="story">Story</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <span className="text-xs uppercase text-zinc-500">{entry.content_type}</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      {isEditing ? (
+                        <Select value={editData.idea_status ?? entry.idea_status} onValueChange={(v) => setEditData({ ...editData, idea_status: v })}>
                           <SelectTrigger className="h-7 text-xs w-32"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             {IDEA_STATUSES.map((s) => (
@@ -501,37 +523,66 @@ export default function PageDetail() {
                         </Select>
                       ) : (
                         <Badge variant="outline" className={`text-[10px] cursor-pointer ${STATUS_COLORS[entry.idea_status] ?? ""}`}
-                          onClick={() => { setEditingId(entry.id); setEditData({ idea_status: entry.idea_status, views: entry.views }); }}>
+                          onClick={() => { setEditingId(entry.id); setEditData({ ...entry }); }}>
                           {IDEA_STATUSES.find((s) => s.value === entry.idea_status)?.label || entry.idea_status}
                         </Badge>
                       )}
                     </td>
-                    <td className="py-3 px-4 text-zinc-400 text-xs">{entry.upload_date?.slice(0, 10) || "—"}</td>
-                    <td className="py-3 px-4 text-zinc-400 text-xs">{entry.created_by || "—"}</td>
-                    <td className="py-3 px-4 text-zinc-400 text-xs max-w-[120px] truncate">{entry.ips || "—"}</td>
-                    <td className="py-3 px-4 text-right font-mono font-bold text-white tabular-nums">
-                      {editingId === entry.id ? (
-                        <Input type="number" className="h-7 w-24 text-right text-xs" value={editData.views ?? entry.views} onChange={(e) => setEditData({ ...editData, views: Number(e.target.value) })} />
+                    <td className="py-3 px-4">
+                      {isEditing ? (
+                        <Input type="date" className="h-7 text-xs w-32 cursor-pointer" value={(editData.upload_date ?? entry.upload_date ?? "").slice(0, 10)} onChange={(e) => setEditData({ ...editData, upload_date: e.target.value })} onClick={(e) => (e.target as HTMLInputElement).showPicker?.()} />
                       ) : (
-                        (entry.views ?? 0).toLocaleString()
+                        <span className="text-zinc-400 text-xs">{entry.upload_date?.slice(0, 10) || "—"}</span>
                       )}
                     </td>
                     <td className="py-3 px-4">
-                      <div className="flex items-center gap-1">
-                        {entry.url && <a href={entry.url} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-300"><ExternalLink className="w-3.5 h-3.5" /></a>}
-                        {entry.frame_link && <a href={entry.frame_link} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 text-[9px]">Frame</a>}
-                        {entry.comp_link && <a href={entry.comp_link} target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:text-amber-300 text-[9px]">Comp</a>}
-                      </div>
+                      {isEditing ? (
+                        <Input className="h-7 text-xs w-28" value={editData.created_by ?? entry.created_by ?? ""} onChange={(e) => setEditData({ ...editData, created_by: e.target.value })} />
+                      ) : (
+                        <span className="text-zinc-400 text-xs">{entry.created_by || "—"}</span>
+                      )}
                     </td>
                     <td className="py-3 px-4">
-                      {editingId === entry.id ? (
+                      {isEditing ? (
+                        <Select value={editData.ips ?? entry.ips ?? ""} onValueChange={(v) => setEditData({ ...editData, ips: v })}>
+                          <SelectTrigger className="h-7 text-xs w-32"><SelectValue placeholder="Select IP" /></SelectTrigger>
+                          <SelectContent>
+                            {allPages.map((p) => (
+                              <SelectItem key={p.id} value={p.handle}>@{p.handle}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <span className="text-zinc-400 text-xs max-w-[120px] truncate block">{entry.ips || "—"}</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      {isEditing ? (
+                        <Input type="number" className="h-7 w-24 text-right text-xs" value={editData.views ?? entry.views} onChange={(e) => setEditData({ ...editData, views: Number(e.target.value) })} />
+                      ) : (
+                        <span className="font-mono font-bold text-white tabular-nums">{(entry.views ?? 0).toLocaleString()}</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      {isEditing ? (
+                        <Input className="h-7 text-xs w-40" placeholder="Instagram URL" value={editData.url ?? entry.url ?? ""} onChange={(e) => setEditData({ ...editData, url: e.target.value })} />
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          {entry.url && <a href={entry.url} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-300"><ExternalLink className="w-3.5 h-3.5" /></a>}
+                          {entry.frame_link && <a href={entry.frame_link} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 text-[9px]">Frame</a>}
+                          {entry.comp_link && <a href={entry.comp_link} target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:text-amber-300 text-[9px]">Comp</a>}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      {isEditing ? (
                         <div className="flex items-center gap-1">
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-violet-400" onClick={() => updateMut.mutate({ id: entry.id, data: editData })}><Check className="w-3.5 h-3.5" /></Button>
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-500" onClick={() => setEditingId(null)}><X className="w-3.5 h-3.5" /></Button>
                         </div>
                       ) : (
                         <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-600 hover:text-white" onClick={() => { setEditingId(entry.id); setEditData({ idea_status: entry.idea_status, views: entry.views }); }}>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-600 hover:text-white" onClick={() => { setEditingId(entry.id); setEditData({ ...entry }); }}>
                             <Pencil className="w-3.5 h-3.5" />
                           </Button>
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-600 hover:text-red-400" onClick={() => deleteMut.mutate(entry.id)}>
@@ -541,7 +592,8 @@ export default function PageDetail() {
                       )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
