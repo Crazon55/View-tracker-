@@ -109,6 +109,8 @@ export default function IdeaEngine() {
     queryFn: getCSList,
   });
 
+  const csOnly = csList.filter((c) => c.role?.toLowerCase() !== "cdi");
+
   const { data: allPages = [] } = useQuery<Page[]>({
     queryKey: ["pages"],
     queryFn: getPages,
@@ -364,7 +366,7 @@ export default function IdeaEngine() {
                       <Select value={csOwnerId} onValueChange={setCsOwnerId}>
                         <SelectTrigger><SelectValue placeholder="Select CS" /></SelectTrigger>
                         <SelectContent>
-                          {csList.map((cs) => (
+                          {csOnly.map((cs) => (
                             <SelectItem key={cs.id} value={cs.id}>{cs.name}</SelectItem>
                           ))}
                         </SelectContent>
@@ -372,7 +374,14 @@ export default function IdeaEngine() {
                     </div>
                     <div className="space-y-1.5">
                       <Label>Executor *</Label>
-                      <Input placeholder="Who executes this?" value={executorName} onChange={(e) => setExecutorName(e.target.value)} required />
+                      <Select value={executorName} onValueChange={setExecutorName}>
+                        <SelectTrigger><SelectValue placeholder="Select executor" /></SelectTrigger>
+                        <SelectContent>
+                          {csList.map((cs) => (
+                            <SelectItem key={cs.id} value={cs.name}>{cs.name} {cs.role ? `(${cs.role})` : ""}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
