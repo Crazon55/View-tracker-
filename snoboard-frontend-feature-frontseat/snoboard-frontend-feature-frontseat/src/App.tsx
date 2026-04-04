@@ -187,6 +187,7 @@ function AppLayout() {
     location.pathname === "/ideas" ||
     location.pathname === "/competitor-ideas" ||
     location.pathname === "/post-ips" ||
+    location.pathname.startsWith("/post-ips/") ||
     location.pathname.startsWith("/page/");
 
   if (isFullScreen) {
@@ -212,6 +213,7 @@ function AppLayout() {
           <Route path="/competitor-ideas" element={<CompetitorIdeas />} />
           <Route path="/page/:pageId" element={<PageDetail />} />
           <Route path="/post-ips" element={<PostIPsView />} />
+          <Route path="/post-ips/:pageId" element={<PageDetail />} />
         </Routes>
       </div>
     );
