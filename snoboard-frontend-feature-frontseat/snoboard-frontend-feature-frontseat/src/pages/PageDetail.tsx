@@ -548,7 +548,7 @@ export default function PageDetail() {
                       {isEditing ? (
                         <Input type="date" className="h-7 text-xs w-32 cursor-pointer" value={(editData.upload_date ?? entry.upload_date ?? "").slice(0, 10)} onChange={(e) => setEditData({ ...editData, upload_date: e.target.value })} onClick={(e) => (e.target as HTMLInputElement).showPicker?.()} />
                       ) : (
-                        <span className="text-zinc-400 text-xs">{entry.upload_date?.slice(0, 10) || "—"}</span>
+                        <span className="text-zinc-400 text-xs">{entry.upload_date?.slice(0, 10) || entry.created_at?.slice(0, 10) || ""}</span>
                       )}
                     </td>
                     <td className="py-3 px-4">
