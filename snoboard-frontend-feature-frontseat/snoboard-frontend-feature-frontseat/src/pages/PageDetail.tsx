@@ -48,6 +48,7 @@ export default function PageDetail() {
   const [addOpen, setAddOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState<any>({});
+  const [calSelectedEntry, setCalSelectedEntry] = useState<any>(null);
 
   // Calendar state
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
@@ -620,8 +621,8 @@ export default function PageDetail() {
                     <td className="py-3 px-4">
                       {isEditing ? (
                         <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-violet-400" onClick={() => updateMut.mutate({ id: entry.id, data: editData })}><Check className="w-3.5 h-3.5" /></Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-500" onClick={() => setEditingId(null)}><X className="w-3.5 h-3.5" /></Button>
+                          <Button size="sm" className="h-7 px-2 bg-violet-600 hover:bg-violet-700 text-white text-xs" onClick={() => updateMut.mutate({ id: entry.id, data: editData })}><Check className="w-3.5 h-3.5 mr-1" /> Save</Button>
+                          <Button variant="ghost" size="sm" className="h-7 px-2 text-zinc-400 text-xs" onClick={() => setEditingId(null)}><X className="w-3.5 h-3.5 mr-1" /> Cancel</Button>
                         </div>
                       ) : (
                         <div className="flex items-center gap-1">
@@ -679,21 +680,78 @@ export default function PageDetail() {
                   <div key={day} className={`min-h-[100px] bg-zinc-950/30 rounded-lg p-2 ${isToday ? "ring-1 ring-violet-500" : ""}`}>
                     <span className={`text-xs font-medium ${isToday ? "text-violet-400" : "text-zinc-500"}`}>{day}</span>
                     <div className="mt-1 space-y-1">
-                      {dayEntries.map((entry: any) => (
-                        <div key={entry.id} className="bg-zinc-800/80 rounded px-2 py-1 cursor-pointer hover:bg-zinc-700/80 transition-colors"
-                          onClick={() => { setEditingId(entry.id); setEditData({ idea_status: entry.idea_status, views: entry.views }); setViewMode("table"); }}>
-                          <p className="text-[10px] font-medium text-white truncate">{entry.idea_name}</p>
-                          <div className="flex items-center gap-1 mt-0.5">
-                            <span className={`w-1.5 h-1.5 rounded-full ${entry.idea_status === "scheduled" ? "bg-blue-400" : entry.idea_status === "posted" ? "bg-emerald-400" : entry.idea_status === "complete" ? "bg-violet-400" : "bg-zinc-500"}`} />
-                            <span className="text-[9px] text-zinc-500">{entry.idea_status}</span>
+                      {dayEntries.map((entry: any) => {
+                        const statusObj = IDEA_STATUSES.find((s) => s.value === entry.idea_status);
+                        return (
+                          <div key={entry.id}
+                            className={`rounded px-2 py-1 cursor-pointer hover:brightness-125 transition-all ${statusObj?.color || "bg-zinc-800/80"}`}
+                            onClick={(e) => { e.stopPropagation(); setCalSelectedEntry(calSelectedEntry?.id === entry.id ? null : entry); }}>
+                            <p className="text-[10px] font-medium text-white truncate">{entry.idea_name}</p>
+                            <span className="text-[9px] opacity-70">{statusObj?.label || entry.idea_status}</span>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 );
               })}
             </div>
+
+            {/* Selected entry detail card */}
+            {calSelectedEntry && (
+              <div className="mt-4 bg-zinc-800 border border-zinc-700 rounded-xl p-5 relative">
+                <button onClick={() => setCalSelectedEntry(null)} className="absolute top-3 right-3 text-zinc-500 hover:text-white">
+                  <X className="w-4 h-4" />
+                </button>
+                <div className="flex items-center gap-3 mb-4">
+                  <h3 className="text-lg font-bold text-white">{calSelectedEntry.idea_name}</h3>
+                  <Badge variant="outline" className={`text-[10px] ${STATUS_COLORS[calSelectedEntry.idea_status] ?? ""}`}>
+                    {IDEA_STATUSES.find((s) => s.value === calSelectedEntry.idea_status)?.label || calSelectedEntry.idea_status}
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                  <div>
+                    <span className="text-zinc-500 block">Type</span>
+                    <span className="text-white uppercase">{calSelectedEntry.content_type}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500 block">Upload Date</span>
+                    <span className="text-white">{calSelectedEntry.upload_date?.slice(0, 10) || "\u2014"}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500 block">Created By</span>
+                    <span className="text-white">{calSelectedEntry.created_by || "\u2014"}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500 block">IPs</span>
+                    <span className="text-white">{calSelectedEntry.ips || "\u2014"}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500 block">Views</span>
+                    <span className="text-white font-bold">{(calSelectedEntry.views ?? 0).toLocaleString()}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500 block">Deadline</span>
+                    <span className="text-white">{calSelectedEntry.deadline?.slice(0, 10) || "\u2014"}</span>
+                  </div>
+                </div>
+                {(calSelectedEntry.url || calSelectedEntry.frame_link || calSelectedEntry.comp_link) && (
+                  <div className="flex items-center gap-3 mt-4 pt-3 border-t border-zinc-700">
+                    {calSelectedEntry.url && <a href={calSelectedEntry.url} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:underline text-xs flex items-center gap-1"><ExternalLink className="w-3 h-3" /> Instagram</a>}
+                    {calSelectedEntry.frame_link && <a href={calSelectedEntry.frame_link} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline text-xs">Frame</a>}
+                    {calSelectedEntry.comp_link && <a href={calSelectedEntry.comp_link} target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:underline text-xs">Comp</a>}
+                  </div>
+                )}
+                <div className="flex items-center gap-2 mt-4 pt-3 border-t border-zinc-700">
+                  <Button size="sm" variant="outline" className="text-xs border-zinc-700" onClick={() => { setEditingId(calSelectedEntry.id); setEditData({ ...calSelectedEntry }); setViewMode("table"); setCalSelectedEntry(null); }}>
+                    <Pencil className="w-3 h-3 mr-1" /> Edit in Table
+                  </Button>
+                  <Button size="sm" variant="outline" className="text-xs border-zinc-700 text-red-400 hover:text-red-300" onClick={() => { deleteMut.mutate(calSelectedEntry.id); setCalSelectedEntry(null); }}>
+                    <Trash2 className="w-3 h-3 mr-1" /> Delete
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
