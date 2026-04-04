@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getPageDetail, getContentEntries, createContentEntry, updateContentEntry, deleteContentEntry, getPages } from "@/services/api";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import type { Page } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { ArrowLeft, ExternalLink, Plus, Trash2, Pencil, Check, X, Calendar, Table2, ChevronLeft, ChevronRight, TrendingUp } from "lucide-react";
@@ -40,6 +40,8 @@ const STATUS_COLORS: Record<string, string> = Object.fromEntries(IDEA_STATUSES.m
 export default function PageDetail() {
   const { pageId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isPostMode = location.pathname.startsWith("/post-ips/");
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const userName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "";
@@ -67,7 +69,7 @@ export default function PageDetail() {
 
   // Form state
   const [form, setForm] = useState({
-    idea_name: "", content_type: "reel", idea_status: "idea",
+    idea_name: "", content_type: isPostMode ? "carousel" : "reel", idea_status: "idea",
     upload_date: "", frame_link: "", comp_link: "",
     views: "", url: "", notes: "", ips: "",
   });
@@ -84,8 +86,10 @@ export default function PageDetail() {
     enabled: !!pageId,
   });
 
-  // Filter out carousel/static (those live in Post IPs now)
-  const entries = allEntries.filter((e: any) => e.content_type !== "carousel" && e.content_type !== "static");
+  // Post mode: show carousel/static only. Reel mode: show reels/story only.
+  const entries = isPostMode
+    ? allEntries.filter((e: any) => e.content_type === "carousel" || e.content_type === "static")
+    : allEntries.filter((e: any) => e.content_type !== "carousel" && e.content_type !== "static");
 
   const { data: allPages = [] } = useQuery<Page[]>({ queryKey: ["pages"], queryFn: getPages });
 
@@ -179,8 +183,8 @@ export default function PageDetail() {
       <div className="max-w-7xl mx-auto">
 
         {/* Header */}
-        <Button variant="ghost" size="sm" className="mb-4 text-zinc-500 hover:text-white" onClick={() => navigate("/pages")}>
-          <ArrowLeft className="w-4 h-4 mr-2" /> Back to IP's
+        <Button variant="ghost" size="sm" className="mb-4 text-zinc-500 hover:text-white" onClick={() => navigate(isPostMode ? "/post-ips" : "/pages")}>
+          <ArrowLeft className="w-4 h-4 mr-2" /> {isPostMode ? "Back to Post IPs" : "Back to IP's"}
         </Button>
 
         <div className="flex items-center justify-between mb-8">
@@ -231,9 +235,18 @@ export default function PageDetail() {
                       <Select value={form.content_type} onValueChange={(v) => setForm({ ...form, content_type: v })}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="reel">Reel</SelectItem>
-                          <SelectItem value="carousel">Carousel</SelectItem>
-                          <SelectItem value="static">Static</SelectItem>
+                          {isPostMode ? (
+                            <>
+                              <SelectItem value="carousel">Carousel</SelectItem>
+                              <SelectItem value="static">Static</SelectItem>
+                            </>
+                          ) : (
+                            <>
+                              <SelectItem value="reel">Reel</SelectItem>
+                              <SelectItem value="carousel">Carousel</SelectItem>
+                              <SelectItem value="static">Static</SelectItem>
+                            </>
+                          )}
                           <SelectItem value="story">Story</SelectItem>
                         </SelectContent>
                       </Select>
