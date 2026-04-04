@@ -415,7 +415,11 @@ export default function PostIPsView() {
 
         {/* TABLE VIEW */}
         {viewMode === "table" && (() => {
-          const filteredEntries = entries.filter((e: any) => (e.upload_date || e.created_at || "")?.slice(0, 7) === tableMonth);
+          const filteredEntries = entries.filter((e: any) => {
+            const date = (e.upload_date || e.created_at || "")?.slice(0, 7);
+            if (!date) return true; // show undated entries always
+            return date === tableMonth;
+          });
           const filteredViews = filteredEntries.reduce((s: number, e: any) => s + (e.views ?? 0), 0);
           const tableMonthLabel = new Date(tableMonthDate.year, tableMonthDate.month).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
 
