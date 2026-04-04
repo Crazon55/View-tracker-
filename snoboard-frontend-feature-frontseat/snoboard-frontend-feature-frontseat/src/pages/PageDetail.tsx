@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getPageDetail, getContentEntries, createContentEntry, updateContentEntry, deleteContentEntry, getPages } from "@/services/api";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
@@ -49,6 +49,15 @@ export default function PageDetail() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState<any>({});
   const [calSelectedEntry, setCalSelectedEntry] = useState<any>(null);
+
+  // Escape key to cancel editing
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") { setEditingId(null); setCalSelectedEntry(null); }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   // Calendar state
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
