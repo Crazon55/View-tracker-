@@ -123,7 +123,6 @@ const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/ideas", label: "Original Ideas", icon: Lightbulb },
   { to: "/competitor-ideas", label: "Competitor Ideas", icon: Swords },
-  { to: "/posts", label: "Posts", icon: FileText },
   { to: "/post-ips", label: "Post IPs", icon: Image },
   { to: "/growth", label: "Growth", icon: TrendingUp },
   { to: "/pages", label: "IP's", icon: Users },
