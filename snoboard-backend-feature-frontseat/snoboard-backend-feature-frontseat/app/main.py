@@ -634,6 +634,50 @@ async def migrate_reels():
     return {"success": True, "migrated": migrated, "skipped": skipped}
 
 
+# --- Migrate posts to content entries ---
+@app.post("/api/v1/migrate-posts")
+async def migrate_posts():
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    posts = get_post_repository().get_all()
+    # Also fetch ideas for idea_name lookup
+    ideas = get_idea_repository().get_all()
+    idea_map = {i["id"]: i for i in ideas}
+    migrated = 0
+    skipped = 0
+    for post in posts:
+        # Check if already migrated (by url)
+        url = post.get("url", "")
+        if url:
+            existing = client.table("content_entries").select("id").eq("url", url).execute().data
+            if existing:
+                skipped += 1
+                continue
+        handle = ""
+        if post.get("pages"):
+            handle = post["pages"].get("handle", "")
+        # Determine idea name
+        idea_id = post.get("idea_id")
+        idea_name = ""
+        if idea_id and idea_id in idea_map:
+            idea = idea_map[idea_id]
+            idea_name = f"{idea.get('idea_code', '')} — {idea.get('hook', '')}".strip(" —")
+        if not idea_name:
+            idea_name = handle + " post" if handle else "Post"
+        client.table("content_entries").insert({
+            "page_id": post["page_id"],
+            "idea_name": idea_name,
+            "content_type": "carousel",
+            "idea_status": "posted",
+            "upload_date": post.get("posted_at"),
+            "views": post.get("actual_views", 0) or 0,
+            "url": url,
+            "ips": handle,
+        }).execute()
+        migrated += 1
+    return {"success": True, "migrated": migrated, "skipped": skipped}
+
+
 # --- Growth Data ---
 @app.get("/api/v1/growth")
 async def get_growth_data():
