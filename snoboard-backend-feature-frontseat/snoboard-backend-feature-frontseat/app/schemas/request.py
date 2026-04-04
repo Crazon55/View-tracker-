@@ -70,24 +70,44 @@ class CSUpdate(BaseModel):
 # --- Ideas ---
 class IdeaCreate(BaseModel):
     hook: str
+    hook_variations: list[str] | None = None
     cs_owner_id: str | None = None
     cdi_owner_id: str | None = None
+    executor_name: str | None = None
+    created_by: str | None = None
     format: str = "reel"
     source: str = "original"
     status: str = "active"
     notes: str | None = None
     distributed_to: list[str] | None = None
+    yt_url: str | None = None
+    timestamps: str | None = None
+    base_drive_link: str | None = None
+    edited_drive_link: str | None = None
+    pintu_batch_link: str | None = None
+    comp_link: str | None = None
+    deadline: str | None = None
 
 
 class IdeaUpdate(BaseModel):
     hook: str | None = None
+    hook_variations: list[str] | None = None
     cs_owner_id: str | None = None
     cdi_owner_id: str | None = None
+    executor_name: str | None = None
+    created_by: str | None = None
     format: str | None = None
     source: str | None = None
     status: str | None = None
     notes: str | None = None
     distributed_to: list[str] | None = None
+    yt_url: str | None = None
+    timestamps: str | None = None
+    base_drive_link: str | None = None
+    edited_drive_link: str | None = None
+    pintu_batch_link: str | None = None
+    comp_link: str | None = None
+    deadline: str | None = None
 
 
 # --- Content Entries ---

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageDistributionSelect from "@/components/PageDistributionSelect";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   getIdeaEngine, getCSList, getPages, createIdea, updateIdea, deleteIdea, createCS,
 } from "@/services/api";
@@ -29,6 +30,8 @@ function formatCompact(n: number): string {
 
 export default function CompetitorIdeas() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const userName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "";
   const [search, setSearch] = useState("");
   const [ideaOpen, setIdeaOpen] = useState(false);
   const [editingIdeaId, setEditingIdeaId] = useState<string | null>(null);
@@ -46,6 +49,14 @@ export default function CompetitorIdeas() {
   const [cdiOwnerId, setCdiOwnerId] = useState("");
   const [format, setFormat] = useState("reel");
   const [distributedTo, setDistributedTo] = useState<string[]>([]);
+  const [hookVariations, setHookVariations] = useState("");
+  const [ytUrl, setYtUrl] = useState("");
+  const [timestamps, setTimestamps] = useState("");
+  const [baseDriveLink, setBaseDriveLink] = useState("");
+  const [pintuBatchLink, setPintuBatchLink] = useState("");
+  const [compLink, setCompLink] = useState("");
+  const [executorName, setExecutorName] = useState("");
+  const [deadline, setDeadline] = useState("");
 
   const { data: engineData, isLoading } = useQuery<IdeaEngineData>({
     queryKey: ["idea-engine"],
@@ -117,18 +128,37 @@ export default function CompetitorIdeas() {
     setCdiOwnerId("");
     setFormat("reel");
     setDistributedTo([]);
+    setHookVariations("");
+    setYtUrl("");
+    setTimestamps("");
+    setBaseDriveLink("");
+    setPintuBatchLink("");
+    setCompLink("");
+    setExecutorName("");
+    setDeadline("");
   }
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!hook.trim()) return;
+    if (!executorName.trim()) { toast.error("Executor name is required"); return; }
+    const variations = hookVariations.split("\n").map((v) => v.trim()).filter(Boolean);
     createIdeaMutation.mutate({
       hook: hook.trim(),
+      hook_variations: variations.length > 0 ? variations : undefined,
       cs_owner_id: csOwnerId || undefined,
       cdi_owner_id: cdiOwnerId || undefined,
+      executor_name: executorName.trim(),
+      created_by: userName,
       format,
       source: "repurposed",
       distributed_to: distributedTo.length > 0 ? distributedTo : undefined,
+      yt_url: ytUrl.trim() || undefined,
+      timestamps: timestamps.trim() || undefined,
+      base_drive_link: baseDriveLink.trim() || undefined,
+      pintu_batch_link: pintuBatchLink.trim() || undefined,
+      comp_link: compLink.trim() || undefined,
+      deadline: deadline || undefined,
     });
   };
 
@@ -221,22 +251,34 @@ export default function CompetitorIdeas() {
                 New Competitor Idea
               </Button>
             </DialogTrigger>
-            <DialogContent className="bg-zinc-900 border-zinc-800">
+            <DialogContent className="bg-zinc-900 border-zinc-800 max-w-lg max-h-[85vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Create Competitor Idea</DialogTitle>
               </DialogHeader>
-              <form onSubmit={handleCreate} className="space-y-4 mt-2">
-                <div className="space-y-2">
-                  <Label>Hook / Concept</Label>
+              <form onSubmit={handleCreate} className="space-y-3 mt-2">
+                <div className="space-y-1.5">
+                  <Label>Hook / Concept *</Label>
                   <Input placeholder="e.g. Competitor's viral reel about..." value={hook} onChange={(e) => setHook(e.target.value)} required />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>CS Owner (optional)</Label>
+                <div className="space-y-1.5">
+                  <Label>Hook Variations (one per line)</Label>
+                  <textarea
+                    placeholder={"Variation 1\nVariation 2\nVariation 3"}
+                    value={hookVariations}
+                    onChange={(e) => setHookVariations(e.target.value)}
+                    rows={3}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:border-violet-500/50 focus:outline-none resize-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Competitor Link *</Label>
+                  <Input placeholder="https://instagram.com/reel/..." value={compLink} onChange={(e) => setCompLink(e.target.value)} required />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>CS Owner</Label>
                     <Select value={csOwnerId} onValueChange={setCsOwnerId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select CS" />
-                      </SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder="Select CS" /></SelectTrigger>
                       <SelectContent>
                         {csMembers.map((cs) => (
                           <SelectItem key={cs.id} value={cs.id}>{cs.name}</SelectItem>
@@ -244,12 +286,10 @@ export default function CompetitorIdeas() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-2">
-                    <Label>CDI Owner (optional)</Label>
+                  <div className="space-y-1.5">
+                    <Label>CDI Owner</Label>
                     <Select value={cdiOwnerId} onValueChange={setCdiOwnerId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select CDI" />
-                      </SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder="Select CDI" /></SelectTrigger>
                       <SelectContent>
                         {cdiMembers.map((cdi) => (
                           <SelectItem key={cdi.id} value={cdi.id}>{cdi.name}</SelectItem>
@@ -258,19 +298,49 @@ export default function CompetitorIdeas() {
                     </Select>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Format</Label>
-                  <Select value={format} onValueChange={setFormat}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="reel">Reel</SelectItem>
-                      <SelectItem value="carousel">Carousel</SelectItem>
-                      <SelectItem value="static">Static</SelectItem>
-                      <SelectItem value="story">Story</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Executor *</Label>
+                    <Input placeholder="Who executes this?" value={executorName} onChange={(e) => setExecutorName(e.target.value)} required />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Format</Label>
+                    <Select value={format} onValueChange={setFormat}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="reel">Reel</SelectItem>
+                        <SelectItem value="carousel">Carousel</SelectItem>
+                        <SelectItem value="static">Static</SelectItem>
+                        <SelectItem value="story">Story</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Deadline</Label>
+                    <Input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} onClick={(e) => (e.target as HTMLInputElement).showPicker?.()} className="cursor-pointer" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>YouTube URL</Label>
+                    <Input placeholder="https://youtube.com/..." value={ytUrl} onChange={(e) => setYtUrl(e.target.value)} />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Timestamps</Label>
+                  <Input placeholder="e.g. 0:30-1:45, 3:00-4:20" value={timestamps} onChange={(e) => setTimestamps(e.target.value)} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Base Video Drive Link</Label>
+                    <Input placeholder="Google Drive link" value={baseDriveLink} onChange={(e) => setBaseDriveLink(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Pintu Batch Drive Link</Label>
+                    <Input placeholder="Google Drive link" value={pintuBatchLink} onChange={(e) => setPintuBatchLink(e.target.value)} />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
                   <Label>Distribute to Pages</Label>
                   <PageDistributionSelect
                     pages={allPages}
@@ -278,7 +348,10 @@ export default function CompetitorIdeas() {
                     onChange={setDistributedTo}
                   />
                 </div>
-                <Button type="submit" className="w-full" disabled={createIdeaMutation.isPending}>
+                <div className="bg-zinc-800/50 rounded-lg px-3 py-2 text-xs text-zinc-500">
+                  Created by: <span className="text-white">{userName}</span> (auto)
+                </div>
+                <Button type="submit" className="w-full" disabled={createIdeaMutation.isPending || !executorName.trim()}>
                   {createIdeaMutation.isPending ? "Creating..." : "Create Competitor Idea"}
                 </Button>
               </form>

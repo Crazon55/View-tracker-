@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageDistributionSelect from "@/components/PageDistributionSelect";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   getIdeaEngine,
   getCSList,
@@ -76,12 +77,23 @@ export default function IdeaEngine() {
   const [editDistPages, setEditDistPages] = useState<string[]>([]);
   // sourceTab removed — this page only shows original ideas
 
+  const { user } = useAuth();
+  const userName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "";
+
   // Idea form
   const [hook, setHook] = useState("");
   const [csOwnerId, setCsOwnerId] = useState("");
   const [format, setFormat] = useState("reel");
   const [source, setSource] = useState("original");
   const [distributedTo, setDistributedTo] = useState<string[]>([]);
+  const [hookVariations, setHookVariations] = useState("");
+  const [ytUrl, setYtUrl] = useState("");
+  const [timestamps, setTimestamps] = useState("");
+  const [baseDriveLink, setBaseDriveLink] = useState("");
+  const [editedDriveLink, setEditedDriveLink] = useState("");
+  const [pintuBatchLink, setPintuBatchLink] = useState("");
+  const [executorName, setExecutorName] = useState("");
+  const [deadline, setDeadline] = useState("");
 
   // CS form
   const [csName, setCsName] = useState("");
@@ -167,17 +179,36 @@ export default function IdeaEngine() {
     setFormat("reel");
     setSource("original");
     setDistributedTo([]);
+    setHookVariations("");
+    setYtUrl("");
+    setTimestamps("");
+    setBaseDriveLink("");
+    setEditedDriveLink("");
+    setPintuBatchLink("");
+    setExecutorName("");
+    setDeadline("");
   }
 
   const handleCreateIdea = (e: React.FormEvent) => {
     e.preventDefault();
     if (!hook.trim() || !csOwnerId) return;
+    if (!executorName.trim()) { toast.error("Executor name is required"); return; }
+    const variations = hookVariations.split("\n").map((v) => v.trim()).filter(Boolean);
     createIdeaMutation.mutate({
       hook: hook.trim(),
+      hook_variations: variations.length > 0 ? variations : undefined,
       cs_owner_id: csOwnerId,
+      executor_name: executorName.trim(),
+      created_by: userName,
       format,
       source,
       distributed_to: distributedTo.length > 0 ? distributedTo : undefined,
+      yt_url: ytUrl.trim() || undefined,
+      timestamps: timestamps.trim() || undefined,
+      base_drive_link: baseDriveLink.trim() || undefined,
+      edited_drive_link: editedDriveLink.trim() || undefined,
+      pintu_batch_link: pintuBatchLink.trim() || undefined,
+      deadline: deadline || undefined,
     });
   };
 
@@ -311,43 +342,83 @@ export default function IdeaEngine() {
                   New Idea
                 </Button>
               </DialogTrigger>
-              <DialogContent className="bg-zinc-900 border-zinc-800">
+              <DialogContent className="bg-zinc-900 border-zinc-800 max-w-lg max-h-[85vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle>Create New Idea</DialogTitle>
+                  <DialogTitle>Create Original Idea</DialogTitle>
                 </DialogHeader>
-                <form onSubmit={handleCreateIdea} className="space-y-4 mt-2">
-                  <div className="space-y-2">
-                    <Label>Hook / Concept</Label>
+                <form onSubmit={handleCreateIdea} className="space-y-3 mt-2">
+                  <div className="space-y-1.5">
+                    <Label>Hook / Concept *</Label>
                     <Input placeholder="e.g. How Zerodha scaled to 1Cr users" value={hook} onChange={(e) => setHook(e.target.value)} required />
                   </div>
-                  <div className="space-y-2">
-                    <Label>CS Owner</Label>
-                    <Select value={csOwnerId} onValueChange={setCsOwnerId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select CS owner" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {csList.map((cs) => (
-                          <SelectItem key={cs.id} value={cs.id}>
-                            {cs.name} {cs.role && `(${cs.role})`}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className="space-y-1.5">
+                    <Label>Hook Variations (one per line)</Label>
+                    <textarea
+                      placeholder={"Variation 1\nVariation 2\nVariation 3"}
+                      value={hookVariations}
+                      onChange={(e) => setHookVariations(e.target.value)}
+                      rows={3}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:border-violet-500/50 focus:outline-none resize-none"
+                    />
                   </div>
-                  <div className="space-y-2">
-                    <Label>Format</Label>
-                    <Select value={format} onValueChange={setFormat}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="reel">Reel</SelectItem>
-                        <SelectItem value="carousel">Carousel</SelectItem>
-                        <SelectItem value="static">Static</SelectItem>
-                        <SelectItem value="story">Story</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label>CS Owner *</Label>
+                      <Select value={csOwnerId} onValueChange={setCsOwnerId}>
+                        <SelectTrigger><SelectValue placeholder="Select CS" /></SelectTrigger>
+                        <SelectContent>
+                          {csList.map((cs) => (
+                            <SelectItem key={cs.id} value={cs.id}>{cs.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Executor *</Label>
+                      <Input placeholder="Who executes this?" value={executorName} onChange={(e) => setExecutorName(e.target.value)} required />
+                    </div>
                   </div>
-                  <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label>Format</Label>
+                      <Select value={format} onValueChange={setFormat}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="reel">Reel</SelectItem>
+                          <SelectItem value="carousel">Carousel</SelectItem>
+                          <SelectItem value="static">Static</SelectItem>
+                          <SelectItem value="story">Story</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Deadline</Label>
+                      <Input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} onClick={(e) => (e.target as HTMLInputElement).showPicker?.()} className="cursor-pointer" />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>YouTube URL</Label>
+                    <Input placeholder="https://youtube.com/watch?v=..." value={ytUrl} onChange={(e) => setYtUrl(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Timestamps</Label>
+                    <Input placeholder="e.g. 0:30-1:45, 3:00-4:20" value={timestamps} onChange={(e) => setTimestamps(e.target.value)} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label>Base Video Drive Link</Label>
+                      <Input placeholder="Google Drive link" value={baseDriveLink} onChange={(e) => setBaseDriveLink(e.target.value)} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Edited Drive Link</Label>
+                      <Input placeholder="After editing" value={editedDriveLink} onChange={(e) => setEditedDriveLink(e.target.value)} />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Pintu Batch Drive Link</Label>
+                    <Input placeholder="Google Drive link for Pintu batch" value={pintuBatchLink} onChange={(e) => setPintuBatchLink(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
                     <Label>Distribute to Pages</Label>
                     <PageDistributionSelect
                       pages={allPages}
@@ -355,11 +426,14 @@ export default function IdeaEngine() {
                       onChange={setDistributedTo}
                     />
                   </div>
-                  <Button type="submit" className="w-full" disabled={createIdeaMutation.isPending || !csOwnerId}>
+                  <div className="bg-zinc-800/50 rounded-lg px-3 py-2 text-xs text-zinc-500">
+                    Created by: <span className="text-white">{userName}</span> (auto)
+                  </div>
+                  <Button type="submit" className="w-full" disabled={createIdeaMutation.isPending || !csOwnerId || !executorName.trim()}>
                     {createIdeaMutation.isPending ? "Creating..." : "Create Idea"}
                   </Button>
                   <p className="text-xs text-zinc-500 text-center">
-                    Idea ID (e.g. FS-001) will be auto-generated
+                    Idea ID (e.g. OG-001) will be auto-generated
                   </p>
                 </form>
               </DialogContent>
