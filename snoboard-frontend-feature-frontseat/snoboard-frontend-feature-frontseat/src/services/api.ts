@@ -103,6 +103,11 @@ export const createContentEntry = (data: any) => fetchApi<any>("/api/v1/content-
 export const updateContentEntry = (id: string, data: any) => fetchApi<any>(`/api/v1/content-entries/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const deleteContentEntry = (id: string) => fetchApi<any>(`/api/v1/content-entries/${id}`, { method: "DELETE" });
 
+// User Roles
+export const getUserRole = (email: string) => fetchApi<any>(`/api/v1/user-role/${encodeURIComponent(email)}`);
+export const setUserRole = (data: { email: string; role: string; name?: string }) =>
+  fetchApi<any>("/api/v1/user-role", { method: "POST", body: JSON.stringify(data) });
+
 // Chat
 export interface ChatMessage {
   role: "user" | "assistant";
