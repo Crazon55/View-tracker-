@@ -45,7 +45,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [breakdownMode, setBreakdownMode] = useState<BreakdownMode>("reels");
-  const [rightCardView, setRightCardView] = useState<"donut" | "pages">("donut");
+  const [rightCardView] = useState<"donut" | "pages">("pages");
   const [globalPeriod, setGlobalPeriod] = useState<TimePeriod>("monthly");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -75,7 +75,7 @@ export default function Dashboard() {
       const data = await res.json();
       return data.data ?? [];
     },
-    enabled: rightCardView === "pages",
+    enabled: true,
   });
 
   if (isLoading) {
@@ -173,7 +173,7 @@ export default function Dashboard() {
 
         {/* Top Cards Row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 mb-8 sm:mb-10">
-          {/* Total Ecosystem Reach */}
+          {/* Total Ecosystem Reach + Distribution */}
           <div className="relative overflow-hidden bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8">
             <div className="absolute -top-20 -left-20 w-60 h-60 bg-violet-600/20 rounded-full blur-3xl pointer-events-none" />
             <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
@@ -181,160 +181,127 @@ export default function Dashboard() {
               <p className="text-[10px] sm:text-[11px] uppercase tracking-[0.2em] text-zinc-400 font-semibold mb-4 sm:mb-6">
                 Total Ecosystem Reach
               </p>
-              <p className="text-5xl sm:text-6xl lg:text-7xl font-black text-white tabular-nums tracking-tight leading-none">
-                {formatCompact(totalViews)}
-              </p>
-              <div className="flex items-center gap-3 mt-5 sm:mt-6">
-                <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold px-3 py-1.5 rounded-full">
-                  <TrendingUp className="w-3.5 h-3.5" />
-                  {currentMonth}
-                </span>
-                <span className="text-xs text-zinc-500 uppercase tracking-wider hidden sm:inline">Growth Period</span>
+              <div className="flex items-center justify-between gap-6">
+                <div>
+                  <p className="text-5xl sm:text-6xl lg:text-7xl font-black text-white tabular-nums tracking-tight leading-none">
+                    {formatCompact(totalViews)}
+                  </p>
+                  <div className="flex items-center gap-3 mt-5 sm:mt-6">
+                    <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold px-3 py-1.5 rounded-full">
+                      <TrendingUp className="w-3.5 h-3.5" />
+                      {(() => {
+                        const now = new Date();
+                        const monthName = now.toLocaleString("default", { month: "long" });
+                        const day = now.getDate();
+                        const year = now.getFullYear();
+                        return `${monthName} 1 — ${monthName} ${day}, ${year}`;
+                      })()}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-4 mt-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-r from-purple-500 to-pink-500" />
+                      <span className="text-xs text-zinc-500">Reels</span>
+                      <span className="text-sm font-bold text-white tabular-nums">{formatCompact(stats?.total_reel_views ?? 0)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                      <span className="text-xs text-zinc-500">Posts</span>
+                      <span className="text-sm font-bold text-white tabular-nums">{formatCompact(stats?.total_post_views ?? 0)}</span>
+                    </div>
+                  </div>
+                </div>
+                {/* Donut chart */}
+                {(() => {
+                  const reelViews = stats?.total_reel_views ?? 0;
+                  const postViews = stats?.total_post_views ?? 0;
+                  const total = reelViews + postViews;
+                  const size = 140;
+                  const stroke = 12;
+                  const radius = (size - stroke) / 2;
+                  const circumference = 2 * Math.PI * radius;
+                  const gap = 0.02;
+                  const reelFrac = total > 0 ? reelViews / total : 0;
+                  const reelLen = reelFrac * circumference * (1 - gap);
+                  const postFrac = total > 0 ? postViews / total : 0;
+                  const postLen = postFrac * circumference * (1 - gap);
+                  const gapLen = total > 0 && postViews > 0 ? circumference * gap : 0;
+                  return (
+                    <div className="relative flex items-center justify-center shrink-0" style={{ width: size, height: size }}>
+                      <svg width={size} height={size} className="-rotate-90">
+                        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#27272a" strokeWidth={stroke} />
+                        {reelViews > 0 && (
+                          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="url(#dash-reel-combined)" strokeWidth={stroke} strokeLinecap="round" strokeDasharray={`${reelLen} ${circumference - reelLen}`} strokeDashoffset={0} />
+                        )}
+                        {postViews > 0 && (
+                          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#10b981" strokeWidth={stroke} strokeLinecap="round" strokeDasharray={`${postLen} ${circumference - postLen}`} strokeDashoffset={-(reelLen + gapLen)} />
+                        )}
+                        <defs>
+                          <linearGradient id="dash-reel-combined" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stopColor="#a855f7" />
+                            <stop offset="100%" stopColor="#d946ef" />
+                          </linearGradient>
+                        </defs>
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <p className="text-[8px] uppercase tracking-widest text-zinc-500">Total</p>
+                        <p className="text-lg font-black text-white tabular-nums">{formatCompact(total)}</p>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>
 
-          {/* Views Distribution + Page-wise Views */}
+          {/* Monthly Growth Chart */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8 overflow-hidden">
-            <div className="space-y-3 mb-5 sm:mb-6">
-              <div className="flex items-center justify-between">
-                <p className="text-[10px] sm:text-[11px] uppercase tracking-[0.2em] text-zinc-400 font-semibold">
-                  {rightCardView === "donut" ? "Views Distribution" : "Monthly Growth"}
-                </p>
-                <TogglePill
-                  options={[
-                    { label: "Distribution", value: "donut" },
-                    { label: "Growth", value: "pages" },
-                  ]}
-                  value={rightCardView}
-                  onChange={(v) => setRightCardView(v as "donut" | "pages")}
-                />
-              </div>
+            <div className="mb-5 sm:mb-6">
+              <p className="text-[10px] sm:text-[11px] uppercase tracking-[0.2em] text-zinc-400 font-semibold">
+                Monthly Growth
+              </p>
             </div>
+            {(() => {
+              const GCOLORS = ["#a855f7", "#10b981", "#f59e0b", "#ec4899", "#06b6d4", "#f43f5e", "#8b5cf6", "#14b8a6", "#f97316", "#6366f1"];
+              const allGrowth = growthData.filter((v: any) => v.handle !== "total");
+              const growthTotal = allGrowth.reduce((s: number, v: any) => s + (v.views ?? 0), 0);
+              const stage3Data = allGrowth.filter((v: any) => v.stage === 3);
+              const months = [...new Set(stage3Data.map((v: any) => v.month?.slice(0, 7)))].sort();
+              const handles = [...new Set(stage3Data.map((v: any) => v.handle))];
+              const chartData = months.map((month: string) => {
+                const row: any = { name: new Date(month + "-01").toLocaleDateString("en-GB", { month: "short", year: "2-digit" }) };
+                for (const h of handles) {
+                  const entry = stage3Data.find((v: any) => v.month?.slice(0, 7) === month && v.handle === h);
+                  row[h] = entry ? (entry.views ?? 0) : 0;
+                }
+                return row;
+              });
 
-            <AnimatePresence mode="wait">
-              {rightCardView === "donut" ? (
-                <motion.div
-                  key="donut"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.25 }}
-                  className="flex items-center justify-center gap-8"
-                >
-                  {(() => {
-                    const reelViews = stats?.total_reel_views ?? 0;
-                    const postViews = stats?.total_post_views ?? 0;
-                    const total = reelViews + postViews;
-                    const size = 160;
-                    const stroke = 14;
-                    const radius = (size - stroke) / 2;
-                    const circumference = 2 * Math.PI * radius;
-                    const gap = 0.02;
-                    const reelFrac = total > 0 ? reelViews / total : 0;
-                    const reelLen = reelFrac * circumference * (1 - gap);
-                    const postFrac = total > 0 ? postViews / total : 0;
-                    const postLen = postFrac * circumference * (1 - gap);
-                    const gapLen = total > 0 && postViews > 0 ? circumference * gap : 0;
-                    return (
-                      <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
-                        <svg width={size} height={size} className="-rotate-90">
-                          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#27272a" strokeWidth={stroke} />
-                          {reelViews > 0 && (
-                            <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="url(#dash-reel)" strokeWidth={stroke} strokeLinecap="round" strokeDasharray={`${reelLen} ${circumference - reelLen}`} strokeDashoffset={0} />
-                          )}
-                          {postViews > 0 && (
-                            <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#10b981" strokeWidth={stroke} strokeLinecap="round" strokeDasharray={`${postLen} ${circumference - postLen}`} strokeDashoffset={-(reelLen + gapLen)} />
-                          )}
-                          <defs>
-                            <linearGradient id="dash-reel" x1="0%" y1="0%" x2="100%" y2="100%">
-                              <stop offset="0%" stopColor="#a855f7" />
-                              <stop offset="100%" stopColor="#d946ef" />
-                            </linearGradient>
-                          </defs>
-                        </svg>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center">
-                          <p className="text-[9px] uppercase tracking-widest text-zinc-500">Total Views</p>
-                          <p className="text-2xl font-black text-white tabular-nums mt-1">{total.toLocaleString()}</p>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full bg-gradient-to-r from-purple-500 to-pink-500" />
-                      <div>
-                        <p className="text-xs text-zinc-500">Reel Views</p>
-                        <p className="text-lg font-bold text-white tabular-nums">{formatCompact(stats?.total_reel_views ?? 0)}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full bg-emerald-500" />
-                      <div>
-                        <p className="text-xs text-zinc-500">Post Views</p>
-                        <p className="text-lg font-bold text-white tabular-nums">{formatCompact(stats?.total_post_views ?? 0)}</p>
-                      </div>
-                    </div>
-                    <div className="h-px bg-zinc-800" />
-                    <div className="flex items-center gap-4 text-xs text-zinc-600">
-                      <span>{stats?.total_reels ?? 0} reels</span>
-                      <span>{stats?.total_posts ?? 0} posts</span>
-                      <span>{allPages.length} pages</span>
+              return chartData.length > 0 ? (
+                <div className="overflow-hidden">
+                  <div className="flex items-center justify-end mb-3">
+                    <div className="text-right">
+                      <p className="text-[9px] uppercase tracking-widest text-zinc-500">All Time Total</p>
+                      <p className="text-xl font-black text-violet-400 tabular-nums">{formatCompact(growthTotal)}</p>
                     </div>
                   </div>
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="pages"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.25 }}
-                >
-                  {(() => {
-                    const GCOLORS = ["#a855f7", "#10b981", "#f59e0b", "#ec4899", "#06b6d4", "#f43f5e", "#8b5cf6", "#14b8a6", "#f97316", "#6366f1"];
-                    const allGrowth = growthData.filter((v: any) => v.handle !== "total");
-                    const growthTotal = allGrowth.reduce((s: number, v: any) => s + (v.views ?? 0), 0);
-                    const stage3Data = allGrowth.filter((v: any) => v.stage === 3);
-                    const months = [...new Set(stage3Data.map((v: any) => v.month?.slice(0, 7)))].sort();
-                    const handles = [...new Set(stage3Data.map((v: any) => v.handle))];
-                    const chartData = months.map((month: string) => {
-                      const row: any = { name: new Date(month + "-01").toLocaleDateString("en-GB", { month: "short", year: "2-digit" }) };
-                      for (const h of handles) {
-                        const entry = stage3Data.find((v: any) => v.month?.slice(0, 7) === month && v.handle === h);
-                        row[h] = entry ? (entry.views ?? 0) : 0;
-                      }
-                      return row;
-                    });
-
-                    return chartData.length > 0 ? (
-                      <div className="overflow-hidden">
-                        <div className="flex items-center justify-end mb-3">
-                          <div className="text-right">
-                            <p className="text-[9px] uppercase tracking-widest text-zinc-500">All Time Total</p>
-                            <p className="text-xl font-black text-violet-400 tabular-nums">{formatCompact(growthTotal)}</p>
-                          </div>
-                        </div>
-                        <ResponsiveContainer width="100%" height={280}>
-                          <BarChart data={chartData} margin={{ top: 0, right: 5, bottom: 0, left: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                            <XAxis dataKey="name" tick={{ fill: "#71717a", fontSize: 10 }} />
-                            <YAxis tick={{ fill: "#71717a", fontSize: 9 }} tickFormatter={(v: number) => formatCompact(v)} />
-                            <Tooltip
-                              contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 8 }}
-                              formatter={(value: number, name: string) => [formatCompact(value), `@${name}`]}
-                            />
-                            {handles.map((h: string, i: number) => (
-                              <Bar key={h} dataKey={h} fill={GCOLORS[i % GCOLORS.length]} radius={[3, 3, 0, 0]} />
-                            ))}
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    ) : <p className="text-center text-zinc-600 py-8 text-sm">No growth data yet</p>;
-                  })()}
-                </motion.div>
-              )}
-            </AnimatePresence>
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={chartData} margin={{ top: 0, right: 5, bottom: 0, left: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                      <XAxis dataKey="name" tick={{ fill: "#71717a", fontSize: 10 }} />
+                      <YAxis tick={{ fill: "#71717a", fontSize: 9 }} tickFormatter={(v: number) => formatCompact(v)} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 8 }}
+                        formatter={(value: number, name: string) => [formatCompact(value), `@${name}`]}
+                      />
+                      {handles.map((h: string, i: number) => (
+                        <Bar key={h} dataKey={h} fill={GCOLORS[i % GCOLORS.length]} radius={[3, 3, 0, 0]} />
+                      ))}
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : <p className="text-center text-zinc-600 py-8 text-sm">No growth data yet</p>;
+            })()}
           </div>
         </div>
 
