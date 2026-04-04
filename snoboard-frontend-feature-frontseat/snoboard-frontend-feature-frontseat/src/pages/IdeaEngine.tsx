@@ -90,7 +90,6 @@ export default function IdeaEngine() {
   const [ytUrl, setYtUrl] = useState("");
   const [timestamps, setTimestamps] = useState("");
   const [baseDriveLink, setBaseDriveLink] = useState("");
-  const [editedDriveLink, setEditedDriveLink] = useState("");
   const [pintuBatchLink, setPintuBatchLink] = useState("");
   const [executorName, setExecutorName] = useState("");
   const [deadline, setDeadline] = useState("");
@@ -183,7 +182,6 @@ export default function IdeaEngine() {
     setYtUrl("");
     setTimestamps("");
     setBaseDriveLink("");
-    setEditedDriveLink("");
     setPintuBatchLink("");
     setExecutorName("");
     setDeadline("");
@@ -206,7 +204,6 @@ export default function IdeaEngine() {
       yt_url: ytUrl.trim() || undefined,
       timestamps: timestamps.trim() || undefined,
       base_drive_link: baseDriveLink.trim() || undefined,
-      edited_drive_link: editedDriveLink.trim() || undefined,
       pintu_batch_link: pintuBatchLink.trim() || undefined,
       deadline: deadline || undefined,
     });
@@ -404,15 +401,9 @@ export default function IdeaEngine() {
                     <Label>Timestamps</Label>
                     <Input placeholder="e.g. 0:30-1:45, 3:00-4:20" value={timestamps} onChange={(e) => setTimestamps(e.target.value)} />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label>Base Video Drive Link</Label>
-                      <Input placeholder="Google Drive link" value={baseDriveLink} onChange={(e) => setBaseDriveLink(e.target.value)} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>Edited Drive Link</Label>
-                      <Input placeholder="After editing" value={editedDriveLink} onChange={(e) => setEditedDriveLink(e.target.value)} />
-                    </div>
+                  <div className="space-y-1.5">
+                    <Label>Base Video Drive Link</Label>
+                    <Input placeholder="Google Drive link" value={baseDriveLink} onChange={(e) => setBaseDriveLink(e.target.value)} />
                   </div>
                   <div className="space-y-1.5">
                     <Label>Pintu Batch Drive Link</Label>
