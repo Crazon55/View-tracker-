@@ -4,7 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords } from "lucide-react";
+import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -20,6 +20,7 @@ import GrowthView from "./pages/GrowthView";
 import MainReelsView from "./pages/MainReelsView";
 import IdeaEngine from "./pages/IdeaEngine";
 import CompetitorIdeas from "./pages/CompetitorIdeas";
+import PostIPsView from "./pages/PostIPsView";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -122,7 +123,8 @@ const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/ideas", label: "Original Ideas", icon: Lightbulb },
   { to: "/competitor-ideas", label: "Competitor Ideas", icon: Swords },
-  { to: "/posts", label: "Post IPs", icon: FileText },
+  { to: "/posts", label: "Posts", icon: FileText },
+  { to: "/post-ips", label: "Post IPs", icon: Image },
   { to: "/growth", label: "Growth", icon: TrendingUp },
   { to: "/pages", label: "IP's", icon: Users },
 ];
@@ -268,6 +270,7 @@ function AppLayout() {
         <Routes>
           <Route path="/pages" element={<PagesView />} />
           <Route path="/posts" element={<PostsView />} />
+          <Route path="/post-ips" element={<PostIPsView />} />
           <Route path="/reels/stage1" element={<ReelsStage1View />} />
           <Route path="/reels/main" element={<MainReelsView />} />
           <Route path="/growth" element={<GrowthView />} />

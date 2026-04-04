@@ -1,20 +1,33 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getPosts, getPages, createPost, updatePost, deletePost, createPage, getIdeas, createIdea, getCSList } from "@/services/api";
-import type { Post, Page, Idea, ContentStrategist } from "@/types";
+import { getPosts, getPages, createPost, updatePost, deletePost, createPage, getIdeas } from "@/services/api";
+import type { Post, Page, Idea } from "@/types";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { Plus, Trash2, ExternalLink, Pencil, Check, X } from "lucide-react";
 import DateRangeFilter, { filterByDateRange } from "@/components/DateRangeFilter";
@@ -28,9 +41,7 @@ function formatDate(dateStr: string | null): string {
   if (!dateStr) return "-";
   try {
     const d = new Date(dateStr);
-    const exact = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-    const relative = formatDistanceToNow(d, { addSuffix: true });
-    return `${exact} (${relative})`;
+    return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
   } catch {
     return dateStr;
   }
@@ -39,23 +50,23 @@ function formatDate(dateStr: string | null): string {
 export default function PostsView() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-
-  const [pageId, setPageId] = useState("");
-  const [url, setUrl] = useState("");
-  const [postedAt, setPostedAt] = useState("");
-  const [expectedViews, setExpectedViews] = useState("");
-  const [actualViews, setActualViews] = useState("");
-  const [ideaId, setIdeaId] = useState("");
-  const [newIdeaHook, setNewIdeaHook] = useState("");
-  const [showNewIdea, setShowNewIdea] = useState(false);
-  const [newIdeaCsId, setNewIdeaCsId] = useState("");
-  const [newHandle, setNewHandle] = useState("");
-  const [showNewPage, setShowNewPage] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editExpected, setEditExpected] = useState("");
   const [editActual, setEditActual] = useState("");
   const [editPostedAt, setEditPostedAt] = useState("");
   const [editPageId, setEditPageId] = useState("");
+
+  // Form state
+  const [pageId, setPageId] = useState("");
+  const [url, setUrl] = useState("");
+  const [expectedViews, setExpectedViews] = useState("");
+  const [actualViews, setActualViews] = useState("");
+  const [postedAt, setPostedAt] = useState("");
+  const [ideaId, setIdeaId] = useState("");
+  const [newHandle, setNewHandle] = useState("");
+  const [showNewPage, setShowNewPage] = useState(false);
+
+  // Date range filter
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [filterPage, setFilterPage] = useState("all");
@@ -79,21 +90,6 @@ export default function PostsView() {
     queryFn: getIdeas,
   });
 
-  const { data: csList = [] } = useQuery<ContentStrategist[]>({
-    queryKey: ["cs"],
-    queryFn: getCSList,
-  });
-
-  const addMutation = useMutation({
-    mutationFn: createPost,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
-      toast.success("Post added to Post IPs");
-      resetForm();
-    },
-    onError: (err: any) => toast.error(`Failed to add post: ${err.message}`),
-  });
-
   const addPageMutation = useMutation({
     mutationFn: createPage,
     onSuccess: (newPage: any) => {
@@ -106,8 +102,18 @@ export default function PostsView() {
     onError: () => toast.error("Failed to add page"),
   });
 
+  const addMutation = useMutation({
+    mutationFn: createPost,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      toast.success("Post added");
+      resetForm();
+    },
+    onError: () => toast.error("Failed to add post"),
+  });
+
   const editMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: { page_id?: string; expected_views?: number; actual_views?: number; posted_at?: string } }) =>
+    mutationFn: ({ id, data }: { id: string; data: { expected_views?: number; actual_views?: number; posted_at?: string } }) =>
       updatePost(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["posts"] });
@@ -126,37 +132,14 @@ export default function PostsView() {
     onError: () => toast.error("Failed to delete post"),
   });
 
-  function startEdit(post: Post) {
-    setEditingId(post.id);
-    setEditExpected(String(post.expected_views ?? ""));
-    setEditActual(String(post.actual_views ?? ""));
-    setEditPostedAt(post.posted_at ? new Date(post.posted_at).toISOString().slice(0, 10) : "");
-    setEditPageId(post.page_id);
-  }
-
-  function saveEdit(id: string) {
-    editMutation.mutate({
-      id,
-      data: {
-        page_id: editPageId || undefined,
-        expected_views: editExpected ? Number(editExpected) : undefined,
-        actual_views: editActual ? Number(editActual) : undefined,
-        posted_at: editPostedAt || undefined,
-      },
-    });
-  }
-
   function resetForm() {
     setOpen(false);
     setPageId("");
     setUrl("");
-    setPostedAt("");
     setExpectedViews("");
     setActualViews("");
+    setPostedAt("");
     setIdeaId("");
-    setNewIdeaHook("");
-    setNewIdeaCsId("");
-    setShowNewIdea(false);
     setNewHandle("");
     setShowNewPage(false);
   }
@@ -183,44 +166,45 @@ export default function PostsView() {
       return;
     }
 
-    let finalIdeaId = ideaId;
-
-    if (showNewIdea && newIdeaHook.trim() && !ideaId) {
-      try {
-        const newIdea = await createIdea({
-          hook: newIdeaHook.trim(),
-          cs_owner_id: newIdeaCsId || undefined,
-          format: "carousel",
-        });
-        finalIdeaId = newIdea.id;
-        queryClient.invalidateQueries({ queryKey: ["ideas"] });
-      } catch {
-        toast.error("Failed to create idea");
-        return;
-      }
-    }
-
     addMutation.mutate({
       page_id: finalPageId,
       url: url.trim(),
-      posted_at: postedAt || undefined,
       expected_views: expectedViews ? Number(expectedViews) : undefined,
       actual_views: actualViews ? Number(actualViews) : undefined,
-      idea_id: finalIdeaId || undefined,
+      posted_at: postedAt || undefined,
+      idea_id: ideaId || undefined,
     });
   };
 
-  const filteredPosts = filterByDateRange(posts, dateFrom, dateTo, "posted_at").filter(
-    (p) => filterPage === "all" || p.pages?.handle?.toLowerCase() === filterPage
-  );
+  function startEdit(post: Post) {
+    setEditingId(post.id);
+    setEditExpected(String(post.expected_views ?? ""));
+    setEditActual(String(post.actual_views ?? ""));
+    setEditPostedAt(post.posted_at ? new Date(post.posted_at).toISOString().slice(0, 10) : "");
+    setEditPageId(post.page_id);
+  }
+
+  function saveEdit(id: string) {
+    editMutation.mutate({
+      id,
+      data: {
+        page_id: editPageId || undefined,
+        expected_views: editExpected ? Number(editExpected) : undefined,
+        actual_views: editActual ? Number(editActual) : undefined,
+        posted_at: editPostedAt || undefined,
+      },
+    });
+  }
+
+  const filteredPosts = filterByDateRange(posts, dateFrom, dateTo, "posted_at").filter((p) => filterPage === "all" || p.pages?.handle?.toLowerCase() === filterPage);
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-white">Post IPs</h2>
+          <h2 className="text-2xl font-semibold tracking-tight text-white">Posts</h2>
           <p className="text-sm text-zinc-500 mt-1">
-            Posts from your main IP accounts — track links, expected & actual views
+            Track expected vs actual views on Instagram posts
           </p>
         </div>
 
@@ -233,7 +217,7 @@ export default function PostsView() {
           </DialogTrigger>
           <DialogContent className="bg-zinc-900 border-zinc-800">
             <DialogHeader>
-              <DialogTitle>Add Post (Main IP)</DialogTitle>
+              <DialogTitle>Add Post</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4 mt-2">
               <div className="space-y-2">
@@ -255,7 +239,12 @@ export default function PostsView() {
                     >
                       {addPageMutation.isPending ? "..." : "Add"}
                     </Button>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => setShowNewPage(false)}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowNewPage(false)}
+                    >
                       Cancel
                     </Button>
                   </div>
@@ -288,68 +277,23 @@ export default function PostsView() {
               </div>
               <div className="space-y-2">
                 <Label>Idea</Label>
-                {showNewIdea ? (
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="Type idea name / hook"
-                        value={newIdeaHook}
-                        onChange={(e) => setNewIdeaHook(e.target.value)}
-                        className="flex-1"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => { setShowNewIdea(false); setNewIdeaHook(""); setNewIdeaCsId(""); }}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                    <Select value={newIdeaCsId} onValueChange={setNewIdeaCsId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select CS owner (optional)" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {csList.map((cs) => (
-                          <SelectItem key={cs.id} value={cs.id}>
-                            {cs.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <Select value={ideaId} onValueChange={setIdeaId}>
-                      <SelectTrigger className="flex-1">
-                        <SelectValue placeholder="Select an idea (optional)" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ideas.map((idea) => (
-                          <SelectItem key={idea.id} value={idea.id}>
-                            <span className="flex items-center gap-2">
-                              {idea.idea_code} — {idea.hook}
-                              <span className={`text-[9px] uppercase px-1.5 py-0.5 rounded font-medium ${idea.source === "original" ? "bg-violet-500/20 text-violet-400" : "bg-amber-500/20 text-amber-400"}`}>
-                                {idea.source === "original" ? "OG" : "COMP"}
-                              </span>
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="shrink-0 border-zinc-700 text-zinc-400 hover:text-white"
-                      onClick={() => { setShowNewIdea(true); setIdeaId(""); }}
-                    >
-                      <Plus className="w-3 h-3 mr-1" />
-                      New
-                    </Button>
-                  </div>
-                )}
+                <Select value={ideaId} onValueChange={setIdeaId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select an idea (required)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ideas.map((idea) => (
+                      <SelectItem key={idea.id} value={idea.id}>
+                        <span className="flex items-center gap-2">
+                          {idea.idea_code} — {idea.hook}
+                          <span className={`text-[9px] uppercase px-1.5 py-0.5 rounded font-medium ${idea.source === "original" ? "bg-violet-500/20 text-violet-400" : "bg-amber-500/20 text-amber-400"}`}>
+                            {idea.source === "original" ? "OG" : "COMP"}
+                          </span>
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="post-url">URL</Label>
@@ -402,61 +346,6 @@ export default function PostsView() {
         </Dialog>
       </div>
 
-      {/* Top 3 Podium */}
-      {(() => {
-        const sorted = [...filteredPosts].sort((a, b) => (b.actual_views ?? 0) - (a.actual_views ?? 0));
-        if (sorted.length < 3) return null;
-        const top3 = sorted.slice(0, 3);
-        const podiumOrder = [top3[1], top3[0], top3[2]];
-        const heights = [120, 160, 95];
-        const medals = ["\u{1F948}", "\u{1F947}", "\u{1F949}"];
-        const ranks = [2, 1, 3];
-        const borderColors = ["border-zinc-400/40", "border-yellow-500/50", "border-amber-700/40"];
-        const bgColors = ["bg-zinc-400/5", "bg-yellow-500/5", "bg-amber-700/5"];
-        const glowColors = ["", "shadow-[0_0_40px_-5px_rgba(234,179,8,0.2)]", ""];
-
-        return (
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-5">
-              <span className="text-xl">{"\u{1F3C6}"}</span>
-              <h3 className="text-lg font-black text-white uppercase tracking-wider">Top 3 Posts</h3>
-            </div>
-            <div className="flex items-end justify-center gap-3 sm:gap-4">
-              {podiumOrder.map((post, i) => (
-                <a
-                  key={post.id}
-                  href={post.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`transition-all duration-300 hover:scale-105 flex flex-col items-center ${ranks[i] === 1 ? "w-36 sm:w-44" : "w-28 sm:w-36"}`}
-                >
-                  <span className={`text-2xl sm:text-3xl mb-2 ${ranks[i] === 1 ? "animate-bounce" : ""}`} style={ranks[i] === 1 ? { animationDuration: "2s" } : {}}>
-                    {medals[i]}
-                  </span>
-                  <p className="text-[10px] text-zinc-500 mb-1 truncate max-w-full text-center">
-                    {post.pages?.handle ?? "\u2014"}
-                  </p>
-                  <p className="text-[9px] text-violet-400 mb-2 truncate max-w-full">
-                    {post.url.replace("https://www.instagram.com", "").replace(/\/$/, "")}
-                  </p>
-                  <div
-                    className={`w-full rounded-t-xl border ${borderColors[i]} ${bgColors[i]} ${glowColors[i]} flex flex-col items-center justify-center`}
-                    style={{ height: heights[i] }}
-                  >
-                    <span className={`font-black tabular-nums text-white ${ranks[i] === 1 ? "text-xl sm:text-2xl" : "text-base sm:text-lg"}`}>
-                      {(post.actual_views ?? 0).toLocaleString()}
-                    </span>
-                    <span className="text-[9px] uppercase tracking-wider text-zinc-500 mt-1">views</span>
-                    <p className="text-[10px] text-zinc-600 mt-1.5">{formatDate(post.posted_at).split("(")[1]?.replace(")", "") ?? ""}</p>
-                  </div>
-                </a>
-              ))}
-            </div>
-            <div className="max-w-sm mx-auto h-1 bg-gradient-to-r from-transparent via-violet-500/30 to-transparent rounded-full" />
-          </div>
-        );
-      })()}
-
       {/* Filters */}
       <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 space-y-3">
         <div className="flex items-end gap-4 flex-wrap">
@@ -496,20 +385,20 @@ export default function PostsView() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {(() => {
-              if (isLoading) return (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-zinc-500 py-8">Loading...</TableCell>
-                </TableRow>
-              );
-              if (filteredPosts.length === 0) return (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-zinc-500 py-8">
-                    {posts.length === 0 ? "No posts yet. Click \"Add Post\" to get started." : "No posts in this date range."}
-                  </TableCell>
-                </TableRow>
-              );
-              return filteredPosts.map((post) => (
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center text-zinc-500 py-8">
+                  Loading...
+                </TableCell>
+              </TableRow>
+            ) : filteredPosts.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center text-zinc-500 py-8">
+                  {posts.length === 0 ? "No posts tracked yet. Click \"Add Post\" to get started." : "No posts in this date range."}
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredPosts.map((post) => (
                 <TableRow key={post.id}>
                   <TableCell className="font-medium">
                     {editingId === post.id ? (
@@ -526,38 +415,61 @@ export default function PostsView() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <a href={post.url} target="_blank" rel="noopener noreferrer"
-                      className="text-violet-400 hover:underline inline-flex items-center gap-1 text-sm max-w-[280px] truncate">
+                    <a
+                      href={post.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-violet-400 hover:underline inline-flex items-center gap-1 text-sm max-w-[280px] truncate"
+                    >
                       {post.url}
                       <ExternalLink className="w-3 h-3 shrink-0" />
                     </a>
                   </TableCell>
+
                   {editingId === post.id ? (
                     <>
                       <TableCell>
-                        <Input type="date" value={editPostedAt}
+                        <Input
+                          type="date"
+                          value={editPostedAt}
                           onChange={(e) => setEditPostedAt(e.target.value)}
                           onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
-                          className="h-8 w-36 cursor-pointer" />
+                          className="h-8 w-36 cursor-pointer"
+                        />
                       </TableCell>
                       <TableCell className="text-right">
-                        <Input type="number" value={editExpected}
+                        <Input
+                          type="number"
+                          value={editExpected}
                           onChange={(e) => setEditExpected(e.target.value)}
-                          className="w-28 ml-auto text-right h-8" />
+                          className="w-28 ml-auto text-right h-8"
+                        />
                       </TableCell>
                       <TableCell className="text-right">
-                        <Input type="number" value={editActual}
+                        <Input
+                          type="number"
+                          value={editActual}
                           onChange={(e) => setEditActual(e.target.value)}
-                          className="w-28 ml-auto text-right h-8" />
+                          className="w-28 ml-auto text-right h-8"
+                        />
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-violet-400"
-                            onClick={() => saveEdit(post.id)} disabled={editMutation.isPending}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-violet-400"
+                            onClick={() => saveEdit(post.id)}
+                            disabled={editMutation.isPending}
+                          >
                             <Check className="w-4 h-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500"
-                            onClick={() => setEditingId(null)}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-zinc-500"
+                            onClick={() => setEditingId(null)}
+                          >
                             <X className="w-4 h-4" />
                           </Button>
                         </div>
@@ -565,17 +477,32 @@ export default function PostsView() {
                     </>
                   ) : (
                     <>
-                      <TableCell className="text-sm text-zinc-500">{formatDate(post.posted_at)}</TableCell>
-                      <TableCell className="text-right font-mono text-sm">{formatViews(post.expected_views)}</TableCell>
-                      <TableCell className="text-right font-mono text-sm">{formatViews(post.actual_views)}</TableCell>
+                      <TableCell className="text-sm text-zinc-500">
+                        {formatDate(post.posted_at)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">
+                        {formatViews(post.expected_views)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">
+                        {formatViews(post.actual_views)}
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-white"
-                            onClick={() => startEdit(post)}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-zinc-500 hover:text-white"
+                            onClick={() => startEdit(post)}
+                          >
                             <Pencil className="w-4 h-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-red-400"
-                            onClick={() => removeMutation.mutate(post.id)} disabled={removeMutation.isPending}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-zinc-500 hover:text-red-400"
+                            onClick={() => removeMutation.mutate(post.id)}
+                            disabled={removeMutation.isPending}
+                          >
                             <Trash2 className="w-4 h-4" />
                           </Button>
                         </div>
@@ -583,8 +510,8 @@ export default function PostsView() {
                     </>
                   )}
                 </TableRow>
-              ));
-            })()}
+              ))
+            )}
           </TableBody>
         </Table>
       </div>
