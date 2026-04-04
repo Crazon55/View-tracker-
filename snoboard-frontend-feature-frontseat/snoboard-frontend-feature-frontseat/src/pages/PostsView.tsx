@@ -54,6 +54,7 @@ export default function PostsView() {
   const [editExpected, setEditExpected] = useState("");
   const [editActual, setEditActual] = useState("");
   const [editPostedAt, setEditPostedAt] = useState("");
+  const [editPageId, setEditPageId] = useState("");
 
   // Form state
   const [pageId, setPageId] = useState("");
@@ -180,12 +181,14 @@ export default function PostsView() {
     setEditExpected(String(post.expected_views ?? ""));
     setEditActual(String(post.actual_views ?? ""));
     setEditPostedAt(post.posted_at ? new Date(post.posted_at).toISOString().slice(0, 10) : "");
+    setEditPageId(post.page_id);
   }
 
   function saveEdit(id: string) {
     editMutation.mutate({
       id,
       data: {
+        page_id: editPageId || undefined,
         expected_views: editExpected ? Number(editExpected) : undefined,
         actual_views: editActual ? Number(editActual) : undefined,
         posted_at: editPostedAt || undefined,
@@ -398,7 +401,18 @@ export default function PostsView() {
               filteredPosts.map((post) => (
                 <TableRow key={post.id}>
                   <TableCell className="font-medium">
-                    {post.pages?.handle ?? "-"}
+                    {editingId === post.id ? (
+                      <Select value={editPageId} onValueChange={setEditPageId}>
+                        <SelectTrigger className="h-8 w-40 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {allPages.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>@{p.handle}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      post.pages?.handle ?? "-"
+                    )}
                   </TableCell>
                   <TableCell>
                     <a
