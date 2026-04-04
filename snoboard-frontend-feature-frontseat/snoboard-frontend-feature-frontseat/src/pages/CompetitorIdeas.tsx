@@ -301,7 +301,14 @@ export default function CompetitorIdeas() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label>Executor *</Label>
-                    <Input placeholder="Who executes this?" value={executorName} onChange={(e) => setExecutorName(e.target.value)} required />
+                    <Select value={executorName} onValueChange={setExecutorName}>
+                      <SelectTrigger><SelectValue placeholder="Select executor" /></SelectTrigger>
+                      <SelectContent>
+                        {csList.map((cs) => (
+                          <SelectItem key={cs.id} value={cs.name}>{cs.name} {cs.role ? `(${cs.role})` : ""}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-1.5">
                     <Label>Format</Label>
