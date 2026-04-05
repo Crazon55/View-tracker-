@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getPageDetail, getContentEntries, createContentEntry, updateContentEntry, deleteContentEntry, getPages } from "@/services/api";
+import { getPageDetail, getContentEntries, createContentEntry, updateContentEntry, deleteContentEntry, getPages, getIdeas } from "@/services/api";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import type { Page } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
@@ -83,6 +83,7 @@ export default function PageDetail() {
     views: "", url: "", notes: "", ips: "",
     deadline: "", assigned_role: "",
   });
+  const [showNewIdea, setShowNewIdea] = useState(false);
 
   const { data: pageData, isLoading: pageLoading } = useQuery({
     queryKey: ["page-detail", pageId],
@@ -102,6 +103,7 @@ export default function PageDetail() {
     : allEntries.filter((e: any) => e.content_type !== "carousel" && e.content_type !== "static");
 
   const { data: allPages = [] } = useQuery<Page[]>({ queryKey: ["pages"], queryFn: getPages });
+  const { data: allIdeas = [] } = useQuery<any[]>({ queryKey: ["ideas"], queryFn: getIdeas });
 
   const createMut = useMutation({
     mutationFn: createContentEntry,
@@ -239,7 +241,32 @@ export default function PageDetail() {
                 <form onSubmit={handleCreate} className="space-y-3 mt-2">
                   <div className="space-y-1.5">
                     <Label>Idea Name</Label>
-                    <Input value={form.idea_name} onChange={(e) => setForm({ ...form, idea_name: e.target.value })} required />
+                    {showNewIdea ? (
+                      <div className="flex gap-2">
+                        <Input placeholder="New idea name (moment marketing)" value={form.idea_name} onChange={(e) => setForm({ ...form, idea_name: e.target.value })} className="flex-1" required />
+                        <Button type="button" variant="ghost" size="sm" onClick={() => { setShowNewIdea(false); setForm({ ...form, idea_name: "" }); }}>Cancel</Button>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <Select value={form.idea_name} onValueChange={(v) => setForm({ ...form, idea_name: v })}>
+                          <SelectTrigger className="flex-1"><SelectValue placeholder="Select an idea" /></SelectTrigger>
+                          <SelectContent>
+                            {allIdeas.map((idea: any) => (
+                              <SelectItem key={idea.id} value={idea.idea_code ? `${idea.idea_code} — ${idea.hook}` : idea.hook}>
+                                <span className="flex items-center gap-2">
+                                  {idea.idea_code && <span className="text-violet-400">{idea.idea_code}</span>}
+                                  {idea.hook}
+                                  <span className={`text-[9px] uppercase px-1 rounded ${idea.source === "original" ? "bg-violet-500/20 text-violet-400" : "bg-amber-500/20 text-amber-400"}`}>
+                                    {idea.source === "original" ? "OG" : "CI"}
+                                  </span>
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button type="button" variant="outline" size="sm" className="shrink-0 border-zinc-700 text-zinc-400" onClick={() => setShowNewIdea(true)}>+ New</Button>
+                      </div>
+                    )}
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">

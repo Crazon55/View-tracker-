@@ -10,7 +10,9 @@ interface PageDistributionSelectProps {
 
 function classifyNiche(handle: string): "tech" | "fbs" {
   const lower = handle.toLowerCase();
-  if (lower.includes("tech") || lower.includes("ai") || lower.includes("coded") || lower.includes("code")) return "tech";
+  // tech/ai pages have "tech" in name, or are specifically AI-focused
+  if (lower.includes("tech")) return "tech";
+  if (lower === "ai.cracked" || lower.includes("goodai") || lower === "indianaipage" || lower === "neworderai") return "tech";
   return "fbs";
 }
 
