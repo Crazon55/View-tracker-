@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageDistributionSelect from "@/components/PageDistributionSelect";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  getIdeaEngine, getCSList, getPages, createIdea, updateIdea, deleteIdea, createCS,
+  getIdeaEngine, getCSList, getPages, createIdea, updateIdea, deleteIdea, createCS, scheduleIdea,
 } from "@/services/api";
 import type { IdeaEngineData, IdeaStat, ContentStrategist, Page } from "@/types";
 import { toast } from "sonner";
@@ -20,7 +20,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, Trophy, Search, Check, X, Swords, UserPlus } from "lucide-react";
+import { Plus, Trash2, Trophy, Search, Check, X, Swords, UserPlus, CalendarClock } from "lucide-react";
 
 function formatCompact(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
@@ -110,6 +110,16 @@ export default function CompetitorIdeas() {
       toast.success("Idea deleted");
     },
     onError: () => toast.error("Failed to delete idea"),
+  });
+
+  const scheduleMutation = useMutation({
+    mutationFn: scheduleIdea,
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["idea-engine"] });
+      queryClient.invalidateQueries({ queryKey: ["content-entries"] });
+      toast.success(`Scheduled ${data.scheduled} pages, ${data.skipped} skipped`);
+    },
+    onError: (err: any) => toast.error(`Scheduling failed: ${err.message}`),
   });
 
   const createCDIMutation = useMutation({
@@ -498,6 +508,9 @@ export default function CompetitorIdeas() {
                           </Button>
                         </div>
                       ) : (
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-600 hover:text-green-400" title="Schedule" onClick={() => scheduleMutation.mutate(idea.id)} disabled={scheduleMutation.isPending}>
+                          <CalendarClock className="w-3.5 h-3.5" />
+                        </Button>
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-600 hover:text-red-400" onClick={() => deleteIdeaMutation.mutate(idea.id)}>
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>

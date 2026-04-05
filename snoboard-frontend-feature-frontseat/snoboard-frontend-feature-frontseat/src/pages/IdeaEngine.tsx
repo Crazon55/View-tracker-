@@ -12,6 +12,7 @@ import {
   createIdea,
   updateIdea,
   deleteIdea,
+  scheduleIdea,
 } from "@/services/api";
 import type { IdeaEngineData, CSStat, IdeaStat, ContentStrategist, Idea, Page } from "@/types";
 import { toast } from "sonner";
@@ -55,6 +56,7 @@ import {
   Pencil,
   Check,
   X,
+  CalendarClock,
 } from "lucide-react";
 
 function formatCompact(n: number): string {
@@ -148,6 +150,16 @@ export default function IdeaEngine() {
       toast.success("Idea deleted");
     },
     onError: () => toast.error("Failed to delete idea"),
+  });
+
+  const scheduleMutation = useMutation({
+    mutationFn: scheduleIdea,
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["idea-engine"] });
+      queryClient.invalidateQueries({ queryKey: ["content-entries"] });
+      toast.success(`Scheduled ${data.scheduled} pages, ${data.skipped} skipped`);
+    },
+    onError: (err: any) => toast.error(`Scheduling failed: ${err.message}`),
   });
 
   const createCSMutation = useMutation({
@@ -747,6 +759,15 @@ export default function IdeaEngine() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost" size="icon"
+                          className="h-7 w-7 text-zinc-600 hover:text-green-400"
+                          title="Schedule to distributed pages"
+                          onClick={() => scheduleMutation.mutate(idea.id)}
+                          disabled={scheduleMutation.isPending}
+                        >
+                          <CalendarClock className="w-3.5 h-3.5" />
+                        </Button>
                         {idea.best_post && (
                           <a
                             href={idea.best_post.url}
