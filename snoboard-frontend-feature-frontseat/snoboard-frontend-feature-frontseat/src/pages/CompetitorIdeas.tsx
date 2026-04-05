@@ -38,6 +38,8 @@ export default function CompetitorIdeas() {
   const [editStatus, setEditStatus] = useState("");
   const [editingDistId, setEditingDistId] = useState<string | null>(null);
   const [editDistPages, setEditDistPages] = useState<string[]>([]);
+  const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
+  const [editFieldData, setEditFieldData] = useState<any>({});
 
   // CDI form
   const [cdiOpen, setCdiOpen] = useState(false);
@@ -398,10 +400,18 @@ export default function CompetitorIdeas() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredIdeas.map((idea) => (
+                filteredIdeas.map((idea) => {
+                  const isFieldEdit = editingFieldId === idea.id;
+                  return (
                   <TableRow key={idea.id}>
                     <TableCell><span className="font-mono text-sm font-bold text-amber-400">{idea.idea_code}</span></TableCell>
-                    <TableCell><span className="text-sm text-white font-medium">{idea.hook}</span></TableCell>
+                    <TableCell>
+                      {isFieldEdit ? (
+                        <Input className="h-7 text-xs w-44" value={editFieldData.hook ?? idea.hook} onChange={(e) => setEditFieldData({ ...editFieldData, hook: e.target.value })} />
+                      ) : (
+                        <span className="text-sm text-white font-medium cursor-pointer hover:text-violet-400" onClick={() => { setEditingFieldId(idea.id); setEditFieldData({ hook: idea.hook, format: idea.format }); }}>{idea.hook}</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-sm text-zinc-400">
                       {idea.cs_owner_name || idea.cdi_owner_name || "—"}
                       {(idea.cs_owner_name || idea.cdi_owner_name) && (
@@ -410,7 +420,21 @@ export default function CompetitorIdeas() {
                         </span>
                       )}
                     </TableCell>
-                    <TableCell><span className="text-xs uppercase tracking-wider text-zinc-500">{idea.format}</span></TableCell>
+                    <TableCell>
+                      {isFieldEdit ? (
+                        <Select value={editFieldData.format ?? idea.format} onValueChange={(v) => setEditFieldData({ ...editFieldData, format: v })}>
+                          <SelectTrigger className="h-7 text-xs w-24"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="reel">Reel</SelectItem>
+                            <SelectItem value="carousel">Carousel</SelectItem>
+                            <SelectItem value="static">Static</SelectItem>
+                            <SelectItem value="story">Story</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <span className="text-xs uppercase tracking-wider text-zinc-500 cursor-pointer hover:text-white" onClick={() => { setEditingFieldId(idea.id); setEditFieldData({ hook: idea.hook, format: idea.format }); }}>{idea.format}</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-center font-mono text-sm">{idea.total_posts}</TableCell>
                     <TableCell className="text-right font-mono text-sm font-bold">{formatCompact(idea.total_views)}</TableCell>
                     <TableCell className="text-center">
@@ -464,12 +488,24 @@ export default function CompetitorIdeas() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-600 hover:text-red-400" onClick={() => deleteIdeaMutation.mutate(idea.id)}>
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
+                      {isFieldEdit ? (
+                        <div className="flex items-center gap-1">
+                          <Button size="sm" className="h-7 px-2 bg-violet-600 hover:bg-violet-700 text-white text-xs" onClick={() => { updateIdeaMutation.mutate({ id: idea.id, data: editFieldData }); setEditingFieldId(null); }}>
+                            <Check className="w-3 h-3" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-500" onClick={() => setEditingFieldId(null)}>
+                            <X className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-600 hover:text-red-400" onClick={() => deleteIdeaMutation.mutate(idea.id)}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
-                ))
+                  );
+                })
               )}
             </TableBody>
           </Table>

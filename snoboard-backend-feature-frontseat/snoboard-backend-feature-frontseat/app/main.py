@@ -332,9 +332,39 @@ async def list_ideas():
 
 @app.post("/api/v1/ideas")
 async def create_idea(req: IdeaCreate):
+    from app.database.client import get_supabase_client
     data = req.model_dump(exclude_none=True)
     try:
         idea = get_idea_repository().create(data)
+
+        # Auto-create content entries for each distributed page
+        distributed_to = data.get("distributed_to") or []
+        if distributed_to:
+            client = get_supabase_client()
+            pages = client.table("pages").select("id,handle").execute().data or []
+            page_map = {p["id"]: p["handle"] for p in pages}
+            idea_name = f"{idea.get('idea_code', '')} — {idea.get('hook', '')}".strip(" —")
+            content_type = data.get("format", "reel")
+            deadline = data.get("deadline")
+            created_by = data.get("created_by", "")
+            executor = data.get("executor_name", "")
+
+            for page_id in distributed_to:
+                handle = page_map.get(page_id, "")
+                try:
+                    client.table("content_entries").insert({
+                        "page_id": page_id,
+                        "idea_name": idea_name,
+                        "content_type": content_type,
+                        "idea_status": "idea",
+                        "ips": handle,
+                        "created_by": created_by,
+                        "deadline": deadline,
+                        "assigned_role": executor,
+                    }).execute()
+                except Exception:
+                    pass  # Skip duplicates silently
+
         return {"success": True, "data": idea}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
