@@ -380,8 +380,7 @@ export default function CompetitorIdeas() {
               <TableRow>
                 <TableHead className="w-24">ID</TableHead>
                 <TableHead>Hook</TableHead>
-                <TableHead>CS</TableHead>
-                <TableHead>CDI</TableHead>
+                <TableHead>Created by</TableHead>
                 <TableHead>Format</TableHead>
                 <TableHead className="text-center">Posts</TableHead>
                 <TableHead className="text-right">Views</TableHead>
@@ -394,7 +393,7 @@ export default function CompetitorIdeas() {
             <TableBody>
               {filteredIdeas.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={11} className="text-center text-zinc-500 py-8">
+                  <TableCell colSpan={10} className="text-center text-zinc-500 py-8">
                     {ideas.length === 0 ? 'No competitor ideas yet. Click "New Competitor Idea" to create one.' : "No ideas matching your search."}
                   </TableCell>
                 </TableRow>
@@ -403,8 +402,14 @@ export default function CompetitorIdeas() {
                   <TableRow key={idea.id}>
                     <TableCell><span className="font-mono text-sm font-bold text-amber-400">{idea.idea_code}</span></TableCell>
                     <TableCell><span className="text-sm text-white font-medium">{idea.hook}</span></TableCell>
-                    <TableCell className="text-sm text-zinc-400">{idea.cs_owner_name || "—"}</TableCell>
-                    <TableCell className="text-sm text-zinc-400">{idea.cdi_owner_name || "—"}</TableCell>
+                    <TableCell className="text-sm text-zinc-400">
+                      {idea.cs_owner_name || idea.cdi_owner_name || "—"}
+                      {(idea.cs_owner_name || idea.cdi_owner_name) && (
+                        <span className={`ml-1 text-[9px] px-1 rounded ${idea.cdi_owner_name ? "bg-amber-500/20 text-amber-400" : "bg-violet-500/20 text-violet-400"}`}>
+                          {idea.cdi_owner_name ? "CDI" : "CS"}
+                        </span>
+                      )}
+                    </TableCell>
                     <TableCell><span className="text-xs uppercase tracking-wider text-zinc-500">{idea.format}</span></TableCell>
                     <TableCell className="text-center font-mono text-sm">{idea.total_posts}</TableCell>
                     <TableCell className="text-right font-mono text-sm font-bold">{formatCompact(idea.total_views)}</TableCell>

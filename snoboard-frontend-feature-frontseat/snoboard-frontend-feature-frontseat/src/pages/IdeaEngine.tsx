@@ -625,7 +625,7 @@ export default function IdeaEngine() {
               <TableRow>
                 <TableHead className="w-24">ID</TableHead>
                 <TableHead>Hook</TableHead>
-                <TableHead>CS Owner</TableHead>
+                <TableHead>Created by</TableHead>
                 <TableHead>Format</TableHead>
                 <TableHead className="text-center">Posts</TableHead>
                 <TableHead className="text-right">Views</TableHead>
