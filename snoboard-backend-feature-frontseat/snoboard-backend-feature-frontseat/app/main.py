@@ -381,6 +381,179 @@ async def delete_idea(idea_id: str):
     return {"success": True, "message": "Idea deleted"}
 
 
+@app.post("/api/v1/schedule-idea/{idea_id}")
+async def schedule_idea(idea_id: str):
+    """Run scheduling logic for an idea — assigns dates to all distributed pages."""
+    import random
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+
+    # Fetch idea
+    idea = get_idea_repository().get_by_id(idea_id)
+    if not idea:
+        raise HTTPException(status_code=404, detail="Idea not found")
+
+    distributed_to = idea.get("distributed_to") or []
+    if not distributed_to:
+        raise HTTPException(status_code=400, detail="No pages to distribute to")
+
+    idea_name = f"{idea.get('idea_code', '')} — {idea.get('hook', '')}".strip(" —")
+    content_type = idea.get("format", "reel")
+    source = idea.get("source", "original")
+    created_by = idea.get("created_by", "")
+
+    # Fetch pages with device info
+    pages = client.table("pages").select("id,handle,stage,device").execute().data or []
+    page_map = {p["id"]: p for p in pages}
+
+    # Fetch existing scheduled content entries (past 7 days to next 30 days)
+    now = datetime.utcnow()
+    week_ago = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+    month_ahead = (now + timedelta(days=30)).strftime("%Y-%m-%d")
+    existing = client.table("content_entries").select("*").gte("upload_date", week_ago).lte("upload_date", month_ahead).execute().data or []
+
+    all_scheduled = []
+    for e in existing:
+        ud = e.get("upload_date") or e.get("scheduled_at") or ""
+        if not ud:
+            continue
+        try:
+            date_obj = datetime.fromisoformat(ud.replace("Z", "+00:00")) if "T" in ud else datetime.strptime(ud[:10], "%Y-%m-%d")
+        except Exception:
+            continue
+        all_scheduled.append({
+            "idea": (e.get("idea_name") or "").lower().strip(),
+            "page": (e.get("ips") or "").lower().strip(),
+            "device": (e.get("device") or "").lower().strip(),
+            "date": date_obj,
+            "day_key": date_obj.strftime("%Y-%m-%d"),
+        })
+
+    results = []
+    targets = list(distributed_to)
+    random.shuffle(targets)
+
+    for page_id in targets:
+        page_info = page_map.get(page_id)
+        if not page_info:
+            continue
+
+        handle = page_info.get("handle", "")
+        stage = page_info.get("stage", 1)
+        device = (page_info.get("device") or "unknown").lower().strip()
+        page_clean = handle.lower().strip()
+
+        # Stage-specific params
+        if stage == 3:
+            device_breather_min = 151
+            time_start = 540   # 9 AM
+            time_end = 1380    # 11 PM
+            chaos_skip_chance = 0.3
+        else:
+            device_breather_min = 90
+            time_start = 630   # 10:30 AM
+            time_end = 1170    # 7:30 PM
+            chaos_skip_chance = 0.0
+
+        # Chaos skip for stage 3
+        if random.random() < chaos_skip_chance:
+            results.append({"page": handle, "status": "skipped", "reason": "chaos_skip"})
+            continue
+
+        device_breather_ms = device_breather_min * 60
+        schedule_date = now
+        is_safe = False
+        time_window = ""
+
+        for attempt in range(200):
+            total_min = time_start + random.randint(0, time_end - time_start)
+            hour = total_min // 60
+            minute = total_min % 60
+            candidate = schedule_date.replace(hour=min(hour, 23), minute=minute, second=random.randint(0, 59))
+            if candidate <= now + timedelta(minutes=30):
+                candidate += timedelta(days=1)
+                continue
+
+            day_key = candidate.strftime("%Y-%m-%d")
+
+            # Safety wall 1: Device breather
+            device_busy = any(
+                abs((s["date"] - candidate).total_seconds()) < device_breather_ms
+                for s in all_scheduled if s["device"] == device
+            )
+
+            # Safety wall 2: 48h device-idea cooldown
+            idea_clean = idea_name.lower().strip()
+            device_idea_blocked = any(
+                s["device"] == device and s["idea"] == idea_clean
+                and abs((s["date"] - candidate).total_seconds()) < 48 * 3600
+                for s in all_scheduled
+            )
+
+            # Safety wall 3: Account daily limit (1 per day)
+            account_daily = sum(1 for s in all_scheduled if s["page"] == page_clean and s["day_key"] == day_key)
+
+            if device_busy or device_idea_blocked or account_daily >= 1:
+                schedule_date += timedelta(days=1)
+                continue
+
+            # Found safe slot
+            ampm = "PM" if hour >= 12 else "AM"
+            display_hour = hour % 12 or 12
+            duration = random.choice([2, 5, 7, 10])
+            time_window = f"{display_hour}:{minute:02d} - {display_hour}:{(minute + duration):02d} {ampm}"
+            schedule_date = candidate
+            is_safe = True
+            break
+
+        if not is_safe:
+            # Fallback: 14+ days out
+            schedule_date = now + timedelta(days=14 + random.randint(0, 30))
+            schedule_date = schedule_date.replace(hour=10, minute=30, second=0)
+            time_window = "10:30 - 10:37 AM"
+
+        scheduled_str = schedule_date.strftime("%Y-%m-%dT%H:%M:%S")
+
+        # Create or update content entry
+        try:
+            client.table("content_entries").insert({
+                "page_id": page_id,
+                "idea_name": idea_name,
+                "content_type": content_type,
+                "idea_status": "scheduled",
+                "ips": handle,
+                "created_by": created_by,
+                "upload_date": schedule_date.strftime("%Y-%m-%d"),
+                "scheduled_at": scheduled_str,
+                "upload_time_window": time_window,
+                "device": device,
+            }).execute()
+        except Exception:
+            pass
+
+        # Track for conflict checking
+        all_scheduled.append({
+            "idea": idea_name.lower().strip(),
+            "page": page_clean,
+            "device": device,
+            "date": schedule_date,
+            "day_key": schedule_date.strftime("%Y-%m-%d"),
+        })
+
+        results.append({
+            "page": handle,
+            "device": device,
+            "scheduled_at": scheduled_str,
+            "time_window": time_window,
+            "status": "scheduled",
+        })
+
+    # Update idea status to scheduled
+    get_idea_repository().update(idea_id, {"status": "active"})
+
+    return {"success": True, "scheduled": len([r for r in results if r["status"] == "scheduled"]), "skipped": len([r for r in results if r["status"] == "skipped"]), "results": results}
+
+
 # --- Idea Engine Dashboard ---
 @app.get("/api/v1/idea-engine")
 async def idea_engine_dashboard():
