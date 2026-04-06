@@ -51,6 +51,8 @@ export default function PageDetail() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState<any>({});
   const [calSelectedEntry, setCalSelectedEntry] = useState<any>(null);
+  const [calEditData, setCalEditData] = useState<any>({});
+  const [calEditing, setCalEditing] = useState(false);
 
   // Escape key to cancel editing
   useEffect(() => {
@@ -753,10 +755,10 @@ export default function PageDetail() {
               })}
             </div>
 
-            {/* Selected entry detail card */}
+            {/* Selected entry detail card — editable inline */}
             {calSelectedEntry && (
               <div className="mt-4 bg-zinc-800 border border-zinc-700 rounded-xl p-5 relative">
-                <button onClick={() => setCalSelectedEntry(null)} className="absolute top-3 right-3 text-zinc-500 hover:text-white">
+                <button onClick={() => { setCalSelectedEntry(null); setCalEditing(false); }} className="absolute top-3 right-3 text-zinc-500 hover:text-white">
                   <X className="w-4 h-4" />
                 </button>
                 <div className="flex items-center gap-3 mb-4">
@@ -764,56 +766,94 @@ export default function PageDetail() {
                   <Badge variant="outline" className={`text-[10px] ${STATUS_COLORS[calSelectedEntry.idea_status] ?? ""}`}>
                     {IDEA_STATUSES.find((s) => s.value === calSelectedEntry.idea_status)?.label || calSelectedEntry.idea_status}
                   </Badge>
+                  {!calEditing && (
+                    <button onClick={() => { setCalEditing(true); setCalEditData({ ...calSelectedEntry }); }} className="text-zinc-500 hover:text-violet-400 ml-auto">
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-                  <div>
-                    <span className="text-zinc-500 block">Type</span>
-                    <span className="text-white uppercase">{calSelectedEntry.content_type}</span>
+
+                {calEditing ? (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <span className="text-zinc-500 text-xs">Views</span>
+                        <Input type="number" className="h-8 text-xs" value={calEditData.views ?? 0} onChange={(e) => setCalEditData({ ...calEditData, views: Number(e.target.value) })} />
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-zinc-500 text-xs">Status</span>
+                        <Select value={calEditData.idea_status ?? calSelectedEntry.idea_status} onValueChange={(v) => setCalEditData({ ...calEditData, idea_status: v })}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>{IDEA_STATUSES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-zinc-500 text-xs">Upload Date</span>
+                        <Input type="date" className="h-8 text-xs cursor-pointer" value={(calEditData.upload_date ?? calSelectedEntry.upload_date ?? "").slice(0, 10)} onChange={(e) => setCalEditData({ ...calEditData, upload_date: e.target.value })} onClick={(e) => (e.target as HTMLInputElement).showPicker?.()} />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-zinc-500 text-xs">Captions</span>
+                      <textarea className="w-full h-20 bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 resize-none focus:border-violet-500/50 focus:outline-none" placeholder="Write captions here..." value={calEditData.notes ?? calSelectedEntry.notes ?? ""} onChange={(e) => setCalEditData({ ...calEditData, notes: e.target.value })} />
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <span className="text-zinc-500 text-xs">Instagram URL</span>
+                        <Input className="h-8 text-xs" placeholder="https://instagram.com/..." value={calEditData.url ?? calSelectedEntry.url ?? ""} onChange={(e) => setCalEditData({ ...calEditData, url: e.target.value })} />
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-zinc-500 text-xs">Frame Link</span>
+                        <Input className="h-8 text-xs" placeholder="frame.io or drive link" value={calEditData.frame_link ?? calSelectedEntry.frame_link ?? ""} onChange={(e) => setCalEditData({ ...calEditData, frame_link: e.target.value })} />
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-zinc-500 text-xs">Comp / Drive Link</span>
+                        <Input className="h-8 text-xs" placeholder="Drive link" value={calEditData.comp_link ?? calSelectedEntry.comp_link ?? ""} onChange={(e) => setCalEditData({ ...calEditData, comp_link: e.target.value })} />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 pt-2">
+                      <Button size="sm" className="bg-violet-600 hover:bg-violet-700 text-white text-xs" onClick={() => {
+                        updateMut.mutate({ id: calSelectedEntry.id, data: calEditData });
+                        setCalSelectedEntry({ ...calSelectedEntry, ...calEditData });
+                        setCalEditing(false);
+                      }}>
+                        <Check className="w-3 h-3 mr-1" /> Save
+                      </Button>
+                      <Button size="sm" variant="ghost" className="text-xs text-zinc-400" onClick={() => setCalEditing(false)}>Cancel</Button>
+                      <div className="flex-1" />
+                      <Button size="sm" variant="outline" className="text-xs border-zinc-700 text-red-400 hover:text-red-300" onClick={() => { deleteMut.mutate(calSelectedEntry.id); setCalSelectedEntry(null); setCalEditing(false); }}>
+                        <Trash2 className="w-3 h-3 mr-1" /> Delete
+                      </Button>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-zinc-500 block">Upload Date</span>
-                    <span className="text-white">{(calSelectedEntry.idea_status === "scheduled" || calSelectedEntry.idea_status === "posted") ? (calSelectedEntry.upload_date?.slice(0, 10) || "\u2014") : "\u2014"}</span>
-                  </div>
-                  <div>
-                    <span className="text-zinc-500 block">Created By</span>
-                    <span className="text-white">{calSelectedEntry.created_by || "\u2014"}</span>
-                  </div>
-                  <div>
-                    <span className="text-zinc-500 block">IPs</span>
-                    <span className="text-white">{calSelectedEntry.ips || "\u2014"}</span>
-                  </div>
-                  <div>
-                    <span className="text-zinc-500 block">Views</span>
-                    <span className="text-white font-bold">{(calSelectedEntry.views ?? 0).toLocaleString()}</span>
-                  </div>
-                  <div>
-                    <span className="text-zinc-500 block">Deadline</span>
-                    <span className="text-white">{calSelectedEntry.deadline?.slice(0, 10) || "\u2014"}</span>
-                  </div>
-                </div>
-                {/* Captions */}
-                {calSelectedEntry.notes && (
-                  <div className="mt-4 pt-3 border-t border-zinc-700">
-                    <span className="text-zinc-500 text-xs block mb-1">Captions</span>
-                    <p className="text-sm text-white whitespace-pre-wrap">{calSelectedEntry.notes}</p>
-                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                      <div><span className="text-zinc-500 block">Type</span><span className="text-white uppercase">{calSelectedEntry.content_type}</span></div>
+                      <div><span className="text-zinc-500 block">Upload Date</span><span className="text-white">{(calSelectedEntry.idea_status === "scheduled" || calSelectedEntry.idea_status === "posted") ? (calSelectedEntry.upload_date?.slice(0, 10) || calSelectedEntry.created_at?.slice(0, 10) || "\u2014") : "\u2014"}</span></div>
+                      <div><span className="text-zinc-500 block">Created By</span><span className="text-white">{calSelectedEntry.created_by || "\u2014"}</span></div>
+                      <div><span className="text-zinc-500 block">IPs</span><span className="text-white">{calSelectedEntry.ips || "\u2014"}</span></div>
+                      <div><span className="text-zinc-500 block">Views</span><span className="text-white font-bold">{(calSelectedEntry.views ?? 0).toLocaleString()}</span></div>
+                      <div><span className="text-zinc-500 block">Deadline</span><span className="text-white">{calSelectedEntry.deadline?.slice(0, 10) || "\u2014"}</span></div>
+                    </div>
+                    {calSelectedEntry.notes && (
+                      <div className="mt-4 pt-3 border-t border-zinc-700">
+                        <span className="text-zinc-500 text-xs block mb-1">Captions</span>
+                        <p className="text-sm text-white whitespace-pre-wrap">{calSelectedEntry.notes}</p>
+                      </div>
+                    )}
+                    <div className="mt-4 pt-3 border-t border-zinc-700 flex flex-wrap items-center gap-3">
+                      {calSelectedEntry.url && <a href={calSelectedEntry.url} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:underline text-xs flex items-center gap-1"><ExternalLink className="w-3 h-3" /> Instagram</a>}
+                      {calSelectedEntry.frame_link && <a href={calSelectedEntry.frame_link} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline text-xs flex items-center gap-1"><ExternalLink className="w-3 h-3" /> Frame Link</a>}
+                      {calSelectedEntry.comp_link && <a href={calSelectedEntry.comp_link} target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:underline text-xs flex items-center gap-1"><ExternalLink className="w-3 h-3" /> Comp Link</a>}
+                      {!calSelectedEntry.url && !calSelectedEntry.frame_link && !calSelectedEntry.comp_link && <span className="text-zinc-600 text-xs">No links added</span>}
+                    </div>
+                    <div className="flex items-center gap-2 mt-4 pt-3 border-t border-zinc-700">
+                      <Button size="sm" variant="outline" className="text-xs border-zinc-700 text-red-400 hover:text-red-300" onClick={() => { deleteMut.mutate(calSelectedEntry.id); setCalSelectedEntry(null); }}>
+                        <Trash2 className="w-3 h-3 mr-1" /> Delete
+                      </Button>
+                    </div>
+                  </>
                 )}
-                {/* Links */}
-                <div className="mt-4 pt-3 border-t border-zinc-700 flex flex-wrap items-center gap-3">
-                  {calSelectedEntry.url && <a href={calSelectedEntry.url} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:underline text-xs flex items-center gap-1"><ExternalLink className="w-3 h-3" /> Instagram</a>}
-                  {calSelectedEntry.frame_link && <a href={calSelectedEntry.frame_link} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline text-xs flex items-center gap-1"><ExternalLink className="w-3 h-3" /> Frame Link</a>}
-                  {calSelectedEntry.comp_link && <a href={calSelectedEntry.comp_link} target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:underline text-xs flex items-center gap-1"><ExternalLink className="w-3 h-3" /> Comp Link</a>}
-                  {!calSelectedEntry.url && !calSelectedEntry.frame_link && !calSelectedEntry.comp_link && <span className="text-zinc-600 text-xs">No links added</span>}
-                </div>
-                {/* Actions */}
-                <div className="flex items-center gap-2 mt-4 pt-3 border-t border-zinc-700">
-                  <Button size="sm" variant="outline" className="text-xs border-zinc-700" onClick={() => { setEditingId(calSelectedEntry.id); setEditData({ ...calSelectedEntry }); setViewMode("table"); setCalSelectedEntry(null); }}>
-                    <Pencil className="w-3 h-3 mr-1" /> Edit in Table
-                  </Button>
-                  <Button size="sm" variant="outline" className="text-xs border-zinc-700 text-red-400 hover:text-red-300" onClick={() => { deleteMut.mutate(calSelectedEntry.id); setCalSelectedEntry(null); }}>
-                    <Trash2 className="w-3 h-3 mr-1" /> Delete
-                  </Button>
-                </div>
               </div>
             )}
           </div>
