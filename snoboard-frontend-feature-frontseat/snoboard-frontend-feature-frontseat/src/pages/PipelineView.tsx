@@ -24,6 +24,7 @@ export default function PipelineView() {
   const [filterPage, setFilterPage] = useState("all");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [contentType, setContentType] = useState<"all" | "reels" | "posts">("all");
 
   // Month filter
   const [monthDate, setMonthDate] = useState(() => {
@@ -66,8 +67,15 @@ export default function PipelineView() {
     ? allEntries
     : allEntries.filter((e: any) => e.page_id === filterPage || e.ips === allPages.find((p) => p.id === filterPage)?.handle);
 
+  // Filter by content type
+  const typeFiltered = contentType === "all"
+    ? pageFiltered
+    : contentType === "reels"
+      ? pageFiltered.filter((e: any) => e.content_type === "reel" || e.content_type === "story")
+      : pageFiltered.filter((e: any) => e.content_type === "carousel" || e.content_type === "static");
+
   // Filter by month
-  const entries = pageFiltered.filter((e: any) => {
+  const entries = typeFiltered.filter((e: any) => {
     const d = (e.upload_date || e.created_at || "")?.slice(0, 7);
     if (!d) return true;
     return d === monthPrefix;
@@ -139,6 +147,12 @@ export default function PipelineView() {
               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={prevMonth}><ChevronLeft className="w-4 h-4" /></Button>
               <span className="text-sm font-bold text-white min-w-[130px] text-center">{monthLabel}</span>
               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={nextMonth}><ChevronRight className="w-4 h-4" /></Button>
+            </div>
+            {/* Content type filter */}
+            <div className="inline-flex items-center bg-zinc-800/80 rounded-full p-0.5 gap-0.5">
+              <button onClick={() => setContentType("all")} className={`text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-full font-medium transition-all ${contentType === "all" ? "bg-violet-600 text-white" : "text-zinc-500 hover:text-zinc-300"}`}>All</button>
+              <button onClick={() => setContentType("reels")} className={`text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-full font-medium transition-all ${contentType === "reels" ? "bg-emerald-600 text-white" : "text-zinc-500 hover:text-zinc-300"}`}>Reels</button>
+              <button onClick={() => setContentType("posts")} className={`text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-full font-medium transition-all ${contentType === "posts" ? "bg-emerald-600 text-white" : "text-zinc-500 hover:text-zinc-300"}`}>Posts</button>
             </div>
             <Select value={filterPage} onValueChange={setFilterPage}>
               <SelectTrigger className="w-48">
