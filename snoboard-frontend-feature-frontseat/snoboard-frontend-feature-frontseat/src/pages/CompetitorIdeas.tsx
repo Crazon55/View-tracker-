@@ -478,6 +478,8 @@ export default function CompetitorIdeas() {
                         </div>
                       )}
                     </TableCell>
+                    <TableCell className="text-center font-mono text-sm">{idea.total_posts}</TableCell>
+                    <TableCell className="text-right font-mono text-sm font-bold">{formatCompact(idea.total_views)}</TableCell>
                     <TableCell>
                       {editingIdeaId === idea.id ? (
                         <div className="flex items-center gap-1">
