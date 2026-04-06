@@ -409,57 +409,50 @@ export default function CompetitorIdeas() {
               ) : (
                 filteredIdeas.map((idea) => {
                   const isFieldEdit = editingFieldId === idea.id;
+                  const startEdit = () => { if (!isFieldEdit) { setEditingFieldId(idea.id); setEditFieldData({ hook: idea.hook, hook_variations: (idea.hook_variations || []).join("\n"), executor_name: idea.executor_name || "", format: idea.format, deadline: idea.deadline || "", yt_url: idea.yt_url || "", timestamps: idea.timestamps || "", base_drive_link: idea.base_drive_link || "", pintu_batch_link: idea.pintu_batch_link || "", comp_link: idea.comp_link || "" }); } };
                   return (
                   <TableRow key={idea.id}>
                     <TableCell><span className="font-mono text-xs font-bold text-amber-400">{idea.idea_code}</span></TableCell>
-                    <TableCell>
-                      {isFieldEdit ? (
-                        <Input className="h-7 text-xs w-44" value={editFieldData.hook ?? idea.hook} onChange={(e) => setEditFieldData({ ...editFieldData, hook: e.target.value })} />
-                      ) : (
-                        <span className="text-xs text-white font-medium max-w-[150px] truncate block cursor-pointer hover:text-amber-400" onClick={() => { setEditingFieldId(idea.id); setEditFieldData({ hook: idea.hook, format: idea.format }); }}>{idea.hook}</span>
-                      )}
+                    <TableCell onClick={startEdit}>
+                      {isFieldEdit ? <Input className="h-7 text-xs w-36" value={editFieldData.hook} onChange={(e) => setEditFieldData({ ...editFieldData, hook: e.target.value })} />
+                        : <span className="text-xs text-white font-medium max-w-[150px] truncate block hover:text-amber-400">{idea.hook}</span>}
                     </TableCell>
-                    <TableCell>
-                      {idea.hook_variations?.length > 0 ? (
-                        <div className="max-w-[120px]">
-                          {idea.hook_variations.map((v: string, i: number) => (
-                            <p key={i} className="text-[10px] text-zinc-500 truncate">{v}</p>
-                          ))}
-                        </div>
-                      ) : <span className="text-zinc-700 text-xs">—</span>}
+                    <TableCell onClick={startEdit}>
+                      {isFieldEdit ? <textarea className="w-28 h-14 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-[10px] text-white resize-none" value={editFieldData.hook_variations} onChange={(e) => setEditFieldData({ ...editFieldData, hook_variations: e.target.value })} />
+                        : idea.hook_variations?.length > 0 ? <div className="max-w-[120px]">{idea.hook_variations.map((v: string, i: number) => <p key={i} className="text-[10px] text-zinc-500 truncate">{v}</p>)}</div> : <span className="text-zinc-700 text-xs">—</span>}
                     </TableCell>
                     <TableCell className="text-xs text-zinc-400">{idea.created_by || idea.cs_owner_name || idea.cdi_owner_name || "—"}</TableCell>
-                    <TableCell className="text-xs text-zinc-400">{idea.executor_name || "—"}</TableCell>
-                    <TableCell>
-                      {isFieldEdit ? (
-                        <Select value={editFieldData.format ?? idea.format} onValueChange={(v) => setEditFieldData({ ...editFieldData, format: v })}>
-                          <SelectTrigger className="h-7 text-xs w-24"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="reel">Reel</SelectItem>
-                            <SelectItem value="carousel">Carousel</SelectItem>
-                            <SelectItem value="static">Static</SelectItem>
-                            <SelectItem value="story">Story</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <span className="text-[10px] uppercase tracking-wider text-zinc-500 cursor-pointer hover:text-white" onClick={() => { setEditingFieldId(idea.id); setEditFieldData({ hook: idea.hook, format: idea.format }); }}>{idea.format}</span>
-                      )}
+                    <TableCell onClick={startEdit}>
+                      {isFieldEdit ? <Input className="h-7 text-xs w-24" value={editFieldData.executor_name} onChange={(e) => setEditFieldData({ ...editFieldData, executor_name: e.target.value })} />
+                        : <span className="text-xs text-zinc-400 hover:text-white">{idea.executor_name || "—"}</span>}
                     </TableCell>
-                    <TableCell>
-                      {idea.deadline ? <span className="text-xs text-red-400 font-bold">{idea.deadline.slice(0, 10)}</span> : <span className="text-zinc-700 text-xs">—</span>}
+                    <TableCell onClick={startEdit}>
+                      {isFieldEdit ? <Select value={editFieldData.format} onValueChange={(v) => setEditFieldData({ ...editFieldData, format: v })}><SelectTrigger className="h-7 text-xs w-24"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="reel">Reel</SelectItem><SelectItem value="carousel">Carousel</SelectItem><SelectItem value="static">Static</SelectItem><SelectItem value="story">Story</SelectItem></SelectContent></Select>
+                        : <span className="text-[10px] uppercase tracking-wider text-zinc-500 hover:text-white">{idea.format}</span>}
                     </TableCell>
-                    <TableCell>
-                      {idea.yt_url ? <a href={idea.yt_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-violet-400 hover:underline truncate block max-w-[80px]">Link</a> : <span className="text-zinc-700 text-xs">—</span>}
+                    <TableCell onClick={startEdit}>
+                      {isFieldEdit ? <Input type="date" className="h-7 text-xs w-32 cursor-pointer" value={editFieldData.deadline} onChange={(e) => setEditFieldData({ ...editFieldData, deadline: e.target.value })} onClick={(e) => (e.target as HTMLInputElement).showPicker?.()} />
+                        : idea.deadline ? <span className="text-xs text-red-400 font-bold">{idea.deadline.slice(0, 10)}</span> : <span className="text-zinc-700 text-xs">—</span>}
                     </TableCell>
-                    <TableCell className="text-[10px] text-zinc-500 max-w-[80px] truncate">{idea.timestamps || "—"}</TableCell>
-                    <TableCell>
-                      {idea.base_drive_link ? <a href={idea.base_drive_link} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-400 hover:underline">Drive</a> : <span className="text-zinc-700 text-xs">—</span>}
+                    <TableCell onClick={startEdit}>
+                      {isFieldEdit ? <Input className="h-7 text-xs w-32" placeholder="YouTube URL" value={editFieldData.yt_url} onChange={(e) => setEditFieldData({ ...editFieldData, yt_url: e.target.value })} />
+                        : idea.yt_url ? <a href={idea.yt_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-[10px] text-violet-400 hover:underline">Link</a> : <span className="text-zinc-700 text-xs">—</span>}
                     </TableCell>
-                    <TableCell>
-                      {idea.pintu_batch_link ? <a href={idea.pintu_batch_link} target="_blank" rel="noopener noreferrer" className="text-[10px] text-amber-400 hover:underline">Pintu</a> : <span className="text-zinc-700 text-xs">—</span>}
+                    <TableCell onClick={startEdit}>
+                      {isFieldEdit ? <Input className="h-7 text-xs w-28" placeholder="0:30-1:45" value={editFieldData.timestamps} onChange={(e) => setEditFieldData({ ...editFieldData, timestamps: e.target.value })} />
+                        : <span className="text-[10px] text-zinc-500 max-w-[80px] truncate block hover:text-white">{idea.timestamps || "—"}</span>}
                     </TableCell>
-                    <TableCell>
-                      {idea.comp_link ? <a href={idea.comp_link} target="_blank" rel="noopener noreferrer" className="text-[10px] text-pink-400 hover:underline">Comp</a> : <span className="text-zinc-700 text-xs">—</span>}
+                    <TableCell onClick={startEdit}>
+                      {isFieldEdit ? <Input className="h-7 text-xs w-32" placeholder="Drive link" value={editFieldData.base_drive_link} onChange={(e) => setEditFieldData({ ...editFieldData, base_drive_link: e.target.value })} />
+                        : idea.base_drive_link ? <a href={idea.base_drive_link} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-[10px] text-blue-400 hover:underline">Drive</a> : <span className="text-zinc-700 text-xs">—</span>}
+                    </TableCell>
+                    <TableCell onClick={startEdit}>
+                      {isFieldEdit ? <Input className="h-7 text-xs w-32" placeholder="Pintu link" value={editFieldData.pintu_batch_link} onChange={(e) => setEditFieldData({ ...editFieldData, pintu_batch_link: e.target.value })} />
+                        : idea.pintu_batch_link ? <a href={idea.pintu_batch_link} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-[10px] text-amber-400 hover:underline">Pintu</a> : <span className="text-zinc-700 text-xs">—</span>}
+                    </TableCell>
+                    <TableCell onClick={startEdit}>
+                      {isFieldEdit ? <Input className="h-7 text-xs w-32" placeholder="Comp link" value={editFieldData.comp_link} onChange={(e) => setEditFieldData({ ...editFieldData, comp_link: e.target.value })} />
+                        : idea.comp_link ? <a href={idea.comp_link} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-[10px] text-pink-400 hover:underline">Comp</a> : <span className="text-zinc-700 text-xs">—</span>}
                     </TableCell>
                     <TableCell>
                       {editingDistId === idea.id ? (
@@ -511,6 +504,15 @@ export default function CompetitorIdeas() {
                             <Check className="w-3 h-3" />
                           </Button>
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-500" onClick={() => setEditingFieldId(null)}>
+                            <X className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      ) : isFieldEdit ? (
+                        <div className="flex items-center gap-1">
+                          <Button size="sm" className="h-7 px-2 bg-violet-600 hover:bg-violet-700 text-white text-xs" onClick={() => { const d: any = { ...editFieldData }; if (d.hook_variations) d.hook_variations = d.hook_variations.split("\n").filter((v: string) => v.trim()); updateIdeaMutation.mutate({ id: idea.id, data: d }); setEditingFieldId(null); }}>
+                            <Check className="w-3 h-3 mr-1" /> Save
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-7 px-2 text-zinc-400 text-xs" onClick={() => setEditingFieldId(null)}>
                             <X className="w-3 h-3" />
                           </Button>
                         </div>
