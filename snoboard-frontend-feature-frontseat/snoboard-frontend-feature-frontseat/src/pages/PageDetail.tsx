@@ -303,10 +303,6 @@ export default function PageDetail() {
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Upload Date</Label>
-                    <Input type="date" value={form.upload_date} onChange={(e) => setForm({ ...form, upload_date: e.target.value })} onClick={(e) => (e.target as HTMLInputElement).showPicker?.()} className="cursor-pointer" />
-                  </div>
-                  <div className="space-y-1.5">
                     <Label>IPs</Label>
                     <Select value={form.ips} onValueChange={(v) => setForm({ ...form, ips: v })}>
                       <SelectTrigger><SelectValue placeholder="Select IP" /></SelectTrigger>
