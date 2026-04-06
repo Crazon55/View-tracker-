@@ -1021,8 +1021,8 @@ async def get_growth_data():
                 and ((r.get("posted_at") or "")[:7] == month_prefix)
             )
             total_views = entry_views + reel_views
-            if total_views > 0:
-                data.append({
+            # Include all pages (even 0 views) so stage 1 shows up
+            data.append({
                     "id": f"live-{page_id}-{month_prefix}",
                     "handle": handle,
                     "stage": stage,
