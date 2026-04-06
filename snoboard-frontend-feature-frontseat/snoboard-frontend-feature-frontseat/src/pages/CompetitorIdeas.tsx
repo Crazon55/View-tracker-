@@ -381,14 +381,21 @@ export default function CompetitorIdeas() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-24">ID</TableHead>
+                <TableHead className="w-20">ID</TableHead>
                 <TableHead>Hook</TableHead>
+                <TableHead>Variations</TableHead>
                 <TableHead>Created by</TableHead>
+                <TableHead>Executor</TableHead>
                 <TableHead>Format</TableHead>
+                <TableHead>Deadline</TableHead>
+                <TableHead>YT URL</TableHead>
+                <TableHead>Timestamps</TableHead>
+                <TableHead>Drive Link</TableHead>
+                <TableHead>Pintu Batch</TableHead>
+                <TableHead>Comp Link</TableHead>
+                <TableHead>Distributed To</TableHead>
                 <TableHead className="text-center">Posts</TableHead>
                 <TableHead className="text-right">Views</TableHead>
-                <TableHead className="text-center">Winners</TableHead>
-                <TableHead>Distributed To</TableHead>
                 <TableHead className="w-24">Status</TableHead>
                 <TableHead className="w-20"></TableHead>
               </TableRow>
@@ -396,7 +403,7 @@ export default function CompetitorIdeas() {
             <TableBody>
               {filteredIdeas.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center text-zinc-500 py-8">
+                  <TableCell colSpan={17} className="text-center text-zinc-500 py-8">
                     {ideas.length === 0 ? 'No competitor ideas yet. Click "New Competitor Idea" to create one.' : "No ideas matching your search."}
                   </TableCell>
                 </TableRow>
@@ -405,22 +412,25 @@ export default function CompetitorIdeas() {
                   const isFieldEdit = editingFieldId === idea.id;
                   return (
                   <TableRow key={idea.id}>
-                    <TableCell><span className="font-mono text-sm font-bold text-amber-400">{idea.idea_code}</span></TableCell>
+                    <TableCell><span className="font-mono text-xs font-bold text-amber-400">{idea.idea_code}</span></TableCell>
                     <TableCell>
                       {isFieldEdit ? (
                         <Input className="h-7 text-xs w-44" value={editFieldData.hook ?? idea.hook} onChange={(e) => setEditFieldData({ ...editFieldData, hook: e.target.value })} />
                       ) : (
-                        <span className="text-sm text-white font-medium cursor-pointer hover:text-violet-400" onClick={() => { setEditingFieldId(idea.id); setEditFieldData({ hook: idea.hook, format: idea.format }); }}>{idea.hook}</span>
+                        <span className="text-xs text-white font-medium max-w-[150px] truncate block cursor-pointer hover:text-amber-400" onClick={() => { setEditingFieldId(idea.id); setEditFieldData({ hook: idea.hook, format: idea.format }); }}>{idea.hook}</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-sm text-zinc-400">
-                      {idea.cs_owner_name || idea.cdi_owner_name || "—"}
-                      {(idea.cs_owner_name || idea.cdi_owner_name) && (
-                        <span className={`ml-1 text-[9px] px-1 rounded ${idea.cdi_owner_name ? "bg-amber-500/20 text-amber-400" : "bg-violet-500/20 text-violet-400"}`}>
-                          {idea.cdi_owner_name ? "CDI" : "CS"}
-                        </span>
-                      )}
+                    <TableCell>
+                      {idea.hook_variations?.length > 0 ? (
+                        <div className="max-w-[120px]">
+                          {idea.hook_variations.map((v: string, i: number) => (
+                            <p key={i} className="text-[10px] text-zinc-500 truncate">{v}</p>
+                          ))}
+                        </div>
+                      ) : <span className="text-zinc-700 text-xs">—</span>}
                     </TableCell>
+                    <TableCell className="text-xs text-zinc-400">{idea.created_by || idea.cs_owner_name || idea.cdi_owner_name || "—"}</TableCell>
+                    <TableCell className="text-xs text-zinc-400">{idea.executor_name || "—"}</TableCell>
                     <TableCell>
                       {isFieldEdit ? (
                         <Select value={editFieldData.format ?? idea.format} onValueChange={(v) => setEditFieldData({ ...editFieldData, format: v })}>
@@ -433,17 +443,24 @@ export default function CompetitorIdeas() {
                           </SelectContent>
                         </Select>
                       ) : (
-                        <span className="text-xs uppercase tracking-wider text-zinc-500 cursor-pointer hover:text-white" onClick={() => { setEditingFieldId(idea.id); setEditFieldData({ hook: idea.hook, format: idea.format }); }}>{idea.format}</span>
+                        <span className="text-[10px] uppercase tracking-wider text-zinc-500 cursor-pointer hover:text-white" onClick={() => { setEditingFieldId(idea.id); setEditFieldData({ hook: idea.hook, format: idea.format }); }}>{idea.format}</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-center font-mono text-sm">{idea.total_posts}</TableCell>
-                    <TableCell className="text-right font-mono text-sm font-bold">{formatCompact(idea.total_views)}</TableCell>
-                    <TableCell className="text-center">
-                      {idea.winners_count > 0 ? (
-                        <span className="inline-flex items-center gap-1 bg-yellow-500/10 text-yellow-400 text-xs font-bold px-2 py-0.5 rounded-full">
-                          <Trophy className="w-3 h-3" />{idea.winners_count}
-                        </span>
-                      ) : <span className="text-zinc-600 text-sm">0</span>}
+                    <TableCell>
+                      {idea.deadline ? <span className="text-xs text-red-400 font-bold">{idea.deadline.slice(0, 10)}</span> : <span className="text-zinc-700 text-xs">—</span>}
+                    </TableCell>
+                    <TableCell>
+                      {idea.yt_url ? <a href={idea.yt_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-violet-400 hover:underline truncate block max-w-[80px]">Link</a> : <span className="text-zinc-700 text-xs">—</span>}
+                    </TableCell>
+                    <TableCell className="text-[10px] text-zinc-500 max-w-[80px] truncate">{idea.timestamps || "—"}</TableCell>
+                    <TableCell>
+                      {idea.base_drive_link ? <a href={idea.base_drive_link} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-400 hover:underline">Drive</a> : <span className="text-zinc-700 text-xs">—</span>}
+                    </TableCell>
+                    <TableCell>
+                      {idea.pintu_batch_link ? <a href={idea.pintu_batch_link} target="_blank" rel="noopener noreferrer" className="text-[10px] text-amber-400 hover:underline">Pintu</a> : <span className="text-zinc-700 text-xs">—</span>}
+                    </TableCell>
+                    <TableCell>
+                      {idea.comp_link ? <a href={idea.comp_link} target="_blank" rel="noopener noreferrer" className="text-[10px] text-pink-400 hover:underline">Comp</a> : <span className="text-zinc-700 text-xs">—</span>}
                     </TableCell>
                     <TableCell>
                       {editingDistId === idea.id ? (
