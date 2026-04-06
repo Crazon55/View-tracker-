@@ -508,12 +508,14 @@ export default function CompetitorIdeas() {
                           </Button>
                         </div>
                       ) : (
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-600 hover:text-green-400" title="Schedule" onClick={() => scheduleMutation.mutate(idea.id)} disabled={scheduleMutation.isPending}>
-                          <CalendarClock className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-600 hover:text-red-400" onClick={() => deleteIdeaMutation.mutate(idea.id)}>
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-600 hover:text-green-400" title="Schedule" onClick={() => scheduleMutation.mutate(idea.id)} disabled={scheduleMutation.isPending}>
+                            <CalendarClock className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-600 hover:text-red-400" onClick={() => deleteIdeaMutation.mutate(idea.id)}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
                       )}
                     </TableCell>
                   </TableRow>
