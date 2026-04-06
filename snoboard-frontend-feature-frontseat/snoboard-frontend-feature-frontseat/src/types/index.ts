@@ -54,6 +54,15 @@ export interface Idea {
   distributed_to: string[] | null;
   created_at: string;
   content_strategists?: { id: string; name: string };
+  hook_variations?: string[];
+  executor_name?: string;
+  created_by?: string;
+  yt_url?: string;
+  timestamps?: string;
+  base_drive_link?: string;
+  pintu_batch_link?: string;
+  comp_link?: string;
+  deadline?: string;
 }
 
 export interface IdeaStat {
@@ -74,6 +83,15 @@ export interface IdeaStat {
   winners_count: number;
   hit_rate: number;
   best_post: { url: string; views: number; page_handle: string } | null;
+  hook_variations: string[];
+  executor_name: string;
+  created_by: string;
+  yt_url: string;
+  timestamps: string;
+  base_drive_link: string;
+  pintu_batch_link: string;
+  comp_link: string;
+  deadline: string;
 }
 
 export interface CSStat {

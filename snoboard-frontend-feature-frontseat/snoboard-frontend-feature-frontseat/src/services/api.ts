@@ -85,7 +85,7 @@ export const deleteCS = (id: string) =>
 
 // Ideas
 export const getIdeas = () => fetchApi<any[]>("/api/v1/ideas");
-export const createIdea = (data: { hook: string; cs_owner_id?: string; cdi_owner_id?: string; format?: string; source?: string; status?: string; notes?: string; distributed_to?: string[] }) =>
+export const createIdea = (data: { hook: string; cs_owner_id?: string; cdi_owner_id?: string; format?: string; source?: string; status?: string; notes?: string; distributed_to?: string[]; hook_variations?: string[]; executor_name?: string; created_by?: string; yt_url?: string; timestamps?: string; base_drive_link?: string; pintu_batch_link?: string; comp_link?: string; deadline?: string }) =>
   fetchApi<any>("/api/v1/ideas", { method: "POST", body: JSON.stringify(data) });
 export const updateIdea = (id: string, data: Record<string, any>) =>
   fetchApi<any>(`/api/v1/ideas/${id}`, { method: "PUT", body: JSON.stringify(data) });
