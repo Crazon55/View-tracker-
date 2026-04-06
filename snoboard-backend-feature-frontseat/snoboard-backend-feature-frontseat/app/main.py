@@ -992,8 +992,11 @@ async def get_growth_data():
     entries = client.table("content_entries").select("page_id,views,upload_date,created_at").execute().data or []
     all_reels = get_reel_repository().get_all()
 
-    # Collect all months from content_entries + reels
+    # Collect all months from content_entries + reels + always include current month
+    now = datetime.utcnow()
+    current_month_prefix = f"{now.year}-{now.month:02d}"
     live_months = set()
+    live_months.add(current_month_prefix)  # Always include current month
     for e in entries:
         m = (e.get("upload_date") or e.get("created_at") or "")[:7]
         if m and m not in existing_months:
@@ -1002,6 +1005,8 @@ async def get_growth_data():
         m = (r.get("posted_at") or "")[:7]
         if m and m not in existing_months:
             live_months.add(m)
+    # Remove months already in growth_data
+    live_months -= existing_months
 
     for month_prefix in live_months:
         month_str = f"{month_prefix}-01"
