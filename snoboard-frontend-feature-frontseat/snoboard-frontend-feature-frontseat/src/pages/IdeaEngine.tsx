@@ -627,15 +627,20 @@ export default function IdeaEngine() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-24">ID</TableHead>
+                <TableHead className="w-20">ID</TableHead>
                 <TableHead>Hook</TableHead>
+                <TableHead>Variations</TableHead>
                 <TableHead>Created by</TableHead>
+                <TableHead>Executor</TableHead>
                 <TableHead>Format</TableHead>
+                <TableHead>Deadline</TableHead>
+                <TableHead>YT URL</TableHead>
+                <TableHead>Timestamps</TableHead>
+                <TableHead>Drive Link</TableHead>
+                <TableHead>Pintu Batch</TableHead>
+                <TableHead>Distributed To</TableHead>
                 <TableHead className="text-center">Posts</TableHead>
                 <TableHead className="text-right">Views</TableHead>
-                <TableHead className="text-center">Winners</TableHead>
-                <TableHead className="text-center">Hit Rate</TableHead>
-                <TableHead>Distributed To</TableHead>
                 <TableHead className="w-24">Status</TableHead>
                 <TableHead className="w-20"></TableHead>
               </TableRow>
@@ -643,7 +648,7 @@ export default function IdeaEngine() {
             <TableBody>
               {filteredIdeas.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={11} className="text-center text-zinc-500 py-8">
+                  <TableCell colSpan={16} className="text-center text-zinc-500 py-8">
                     {ideas.length === 0
                       ? "No ideas yet. Click \"New Idea\" to create your first one."
                       : "No ideas matching your search."}
@@ -653,33 +658,37 @@ export default function IdeaEngine() {
                 filteredIdeas.map((idea) => (
                   <TableRow key={idea.id}>
                     <TableCell>
-                      <span className="font-mono text-sm font-bold text-violet-400">{idea.idea_code}</span>
+                      <span className="font-mono text-xs font-bold text-violet-400">{idea.idea_code}</span>
                     </TableCell>
                     <TableCell>
-                      <span className="text-sm text-white font-medium">{idea.hook}</span>
+                      <span className="text-xs text-white font-medium max-w-[150px] truncate block">{idea.hook}</span>
                     </TableCell>
-                    <TableCell className="text-sm text-zinc-400">{idea.cs_owner_name}</TableCell>
                     <TableCell>
-                      <span className="text-xs uppercase tracking-wider text-zinc-500">{idea.format}</span>
+                      {idea.hook_variations?.length > 0 ? (
+                        <div className="max-w-[120px]">
+                          {idea.hook_variations.map((v: string, i: number) => (
+                            <p key={i} className="text-[10px] text-zinc-500 truncate">{v}</p>
+                          ))}
+                        </div>
+                      ) : <span className="text-zinc-700 text-xs">—</span>}
                     </TableCell>
-                    <TableCell className="text-center font-mono text-sm">{idea.total_posts}</TableCell>
-                    <TableCell className="text-right font-mono text-sm font-bold">
-                      {formatCompact(idea.total_views)}
+                    <TableCell className="text-xs text-zinc-400">{idea.created_by || idea.cs_owner_name || "—"}</TableCell>
+                    <TableCell className="text-xs text-zinc-400">{idea.executor_name || "—"}</TableCell>
+                    <TableCell>
+                      <span className="text-[10px] uppercase tracking-wider text-zinc-500">{idea.format}</span>
                     </TableCell>
-                    <TableCell className="text-center">
-                      {idea.winners_count > 0 ? (
-                        <span className="inline-flex items-center gap-1 bg-yellow-500/10 text-yellow-400 text-xs font-bold px-2 py-0.5 rounded-full">
-                          <Trophy className="w-3 h-3" />
-                          {idea.winners_count}
-                        </span>
-                      ) : (
-                        <span className="text-zinc-600 text-sm">0</span>
-                      )}
+                    <TableCell>
+                      {idea.deadline ? <span className="text-xs text-red-400 font-bold">{idea.deadline.slice(0, 10)}</span> : <span className="text-zinc-700 text-xs">—</span>}
                     </TableCell>
-                    <TableCell className="text-center">
-                      <span className={`text-sm font-bold ${idea.hit_rate > 0 ? "text-emerald-400" : "text-zinc-600"}`}>
-                        {idea.hit_rate}%
-                      </span>
+                    <TableCell>
+                      {idea.yt_url ? <a href={idea.yt_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-violet-400 hover:underline truncate block max-w-[80px]">Link</a> : <span className="text-zinc-700 text-xs">—</span>}
+                    </TableCell>
+                    <TableCell className="text-[10px] text-zinc-500 max-w-[80px] truncate">{idea.timestamps || "—"}</TableCell>
+                    <TableCell>
+                      {idea.base_drive_link ? <a href={idea.base_drive_link} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-400 hover:underline">Drive</a> : <span className="text-zinc-700 text-xs">—</span>}
+                    </TableCell>
+                    <TableCell>
+                      {idea.pintu_batch_link ? <a href={idea.pintu_batch_link} target="_blank" rel="noopener noreferrer" className="text-[10px] text-amber-400 hover:underline">Pintu</a> : <span className="text-zinc-700 text-xs">—</span>}
                     </TableCell>
                     <TableCell>
                       {editingDistId === idea.id ? (
