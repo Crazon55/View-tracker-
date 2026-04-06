@@ -269,7 +269,7 @@ export default function CompetitorIdeas() {
               </DialogHeader>
               <form onSubmit={handleCreate} className="space-y-3 mt-2">
                 <div className="space-y-1.5">
-                  <Label>Hook / Concept *</Label>
+                  <Label>Idea *</Label>
                   <Input placeholder="e.g. Competitor's viral reel about..." value={hook} onChange={(e) => setHook(e.target.value)} required />
                 </div>
                 <div className="space-y-1.5">
@@ -283,8 +283,8 @@ export default function CompetitorIdeas() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Competitor Link *</Label>
-                  <Input placeholder="https://instagram.com/reel/..." value={compLink} onChange={(e) => setCompLink(e.target.value)} required />
+                  <Label>Competitor Link</Label>
+                  <Input placeholder="https://instagram.com/reel/..." value={compLink} onChange={(e) => setCompLink(e.target.value)} />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
@@ -382,7 +382,7 @@ export default function CompetitorIdeas() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-20">ID</TableHead>
-                <TableHead>Hook</TableHead>
+                <TableHead>Idea</TableHead>
                 <TableHead>Variations</TableHead>
                 <TableHead>Created by</TableHead>
                 <TableHead>Executor</TableHead>

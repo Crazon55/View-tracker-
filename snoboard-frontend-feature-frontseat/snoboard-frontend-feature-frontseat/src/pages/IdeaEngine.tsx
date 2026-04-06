@@ -363,7 +363,7 @@ export default function IdeaEngine() {
                 </DialogHeader>
                 <form onSubmit={handleCreateIdea} className="space-y-3 mt-2">
                   <div className="space-y-1.5">
-                    <Label>Hook / Concept *</Label>
+                    <Label>Idea *</Label>
                     <Input placeholder="e.g. How Zerodha scaled to 1Cr users" value={hook} onChange={(e) => setHook(e.target.value)} required />
                   </div>
                   <div className="space-y-1.5">
@@ -615,7 +615,7 @@ export default function IdeaEngine() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
             <Input
-              placeholder="Search by ID, hook, or CS name..."
+              placeholder="Search by ID, idea, or name..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-10 bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-600 focus:border-violet-500/50 h-11"
@@ -628,7 +628,7 @@ export default function IdeaEngine() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-20">ID</TableHead>
-                <TableHead>Hook</TableHead>
+                <TableHead>Idea</TableHead>
                 <TableHead>Variations</TableHead>
                 <TableHead>Created by</TableHead>
                 <TableHead>Executor</TableHead>
