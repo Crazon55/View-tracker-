@@ -785,13 +785,21 @@ export default function PageDetail() {
                     <span className="text-white">{calSelectedEntry.deadline?.slice(0, 10) || "\u2014"}</span>
                   </div>
                 </div>
-                {(calSelectedEntry.url || calSelectedEntry.frame_link || calSelectedEntry.comp_link) && (
-                  <div className="flex items-center gap-3 mt-4 pt-3 border-t border-zinc-700">
-                    {calSelectedEntry.url && <a href={calSelectedEntry.url} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:underline text-xs flex items-center gap-1"><ExternalLink className="w-3 h-3" /> Instagram</a>}
-                    {calSelectedEntry.frame_link && <a href={calSelectedEntry.frame_link} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline text-xs">Frame</a>}
-                    {calSelectedEntry.comp_link && <a href={calSelectedEntry.comp_link} target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:underline text-xs">Comp</a>}
+                {/* Captions */}
+                {calSelectedEntry.notes && (
+                  <div className="mt-4 pt-3 border-t border-zinc-700">
+                    <span className="text-zinc-500 text-xs block mb-1">Captions</span>
+                    <p className="text-sm text-white whitespace-pre-wrap">{calSelectedEntry.notes}</p>
                   </div>
                 )}
+                {/* Links */}
+                <div className="mt-4 pt-3 border-t border-zinc-700 flex flex-wrap items-center gap-3">
+                  {calSelectedEntry.url && <a href={calSelectedEntry.url} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:underline text-xs flex items-center gap-1"><ExternalLink className="w-3 h-3" /> Instagram</a>}
+                  {calSelectedEntry.frame_link && <a href={calSelectedEntry.frame_link} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline text-xs flex items-center gap-1"><ExternalLink className="w-3 h-3" /> Frame Link</a>}
+                  {calSelectedEntry.comp_link && <a href={calSelectedEntry.comp_link} target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:underline text-xs flex items-center gap-1"><ExternalLink className="w-3 h-3" /> Comp Link</a>}
+                  {!calSelectedEntry.url && !calSelectedEntry.frame_link && !calSelectedEntry.comp_link && <span className="text-zinc-600 text-xs">No links added</span>}
+                </div>
+                {/* Actions */}
                 <div className="flex items-center gap-2 mt-4 pt-3 border-t border-zinc-700">
                   <Button size="sm" variant="outline" className="text-xs border-zinc-700" onClick={() => { setEditingId(calSelectedEntry.id); setEditData({ ...calSelectedEntry }); setViewMode("table"); setCalSelectedEntry(null); }}>
                     <Pencil className="w-3 h-3 mr-1" /> Edit in Table
