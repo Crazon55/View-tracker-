@@ -776,10 +776,10 @@ export default function IdeaEngine() {
                       ) : (
                         <Badge
                           variant="outline"
-                          className={`text-[10px] uppercase cursor-pointer ${statusColors[idea.status] ?? "text-zinc-500"}`}
-                          onClick={() => { setEditingIdeaId(idea.id); setEditStatus(idea.status); }}
+                          className={`text-[10px] uppercase cursor-pointer ${statusColors[idea.status || "active"] ?? "text-zinc-500"}`}
+                          onClick={() => { setEditingIdeaId(idea.id); setEditStatus(idea.status || "active"); }}
                         >
-                          {idea.status}
+                          {idea.status || "active"}
                         </Badge>
                       )}
                     </TableCell>

@@ -494,7 +494,7 @@ export default function CompetitorIdeas() {
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-500" onClick={() => setEditingIdeaId(null)}><X className="w-3.5 h-3.5" /></Button>
                         </div>
                       ) : (
-                        <Badge variant="outline" className={`text-[10px] uppercase cursor-pointer ${statusColors[idea.status] ?? "text-zinc-500"}`} onClick={() => { setEditingIdeaId(idea.id); setEditStatus(idea.status); }}>{idea.status}</Badge>
+                        <Badge variant="outline" className={`text-[10px] uppercase cursor-pointer ${statusColors[idea.status || "active"] ?? "text-zinc-500"}`} onClick={() => { setEditingIdeaId(idea.id); setEditStatus(idea.status || "active"); }}>{idea.status || "active"}</Badge>
                       )}
                     </TableCell>
                     <TableCell>
