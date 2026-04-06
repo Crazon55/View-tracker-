@@ -288,17 +288,8 @@ export default function CompetitorIdeas() {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label>Created by *</Label>
-                    <Select value={csOwnerId} onValueChange={(v) => { setCsOwnerId(v); const member = csList.find((c) => c.id === v); if (member?.role?.toLowerCase() === "cdi") setCdiOwnerId(v); else setCdiOwnerId(""); }}>
-                      <SelectTrigger><SelectValue placeholder="Select creator" /></SelectTrigger>
-                      <SelectContent>
-                        {csList.map((cs) => (
-                          <SelectItem key={cs.id} value={cs.id}>
-                            {cs.name} <span className="text-zinc-500">({cs.role || "CS"})</span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label>Created by</Label>
+                    <div className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white">{userName}</div>
                   </div>
                   <div className="space-y-1.5">
                     <Label>Executor *</Label>
