@@ -202,9 +202,8 @@ export default function CompetitorIdeas() {
 
   const statusColors: Record<string, string> = {
     draft: "bg-zinc-700 text-zinc-300",
-    ready: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-    active: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-    exhausted: "bg-red-500/20 text-red-400 border-red-500/30",
+    in_progress: "bg-amber-500/20 text-amber-400 border-amber-500/30",
+    completed: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
   };
 
   return (
@@ -485,16 +484,15 @@ export default function CompetitorIdeas() {
                             <SelectTrigger className="h-7 text-xs w-24"><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="draft">Draft</SelectItem>
-                              <SelectItem value="ready">Ready</SelectItem>
-                              <SelectItem value="active">Active</SelectItem>
-                              <SelectItem value="exhausted">Exhausted</SelectItem>
+                              <SelectItem value="in_progress">In Progress</SelectItem>
+                              <SelectItem value="completed">Completed</SelectItem>
                             </SelectContent>
                           </Select>
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-violet-400" onClick={() => updateIdeaMutation.mutate({ id: idea.id, data: { status: editStatus } })}><Check className="w-3.5 h-3.5" /></Button>
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-500" onClick={() => setEditingIdeaId(null)}><X className="w-3.5 h-3.5" /></Button>
                         </div>
                       ) : (
-                        <Badge variant="outline" className={`text-[10px] uppercase cursor-pointer ${statusColors[idea.status || "active"] ?? "text-zinc-500"}`} onClick={() => { setEditingIdeaId(idea.id); setEditStatus(idea.status || "active"); }}>{idea.status || "active"}</Badge>
+                        <Badge variant="outline" className={`text-[10px] uppercase cursor-pointer ${statusColors[idea.status || "draft"] ?? "text-zinc-500"}`} onClick={() => { setEditingIdeaId(idea.id); setEditStatus(idea.status || "draft"); }}>{idea.status || "draft"}</Badge>
                       )}
                     </TableCell>
                     <TableCell>

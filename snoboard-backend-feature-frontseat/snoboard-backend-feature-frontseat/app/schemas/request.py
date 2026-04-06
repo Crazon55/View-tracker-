@@ -77,7 +77,7 @@ class IdeaCreate(BaseModel):
     created_by: str | None = None
     format: str = "reel"
     source: str = "original"
-    status: str = "active"
+    status: str = "draft"
     notes: str | None = None
     distributed_to: list[str] | None = None
     yt_url: str | None = None
