@@ -745,6 +745,7 @@ export default function PageDetail() {
                             className={`rounded px-2 py-1 cursor-pointer hover:brightness-125 transition-all ${statusObj?.color || "bg-zinc-800/80"}`}
                             onClick={(e) => { e.stopPropagation(); setCalSelectedEntry(calSelectedEntry?.id === entry.id ? null : entry); }}>
                             <p className="text-[10px] font-medium text-white truncate">{entry.idea_name}</p>
+                            {entry.notes && <p className="text-[8px] text-zinc-400 truncate">{entry.notes.split("\n")[0]}</p>}
                             <span className="text-[9px] opacity-70">{statusObj?.label || entry.idea_status}</span>
                           </div>
                         );

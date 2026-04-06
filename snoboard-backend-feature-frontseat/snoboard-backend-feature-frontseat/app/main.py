@@ -514,20 +514,27 @@ async def schedule_idea(idea_id: str):
 
         scheduled_str = schedule_date.strftime("%Y-%m-%dT%H:%M:%S")
 
-        # Create or update content entry
+        # Update existing content entry or create new one
         try:
-            client.table("content_entries").insert({
-                "page_id": page_id,
-                "idea_name": idea_name,
-                "content_type": content_type,
+            existing = client.table("content_entries").select("id").eq("page_id", page_id).eq("idea_name", idea_name).execute().data
+            update_data = {
                 "idea_status": "scheduled",
-                "ips": handle,
-                "created_by": created_by,
                 "upload_date": schedule_date.strftime("%Y-%m-%d"),
                 "scheduled_at": scheduled_str,
                 "upload_time_window": time_window,
                 "device": device,
-            }).execute()
+            }
+            if existing:
+                client.table("content_entries").update(update_data).eq("id", existing[0]["id"]).execute()
+            else:
+                client.table("content_entries").insert({
+                    "page_id": page_id,
+                    "idea_name": idea_name,
+                    "content_type": content_type,
+                    "ips": handle,
+                    "created_by": created_by,
+                    **update_data,
+                }).execute()
         except Exception:
             pass
 

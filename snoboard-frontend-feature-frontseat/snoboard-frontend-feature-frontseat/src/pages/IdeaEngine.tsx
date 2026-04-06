@@ -7,6 +7,7 @@ import {
   getCSList,
   getIdeas,
   getPages,
+  getAllContentEntries,
   createCS,
   deleteCS,
   createIdea,
@@ -73,6 +74,7 @@ export default function IdeaEngine() {
   const [csRankMode, setCsRankMode] = useState<CSRankMode>("views");
   const [ideaOpen, setIdeaOpen] = useState(false);
   const [csOpen, setCsOpen] = useState(false);
+  const [expandedIdeaId, setExpandedIdeaId] = useState<string | null>(null);
   const [editingIdeaId, setEditingIdeaId] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState("");
   const [editingDistId, setEditingDistId] = useState<string | null>(null);
@@ -93,7 +95,7 @@ export default function IdeaEngine() {
   const [timestamps, setTimestamps] = useState("");
   const [baseDriveLink, setBaseDriveLink] = useState("");
   const [pintuBatchLink, setPintuBatchLink] = useState("");
-  const [executorName, setExecutorName] = useState("");
+  const [executorNames, setExecutorNames] = useState<string[]>([]);
   const [deadline, setDeadline] = useState("");
 
   // CS form
@@ -116,6 +118,11 @@ export default function IdeaEngine() {
   const { data: allPages = [] } = useQuery<Page[]>({
     queryKey: ["pages"],
     queryFn: getPages,
+  });
+
+  const { data: allContentEntries = [] } = useQuery<any[]>({
+    queryKey: ["content-entries", "all"],
+    queryFn: () => getAllContentEntries(),
   });
 
   // Mutations
@@ -197,21 +204,21 @@ export default function IdeaEngine() {
     setTimestamps("");
     setBaseDriveLink("");
     setPintuBatchLink("");
-    setExecutorName("");
+    setExecutorNames([]);
     setDeadline("");
   }
 
   const handleCreateIdea = (e: React.FormEvent) => {
     e.preventDefault();
     if (!hook.trim()) return;
-    if (!executorName.trim()) { toast.error("Executor name is required"); return; }
+    if (executorNames.length === 0) { toast.error("Executor is required"); return; }
     const matchedCs = csList.find((c) => c.name.toLowerCase() === userName.toLowerCase());
     const variations = hookVariations.split("\n").map((v) => v.trim()).filter(Boolean);
     createIdeaMutation.mutate({
       hook: hook.trim(),
       hook_variations: variations.length > 0 ? variations : undefined,
       cs_owner_id: matchedCs?.id || csOwnerId || undefined,
-      executor_name: executorName.trim(),
+      executor_name: executorNames.join(", "),
       created_by: userName,
       format,
       source,
@@ -382,17 +389,16 @@ export default function IdeaEngine() {
                       <div className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white">{userName}</div>
                     </div>
                     <div className="space-y-1.5">
-                      <Label>Executor *</Label>
-                      <Select value={executorName} onValueChange={setExecutorName}>
-                        <SelectTrigger><SelectValue placeholder="Select executor" /></SelectTrigger>
-                        <SelectContent>
-                          {csList.map((cs) => (
-                            <SelectItem key={cs.id} value={cs.name}>
-                              {cs.name} <span className="text-zinc-500">({cs.role || "CS"})</span>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Label>Executor * (multi-select)</Label>
+                      <div className="max-h-32 overflow-y-auto bg-zinc-950 border border-zinc-800 rounded-lg p-1.5 space-y-0.5">
+                        {csList.map((cs) => (
+                          <label key={cs.id} className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs transition-colors ${executorNames.includes(cs.name) ? "bg-violet-500/10 text-white" : "text-zinc-400 hover:bg-zinc-800"}`}>
+                            <input type="checkbox" checked={executorNames.includes(cs.name)} onChange={() => setExecutorNames((prev) => prev.includes(cs.name) ? prev.filter((n) => n !== cs.name) : [...prev, cs.name])} className="rounded border-zinc-700 bg-zinc-800 text-violet-500 w-3 h-3" />
+                            {cs.name} <span className="text-zinc-500">({cs.role || "CS"})</span>
+                          </label>
+                        ))}
+                      </div>
+                      {executorNames.length > 0 && <p className="text-[10px] text-violet-400">{executorNames.join(", ")}</p>}
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
@@ -440,7 +446,7 @@ export default function IdeaEngine() {
                   <div className="bg-zinc-800/50 rounded-lg px-3 py-2 text-xs text-zinc-500">
                     Created by: <span className="text-white">{userName}</span> (auto)
                   </div>
-                  <Button type="submit" className="w-full" disabled={createIdeaMutation.isPending || !executorName.trim()}>
+                  <Button type="submit" className="w-full" disabled={createIdeaMutation.isPending || executorNames.length === 0}>
                     {createIdeaMutation.isPending ? "Creating..." : "Create Idea"}
                   </Button>
                   <p className="text-xs text-zinc-500 text-center">
@@ -655,8 +661,12 @@ export default function IdeaEngine() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredIdeas.map((idea) => (
-                  <TableRow key={idea.id}>
+                filteredIdeas.map((idea) => {
+                  const ideaLabel = `${idea.idea_code} — ${idea.hook}`.trim();
+                  const distributedEntries = allContentEntries.filter((e: any) => e.idea_name === ideaLabel || e.idea_name === idea.hook);
+                  const isExpanded = expandedIdeaId === idea.id;
+                  return (<>
+                  <TableRow key={idea.id} className="cursor-pointer" onClick={() => setExpandedIdeaId(isExpanded ? null : idea.id)}>
                     <TableCell>
                       <span className="font-mono text-xs font-bold text-violet-400">{idea.idea_code}</span>
                     </TableCell>
@@ -790,7 +800,43 @@ export default function IdeaEngine() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))
+                  {isExpanded && (
+                    <TableRow key={`${idea.id}-expand`}>
+                      <TableCell colSpan={16} className="bg-zinc-900/50 p-4">
+                        <div className="space-y-2">
+                          <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">Distributed Pages</p>
+                          {distributedEntries.length === 0 ? (
+                            <p className="text-xs text-zinc-600">No pages distributed yet</p>
+                          ) : (
+                            <div className="border border-zinc-800 rounded-lg overflow-hidden">
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="border-b border-zinc-800 bg-zinc-900/80">
+                                    <th className="text-left py-2 px-3 text-zinc-500">IP</th>
+                                    <th className="text-right py-2 px-3 text-zinc-500">Views</th>
+                                    <th className="text-left py-2 px-3 text-zinc-500">Link</th>
+                                    <th className="text-left py-2 px-3 text-zinc-500">Status</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {distributedEntries.map((entry: any) => (
+                                    <tr key={entry.id} className="border-b border-zinc-800/50">
+                                      <td className="py-2 px-3 text-white font-medium">@{entry.ips || "—"}</td>
+                                      <td className="py-2 px-3 text-right font-mono text-white">{(entry.views ?? 0).toLocaleString()}</td>
+                                      <td className="py-2 px-3">{entry.url ? <a href={entry.url} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:underline">Link</a> : <span className="text-zinc-600">—</span>}</td>
+                                      <td className="py-2 px-3"><span className={`text-[10px] px-1.5 py-0.5 rounded ${entry.idea_status === "posted" ? "bg-emerald-500/20 text-emerald-400" : entry.idea_status === "scheduled" ? "bg-green-500/20 text-green-400" : "bg-zinc-700 text-zinc-300"}`}>{entry.idea_status}</span></td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  </>);
+                })
               )}
             </TableBody>
           </Table>
