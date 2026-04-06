@@ -40,7 +40,9 @@ export default function PageDetail() {
   const { pageId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const isPostMode = location.pathname.startsWith("/post-ips/");
+  const defaultPostMode = location.pathname.startsWith("/post-ips/");
+  const [contentFilter, setContentFilter] = useState<"reels" | "posts">(defaultPostMode ? "posts" : "reels");
+  const isPostMode = contentFilter === "posts";
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const userName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "";
@@ -217,6 +219,16 @@ export default function PageDetail() {
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Content filter: Reels vs Posts */}
+            <div className="inline-flex items-center bg-zinc-800/80 rounded-full p-0.5 gap-0.5">
+              <button onClick={() => setContentFilter("reels")} className={`text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-full font-medium transition-all ${contentFilter === "reels" ? "bg-emerald-600 text-white" : "text-zinc-500 hover:text-zinc-300"}`}>
+                IPs (Reels)
+              </button>
+              <button onClick={() => setContentFilter("posts")} className={`text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-full font-medium transition-all ${contentFilter === "posts" ? "bg-emerald-600 text-white" : "text-zinc-500 hover:text-zinc-300"}`}>
+                Post IPs
+              </button>
+            </div>
+
             {/* View toggle */}
             <div className="inline-flex items-center bg-zinc-800/80 rounded-full p-0.5 gap-0.5">
               <button onClick={() => setViewMode("table")} className={`flex items-center gap-1.5 text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-full font-medium transition-all ${viewMode === "table" ? "bg-violet-600 text-white" : "text-zinc-500 hover:text-zinc-300"}`}>
