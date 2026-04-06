@@ -203,13 +203,14 @@ export default function IdeaEngine() {
 
   const handleCreateIdea = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!hook.trim() || !csOwnerId) return;
+    if (!hook.trim()) return;
     if (!executorName.trim()) { toast.error("Executor name is required"); return; }
+    const matchedCs = csList.find((c) => c.name.toLowerCase() === userName.toLowerCase());
     const variations = hookVariations.split("\n").map((v) => v.trim()).filter(Boolean);
     createIdeaMutation.mutate({
       hook: hook.trim(),
       hook_variations: variations.length > 0 ? variations : undefined,
-      cs_owner_id: csOwnerId,
+      cs_owner_id: matchedCs?.id || csOwnerId || undefined,
       executor_name: executorName.trim(),
       created_by: userName,
       format,
@@ -377,17 +378,8 @@ export default function IdeaEngine() {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <Label>Created by *</Label>
-                      <Select value={csOwnerId} onValueChange={setCsOwnerId}>
-                        <SelectTrigger><SelectValue placeholder="Select creator" /></SelectTrigger>
-                        <SelectContent>
-                          {csList.map((cs) => (
-                            <SelectItem key={cs.id} value={cs.id}>
-                              {cs.name} <span className="text-zinc-500">({cs.role || "CS"})</span>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Label>Created by</Label>
+                      <div className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white">{userName}</div>
                     </div>
                     <div className="space-y-1.5">
                       <Label>Executor *</Label>
@@ -448,7 +440,7 @@ export default function IdeaEngine() {
                   <div className="bg-zinc-800/50 rounded-lg px-3 py-2 text-xs text-zinc-500">
                     Created by: <span className="text-white">{userName}</span> (auto)
                   </div>
-                  <Button type="submit" className="w-full" disabled={createIdeaMutation.isPending || !csOwnerId || !executorName.trim()}>
+                  <Button type="submit" className="w-full" disabled={createIdeaMutation.isPending || !executorName.trim()}>
                     {createIdeaMutation.isPending ? "Creating..." : "Create Idea"}
                   </Button>
                   <p className="text-xs text-zinc-500 text-center">
