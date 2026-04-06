@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getAllContentEntries, updateContentEntry, getPages } from "@/services/api";
+import { getAllContentEntries, updateContentEntry, deleteContentEntry, getPages } from "@/services/api";
 import type { Page } from "@/types";
 import { Badge } from "@/components/ui/badge";
-import { ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
+import { ExternalLink, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,6 +50,15 @@ export default function PipelineView() {
       toast.success("Moved");
     },
     onError: () => toast.error("Failed to move"),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: deleteContentEntry,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["content-entries"] });
+      toast.success("Deleted");
+    },
+    onError: () => toast.error("Failed to delete"),
   });
 
   // Filter by page
@@ -183,27 +192,46 @@ export default function PipelineView() {
                         onDragEnd={handleDragEnd}
                         className={`bg-zinc-950/80 border border-zinc-800 rounded-lg p-3 cursor-grab active:cursor-grabbing transition-all hover:border-zinc-700 ${isDragging ? "opacity-40 scale-95" : ""}`}
                       >
-                        <p className="text-xs font-semibold text-white truncate mb-1">{entry.idea_name}</p>
-                        <div className="flex items-center gap-1.5 mb-1.5">
-                          <span className="text-[9px] uppercase text-zinc-500">{entry.content_type}</span>
-                          {handle && <span className="text-[9px] text-zinc-600">@{handle}</span>}
-                        </div>
-                        {entry.views > 0 && (
-                          <p className="text-[10px] font-mono text-violet-400 mb-1">{(entry.views ?? 0).toLocaleString()} views</p>
-                        )}
+                        {/* Account name - big */}
+                        {handle && <p className="text-sm font-bold text-white mb-1">@{handle}</p>}
+                        {/* Idea name */}
+                        <p className="text-[11px] text-violet-400 truncate mb-2">{entry.idea_name}</p>
+                        {/* Type */}
+                        <span className="text-[9px] uppercase text-zinc-500">{entry.content_type}</span>
+                        {/* Deadline - always red */}
                         {entry.deadline && (
-                          <p className={`text-[9px] mb-1 ${entry.deadline <= new Date().toISOString().slice(0, 10) ? "text-red-400 font-bold" : "text-zinc-500"}`}>
+                          <p className="text-[10px] text-red-400 font-bold mt-1.5">
                             Due: {entry.deadline.slice(0, 10)}
                           </p>
                         )}
-                        {entry.created_by && (
-                          <p className="text-[9px] text-zinc-600">{entry.created_by}</p>
+                        {/* Creator & Executor */}
+                        <div className="mt-2 space-y-0.5">
+                          {entry.created_by && (
+                            <p className="text-[9px] text-zinc-500">Created: <span className="text-zinc-300">{entry.created_by}</span></p>
+                          )}
+                          {entry.assigned_role && (
+                            <p className="text-[9px] text-zinc-500">Executor: <span className="text-zinc-300">{entry.assigned_role}</span></p>
+                          )}
+                        </div>
+                        {/* Views */}
+                        {entry.views > 0 && (
+                          <p className="text-[10px] font-mono text-emerald-400 mt-1.5">{(entry.views ?? 0).toLocaleString()} views</p>
                         )}
-                        {entry.url && (
-                          <a href={entry.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-[9px] text-violet-400 hover:underline flex items-center gap-1 mt-1">
-                            <ExternalLink className="w-3 h-3" /> Link
-                          </a>
-                        )}
+                        {/* Footer: link + delete */}
+                        <div className="flex items-center justify-between mt-2 pt-2 border-t border-zinc-800">
+                          {entry.url ? (
+                            <a href={entry.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-[9px] text-violet-400 hover:underline flex items-center gap-1">
+                              <ExternalLink className="w-3 h-3" /> Link
+                            </a>
+                          ) : <span />}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); deleteMut.mutate(entry.id); }}
+                            className="text-zinc-600 hover:text-red-400 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
