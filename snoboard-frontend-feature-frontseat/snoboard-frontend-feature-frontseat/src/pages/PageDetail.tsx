@@ -305,6 +305,10 @@ export default function PageDetail() {
                     </div>
                   </div>
                   <div className="space-y-1.5">
+                    <Label>Upload Date</Label>
+                    <Input type="date" value={form.upload_date} onChange={(e) => setForm({ ...form, upload_date: e.target.value })} onClick={(e) => (e.target as HTMLInputElement).showPicker?.()} className="cursor-pointer" />
+                  </div>
+                  <div className="space-y-1.5">
                     <Label>IPs</Label>
                     <Select value={form.ips} onValueChange={(v) => setForm({ ...form, ips: v })}>
                       <SelectTrigger><SelectValue placeholder="Select IP" /></SelectTrigger>
@@ -607,7 +611,7 @@ export default function PageDetail() {
                       {isEditing ? (
                         <Input type="date" className="h-7 text-xs w-32 cursor-pointer" value={(editData.upload_date ?? entry.upload_date ?? "").slice(0, 10)} onChange={(e) => setEditData({ ...editData, upload_date: e.target.value })} onClick={(e) => (e.target as HTMLInputElement).showPicker?.()} />
                       ) : (
-                        <span className="text-zinc-400 text-xs">{(entry.idea_status === "scheduled" || entry.idea_status === "posted") ? (entry.upload_date?.slice(0, 10) || "") : ""}</span>
+                        <span className="text-zinc-400 text-xs">{(entry.idea_status === "scheduled" || entry.idea_status === "posted") ? (entry.upload_date?.slice(0, 10) || entry.created_at?.slice(0, 10) || "") : ""}</span>
                       )}
                     </td>
                     <td className="py-3 px-4">
