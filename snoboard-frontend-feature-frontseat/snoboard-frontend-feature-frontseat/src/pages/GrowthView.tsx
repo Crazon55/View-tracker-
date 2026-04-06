@@ -33,10 +33,9 @@ function MonthSection({ month, views }: { month: string; views: any[] }) {
   const monthLabel = new Date(month + "-01").toLocaleDateString("en-GB", { month: "long", year: "numeric" });
   const totalViews = views.reduce((s, v) => s + (v.views ?? 0), 0);
 
-  // Split by stage and category
+  // Split by stage
   const stage3 = views.filter((v) => v.stage === 3).sort((a: any, b: any) => (b.views ?? 0) - (a.views ?? 0));
-  const stage1fbs = views.filter((v) => v.stage === 1 && v.category === "fbs").sort((a: any, b: any) => (b.views ?? 0) - (a.views ?? 0));
-  const stage1tech = views.filter((v) => v.stage === 1 && v.category === "tech").sort((a: any, b: any) => (b.views ?? 0) - (a.views ?? 0));
+  const stage1 = views.filter((v) => (v.stage ?? 1) === 1).sort((a: any, b: any) => (b.views ?? 0) - (a.views ?? 0));
   const stage2 = views.filter((v) => v.stage === 2).sort((a: any, b: any) => (b.views ?? 0) - (a.views ?? 0));
 
   return (
@@ -88,31 +87,17 @@ function MonthSection({ month, views }: { month: string; views: any[] }) {
             </div>
           )}
 
-          {/* Stage 1 FBS */}
-          {stage1fbs.length > 0 && (
+          {/* Stage 1 */}
+          {stage1.length > 0 && (
             <div>
               <div className="flex items-center gap-3 mb-5">
                 <div className="w-3 h-3 rounded-full bg-blue-500" />
-                <h3 className="text-lg font-bold text-white">Stage 0/1 — FBS</h3>
+                <h3 className="text-lg font-bold text-white">Stage 1</h3>
                 <span className="text-sm text-zinc-500">
-                  {formatCompact(stage1fbs.reduce((s, v) => s + (v.views ?? 0), 0))} views
+                  {formatCompact(stage1.reduce((s, v) => s + (v.views ?? 0), 0))} views
                 </span>
               </div>
-              <GrowthTable views={stage1fbs} totalViews={totalViews} />
-            </div>
-          )}
-
-          {/* Stage 1 Tech */}
-          {stage1tech.length > 0 && (
-            <div>
-              <div className="flex items-center gap-3 mb-5">
-                <div className="w-3 h-3 rounded-full bg-cyan-500" />
-                <h3 className="text-lg font-bold text-white">Stage 0/1 — Tech</h3>
-                <span className="text-sm text-zinc-500">
-                  {formatCompact(stage1tech.reduce((s, v) => s + (v.views ?? 0), 0))} views
-                </span>
-              </div>
-              <GrowthTable views={stage1tech} totalViews={totalViews} />
+              <GrowthTable views={stage1} totalViews={totalViews} />
             </div>
           )}
         </div>
