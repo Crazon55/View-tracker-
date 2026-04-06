@@ -241,7 +241,9 @@ export default function PageDetail() {
                 <form onSubmit={handleCreate} className="space-y-3 mt-2">
                   <div className="space-y-1.5">
                     <Label>Idea Name</Label>
-                    {showNewIdea ? (
+                    {isPostMode ? (
+                      <Input placeholder="Enter idea name" value={form.idea_name} onChange={(e) => setForm({ ...form, idea_name: e.target.value })} required />
+                    ) : showNewIdea ? (
                       <div className="flex gap-2">
                         <Input placeholder="New idea name (moment marketing)" value={form.idea_name} onChange={(e) => setForm({ ...form, idea_name: e.target.value })} className="flex-1" required />
                         <Button type="button" variant="ghost" size="sm" onClick={() => { setShowNewIdea(false); setForm({ ...form, idea_name: "" }); }}>Cancel</Button>
