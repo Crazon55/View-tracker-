@@ -605,7 +605,7 @@ export default function PageDetail() {
                       {isEditing ? (
                         <Input type="date" className="h-7 text-xs w-32 cursor-pointer" value={(editData.upload_date ?? entry.upload_date ?? "").slice(0, 10)} onChange={(e) => setEditData({ ...editData, upload_date: e.target.value })} onClick={(e) => (e.target as HTMLInputElement).showPicker?.()} />
                       ) : (
-                        <span className="text-zinc-400 text-xs">{entry.upload_date?.slice(0, 10) || entry.created_at?.slice(0, 10) || ""}</span>
+                        <span className="text-zinc-400 text-xs">{(entry.idea_status === "scheduled" || entry.idea_status === "posted") ? (entry.upload_date?.slice(0, 10) || "") : ""}</span>
                       )}
                     </td>
                     <td className="py-3 px-4">
@@ -748,7 +748,7 @@ export default function PageDetail() {
                   </div>
                   <div>
                     <span className="text-zinc-500 block">Upload Date</span>
-                    <span className="text-white">{calSelectedEntry.upload_date?.slice(0, 10) || "\u2014"}</span>
+                    <span className="text-white">{(calSelectedEntry.idea_status === "scheduled" || calSelectedEntry.idea_status === "posted") ? (calSelectedEntry.upload_date?.slice(0, 10) || "\u2014") : "\u2014"}</span>
                   </div>
                   <div>
                     <span className="text-zinc-500 block">Created By</span>
