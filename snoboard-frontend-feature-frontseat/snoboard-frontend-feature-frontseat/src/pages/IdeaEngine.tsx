@@ -295,6 +295,7 @@ export default function IdeaEngine() {
     draft: "bg-zinc-700 text-zinc-300",
     in_progress: "bg-amber-500/20 text-amber-400 border-amber-500/30",
     completed: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+    active: "bg-blue-500/20 text-blue-400 border-blue-500/30",
   };
 
   return (
