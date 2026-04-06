@@ -27,6 +27,8 @@ export default function PagesView() {
   const navigate = useNavigate();
   const [addOpen, setAddOpen] = useState(false);
   const [newHandle, setNewHandle] = useState("");
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropStage, setDropStage] = useState<number | null>(null);
   const [newName, setNewName] = useState("");
   const [newStage, setNewStage] = useState("1");
 
@@ -139,7 +141,11 @@ export default function PagesView() {
           const stagePages = pages.filter((p) => (p.stage ?? 1) === stage.value).sort((a, b) => a.handle.localeCompare(b.handle));
 
           return (
-            <div key={stage.value} className={`border rounded-2xl p-5 ${stage.color}`}>
+            <div key={stage.value} className={`border rounded-2xl p-5 transition-all ${dropStage === stage.value ? "scale-[1.01] border-2 brightness-110" : ""} ${stage.color}`}
+              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropStage(stage.value); }}
+              onDragLeave={() => setDropStage(null)}
+              onDrop={(e) => { e.preventDefault(); const pageId = e.dataTransfer.getData("text/plain"); if (pageId) { updateMutation.mutate({ id: pageId, data: { stage: stage.value } }); } setDraggingId(null); setDropStage(null); }}
+            >
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <div className={`w-2.5 h-2.5 rounded-full ${stage.dot}`} />
@@ -152,7 +158,10 @@ export default function PagesView() {
                 {stagePages.map((page) => (
                   <div
                     key={page.id}
-                    className="group flex items-center justify-between bg-zinc-950/60 hover:bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-xl px-4 py-3 cursor-pointer transition-all"
+                    draggable
+                    onDragStart={(e) => { setDraggingId(page.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", page.id); }}
+                    onDragEnd={() => { setDraggingId(null); setDropStage(null); }}
+                    className={`group flex items-center justify-between bg-zinc-950/60 hover:bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-xl px-4 py-3 cursor-grab active:cursor-grabbing transition-all ${draggingId === page.id ? "opacity-40 scale-95" : ""}`}
                     onClick={() => navigate(`/page/${page.id}`)}
                   >
                     <div className="flex items-center gap-3 min-w-0">
