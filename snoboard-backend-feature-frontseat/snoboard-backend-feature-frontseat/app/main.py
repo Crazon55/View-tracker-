@@ -443,22 +443,15 @@ async def schedule_idea(idea_id: str):
         device = (page_info.get("device") or "unknown").lower().strip()
         page_clean = handle.lower().strip()
 
-        # Stage-specific params
+        # Stage 3 pages: skip scheduling (they get content entries via auto-distribute, not scheduled)
         if stage == 3:
-            device_breather_min = 151
-            time_start = 540   # 9 AM
-            time_end = 1380    # 11 PM
-            chaos_skip_chance = 0.3
-        else:
-            device_breather_min = 90
-            time_start = 630   # 10:30 AM
-            time_end = 1170    # 7:30 PM
-            chaos_skip_chance = 0.0
-
-        # Chaos skip for stage 3
-        if random.random() < chaos_skip_chance:
-            results.append({"page": handle, "status": "skipped", "reason": "chaos_skip"})
+            results.append({"page": handle, "status": "skipped", "reason": "stage3_no_scheduling"})
             continue
+
+        # Stage 1 scheduling params
+        device_breather_min = 90
+        time_start = 630   # 10:30 AM
+        time_end = 1170    # 7:30 PM
 
         device_breather_ms = device_breather_min * 60
         schedule_date = now
