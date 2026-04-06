@@ -77,6 +77,8 @@ export default function IdeaEngine() {
   const [expandedIdeaId, setExpandedIdeaId] = useState<string | null>(null);
   const [editingIdeaId, setEditingIdeaId] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState("");
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [editRowData, setEditRowData] = useState<any>({});
   const [editingDistId, setEditingDistId] = useState<string | null>(null);
   const [editDistPages, setEditDistPages] = useState<string[]>([]);
   // sourceTab removed — this page only shows original ideas
@@ -666,40 +668,53 @@ export default function IdeaEngine() {
                   const distributedEntries = allContentEntries.filter((e: any) => e.idea_name === ideaLabel || e.idea_name === idea.hook);
                   const isExpanded = expandedIdeaId === idea.id;
                   return (<>
-                  <TableRow key={idea.id} className="cursor-pointer" onClick={() => setExpandedIdeaId(isExpanded ? null : idea.id)}>
-                    <TableCell>
+                  <TableRow key={idea.id} className="cursor-pointer">
+                    {(() => {
+                      const isRowEdit = editingRowId === idea.id;
+                      const startEdit = (e: React.MouseEvent) => { e.stopPropagation(); if (!isRowEdit) { setEditingRowId(idea.id); setEditRowData({ hook: idea.hook, hook_variations: (idea.hook_variations || []).join("\n"), executor_name: idea.executor_name || "", format: idea.format, deadline: idea.deadline || "", yt_url: idea.yt_url || "", timestamps: idea.timestamps || "", base_drive_link: idea.base_drive_link || "", pintu_batch_link: idea.pintu_batch_link || "" }); } };
+                      return (<>
+                    <TableCell onClick={() => setExpandedIdeaId(isExpanded ? null : idea.id)}>
                       <span className="font-mono text-xs font-bold text-violet-400">{idea.idea_code}</span>
                     </TableCell>
-                    <TableCell>
-                      <span className="text-xs text-white font-medium max-w-[150px] truncate block">{idea.hook}</span>
+                    <TableCell onClick={startEdit}>
+                      {isRowEdit ? <Input className="h-7 text-xs w-36" value={editRowData.hook} onChange={(e) => setEditRowData({ ...editRowData, hook: e.target.value })} onClick={(e) => e.stopPropagation()} />
+                        : <span className="text-xs text-white font-medium max-w-[150px] truncate block hover:text-violet-400">{idea.hook}</span>}
                     </TableCell>
-                    <TableCell>
-                      {idea.hook_variations?.length > 0 ? (
-                        <div className="max-w-[120px]">
-                          {idea.hook_variations.map((v: string, i: number) => (
-                            <p key={i} className="text-[10px] text-zinc-500 truncate">{v}</p>
-                          ))}
-                        </div>
-                      ) : <span className="text-zinc-700 text-xs">—</span>}
+                    <TableCell onClick={startEdit}>
+                      {isRowEdit ? <textarea className="w-28 h-14 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-[10px] text-white resize-none" value={editRowData.hook_variations} onChange={(e) => setEditRowData({ ...editRowData, hook_variations: e.target.value })} onClick={(e) => e.stopPropagation()} />
+                        : idea.hook_variations?.length > 0 ? <div className="max-w-[120px]">{idea.hook_variations.map((v: string, i: number) => <p key={i} className="text-[10px] text-zinc-500 truncate">{v}</p>)}</div> : <span className="text-zinc-700 text-xs">—</span>}
                     </TableCell>
                     <TableCell className="text-xs text-zinc-400">{idea.created_by || idea.cs_owner_name || "—"}</TableCell>
-                    <TableCell className="text-xs text-zinc-400">{idea.executor_name || "—"}</TableCell>
-                    <TableCell>
-                      <span className="text-[10px] uppercase tracking-wider text-zinc-500">{idea.format}</span>
+                    <TableCell onClick={startEdit}>
+                      {isRowEdit ? <Input className="h-7 text-xs w-24" value={editRowData.executor_name} onChange={(e) => setEditRowData({ ...editRowData, executor_name: e.target.value })} onClick={(e) => e.stopPropagation()} />
+                        : <span className="text-xs text-zinc-400 hover:text-white">{idea.executor_name || "—"}</span>}
                     </TableCell>
-                    <TableCell>
-                      {idea.deadline ? <span className="text-xs text-red-400 font-bold">{idea.deadline.slice(0, 10)}</span> : <span className="text-zinc-700 text-xs">—</span>}
+                    <TableCell onClick={startEdit}>
+                      {isRowEdit ? <Select value={editRowData.format} onValueChange={(v) => setEditRowData({ ...editRowData, format: v })}><SelectTrigger className="h-7 text-xs w-24" onClick={(e) => e.stopPropagation()}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="reel">Reel</SelectItem><SelectItem value="carousel">Carousel</SelectItem><SelectItem value="static">Static</SelectItem><SelectItem value="story">Story</SelectItem></SelectContent></Select>
+                        : <span className="text-[10px] uppercase tracking-wider text-zinc-500 hover:text-white">{idea.format}</span>}
                     </TableCell>
-                    <TableCell>
-                      {idea.yt_url ? <a href={idea.yt_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-violet-400 hover:underline truncate block max-w-[80px]">Link</a> : <span className="text-zinc-700 text-xs">—</span>}
+                    <TableCell onClick={startEdit}>
+                      {isRowEdit ? <Input type="date" className="h-7 text-xs w-32 cursor-pointer" value={editRowData.deadline} onChange={(e) => setEditRowData({ ...editRowData, deadline: e.target.value })} onClick={(e) => { e.stopPropagation(); (e.target as HTMLInputElement).showPicker?.(); }} />
+                        : idea.deadline ? <span className="text-xs text-red-400 font-bold">{idea.deadline.slice(0, 10)}</span> : <span className="text-zinc-700 text-xs">—</span>}
                     </TableCell>
-                    <TableCell className="text-[10px] text-zinc-500 max-w-[80px] truncate">{idea.timestamps || "—"}</TableCell>
-                    <TableCell>
-                      {idea.base_drive_link ? <a href={idea.base_drive_link} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-400 hover:underline">Drive</a> : <span className="text-zinc-700 text-xs">—</span>}
+                    <TableCell onClick={startEdit}>
+                      {isRowEdit ? <Input className="h-7 text-xs w-32" placeholder="YouTube URL" value={editRowData.yt_url} onChange={(e) => setEditRowData({ ...editRowData, yt_url: e.target.value })} onClick={(e) => e.stopPropagation()} />
+                        : idea.yt_url ? <a href={idea.yt_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-[10px] text-violet-400 hover:underline">Link</a> : <span className="text-zinc-700 text-xs">—</span>}
                     </TableCell>
-                    <TableCell>
-                      {idea.pintu_batch_link ? <a href={idea.pintu_batch_link} target="_blank" rel="noopener noreferrer" className="text-[10px] text-amber-400 hover:underline">Pintu</a> : <span className="text-zinc-700 text-xs">—</span>}
+                    <TableCell onClick={startEdit}>
+                      {isRowEdit ? <Input className="h-7 text-xs w-28" placeholder="0:30-1:45" value={editRowData.timestamps} onChange={(e) => setEditRowData({ ...editRowData, timestamps: e.target.value })} onClick={(e) => e.stopPropagation()} />
+                        : <span className="text-[10px] text-zinc-500 max-w-[80px] truncate block hover:text-white">{idea.timestamps || "—"}</span>}
                     </TableCell>
+                    <TableCell onClick={startEdit}>
+                      {isRowEdit ? <Input className="h-7 text-xs w-32" placeholder="Drive link" value={editRowData.base_drive_link} onChange={(e) => setEditRowData({ ...editRowData, base_drive_link: e.target.value })} onClick={(e) => e.stopPropagation()} />
+                        : idea.base_drive_link ? <a href={idea.base_drive_link} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-[10px] text-blue-400 hover:underline">Drive</a> : <span className="text-zinc-700 text-xs">—</span>}
+                    </TableCell>
+                    <TableCell onClick={startEdit}>
+                      {isRowEdit ? <Input className="h-7 text-xs w-32" placeholder="Pintu link" value={editRowData.pintu_batch_link} onChange={(e) => setEditRowData({ ...editRowData, pintu_batch_link: e.target.value })} onClick={(e) => e.stopPropagation()} />
+                        : idea.pintu_batch_link ? <a href={idea.pintu_batch_link} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-[10px] text-amber-400 hover:underline">Pintu</a> : <span className="text-zinc-700 text-xs">—</span>}
+                    </TableCell>
+                    </>);
+                    })()}
                     <TableCell>
                       {editingDistId === idea.id ? (
                         <div className="space-y-2">
@@ -770,11 +785,19 @@ export default function IdeaEngine() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
+                        {editingRowId === idea.id ? (<>
+                          <Button size="sm" className="h-7 px-2 bg-violet-600 hover:bg-violet-700 text-white text-xs" onClick={(e) => { e.stopPropagation(); const d: any = { ...editRowData }; if (d.hook_variations) d.hook_variations = d.hook_variations.split("\n").filter((v: string) => v.trim()); updateIdeaMutation.mutate({ id: idea.id, data: d }); setEditingRowId(null); }}>
+                            <Check className="w-3 h-3 mr-1" /> Save
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-7 px-2 text-zinc-400 text-xs" onClick={(e) => { e.stopPropagation(); setEditingRowId(null); }}>
+                            <X className="w-3 h-3" />
+                          </Button>
+                        </>) : (<>
                         <Button
                           variant="ghost" size="icon"
                           className="h-7 w-7 text-zinc-600 hover:text-green-400"
                           title="Schedule to distributed pages"
-                          onClick={() => scheduleMutation.mutate(idea.id)}
+                          onClick={(e) => { e.stopPropagation(); scheduleMutation.mutate(idea.id); }}
                           disabled={scheduleMutation.isPending}
                         >
                           <CalendarClock className="w-3.5 h-3.5" />
@@ -793,10 +816,11 @@ export default function IdeaEngine() {
                         <Button
                           variant="ghost" size="icon"
                           className="h-7 w-7 text-zinc-600 hover:text-red-400"
-                          onClick={() => deleteIdeaMutation.mutate(idea.id)}
+                          onClick={(e) => { e.stopPropagation(); deleteIdeaMutation.mutate(idea.id); }}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
+                        </>)}
                       </div>
                     </TableCell>
                   </TableRow>
