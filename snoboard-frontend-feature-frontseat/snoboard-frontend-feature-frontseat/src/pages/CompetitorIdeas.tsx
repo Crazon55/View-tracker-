@@ -204,6 +204,7 @@ export default function CompetitorIdeas() {
     draft: "bg-zinc-700 text-zinc-300",
     in_progress: "bg-amber-500/20 text-amber-400 border-amber-500/30",
     completed: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+    active: "bg-blue-500/20 text-blue-400 border-blue-500/30",
   };
 
   return (
@@ -408,7 +409,7 @@ export default function CompetitorIdeas() {
               ) : (
                 filteredIdeas.map((idea) => {
                   const isFieldEdit = editingFieldId === idea.id;
-                  const startEdit = () => { if (!isFieldEdit) { setEditingFieldId(idea.id); setEditFieldData({ hook: idea.hook, hook_variations: (idea.hook_variations || []).join("\n"), executor_name: idea.executor_name || "", format: idea.format, deadline: idea.deadline || "", yt_url: idea.yt_url || "", timestamps: idea.timestamps || "", base_drive_link: idea.base_drive_link || "", pintu_batch_link: idea.pintu_batch_link || "", comp_link: idea.comp_link || "" }); } };
+                  const startEdit = (e?: React.MouseEvent) => { e?.stopPropagation(); if (!isFieldEdit) { setEditingFieldId(idea.id); setEditFieldData({ hook: idea.hook, hook_variations: (idea.hook_variations || []).join("\n"), executor_name: idea.executor_name || "", format: idea.format, deadline: idea.deadline || "", yt_url: idea.yt_url || "", timestamps: idea.timestamps || "", base_drive_link: idea.base_drive_link || "", pintu_batch_link: idea.pintu_batch_link || "", comp_link: idea.comp_link || "" }); } };
                   return (
                   <TableRow key={idea.id}>
                     <TableCell><span className="font-mono text-xs font-bold text-amber-400">{idea.idea_code}</span></TableCell>
