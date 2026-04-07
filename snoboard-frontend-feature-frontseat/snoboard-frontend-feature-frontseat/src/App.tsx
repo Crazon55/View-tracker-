@@ -5,7 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { getDeadlines } from "@/services/api";
 import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, BarChart3 } from "lucide-react";
+import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, BarChart3, Scissors } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -198,7 +198,14 @@ function AnimalPicker({ userId }: { userId: string | undefined }) {
   );
 }
 
-const navItems = [
+type NavItem = {
+  to: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  external?: boolean;
+};
+
+const navItems: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/ideas", label: "Original Ideas", icon: Lightbulb },
   { to: "/competitor-ideas", label: "Competitor Ideas", icon: Swords },
@@ -207,6 +214,7 @@ const navItems = [
   { to: "/stage1-tracker", label: "Stage 1 Tracker", icon: BarChart3 },
   { to: "/growth", label: "Growth", icon: TrendingUp },
   { to: "/pages", label: "IP's", icon: Users },
+  { to: "http://16.112.125.207:5173/", label: "Pintu", icon: Scissors, external: true },
 ];
 
 function HamburgerMenu() {
@@ -232,10 +240,17 @@ function HamburgerMenu() {
             <p className="text-xs text-muted-foreground mt-0.5">Frontseat Media</p>
           </div>
           <nav className="px-3 py-4 space-y-1 flex-1">
-            {navItems.map(({ to, label, icon: Icon }) => (
+            {navItems.map(({ to, label, icon: Icon, external }) => (
               <button
                 key={to}
-                onClick={() => { navigate(to); setOpen(false); }}
+                onClick={() => {
+                  if (external) {
+                    window.open(to, "_blank", "noopener,noreferrer");
+                  } else {
+                    navigate(to);
+                  }
+                  setOpen(false);
+                }}
                 className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors w-full text-left text-zinc-400 hover:text-white hover:bg-zinc-900"
               >
                 <Icon className="w-4 h-4" />
@@ -316,22 +331,35 @@ function AppLayout() {
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1">
-          {navItems.map(({ to, label, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === "/"}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  isActive
-                    ? "bg-violet-500/10 text-violet-400"
-                    : "text-zinc-500 hover:text-white hover:bg-zinc-900"
-                }`
-              }
-            >
-              <Icon className="w-4 h-4" />
-              {label}
-            </NavLink>
+          {navItems.map(({ to, label, icon: Icon, external }) => (
+            external ? (
+              <a
+                key={to}
+                href={to}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-zinc-500 hover:text-white hover:bg-zinc-900"
+              >
+                <Icon className="w-4 h-4" />
+                {label}
+              </a>
+            ) : (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === "/"}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    isActive
+                      ? "bg-violet-500/10 text-violet-400"
+                      : "text-zinc-500 hover:text-white hover:bg-zinc-900"
+                  }`
+                }
+              >
+                <Icon className="w-4 h-4" />
+                {label}
+              </NavLink>
+            )
           ))}
         </nav>
 
