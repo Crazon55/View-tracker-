@@ -64,11 +64,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const handleSetRole = async (newRole: string) => {
     if (!user?.email) return;
     const name = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split("@")[0] || "";
+    // Save to localStorage immediately so it persists across refreshes
+    localStorage.setItem(`role_${user.email}`, newRole);
     try {
       await setUserRole({ email: user.email, role: newRole, name });
     } catch (err) {
-      console.error("Failed to save role:", err);
-      // Continue anyway so user isn't stuck
+      console.error("Failed to save role to backend (using local fallback):", err);
     }
     setRoleState(newRole);
     setRoleName(ROLES.find((r) => r.value === newRole)?.label || newRole);
@@ -76,12 +77,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const fetchRole = async (email: string) => {
+    // Check localStorage first
+    const localRole = localStorage.getItem(`role_${email}`);
+    if (localRole) {
+      setRoleState(localRole);
+      setRoleName(ROLES.find((r) => r.value === localRole)?.label || localRole);
+      setNeedsRole(false);
+      return;
+    }
     try {
       const data = await getUserRole(email);
       if (data?.role) {
         setRoleState(data.role);
         setRoleName(ROLES.find((r) => r.value === data.role)?.label || data.role);
         setNeedsRole(false);
+        localStorage.setItem(`role_${email}`, data.role);
       } else {
         setNeedsRole(true);
       }
