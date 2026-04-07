@@ -33,6 +33,7 @@ export default function CompetitorIdeas() {
   const { user } = useAuth();
   const userName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "";
   const [search, setSearch] = useState("");
+  const [contentType, setContentType] = useState<"all" | "reels" | "posts">("all");
   const [ideaOpen, setIdeaOpen] = useState(false);
   const [editingIdeaId, setEditingIdeaId] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState("");
@@ -191,14 +192,19 @@ export default function CompetitorIdeas() {
   }
 
   const ideas = (engineData?.ideas ?? []).filter((i) => i.source === "repurposed");
+  const typeFilteredIdeas = contentType === "all"
+    ? ideas
+    : contentType === "reels"
+      ? ideas.filter((i) => i.format === "reel" || i.format === "story")
+      : ideas.filter((i) => i.format === "carousel" || i.format === "static");
   const filteredIdeas = search.trim()
-    ? ideas.filter((i) =>
+    ? typeFilteredIdeas.filter((i) =>
         i.idea_code.toLowerCase().includes(search.toLowerCase()) ||
         i.hook.toLowerCase().includes(search.toLowerCase()) ||
         i.cs_owner_name.toLowerCase().includes(search.toLowerCase()) ||
         (i.cdi_owner_name || "").toLowerCase().includes(search.toLowerCase())
       )
-    : ideas;
+    : typeFilteredIdeas;
 
   const statusColors: Record<string, string> = {
     draft: "bg-zinc-700 text-zinc-300",
@@ -363,8 +369,14 @@ export default function CompetitorIdeas() {
         {/* Ideas heading */}
         <div className="flex items-center gap-3 mb-4">
           <h2 className="text-xl font-black text-white uppercase tracking-wider">Ideas</h2>
-          <Badge variant="outline" className="border-zinc-700 text-zinc-400 text-xs font-mono">{ideas.length}</Badge>
+          <Badge variant="outline" className="border-zinc-700 text-zinc-400 text-xs font-mono">{typeFilteredIdeas.length}</Badge>
           <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-[10px] uppercase">Competitor</Badge>
+          {/* Content type filter */}
+          <div className="inline-flex items-center bg-zinc-800/80 rounded-full p-0.5 gap-0.5 ml-auto">
+            <button onClick={() => setContentType("all")} className={`text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-full font-medium transition-all ${contentType === "all" ? "bg-violet-600 text-white" : "text-zinc-500 hover:text-zinc-300"}`}>All</button>
+            <button onClick={() => setContentType("reels")} className={`text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-full font-medium transition-all ${contentType === "reels" ? "bg-emerald-600 text-white" : "text-zinc-500 hover:text-zinc-300"}`}>Reels</button>
+            <button onClick={() => setContentType("posts")} className={`text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-full font-medium transition-all ${contentType === "posts" ? "bg-emerald-600 text-white" : "text-zinc-500 hover:text-zinc-300"}`}>Posts</button>
+          </div>
         </div>
 
         {/* Search */}
@@ -403,7 +415,7 @@ export default function CompetitorIdeas() {
               {filteredIdeas.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={17} className="text-center text-zinc-500 py-8">
-                    {ideas.length === 0 ? 'No competitor ideas yet. Click "New Competitor Idea" to create one.' : "No ideas matching your search."}
+                    {ideas.length === 0 ? 'No competitor ideas yet. Click "New Competitor Idea" to create one.' : "No ideas matching your filters."}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -538,9 +550,9 @@ export default function CompetitorIdeas() {
 
         {filteredIdeas.length > 0 && (
           <div className="flex items-center gap-6 mt-3 text-xs text-zinc-600">
-            <span>Total views: <span className="text-white font-bold">{formatCompact(ideas.reduce((s, i) => s + i.total_views, 0))}</span></span>
-            <span>Total posts: <span className="text-white font-bold">{ideas.reduce((s, i) => s + i.total_posts, 0)}</span></span>
-            <span>Winners: <span className="text-yellow-400 font-bold">{ideas.reduce((s, i) => s + i.winners_count, 0)}</span></span>
+            <span>Total views: <span className="text-white font-bold">{formatCompact(typeFilteredIdeas.reduce((s, i) => s + i.total_views, 0))}</span></span>
+            <span>Total posts: <span className="text-white font-bold">{typeFilteredIdeas.reduce((s, i) => s + i.total_posts, 0)}</span></span>
+            <span>Winners: <span className="text-yellow-400 font-bold">{typeFilteredIdeas.reduce((s, i) => s + i.winners_count, 0)}</span></span>
           </div>
         )}
       </div>
