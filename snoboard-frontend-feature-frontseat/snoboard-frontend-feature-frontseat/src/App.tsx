@@ -5,7 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { getDeadlines } from "@/services/api";
 import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban } from "lucide-react";
+import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, BarChart3 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -23,6 +23,7 @@ import IdeaEngine from "./pages/IdeaEngine";
 import CompetitorIdeas from "./pages/CompetitorIdeas";
 import PostIPsView from "./pages/PostIPsView";
 import PipelineView from "./pages/PipelineView";
+import Stage1Tracker from "./pages/Stage1Tracker";
 import RoleSelect from "./pages/RoleSelect";
 import NotFound from "./pages/NotFound";
 
@@ -203,6 +204,7 @@ const navItems = [
   { to: "/competitor-ideas", label: "Competitor Ideas", icon: Swords },
   { to: "/post-ips", label: "Post IPs", icon: Image },
   { to: "/pipeline", label: "Pipeline", icon: Kanban },
+  { to: "/stage1-tracker", label: "Stage 1 Tracker", icon: BarChart3 },
   { to: "/growth", label: "Growth", icon: TrendingUp },
   { to: "/pages", label: "IP's", icon: Users },
 ];
@@ -267,6 +269,7 @@ function AppLayout() {
     location.pathname === "/competitor-ideas" ||
     location.pathname === "/post-ips" ||
     location.pathname === "/pipeline" ||
+    location.pathname === "/stage1-tracker" ||
     location.pathname.startsWith("/post-ips/") ||
     location.pathname.startsWith("/page/");
 
@@ -295,6 +298,7 @@ function AppLayout() {
           <Route path="/post-ips" element={<PostIPsView />} />
           <Route path="/post-ips/:pageId" element={<PageDetail />} />
           <Route path="/pipeline" element={<PipelineView />} />
+          <Route path="/stage1-tracker" element={<Stage1Tracker />} />
         </Routes>
       </div>
     );
