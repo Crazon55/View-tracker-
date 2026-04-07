@@ -154,7 +154,7 @@ export default function PageDetail() {
       views: form.views ? Number(form.views) : 0,
       url: form.url || undefined,
       notes: form.notes || undefined,
-      ips: form.ips || undefined,
+      ips: pageData?.page?.handle || form.ips || undefined,
       deadline: form.deadline || undefined,
       assigned_role: form.assigned_role || undefined,
     });
@@ -321,17 +321,6 @@ export default function PageDetail() {
                   <div className="space-y-1.5">
                     <Label>Upload Date</Label>
                     <Input type="date" value={form.upload_date} onChange={(e) => setForm({ ...form, upload_date: e.target.value })} onClick={(e) => (e.target as HTMLInputElement).showPicker?.()} className="cursor-pointer" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>IPs</Label>
-                    <Select value={form.ips} onValueChange={(v) => setForm({ ...form, ips: v })}>
-                      <SelectTrigger><SelectValue placeholder="Select IP" /></SelectTrigger>
-                      <SelectContent>
-                        {allPages.map((p) => (
-                          <SelectItem key={p.id} value={p.handle}>@{p.handle}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
