@@ -342,6 +342,16 @@ export default function PageDetail() {
                       <Input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
                     </div>
                   </div>
+                  <div className="space-y-1.5">
+                    <Label>Captions <span className="text-zinc-600 text-[10px]">(only shown in calendar view)</span></Label>
+                    <textarea
+                      placeholder="Write captions here..."
+                      value={form.notes}
+                      onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                      rows={3}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:border-violet-500/50 focus:outline-none resize-none"
+                    />
+                  </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label>Deadline</Label>
@@ -654,14 +664,12 @@ export default function PageDetail() {
                           <Input className="h-7 text-xs w-44" placeholder="Instagram URL" value={editData.url ?? entry.url ?? ""} onChange={(e) => setEditData({ ...editData, url: e.target.value })} />
                           <Input className="h-7 text-xs w-44" placeholder="Frame Link" value={editData.frame_link ?? entry.frame_link ?? ""} onChange={(e) => setEditData({ ...editData, frame_link: e.target.value })} />
                           <Input className="h-7 text-xs w-44" placeholder="Comp Link" value={editData.comp_link ?? entry.comp_link ?? ""} onChange={(e) => setEditData({ ...editData, comp_link: e.target.value })} />
-                          <textarea className="w-44 h-14 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-white placeholder:text-zinc-600 resize-none" placeholder="Captions" value={editData.notes ?? entry.notes ?? ""} onChange={(e) => setEditData({ ...editData, notes: e.target.value })} />
                         </div>
                       ) : (
                         <div className="flex items-center gap-1">
                           {entry.url && <a href={entry.url} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-300"><ExternalLink className="w-3.5 h-3.5" /></a>}
                           {entry.frame_link && <a href={entry.frame_link} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 text-[9px]">Frame</a>}
                           {entry.comp_link && <a href={entry.comp_link} target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:text-amber-300 text-[9px]">Comp</a>}
-                          {entry.notes && <span className="text-[9px] text-zinc-500 ml-1">+captions</span>}
                         </div>
                       )}
                     </td>
