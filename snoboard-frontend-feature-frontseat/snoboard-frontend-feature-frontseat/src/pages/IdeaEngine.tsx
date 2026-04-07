@@ -272,6 +272,17 @@ export default function IdeaEngine() {
 
   // Only show original ideas on this page
   const tabIdeas = ideas.filter((i) => i.source === "original");
+
+  // Stat card metrics scoped to original ideas only (backend `system` aggregates
+  // count both OG + CI together, and its `active_ideas` still uses the old
+  // "active" status enum which we no longer write).
+  const ogTotalIdeas = tabIdeas.length;
+  const ogActiveIdeas = tabIdeas.filter((i) => i.status !== "completed").length;
+  const ogTotalPosts = tabIdeas.reduce((s, i) => s + i.total_posts, 0);
+  const ogTotalViews = tabIdeas.reduce((s, i) => s + i.total_views, 0);
+  const ogTotalWinners = tabIdeas.reduce((s, i) => s + i.winners_count, 0);
+  const ogHitRate = ogTotalPosts > 0 ? Math.round((ogTotalWinners / ogTotalPosts) * 100) : 0;
+  const ogAvgViewsPerIdea = ogTotalIdeas > 0 ? Math.round(ogTotalViews / ogTotalIdeas) : 0;
   const filteredIdeas = search.trim()
     ? tabIdeas.filter(
         (i) =>
@@ -467,8 +478,8 @@ export default function IdeaEngine() {
               <Lightbulb className="w-4 h-4 text-amber-400" />
               <span className="text-[10px] uppercase tracking-[0.15em] text-zinc-400 font-semibold">Active Ideas</span>
             </div>
-            <p className="text-3xl font-black text-white tabular-nums">{system?.active_ideas ?? 0}</p>
-            <p className="text-xs text-zinc-600 mt-1">{system?.total_ideas ?? 0} total</p>
+            <p className="text-3xl font-black text-white tabular-nums">{ogActiveIdeas}</p>
+            <p className="text-xs text-zinc-600 mt-1">{ogTotalIdeas} total</p>
           </div>
 
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
@@ -476,7 +487,7 @@ export default function IdeaEngine() {
               <Trophy className="w-4 h-4 text-yellow-500" />
               <span className="text-[10px] uppercase tracking-[0.15em] text-zinc-400 font-semibold">Winners</span>
             </div>
-            <p className="text-3xl font-black text-white tabular-nums">{system?.total_winners ?? 0}</p>
+            <p className="text-3xl font-black text-white tabular-nums">{ogTotalWinners}</p>
             <p className="text-xs text-zinc-600 mt-1">{formatCompact(system?.winner_threshold ?? 50000)}+ views</p>
           </div>
 
@@ -485,8 +496,8 @@ export default function IdeaEngine() {
               <Target className="w-4 h-4 text-emerald-400" />
               <span className="text-[10px] uppercase tracking-[0.15em] text-zinc-400 font-semibold">Hit Rate</span>
             </div>
-            <p className="text-3xl font-black text-white tabular-nums">{system?.hit_rate ?? 0}%</p>
-            <p className="text-xs text-zinc-600 mt-1">{system?.total_posts ?? 0} total posts</p>
+            <p className="text-3xl font-black text-white tabular-nums">{ogHitRate}%</p>
+            <p className="text-xs text-zinc-600 mt-1">{ogTotalPosts} total posts</p>
           </div>
 
           <div className="relative overflow-hidden bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
@@ -496,8 +507,8 @@ export default function IdeaEngine() {
                 <TrendingUp className="w-4 h-4 text-violet-400" />
                 <span className="text-[10px] uppercase tracking-[0.15em] text-zinc-400 font-semibold">Avg Views/Idea</span>
               </div>
-              <p className="text-3xl font-black text-white tabular-nums">{formatCompact(system?.avg_views_per_idea ?? 0)}</p>
-              <p className="text-xs text-zinc-600 mt-1">{formatCompact(system?.total_views ?? 0)} total</p>
+              <p className="text-3xl font-black text-white tabular-nums">{formatCompact(ogAvgViewsPerIdea)}</p>
+              <p className="text-xs text-zinc-600 mt-1">{formatCompact(ogTotalViews)} total</p>
             </div>
           </div>
         </div>
