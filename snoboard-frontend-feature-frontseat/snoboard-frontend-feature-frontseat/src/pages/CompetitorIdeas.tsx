@@ -140,7 +140,7 @@ export default function CompetitorIdeas() {
     setHook("");
     setCsOwnerId("");
     setCdiOwnerId("");
-    setFormat("reel");
+    setFormat(contentType === "posts" ? "static" : "reel");
     setDistributedTo([]);
     setHookVariations("");
     setYtUrl("");
@@ -265,7 +265,10 @@ export default function CompetitorIdeas() {
             </DialogContent>
           </Dialog>
 
-          <Dialog open={ideaOpen} onOpenChange={setIdeaOpen}>
+          <Dialog open={ideaOpen} onOpenChange={(open) => {
+            setIdeaOpen(open);
+            if (open) setFormat(contentType === "posts" ? "static" : "reel");
+          }}>
             <DialogTrigger asChild>
               <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white">
                 <Plus className="w-4 h-4 mr-2" />
@@ -279,7 +282,7 @@ export default function CompetitorIdeas() {
               <form onSubmit={handleCreate} className="space-y-3 mt-2">
                 <div className="space-y-1.5">
                   <Label>Idea *</Label>
-                  <Input placeholder="e.g. Competitor's viral reel about..." value={hook} onChange={(e) => setHook(e.target.value)} required />
+                  <Input placeholder={contentType === "posts" ? "e.g. Competitor's viral post about..." : "e.g. Competitor's viral reel about..."} value={hook} onChange={(e) => setHook(e.target.value)} required />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Hook Variations (one per line)</Label>
@@ -325,32 +328,41 @@ export default function CompetitorIdeas() {
                     </Select>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                {contentType === "posts" ? (
                   <div className="space-y-1.5">
                     <Label>Deadline</Label>
                     <Input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} onClick={(e) => (e.target as HTMLInputElement).showPicker?.()} className="cursor-pointer" />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label>YouTube URL</Label>
-                    <Input placeholder="https://youtube.com/..." value={ytUrl} onChange={(e) => setYtUrl(e.target.value)} />
-                  </div>
-                </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label>Deadline</Label>
+                        <Input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} onClick={(e) => (e.target as HTMLInputElement).showPicker?.()} className="cursor-pointer" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>YouTube URL</Label>
+                        <Input placeholder="https://youtube.com/..." value={ytUrl} onChange={(e) => setYtUrl(e.target.value)} />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Timestamps</Label>
+                      <Input placeholder="e.g. 0:30-1:45, 3:00-4:20" value={timestamps} onChange={(e) => setTimestamps(e.target.value)} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label>Base Video Drive Link</Label>
+                        <Input placeholder="Google Drive link" value={baseDriveLink} onChange={(e) => setBaseDriveLink(e.target.value)} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Pintu Batch Drive Link</Label>
+                        <Input placeholder="Google Drive link" value={pintuBatchLink} onChange={(e) => setPintuBatchLink(e.target.value)} />
+                      </div>
+                    </div>
+                  </>
+                )}
                 <div className="space-y-1.5">
-                  <Label>Timestamps</Label>
-                  <Input placeholder="e.g. 0:30-1:45, 3:00-4:20" value={timestamps} onChange={(e) => setTimestamps(e.target.value)} />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label>Base Video Drive Link</Label>
-                    <Input placeholder="Google Drive link" value={baseDriveLink} onChange={(e) => setBaseDriveLink(e.target.value)} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Pintu Batch Drive Link</Label>
-                    <Input placeholder="Google Drive link" value={pintuBatchLink} onChange={(e) => setPintuBatchLink(e.target.value)} />
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Canva Link <span className="text-zinc-500">(for posts)</span></Label>
+                  <Label>Canva Link {contentType !== "posts" && <span className="text-zinc-500">(for posts)</span>}</Label>
                   <Input placeholder="https://canva.com/..." value={canvaLink} onChange={(e) => setCanvaLink(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
