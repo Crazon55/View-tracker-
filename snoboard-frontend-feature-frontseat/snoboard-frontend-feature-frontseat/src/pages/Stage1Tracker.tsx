@@ -197,17 +197,15 @@ export default function Stage1Tracker() {
   return (
     <div className="min-h-screen bg-zinc-950 px-6 py-8">
       <div className="max-w-[1600px] mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-black text-white">Stage 1 Tracker</h1>
-            <p className="text-zinc-500 mt-1">Weekly view tracker for Stage 1 IPs — aggregated automatically from content entries</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={prevWeek}><ChevronLeft className="w-4 h-4" /></Button>
-            <span className="text-sm font-bold text-white min-w-[180px] text-center">{formatRangeLabel(weekStart)}</span>
-            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={nextWeek}><ChevronRight className="w-4 h-4" /></Button>
-            <Button variant="ghost" size="sm" className="text-xs text-zinc-400 ml-2" onClick={thisWeek}>This Week</Button>
-          </div>
+        <div className="mb-6 pr-72">
+          <h1 className="text-3xl font-black text-white">Stage 1 Tracker</h1>
+          <p className="text-zinc-500 mt-1">Weekly view tracker for Stage 1 IPs — aggregated automatically from content entries</p>
+        </div>
+        <div className="flex items-center gap-2 mb-8">
+          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={prevWeek}><ChevronLeft className="w-4 h-4" /></Button>
+          <span className="text-sm font-bold text-white min-w-[180px] text-center">{formatRangeLabel(weekStart)}</span>
+          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={nextWeek}><ChevronRight className="w-4 h-4" /></Button>
+          <Button variant="ghost" size="sm" className="text-xs text-zinc-400 ml-2" onClick={thisWeek}>This Week</Button>
         </div>
 
         {renderTable("FBS", fbsPages, "bg-amber-500")}
