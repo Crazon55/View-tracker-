@@ -19,19 +19,27 @@ function classifyNiche(handle: string): "tech" | "fbs" {
 export default function PageDistributionSelect({ pages, selected, onChange }: PageDistributionSelectProps) {
   const [open, setOpen] = useState(false);
   const [nicheFilter, setNicheFilter] = useState<"all" | "fbs" | "tech">("all");
+  const [search, setSearch] = useState("");
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setSearch(""); }
     }
     if (open) document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [open]);
 
-  const filteredPages = nicheFilter === "all"
+  const nicheFilteredPages = nicheFilter === "all"
     ? pages
     : pages.filter((p) => classifyNiche(p.handle) === nicheFilter);
+
+  const filteredPages = search.trim()
+    ? nicheFilteredPages.filter((p) =>
+        p.handle.toLowerCase().includes(search.toLowerCase()) ||
+        (p.name || "").toLowerCase().includes(search.toLowerCase())
+      )
+    : nicheFilteredPages;
 
   const nichePages = (niche: "fbs" | "tech") => pages.filter((p) => classifyNiche(p.handle) === niche);
 
@@ -126,8 +134,23 @@ export default function PageDistributionSelect({ pages, selected, onChange }: Pa
             </div>
           </div>
 
+          {/* Search bar */}
+          <div className="px-2 pt-2 pb-1 border-b border-zinc-800">
+            <input
+              type="text"
+              placeholder="Search IPs..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-md px-3 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-violet-500/50"
+              autoFocus
+            />
+          </div>
+
           {/* Page list */}
           <div className="max-h-48 overflow-y-auto p-1">
+            {filteredPages.length === 0 && (
+              <p className="text-center text-zinc-600 text-xs py-4">No IPs found</p>
+            )}
             {filteredPages.map((page) => {
               const isSelected = selected.includes(page.id);
               const niche = classifyNiche(page.handle);
