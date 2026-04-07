@@ -86,6 +86,7 @@ class IdeaCreate(BaseModel):
     edited_drive_link: str | None = None
     pintu_batch_link: str | None = None
     comp_link: str | None = None
+    canva_link: str | None = None
     deadline: str | None = None
 
 
@@ -107,6 +108,7 @@ class IdeaUpdate(BaseModel):
     edited_drive_link: str | None = None
     pintu_batch_link: str | None = None
     comp_link: str | None = None
+    canva_link: str | None = None
     deadline: str | None = None
 
 

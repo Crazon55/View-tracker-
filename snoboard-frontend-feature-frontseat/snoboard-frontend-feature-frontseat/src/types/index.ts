@@ -91,6 +91,7 @@ export interface IdeaStat {
   base_drive_link: string;
   pintu_batch_link: string;
   comp_link: string;
+  canva_link: string;
   deadline: string;
 }
 

@@ -58,6 +58,7 @@ export default function CompetitorIdeas() {
   const [baseDriveLink, setBaseDriveLink] = useState("");
   const [pintuBatchLink, setPintuBatchLink] = useState("");
   const [compLink, setCompLink] = useState("");
+  const [canvaLink, setCanvaLink] = useState("");
   const [executorNames, setExecutorNames] = useState<string[]>([]);
   const [deadline, setDeadline] = useState("");
 
@@ -147,6 +148,7 @@ export default function CompetitorIdeas() {
     setBaseDriveLink("");
     setPintuBatchLink("");
     setCompLink("");
+    setCanvaLink("");
     setExecutorNames([]);
     setDeadline("");
   }
@@ -171,6 +173,7 @@ export default function CompetitorIdeas() {
       base_drive_link: baseDriveLink.trim() || undefined,
       pintu_batch_link: pintuBatchLink.trim() || undefined,
       comp_link: compLink.trim() || undefined,
+      canva_link: canvaLink.trim() || undefined,
       deadline: deadline || undefined,
     });
   };
@@ -347,6 +350,10 @@ export default function CompetitorIdeas() {
                   </div>
                 </div>
                 <div className="space-y-1.5">
+                  <Label>Canva Link <span className="text-zinc-500">(for posts)</span></Label>
+                  <Input placeholder="https://canva.com/..." value={canvaLink} onChange={(e) => setCanvaLink(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
                   <Label>Distribute to Pages</Label>
                   <PageDistributionSelect
                     pages={allPages}
@@ -404,6 +411,7 @@ export default function CompetitorIdeas() {
                 <TableHead>Drive Link</TableHead>
                 <TableHead>Pintu Batch</TableHead>
                 <TableHead>Comp Link</TableHead>
+                <TableHead>Canva Link</TableHead>
                 <TableHead>Distributed To</TableHead>
                 <TableHead className="text-center">Posts</TableHead>
                 <TableHead className="text-right">Views</TableHead>
@@ -414,14 +422,14 @@ export default function CompetitorIdeas() {
             <TableBody>
               {filteredIdeas.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={17} className="text-center text-zinc-500 py-8">
+                  <TableCell colSpan={18} className="text-center text-zinc-500 py-8">
                     {ideas.length === 0 ? 'No competitor ideas yet. Click "New Competitor Idea" to create one.' : "No ideas matching your filters."}
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredIdeas.map((idea) => {
                   const isFieldEdit = editingFieldId === idea.id;
-                  const startEdit = (e?: React.MouseEvent) => { e?.stopPropagation(); if (!isFieldEdit) { setEditingFieldId(idea.id); setEditFieldData({ hook: idea.hook, hook_variations: (idea.hook_variations || []).join("\n"), executor_name: idea.executor_name || "", format: idea.format, deadline: idea.deadline || "", yt_url: idea.yt_url || "", timestamps: idea.timestamps || "", base_drive_link: idea.base_drive_link || "", pintu_batch_link: idea.pintu_batch_link || "", comp_link: idea.comp_link || "" }); } };
+                  const startEdit = (e?: React.MouseEvent) => { e?.stopPropagation(); if (!isFieldEdit) { setEditingFieldId(idea.id); setEditFieldData({ hook: idea.hook, hook_variations: (idea.hook_variations || []).join("\n"), executor_name: idea.executor_name || "", format: idea.format, deadline: idea.deadline || "", yt_url: idea.yt_url || "", timestamps: idea.timestamps || "", base_drive_link: idea.base_drive_link || "", pintu_batch_link: idea.pintu_batch_link || "", comp_link: idea.comp_link || "", canva_link: idea.canva_link || "" }); } };
                   return (
                   <TableRow key={idea.id}>
                     <TableCell><span className="font-mono text-xs font-bold text-amber-400">{idea.idea_code}</span></TableCell>
@@ -465,6 +473,10 @@ export default function CompetitorIdeas() {
                     <TableCell onClick={startEdit}>
                       {isFieldEdit ? <Input className="h-7 text-xs w-32" placeholder="Comp link" value={editFieldData.comp_link} onChange={(e) => setEditFieldData({ ...editFieldData, comp_link: e.target.value })} />
                         : idea.comp_link ? <a href={idea.comp_link} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-[10px] text-pink-400 hover:underline">Comp</a> : <span className="text-zinc-700 text-xs">—</span>}
+                    </TableCell>
+                    <TableCell onClick={startEdit}>
+                      {isFieldEdit ? <Input className="h-7 text-xs w-32" placeholder="Canva link" value={editFieldData.canva_link} onChange={(e) => setEditFieldData({ ...editFieldData, canva_link: e.target.value })} />
+                        : idea.canva_link ? <a href={idea.canva_link} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-[10px] text-cyan-400 hover:underline">Canva</a> : <span className="text-zinc-700 text-xs">—</span>}
                     </TableCell>
                     <TableCell>
                       {editingDistId === idea.id ? (
