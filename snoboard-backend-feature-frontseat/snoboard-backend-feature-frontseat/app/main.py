@@ -628,6 +628,7 @@ async def idea_engine_dashboard():
             "base_drive_link": idea.get("base_drive_link", ""),
             "pintu_batch_link": idea.get("pintu_batch_link", ""),
             "comp_link": idea.get("comp_link", ""),
+            "canva_link": idea.get("canva_link", ""),
             "deadline": idea.get("deadline", ""),
             "total_posts": total_posts,
             "total_views": total_views,
