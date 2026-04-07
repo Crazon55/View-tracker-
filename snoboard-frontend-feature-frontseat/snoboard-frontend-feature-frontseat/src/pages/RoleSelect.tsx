@@ -11,8 +11,11 @@ export default function RoleSelect() {
   const handleConfirm = async () => {
     if (!selected) return;
     setSaving(true);
-    await setRole(selected);
-    setSaving(false);
+    try {
+      await setRole(selected);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (

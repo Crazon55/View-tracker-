@@ -64,7 +64,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const handleSetRole = async (newRole: string) => {
     if (!user?.email) return;
     const name = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split("@")[0] || "";
-    await setUserRole({ email: user.email, role: newRole, name });
+    try {
+      await setUserRole({ email: user.email, role: newRole, name });
+    } catch (err) {
+      console.error("Failed to save role:", err);
+      // Continue anyway so user isn't stuck
+    }
     setRoleState(newRole);
     setRoleName(ROLES.find((r) => r.value === newRole)?.label || newRole);
     setNeedsRole(false);
