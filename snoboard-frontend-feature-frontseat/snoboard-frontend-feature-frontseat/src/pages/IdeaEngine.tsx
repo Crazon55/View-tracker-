@@ -44,6 +44,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Sheet,
+  SheetContent,
+} from "@/components/ui/sheet";
+import {
   Plus,
   Trash2,
   TrendingUp,
@@ -58,6 +62,18 @@ import {
   Check,
   X,
   CalendarClock,
+  Hash,
+  FileText,
+  User,
+  Play,
+  Calendar,
+  Link2,
+  Clock,
+  HardDrive,
+  Eye,
+  BarChart3,
+  Zap,
+  Share2,
 } from "lucide-react";
 
 function formatCompact(n: number): string {
@@ -75,6 +91,7 @@ export default function IdeaEngine() {
   const [ideaOpen, setIdeaOpen] = useState(false);
   const [csOpen, setCsOpen] = useState(false);
   const [expandedIdeaId, setExpandedIdeaId] = useState<string | null>(null);
+  const [selectedIdea, setSelectedIdea] = useState<any | null>(null);
   const [editingIdeaId, setEditingIdeaId] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState("");
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
@@ -679,12 +696,12 @@ export default function IdeaEngine() {
                   const distributedEntries = allContentEntries.filter((e: any) => e.idea_name === ideaLabel || e.idea_name === idea.hook);
                   const isExpanded = expandedIdeaId === idea.id;
                   return (<>
-                  <TableRow key={idea.id} className="cursor-pointer">
+                  <TableRow key={idea.id} className="cursor-pointer" onClick={() => setSelectedIdea(idea)}>
                     {(() => {
                       const isRowEdit = editingRowId === idea.id;
                       const startEdit = (e: React.MouseEvent) => { e.stopPropagation(); if (!isRowEdit) { setEditingRowId(idea.id); setEditRowData({ hook: idea.hook, hook_variations: (idea.hook_variations || []).join("\n"), executor_name: idea.executor_name || "", format: idea.format, deadline: idea.deadline || "", yt_url: idea.yt_url || "", timestamps: idea.timestamps || "", base_drive_link: idea.base_drive_link || "", pintu_batch_link: idea.pintu_batch_link || "" }); } };
                       return (<>
-                    <TableCell onClick={() => setExpandedIdeaId(isExpanded ? null : idea.id)}>
+                    <TableCell>
                       <span className="font-mono text-xs font-bold text-violet-400">{idea.idea_code}</span>
                     </TableCell>
                     <TableCell onClick={startEdit}>
@@ -885,6 +902,145 @@ export default function IdeaEngine() {
             <span>Winners: <span className="text-yellow-400 font-bold">{ideas.reduce((s, i) => s + i.winners_count, 0)}</span></span>
           </div>
         )}
+
+        {/* Notion-style detail panel */}
+        <Sheet open={!!selectedIdea} onOpenChange={(open) => { if (!open) setSelectedIdea(null); }}>
+          <SheetContent side="right" className="w-[480px] sm:w-[540px] bg-zinc-950 border-zinc-800 overflow-y-auto p-0">
+            {selectedIdea && (() => {
+              const idea = selectedIdea;
+              const ideaLabel = `${idea.idea_code} — ${idea.hook}`.trim();
+              const distEntries = allContentEntries.filter((e: any) => e.idea_name === ideaLabel || e.idea_name === idea.hook);
+              return (
+                <div className="flex flex-col">
+                  {/* Header */}
+                  <div className="px-6 pt-8 pb-5 border-b border-zinc-800">
+                    <Badge variant="outline" className={`text-[10px] uppercase mb-3 ${statusColors[idea.status || "draft"] ?? "text-zinc-500"}`}>
+                      {idea.status || "draft"}
+                    </Badge>
+                    <h2 className="text-xl font-bold text-white leading-snug">{idea.hook}</h2>
+                    <p className="text-xs text-zinc-500 font-mono mt-1">{idea.idea_code}</p>
+                  </div>
+
+                  {/* Properties */}
+                  <div className="px-6 py-4 space-y-0">
+                    {[
+                      { icon: User, label: "Created by", value: idea.created_by || idea.cs_owner_name || "—" },
+                      { icon: Users, label: "Executor", value: idea.executor_name || "—" },
+                      { icon: Play, label: "Format", value: (idea.format || "reel").toUpperCase() },
+                      { icon: Hash, label: "Source", value: "Original", badge: "bg-violet-500/20 text-violet-400" },
+                      { icon: Calendar, label: "Deadline", value: idea.deadline ? idea.deadline.slice(0, 10) : "—", highlight: !!idea.deadline },
+                      { icon: Eye, label: "Total Views", value: formatCompact(idea.total_views), bold: true },
+                      { icon: BarChart3, label: "Total Posts", value: String(idea.total_posts) },
+                      { icon: Trophy, label: "Winners", value: String(idea.winners_count), highlight: idea.winners_count > 0 },
+                      { icon: Zap, label: "Hit Rate", value: `${idea.hit_rate}%` },
+                    ].map(({ icon: Icon, label, value, badge, bold, highlight }) => (
+                      <div key={label} className="flex items-center py-2.5 border-b border-zinc-800/50 group">
+                        <div className="flex items-center gap-2.5 w-40 shrink-0">
+                          <Icon className="w-4 h-4 text-zinc-600" />
+                          <span className="text-xs text-zinc-500">{label}</span>
+                        </div>
+                        <div className="flex-1">
+                          {badge ? (
+                            <Badge className={`${badge} text-[10px] uppercase`}>{value}</Badge>
+                          ) : (
+                            <span className={`text-sm ${bold ? "font-bold text-white" : highlight ? "text-amber-400 font-semibold" : value === "—" ? "text-zinc-700" : "text-white"}`}>{value}</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Variations */}
+                    <div className="flex items-start py-2.5 border-b border-zinc-800/50">
+                      <div className="flex items-center gap-2.5 w-40 shrink-0 pt-0.5">
+                        <FileText className="w-4 h-4 text-zinc-600" />
+                        <span className="text-xs text-zinc-500">Variations</span>
+                      </div>
+                      <div className="flex-1">
+                        {idea.hook_variations?.length > 0 ? (
+                          <div className="space-y-1">
+                            {idea.hook_variations.map((v: string, i: number) => (
+                              <p key={i} className="text-sm text-zinc-300">{v}</p>
+                            ))}
+                          </div>
+                        ) : <span className="text-sm text-zinc-700">—</span>}
+                      </div>
+                    </div>
+
+                    {/* Links section */}
+                    <div className="pt-3 pb-1">
+                      <p className="text-[10px] uppercase tracking-widest text-zinc-600 font-semibold mb-1">Links</p>
+                    </div>
+                    {[
+                      { icon: Link2, label: "YouTube URL", value: idea.yt_url, color: "text-violet-400" },
+                      { icon: Clock, label: "Timestamps", value: idea.timestamps, plain: true },
+                      { icon: HardDrive, label: "Drive Link", value: idea.base_drive_link, color: "text-blue-400" },
+                      { icon: Share2, label: "Pintu Batch", value: idea.pintu_batch_link, color: "text-amber-400" },
+                    ].map(({ icon: Icon, label, value, color, plain }) => (
+                      <div key={label} className="flex items-center py-2.5 border-b border-zinc-800/50">
+                        <div className="flex items-center gap-2.5 w-40 shrink-0">
+                          <Icon className="w-4 h-4 text-zinc-600" />
+                          <span className="text-xs text-zinc-500">{label}</span>
+                        </div>
+                        <div className="flex-1">
+                          {value ? (
+                            plain ? <span className="text-sm text-white">{value}</span>
+                            : <a href={value} target="_blank" rel="noopener noreferrer" className={`text-sm ${color} hover:underline truncate block max-w-[280px]`}>{value}</a>
+                          ) : <span className="text-sm text-zinc-700">—</span>}
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Best post */}
+                    {idea.best_post && (
+                      <div className="flex items-center py-2.5 border-b border-zinc-800/50">
+                        <div className="flex items-center gap-2.5 w-40 shrink-0">
+                          <Trophy className="w-4 h-4 text-yellow-500" />
+                          <span className="text-xs text-zinc-500">Best Post</span>
+                        </div>
+                        <div className="flex-1">
+                          <a href={idea.best_post.url} target="_blank" rel="noopener noreferrer" className="text-sm text-emerald-400 hover:underline">
+                            {formatCompact(idea.best_post.views)} views on @{idea.best_post.page_handle}
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Distributed Pages */}
+                  <div className="px-6 py-4 border-t border-zinc-800">
+                    <p className="text-[10px] uppercase tracking-widest text-zinc-600 font-semibold mb-3">
+                      Distributed Pages {distEntries.length > 0 && <span className="text-zinc-500 ml-1">({distEntries.length})</span>}
+                    </p>
+                    {distEntries.length === 0 ? (
+                      <p className="text-xs text-zinc-600 py-3">No pages distributed yet</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {distEntries.map((entry: any) => (
+                          <div key={entry.id} className="flex items-center justify-between bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-white">@{entry.ips || "—"}</span>
+                              <Badge className={`text-[9px] ${entry.idea_status === "posted" ? "bg-emerald-500/20 text-emerald-400" : entry.idea_status === "scheduled" ? "bg-green-500/20 text-green-400" : "bg-zinc-700 text-zinc-300"}`}>
+                                {entry.idea_status}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="text-sm font-mono text-white">{(entry.views ?? 0).toLocaleString()}</span>
+                              {entry.url && (
+                                <a href={entry.url} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-300">
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+          </SheetContent>
+        </Sheet>
       </div>
     </div>
   );
