@@ -92,6 +92,7 @@ export default function IdeaEngine() {
   const [csOpen, setCsOpen] = useState(false);
   const [expandedIdeaId, setExpandedIdeaId] = useState<string | null>(null);
   const [selectedIdea, setSelectedIdea] = useState<any | null>(null);
+  const [sheetEdit, setSheetEdit] = useState<Record<string, any>>({});
   const [editingIdeaId, setEditingIdeaId] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState("");
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
@@ -696,7 +697,7 @@ export default function IdeaEngine() {
                   const distributedEntries = allContentEntries.filter((e: any) => e.idea_name === ideaLabel || e.idea_name === idea.hook);
                   const isExpanded = expandedIdeaId === idea.id;
                   return (<>
-                  <TableRow key={idea.id} className="cursor-pointer" onClick={() => setSelectedIdea(idea)}>
+                  <TableRow key={idea.id} className="cursor-pointer" onClick={() => { setSelectedIdea(idea); setSheetEdit({ hook: idea.hook, hook_variations: (idea.hook_variations || []).join("\n"), executor_name: idea.executor_name || "", format: idea.format || "reel", status: idea.status || "draft", deadline: idea.deadline?.slice(0, 10) || "", yt_url: idea.yt_url || "", timestamps: idea.timestamps || "", base_drive_link: idea.base_drive_link || "", pintu_batch_link: idea.pintu_batch_link || "" }); }}>
                     {(() => {
                       const isRowEdit = editingRowId === idea.id;
                       const startEdit = (e: React.MouseEvent) => { e.stopPropagation(); if (!isRowEdit) { setEditingRowId(idea.id); setEditRowData({ hook: idea.hook, hook_variations: (idea.hook_variations || []).join("\n"), executor_name: idea.executor_name || "", format: idea.format, deadline: idea.deadline || "", yt_url: idea.yt_url || "", timestamps: idea.timestamps || "", base_drive_link: idea.base_drive_link || "", pintu_batch_link: idea.pintu_batch_link || "" }); } };
@@ -903,105 +904,115 @@ export default function IdeaEngine() {
           </div>
         )}
 
-        {/* Notion-style detail panel */}
+        {/* Notion-style editable detail panel */}
         <Sheet open={!!selectedIdea} onOpenChange={(open) => { if (!open) setSelectedIdea(null); }}>
           <SheetContent side="right" className="w-[480px] sm:w-[540px] bg-zinc-950 border-zinc-800 overflow-y-auto p-0">
             {selectedIdea && (() => {
               const idea = selectedIdea;
               const ideaLabel = `${idea.idea_code} — ${idea.hook}`.trim();
               const distEntries = allContentEntries.filter((e: any) => e.idea_name === ideaLabel || e.idea_name === idea.hook);
+              const ed = sheetEdit;
+              const set = (field: string, val: string) => setSheetEdit({ ...ed, [field]: val });
+              const handleSave = () => {
+                const data: any = { ...ed };
+                if (data.hook_variations) data.hook_variations = data.hook_variations.split("\n").filter((v: string) => v.trim());
+                updateIdeaMutation.mutate({ id: idea.id, data }, {
+                  onSuccess: () => setSelectedIdea(null),
+                });
+              };
               return (
                 <div className="flex flex-col">
                   {/* Header */}
                   <div className="px-6 pt-8 pb-5 border-b border-zinc-800">
-                    <Badge variant="outline" className={`text-[10px] uppercase mb-3 ${statusColors[idea.status || "draft"] ?? "text-zinc-500"}`}>
-                      {idea.status || "draft"}
-                    </Badge>
-                    <h2 className="text-xl font-bold text-white leading-snug">{idea.hook}</h2>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Select value={ed.status} onValueChange={(v) => set("status", v)}>
+                        <SelectTrigger className="h-7 w-32 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="draft">Draft</SelectItem>
+                          <SelectItem value="in_progress">In Progress</SelectItem>
+                          <SelectItem value="completed">Completed</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Input className="text-xl font-bold text-white bg-transparent border-zinc-800 hover:border-zinc-700 focus:border-violet-500/50 px-0 h-auto py-1" value={ed.hook} onChange={(e) => set("hook", e.target.value)} />
                     <p className="text-xs text-zinc-500 font-mono mt-1">{idea.idea_code}</p>
                   </div>
 
-                  {/* Properties */}
+                  {/* Editable Properties */}
                   <div className="px-6 py-4 space-y-0">
+                    {/* Read-only: Created by */}
+                    <div className="flex items-center py-2.5 border-b border-zinc-800/50">
+                      <div className="flex items-center gap-2.5 w-40 shrink-0"><User className="w-4 h-4 text-zinc-600" /><span className="text-xs text-zinc-500">Created by</span></div>
+                      <span className="text-sm text-white">{idea.created_by || idea.cs_owner_name || "—"}</span>
+                    </div>
+
+                    {/* Executor */}
+                    <div className="flex items-center py-2.5 border-b border-zinc-800/50">
+                      <div className="flex items-center gap-2.5 w-40 shrink-0"><Users className="w-4 h-4 text-zinc-600" /><span className="text-xs text-zinc-500">Executor</span></div>
+                      <Input className="h-8 text-sm bg-transparent border-zinc-800 hover:border-zinc-700 focus:border-violet-500/50 flex-1" value={ed.executor_name} onChange={(e) => set("executor_name", e.target.value)} />
+                    </div>
+
+                    {/* Format */}
+                    <div className="flex items-center py-2.5 border-b border-zinc-800/50">
+                      <div className="flex items-center gap-2.5 w-40 shrink-0"><Play className="w-4 h-4 text-zinc-600" /><span className="text-xs text-zinc-500">Format</span></div>
+                      <Select value={ed.format} onValueChange={(v) => set("format", v)}>
+                        <SelectTrigger className="h-8 text-sm w-32 bg-transparent border-zinc-800"><SelectValue /></SelectTrigger>
+                        <SelectContent><SelectItem value="reel">Reel</SelectItem><SelectItem value="carousel">Carousel</SelectItem><SelectItem value="static">Static</SelectItem><SelectItem value="story">Story</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Source (read-only) */}
+                    <div className="flex items-center py-2.5 border-b border-zinc-800/50">
+                      <div className="flex items-center gap-2.5 w-40 shrink-0"><Hash className="w-4 h-4 text-zinc-600" /><span className="text-xs text-zinc-500">Source</span></div>
+                      <Badge className="bg-violet-500/20 text-violet-400 text-[10px] uppercase">Original</Badge>
+                    </div>
+
+                    {/* Deadline */}
+                    <div className="flex items-center py-2.5 border-b border-zinc-800/50">
+                      <div className="flex items-center gap-2.5 w-40 shrink-0"><Calendar className="w-4 h-4 text-zinc-600" /><span className="text-xs text-zinc-500">Deadline</span></div>
+                      <Input type="date" className="h-8 text-sm bg-transparent border-zinc-800 hover:border-zinc-700 focus:border-violet-500/50 w-40 cursor-pointer" value={ed.deadline} onChange={(e) => set("deadline", e.target.value)} onClick={(e) => (e.target as HTMLInputElement).showPicker?.()} />
+                    </div>
+
+                    {/* Computed stats (read-only) */}
                     {[
-                      { icon: User, label: "Created by", value: idea.created_by || idea.cs_owner_name || "—" },
-                      { icon: Users, label: "Executor", value: idea.executor_name || "—" },
-                      { icon: Play, label: "Format", value: (idea.format || "reel").toUpperCase() },
-                      { icon: Hash, label: "Source", value: "Original", badge: "bg-violet-500/20 text-violet-400" },
-                      { icon: Calendar, label: "Deadline", value: idea.deadline ? idea.deadline.slice(0, 10) : "—", highlight: !!idea.deadline },
                       { icon: Eye, label: "Total Views", value: formatCompact(idea.total_views), bold: true },
                       { icon: BarChart3, label: "Total Posts", value: String(idea.total_posts) },
                       { icon: Trophy, label: "Winners", value: String(idea.winners_count), highlight: idea.winners_count > 0 },
                       { icon: Zap, label: "Hit Rate", value: `${idea.hit_rate}%` },
-                    ].map(({ icon: Icon, label, value, badge, bold, highlight }) => (
-                      <div key={label} className="flex items-center py-2.5 border-b border-zinc-800/50 group">
-                        <div className="flex items-center gap-2.5 w-40 shrink-0">
-                          <Icon className="w-4 h-4 text-zinc-600" />
-                          <span className="text-xs text-zinc-500">{label}</span>
-                        </div>
-                        <div className="flex-1">
-                          {badge ? (
-                            <Badge className={`${badge} text-[10px] uppercase`}>{value}</Badge>
-                          ) : (
-                            <span className={`text-sm ${bold ? "font-bold text-white" : highlight ? "text-amber-400 font-semibold" : value === "—" ? "text-zinc-700" : "text-white"}`}>{value}</span>
-                          )}
-                        </div>
+                    ].map(({ icon: Icon, label, value, bold, highlight }) => (
+                      <div key={label} className="flex items-center py-2.5 border-b border-zinc-800/50">
+                        <div className="flex items-center gap-2.5 w-40 shrink-0"><Icon className="w-4 h-4 text-zinc-600" /><span className="text-xs text-zinc-500">{label}</span></div>
+                        <span className={`text-sm ${bold ? "font-bold text-white" : highlight ? "text-amber-400 font-semibold" : "text-white"}`}>{value}</span>
                       </div>
                     ))}
 
-                    {/* Variations */}
+                    {/* Variations (editable textarea) */}
                     <div className="flex items-start py-2.5 border-b border-zinc-800/50">
-                      <div className="flex items-center gap-2.5 w-40 shrink-0 pt-0.5">
-                        <FileText className="w-4 h-4 text-zinc-600" />
-                        <span className="text-xs text-zinc-500">Variations</span>
-                      </div>
-                      <div className="flex-1">
-                        {idea.hook_variations?.length > 0 ? (
-                          <div className="space-y-1">
-                            {idea.hook_variations.map((v: string, i: number) => (
-                              <p key={i} className="text-sm text-zinc-300">{v}</p>
-                            ))}
-                          </div>
-                        ) : <span className="text-sm text-zinc-700">—</span>}
-                      </div>
+                      <div className="flex items-center gap-2.5 w-40 shrink-0 pt-2"><FileText className="w-4 h-4 text-zinc-600" /><span className="text-xs text-zinc-500">Variations</span></div>
+                      <textarea className="flex-1 bg-transparent border border-zinc-800 hover:border-zinc-700 focus:border-violet-500/50 focus:outline-none rounded-md px-3 py-2 text-sm text-white resize-none min-h-[60px]" placeholder="One per line" value={ed.hook_variations} onChange={(e) => set("hook_variations", e.target.value)} />
                     </div>
 
-                    {/* Links section */}
+                    {/* Links section (editable) */}
                     <div className="pt-3 pb-1">
                       <p className="text-[10px] uppercase tracking-widest text-zinc-600 font-semibold mb-1">Links</p>
                     </div>
                     {[
-                      { icon: Link2, label: "YouTube URL", value: idea.yt_url, color: "text-violet-400" },
-                      { icon: Clock, label: "Timestamps", value: idea.timestamps, plain: true },
-                      { icon: HardDrive, label: "Drive Link", value: idea.base_drive_link, color: "text-blue-400" },
-                      { icon: Share2, label: "Pintu Batch", value: idea.pintu_batch_link, color: "text-amber-400" },
-                    ].map(({ icon: Icon, label, value, color, plain }) => (
+                      { icon: Link2, label: "YouTube URL", field: "yt_url", placeholder: "https://youtube.com/..." },
+                      { icon: Clock, label: "Timestamps", field: "timestamps", placeholder: "e.g. 0:30-1:45, 3:00-4:20" },
+                      { icon: HardDrive, label: "Drive Link", field: "base_drive_link", placeholder: "Google Drive link" },
+                      { icon: Share2, label: "Pintu Batch", field: "pintu_batch_link", placeholder: "Google Drive link" },
+                    ].map(({ icon: Icon, label, field, placeholder }) => (
                       <div key={label} className="flex items-center py-2.5 border-b border-zinc-800/50">
-                        <div className="flex items-center gap-2.5 w-40 shrink-0">
-                          <Icon className="w-4 h-4 text-zinc-600" />
-                          <span className="text-xs text-zinc-500">{label}</span>
-                        </div>
-                        <div className="flex-1">
-                          {value ? (
-                            plain ? <span className="text-sm text-white">{value}</span>
-                            : <a href={value} target="_blank" rel="noopener noreferrer" className={`text-sm ${color} hover:underline truncate block max-w-[280px]`}>{value}</a>
-                          ) : <span className="text-sm text-zinc-700">—</span>}
-                        </div>
+                        <div className="flex items-center gap-2.5 w-40 shrink-0"><Icon className="w-4 h-4 text-zinc-600" /><span className="text-xs text-zinc-500">{label}</span></div>
+                        <Input className="h-8 text-sm bg-transparent border-zinc-800 hover:border-zinc-700 focus:border-violet-500/50 flex-1" placeholder={placeholder} value={ed[field] || ""} onChange={(e) => set(field, e.target.value)} />
                       </div>
                     ))}
 
-                    {/* Best post */}
+                    {/* Best post (read-only) */}
                     {idea.best_post && (
                       <div className="flex items-center py-2.5 border-b border-zinc-800/50">
-                        <div className="flex items-center gap-2.5 w-40 shrink-0">
-                          <Trophy className="w-4 h-4 text-yellow-500" />
-                          <span className="text-xs text-zinc-500">Best Post</span>
-                        </div>
-                        <div className="flex-1">
-                          <a href={idea.best_post.url} target="_blank" rel="noopener noreferrer" className="text-sm text-emerald-400 hover:underline">
-                            {formatCompact(idea.best_post.views)} views on @{idea.best_post.page_handle}
-                          </a>
-                        </div>
+                        <div className="flex items-center gap-2.5 w-40 shrink-0"><Trophy className="w-4 h-4 text-yellow-500" /><span className="text-xs text-zinc-500">Best Post</span></div>
+                        <a href={idea.best_post.url} target="_blank" rel="noopener noreferrer" className="text-sm text-emerald-400 hover:underline">{formatCompact(idea.best_post.views)} views on @{idea.best_post.page_handle}</a>
                       </div>
                     )}
                   </div>
@@ -1019,22 +1030,23 @@ export default function IdeaEngine() {
                           <div key={entry.id} className="flex items-center justify-between bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5">
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-medium text-white">@{entry.ips || "—"}</span>
-                              <Badge className={`text-[9px] ${entry.idea_status === "posted" ? "bg-emerald-500/20 text-emerald-400" : entry.idea_status === "scheduled" ? "bg-green-500/20 text-green-400" : "bg-zinc-700 text-zinc-300"}`}>
-                                {entry.idea_status}
-                              </Badge>
+                              <Badge className={`text-[9px] ${entry.idea_status === "posted" ? "bg-emerald-500/20 text-emerald-400" : entry.idea_status === "scheduled" ? "bg-green-500/20 text-green-400" : "bg-zinc-700 text-zinc-300"}`}>{entry.idea_status}</Badge>
                             </div>
                             <div className="flex items-center gap-3">
                               <span className="text-sm font-mono text-white">{(entry.views ?? 0).toLocaleString()}</span>
-                              {entry.url && (
-                                <a href={entry.url} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-300">
-                                  <ExternalLink className="w-3.5 h-3.5" />
-                                </a>
-                              )}
+                              {entry.url && <a href={entry.url} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-300"><ExternalLink className="w-3.5 h-3.5" /></a>}
                             </div>
                           </div>
                         ))}
                       </div>
                     )}
+                  </div>
+
+                  {/* Save button */}
+                  <div className="px-6 py-4 border-t border-zinc-800 sticky bottom-0 bg-zinc-950">
+                    <Button className="w-full bg-violet-600 hover:bg-violet-700 text-white" onClick={handleSave} disabled={updateIdeaMutation.isPending}>
+                      {updateIdeaMutation.isPending ? "Saving..." : "Save Changes"}
+                    </Button>
                   </div>
                 </div>
               );
