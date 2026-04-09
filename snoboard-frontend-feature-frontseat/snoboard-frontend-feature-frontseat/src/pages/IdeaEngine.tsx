@@ -697,7 +697,7 @@ export default function IdeaEngine() {
                   const distributedEntries = allContentEntries.filter((e: any) => e.idea_name === ideaLabel || e.idea_name === idea.hook);
                   const isExpanded = expandedIdeaId === idea.id;
                   return (<>
-                  <TableRow key={idea.id} className="cursor-pointer" onClick={() => { setSelectedIdea(idea); setSheetEdit({ hook: idea.hook, hook_variations: (idea.hook_variations || []).join("\n"), executor_name: idea.executor_name || "", format: idea.format || "reel", status: idea.status || "draft", deadline: idea.deadline?.slice(0, 10) || "", yt_url: idea.yt_url || "", timestamps: idea.timestamps || "", base_drive_link: idea.base_drive_link || "", pintu_batch_link: idea.pintu_batch_link || "" }); }}>
+                  <TableRow key={idea.id} className="cursor-pointer" onClick={() => { setSelectedIdea(idea); setSheetEdit({ hook: idea.hook, hook_variations: (idea.hook_variations || []).join("\n"), executor_name: idea.executor_name || "", format: idea.format || "reel", status: idea.status || "draft", deadline: idea.deadline?.slice(0, 10) || "", yt_url: idea.yt_url || "", timestamps: idea.timestamps || "", base_drive_link: idea.base_drive_link || "", pintu_batch_link: idea.pintu_batch_link || "", distributed_to: idea.distributed_to || [] }); }}>
                     {(() => {
                       const isRowEdit = editingRowId === idea.id;
                       const startEdit = (e: React.MouseEvent) => { e.stopPropagation(); if (!isRowEdit) { setEditingRowId(idea.id); setEditRowData({ hook: idea.hook, hook_variations: (idea.hook_variations || []).join("\n"), executor_name: idea.executor_name || "", format: idea.format, deadline: idea.deadline || "", yt_url: idea.yt_url || "", timestamps: idea.timestamps || "", base_drive_link: idea.base_drive_link || "", pintu_batch_link: idea.pintu_batch_link || "" }); } };
@@ -986,10 +986,10 @@ export default function IdeaEngine() {
                       </div>
                     ))}
 
-                    {/* Variations (editable textarea) */}
-                    <div className="flex items-start py-2.5 border-b border-zinc-800/50">
-                      <div className="flex items-center gap-2.5 w-40 shrink-0 pt-2"><FileText className="w-4 h-4 text-zinc-600" /><span className="text-xs text-zinc-500">Variations</span></div>
-                      <textarea className="flex-1 bg-transparent border border-zinc-800 hover:border-zinc-700 focus:border-violet-500/50 focus:outline-none rounded-md px-3 py-2 text-sm text-white resize-none min-h-[60px]" placeholder="One per line" value={ed.hook_variations} onChange={(e) => set("hook_variations", e.target.value)} />
+                    {/* Variations (editable textarea — full width) */}
+                    <div className="py-2.5 border-b border-zinc-800/50">
+                      <div className="flex items-center gap-2.5 mb-2"><FileText className="w-4 h-4 text-zinc-600" /><span className="text-xs text-zinc-500">Variations</span></div>
+                      <textarea className="w-full bg-zinc-900 border border-zinc-800 hover:border-zinc-700 focus:border-violet-500/50 focus:outline-none rounded-md px-3 py-2.5 text-sm text-white resize-y min-h-[120px]" placeholder="Write each hook variation on a new line..." value={ed.hook_variations} onChange={(e) => set("hook_variations", e.target.value)} />
                     </div>
 
                     {/* Links section (editable) */}
@@ -1017,15 +1017,20 @@ export default function IdeaEngine() {
                     )}
                   </div>
 
-                  {/* Distributed Pages */}
+                  {/* Distributed Pages — editable */}
                   <div className="px-6 py-4 border-t border-zinc-800">
                     <p className="text-[10px] uppercase tracking-widest text-zinc-600 font-semibold mb-3">
-                      Distributed Pages {distEntries.length > 0 && <span className="text-zinc-500 ml-1">({distEntries.length})</span>}
+                      Distribute to Pages {(ed.distributed_to || []).length > 0 && <span className="text-zinc-500 ml-1">({(ed.distributed_to || []).length})</span>}
                     </p>
-                    {distEntries.length === 0 ? (
-                      <p className="text-xs text-zinc-600 py-3">No pages distributed yet</p>
-                    ) : (
-                      <div className="space-y-1.5">
+                    <PageDistributionSelect
+                      pages={allPages}
+                      selected={ed.distributed_to || []}
+                      onChange={(pages) => setSheetEdit({ ...ed, distributed_to: pages })}
+                    />
+                    {/* Show existing entries with status/views */}
+                    {distEntries.length > 0 && (
+                      <div className="mt-3 space-y-1.5">
+                        <p className="text-[10px] uppercase tracking-widest text-zinc-600 font-semibold mb-1">Current Entries</p>
                         {distEntries.map((entry: any) => (
                           <div key={entry.id} className="flex items-center justify-between bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5">
                             <div className="flex items-center gap-2">
