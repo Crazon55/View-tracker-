@@ -5,7 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { getDeadlines } from "@/services/api";
 import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, BarChart3, Scissors } from "lucide-react";
+import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, BarChart3, Scissors, Telescope } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -24,6 +24,7 @@ import CompetitorIdeas from "./pages/CompetitorIdeas";
 import PostIPsView from "./pages/PostIPsView";
 import PipelineView from "./pages/PipelineView";
 import Stage1Tracker from "./pages/Stage1Tracker";
+import CompetitorResearch from "./pages/CompetitorResearch";
 import RoleSelect from "./pages/RoleSelect";
 import NotFound from "./pages/NotFound";
 
@@ -212,6 +213,7 @@ const navItems: NavItem[] = [
   { to: "/post-ips", label: "Post IPs", icon: Image },
   { to: "/pipeline", label: "Pipeline", icon: Kanban },
   { to: "/stage1-tracker", label: "Stage 1 Tracker", icon: BarChart3 },
+  { to: "/competitor-research", label: "Competitor Research", icon: Telescope },
   { to: "/growth", label: "Growth", icon: TrendingUp },
   { to: "/pages", label: "IP's", icon: Users },
   { to: "http://16.112.125.207:5173/", label: "Pintu", icon: Scissors, external: true },
@@ -285,6 +287,7 @@ function AppLayout() {
     location.pathname === "/post-ips" ||
     location.pathname === "/pipeline" ||
     location.pathname === "/stage1-tracker" ||
+    location.pathname === "/competitor-research" ||
     location.pathname.startsWith("/post-ips/") ||
     location.pathname.startsWith("/page/");
 
@@ -314,6 +317,7 @@ function AppLayout() {
           <Route path="/post-ips/:pageId" element={<PageDetail />} />
           <Route path="/pipeline" element={<PipelineView />} />
           <Route path="/stage1-tracker" element={<Stage1Tracker />} />
+          <Route path="/competitor-research" element={<CompetitorResearch />} />
         </Routes>
       </div>
     );

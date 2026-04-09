@@ -1048,3 +1048,116 @@ async def get_growth_data():
                 })
 
     return {"success": True, "data": data}
+
+
+# ===================== Competitor Research =====================
+
+COMPETITOR_TABLES = {
+    "fbs_reels": "competitor_fbs_reels",
+    "tech_reels": "competitor_tech_reels",
+    "fbs_posts": "competitor_fbs_posts",
+}
+
+
+def _compute_view_bucket(views: int) -> str:
+    if views >= 1_000_000:
+        return "1M+"
+    if views >= 500_000:
+        return "500k-1M"
+    if views >= 250_000:
+        return "250k-500k"
+    if views >= 100_000:
+        return "100k-250k"
+    if views >= 50_000:
+        return "50-100k"
+    return "<50k"
+
+
+def _extract_handle(url: str) -> str:
+    """Extract Instagram handle from a post/reel URL."""
+    import re
+    m = re.search(r"instagram\.com/([^/]+)", url or "")
+    return m.group(1) if m else ""
+
+
+@app.post("/api/v1/competitor/{category}/ingest")
+async def competitor_ingest(category: str, entries: list[dict]):
+    """Ingest scraped competitor data from n8n. Deduplicates by URL."""
+    if category not in COMPETITOR_TABLES:
+        raise HTTPException(status_code=400, detail=f"Invalid category. Use: {list(COMPETITOR_TABLES.keys())}")
+
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    table = COMPETITOR_TABLES[category]
+
+    inserted = 0
+    skipped = 0
+    for entry in entries:
+        url = entry.get("Link to the reel") or entry.get("url") or entry.get("link") or ""
+        if not url:
+            skipped += 1
+            continue
+
+        views = int(entry.get("views") or entry.get("videoPlayCount") or 0)
+        likes = int(entry.get("Likes") or entry.get("likesCount") or 0)
+        name = entry.get("IG username") or entry.get("ownerFullName") or ""
+        posted_at = entry.get("Posted on") or entry.get("timestamp") or None
+        handle = _extract_handle(url)
+
+        row = {
+            "account_name": name,
+            "account_handle": handle,
+            "likes": likes,
+            "views": views,
+            "view_bucket": _compute_view_bucket(views),
+            "url": url,
+            "posted_at": posted_at,
+        }
+
+        # Upsert: skip if URL already exists
+        existing = client.table(table).select("id").eq("url", url).execute().data
+        if existing:
+            skipped += 1
+            continue
+
+        client.table(table).insert(row).execute()
+        inserted += 1
+
+    return {"success": True, "inserted": inserted, "skipped": skipped}
+
+
+@app.get("/api/v1/competitor/{category}")
+async def competitor_list(category: str, bucket: str | None = None):
+    """Get competitor content with optional view_bucket filter."""
+    if category not in COMPETITOR_TABLES:
+        raise HTTPException(status_code=400, detail=f"Invalid category. Use: {list(COMPETITOR_TABLES.keys())}")
+
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    table = COMPETITOR_TABLES[category]
+
+    query = client.table(table).select("*").order("views", desc=True)
+    if bucket:
+        query = query.eq("view_bucket", bucket)
+
+    data = query.limit(500).execute().data or []
+    return {"success": True, "data": data}
+
+
+@app.put("/api/v1/competitor/{category}/{entry_id}")
+async def competitor_update(category: str, entry_id: str, update: dict):
+    """Update a competitor entry (e.g., toggle usage status)."""
+    if category not in COMPETITOR_TABLES:
+        raise HTTPException(status_code=400, detail=f"Invalid category.")
+
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    table = COMPETITOR_TABLES[category]
+
+    allowed_fields = {"usage"}
+    filtered = {k: v for k, v in update.items() if k in allowed_fields}
+    if not filtered:
+        raise HTTPException(status_code=400, detail="No valid fields to update.")
+
+    client.table(table).update(filtered).eq("id", entry_id).execute()
+    return {"success": True}

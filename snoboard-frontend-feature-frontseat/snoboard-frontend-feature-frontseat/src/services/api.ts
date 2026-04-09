@@ -103,6 +103,13 @@ export const createContentEntry = (data: any) => fetchApi<any>("/api/v1/content-
 export const updateContentEntry = (id: string, data: any) => fetchApi<any>(`/api/v1/content-entries/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const deleteContentEntry = (id: string) => fetchApi<any>(`/api/v1/content-entries/${id}`, { method: "DELETE" });
 
+// Competitor Research
+export type CompetitorCategory = "fbs_reels" | "tech_reels" | "fbs_posts";
+export const getCompetitorContent = (category: CompetitorCategory, bucket?: string) =>
+  fetchApi<any[]>(`/api/v1/competitor/${category}${bucket ? `?bucket=${encodeURIComponent(bucket)}` : ""}`);
+export const updateCompetitorEntry = (category: CompetitorCategory, id: string, data: Record<string, any>) =>
+  fetchApi<any>(`/api/v1/competitor/${category}/${id}`, { method: "PUT", body: JSON.stringify(data) });
+
 // Scheduling
 export const scheduleIdea = (ideaId: string) =>
   fetchApi<any>(`/api/v1/schedule-idea/${ideaId}`, { method: "POST" });
