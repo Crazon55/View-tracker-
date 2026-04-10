@@ -1,7 +1,7 @@
 """FastAPI app for Instagram View Tracker."""
 from datetime import datetime, timezone, timedelta
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database.repositories.pages import get_page_repository
@@ -1081,11 +1081,12 @@ def _extract_handle(url: str) -> str:
 
 
 @app.post("/api/v1/competitor/{category}/ingest")
-async def competitor_ingest(category: str, payload: dict | list[dict]):
+async def competitor_ingest(category: str, request: Request):
     """Ingest scraped competitor data from n8n. Accepts a single dict or a list of dicts. Deduplicates by URL."""
     if category not in COMPETITOR_TABLES:
         raise HTTPException(status_code=400, detail=f"Invalid category. Use: {list(COMPETITOR_TABLES.keys())}")
 
+    payload = await request.json()
     entries = [payload] if isinstance(payload, dict) else payload
 
     from app.database.client import get_supabase_client
