@@ -1093,18 +1093,35 @@ async def competitor_ingest(category: str, request: Request):
     client = get_supabase_client()
     table = COMPETITOR_TABLES[category]
 
+    def _clean_int(val) -> int:
+        """n8n sometimes sends '=35107' instead of 35107. Strip leading '=' and parse."""
+        if val is None:
+            return 0
+        s = str(val).lstrip("=").strip()
+        if not s or s == "None":
+            return 0
+        try:
+            return int(float(s))
+        except (ValueError, TypeError):
+            return 0
+
+    def _clean_str(val) -> str:
+        if val is None:
+            return ""
+        return str(val).lstrip("=").strip()
+
     inserted = 0
     skipped = 0
     for entry in entries:
-        url = entry.get("Link to the reel") or entry.get("url") or entry.get("link") or ""
+        url = _clean_str(entry.get("Link to the reel") or entry.get("url") or entry.get("link") or "")
         if not url:
             skipped += 1
             continue
 
-        views = int(entry.get("views") or entry.get("videoPlayCount") or 0)
-        likes = int(entry.get("Likes") or entry.get("likesCount") or 0)
-        name = entry.get("IG username") or entry.get("ownerFullName") or ""
-        posted_at = entry.get("Posted on") or entry.get("timestamp") or None
+        views = _clean_int(entry.get("views") or entry.get("videoPlayCount"))
+        likes = _clean_int(entry.get("Likes") or entry.get("likesCount"))
+        name = _clean_str(entry.get("IG username") or entry.get("ownerFullName") or "")
+        posted_at = _clean_str(entry.get("Posted on") or entry.get("timestamp") or "")
         handle = _extract_handle(url)
 
         row = {
@@ -1114,7 +1131,7 @@ async def competitor_ingest(category: str, request: Request):
             "views": views,
             "view_bucket": _compute_view_bucket(views),
             "url": url,
-            "posted_at": posted_at,
+            "posted_at": posted_at or None,
         }
 
         # Upsert: skip if URL already exists
