@@ -60,8 +60,12 @@ export default function CompetitorResearch() {
       )
     : rawData;
 
+  // Posts use likes as the primary metric, reels use views
+  const isPostsTab = tab === "fbs_posts";
+  const sortKey = isPostsTab ? "likes" : "views";
+
   // Group by account for gallery view
-  const accountMap = new Map<string, { name: string; handle: string; entries: any[]; topViews: number; totalEntries: number }>();
+  const accountMap = new Map<string, { name: string; handle: string; entries: any[]; topMetric: number; totalEntries: number }>();
   for (const entry of entries) {
     const key = entry.account_handle || entry.account_name;
     if (!accountMap.has(key)) {
@@ -69,16 +73,17 @@ export default function CompetitorResearch() {
         name: entry.account_name,
         handle: entry.account_handle,
         entries: [],
-        topViews: 0,
+        topMetric: 0,
         totalEntries: 0,
       });
     }
     const acc = accountMap.get(key)!;
     acc.entries.push(entry);
     acc.totalEntries++;
-    if (entry.views > acc.topViews) acc.topViews = entry.views;
+    const metric = entry[sortKey] || 0;
+    if (metric > acc.topMetric) acc.topMetric = metric;
   }
-  const accounts = [...accountMap.values()].sort((a, b) => b.topViews - a.topViews);
+  const accounts = [...accountMap.values()].sort((a, b) => b.topMetric - a.topMetric);
 
   if (isLoading) {
     return (
@@ -202,7 +207,7 @@ export default function CompetitorResearch() {
                   {/* Content cards — Notion-style gallery */}
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                     {account.entries
-                      .sort((a: any, b: any) => (b.views || 0) - (a.views || 0))
+                      .sort((a: any, b: any) => (b[sortKey] || 0) - (a[sortKey] || 0))
                       .map((entry: any) => (
                         <div
                           key={entry.id}
@@ -235,16 +240,23 @@ export default function CompetitorResearch() {
                             {entry.view_bucket}
                           </Badge>
 
-                          {/* Stats */}
+                          {/* Stats — posts show likes first, reels show views first */}
                           <div className="space-y-1.5 mb-3">
-                            <div className="flex items-center gap-1.5 text-xs">
-                              <Eye className="w-3 h-3 text-zinc-600" />
-                              <span className="text-white font-mono font-bold">{formatCompact(entry.views || 0)}</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 text-xs">
-                              <Heart className="w-3 h-3 text-zinc-600" />
-                              <span className="text-zinc-400 font-mono">{formatCompact(entry.likes || 0)}</span>
-                            </div>
+                            {isPostsTab ? (
+                              <div className="flex items-center gap-1.5 text-xs">
+                                <Heart className="w-3 h-3 text-pink-500" />
+                                <span className="text-white font-mono font-bold">{formatCompact(entry.likes || 0)}</span>
+                              </div>
+                            ) : (<>
+                              <div className="flex items-center gap-1.5 text-xs">
+                                <Eye className="w-3 h-3 text-zinc-600" />
+                                <span className="text-white font-mono font-bold">{formatCompact(entry.views || 0)}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-xs">
+                                <Heart className="w-3 h-3 text-zinc-600" />
+                                <span className="text-zinc-400 font-mono">{formatCompact(entry.likes || 0)}</span>
+                              </div>
+                            </>)}
                             <div className="flex items-center gap-1.5 text-xs">
                               <Calendar className="w-3 h-3 text-zinc-600" />
                               <span className="text-zinc-500">{entry.posted_at?.slice(0, 10) || "—"}</span>
@@ -301,8 +313,11 @@ export default function CompetitorResearch() {
                 <tr className="border-b border-zinc-800 bg-zinc-900/50">
                   <th className="text-left py-3 px-4 text-xs text-zinc-500 uppercase tracking-wider">Name</th>
                   <th className="text-left py-3 px-4 text-xs text-zinc-500 uppercase tracking-wider">Handle</th>
-                  <th className="text-right py-3 px-4 text-xs text-zinc-500 uppercase tracking-wider">Likes</th>
-                  <th className="text-right py-3 px-4 text-xs text-zinc-500 uppercase tracking-wider">Views</th>
+                  {isPostsTab
+                    ? <th className="text-right py-3 px-4 text-xs text-zinc-500 uppercase tracking-wider">Likes</th>
+                    : <><th className="text-right py-3 px-4 text-xs text-zinc-500 uppercase tracking-wider">Likes</th>
+                       <th className="text-right py-3 px-4 text-xs text-zinc-500 uppercase tracking-wider">Views</th></>
+                  }
                   <th className="text-center py-3 px-4 text-xs text-zinc-500 uppercase tracking-wider">Bucket</th>
                   <th className="text-left py-3 px-4 text-xs text-zinc-500 uppercase tracking-wider">Posted</th>
                   <th className="text-center py-3 px-4 text-xs text-zinc-500 uppercase tracking-wider">Link</th>
@@ -312,7 +327,7 @@ export default function CompetitorResearch() {
               <tbody>
                 {entries.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center text-zinc-600 py-12">
+                    <td colSpan={isPostsTab ? 7 : 8} className="text-center text-zinc-600 py-12">
                       No content yet. Data will appear after n8n runs the daily scrape.
                     </td>
                   </tr>
@@ -321,8 +336,12 @@ export default function CompetitorResearch() {
                     <tr key={entry.id} className="border-b border-zinc-800/50 hover:bg-zinc-900/50">
                       <td className="py-3 px-4 text-sm font-medium text-white">{entry.account_name}</td>
                       <td className="py-3 px-4 text-xs text-zinc-500">@{entry.account_handle}</td>
-                      <td className="py-3 px-4 text-sm text-right font-mono text-zinc-400">{formatCompact(entry.likes || 0)}</td>
-                      <td className="py-3 px-4 text-sm text-right font-mono font-bold text-white">{formatCompact(entry.views || 0)}</td>
+                      {isPostsTab ? (
+                        <td className="py-3 px-4 text-sm text-right font-mono font-bold text-white">{formatCompact(entry.likes || 0)}</td>
+                      ) : (<>
+                        <td className="py-3 px-4 text-sm text-right font-mono text-zinc-400">{formatCompact(entry.likes || 0)}</td>
+                        <td className="py-3 px-4 text-sm text-right font-mono font-bold text-white">{formatCompact(entry.views || 0)}</td>
+                      </>)}
                       <td className="py-3 px-4 text-center">
                         <Badge variant="outline" className={`text-[10px] ${BUCKET_COLORS[entry.view_bucket] || BUCKET_COLORS["<50k"]}`}>
                           {entry.view_bucket}
@@ -364,7 +383,7 @@ export default function CompetitorResearch() {
           <div className="flex items-center gap-6 mt-4 text-xs text-zinc-600">
             <span>Total entries: <span className="text-white font-bold">{entries.length}</span></span>
             <span>Accounts: <span className="text-white font-bold">{accounts.length}</span></span>
-            <span>Avg views: <span className="text-white font-bold">{formatCompact(Math.round(entries.reduce((s: number, e: any) => s + (e.views || 0), 0) / entries.length))}</span></span>
+            <span>Avg {isPostsTab ? "likes" : "views"}: <span className="text-white font-bold">{formatCompact(Math.round(entries.reduce((s: number, e: any) => s + (e[sortKey] || 0), 0) / entries.length))}</span></span>
             <span>1M+ hits: <span className="text-amber-400 font-bold">{entries.filter((e: any) => e.view_bucket === "1M+").length}</span></span>
           </div>
         )}

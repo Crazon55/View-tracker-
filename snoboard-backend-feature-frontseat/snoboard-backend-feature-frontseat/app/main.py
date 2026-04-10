@@ -1129,7 +1129,7 @@ async def competitor_ingest(category: str, request: Request):
             "account_handle": handle,
             "likes": likes,
             "views": views,
-            "view_bucket": _compute_view_bucket(views),
+            "view_bucket": _compute_view_bucket(likes if category == "fbs_posts" else views),
             "url": url,
             "posted_at": posted_at or None,
         }
@@ -1156,7 +1156,8 @@ async def competitor_list(category: str, bucket: str | None = None):
     client = get_supabase_client()
     table = COMPETITOR_TABLES[category]
 
-    query = client.table(table).select("*").order("views", desc=True)
+    order_col = "likes" if category == "fbs_posts" else "views"
+    query = client.table(table).select("*").order(order_col, desc=True)
     if bucket:
         query = query.eq("view_bucket", bucket)
 
