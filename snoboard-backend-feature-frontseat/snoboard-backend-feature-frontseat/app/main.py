@@ -1081,10 +1081,12 @@ def _extract_handle(url: str) -> str:
 
 
 @app.post("/api/v1/competitor/{category}/ingest")
-async def competitor_ingest(category: str, entries: list[dict]):
-    """Ingest scraped competitor data from n8n. Deduplicates by URL."""
+async def competitor_ingest(category: str, payload: dict | list[dict]):
+    """Ingest scraped competitor data from n8n. Accepts a single dict or a list of dicts. Deduplicates by URL."""
     if category not in COMPETITOR_TABLES:
         raise HTTPException(status_code=400, detail=f"Invalid category. Use: {list(COMPETITOR_TABLES.keys())}")
+
+    entries = [payload] if isinstance(payload, dict) else payload
 
     from app.database.client import get_supabase_client
     client = get_supabase_client()
