@@ -630,6 +630,9 @@ export default function PostTracker(){
               </select>
             </div>
           </div>
+          {newIdea.source==="original"&&(
+            <div><label style={ls}>Original source / references</label><input value={newIdea.comp_link} onChange={e=>setNewIdea(p=>({...p,comp_link:e.target.value}))} placeholder="Reference links, articles, sources..." style={is}/></div>
+          )}
           {newIdea.source==="competitor"&&(
             <div><label style={ls}>Comp link</label><input value={newIdea.comp_link} onChange={e=>setNewIdea(p=>({...p,comp_link:e.target.value}))} placeholder="Competitor post URL" style={is}/></div>
           )}
@@ -670,10 +673,13 @@ export default function PostTracker(){
                 </select>
               </div>
             </div>
+            {cd.source==="original"&&(
+              <div><label style={ls}>Original source / references</label><input defaultValue={cd.comp_link||""} key={cd.id+"_source"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{comp_link:e.target.value.trim()||null}})} placeholder="Reference links, articles, sources..." style={is}/></div>
+            )}
             {cd.source==="competitor"&&(
               <div><label style={ls}>Comp link</label><input defaultValue={cd.comp_link||""} key={cd.id+"_comp"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{comp_link:e.target.value.trim()||null}})} placeholder="Competitor post URL" style={is}/></div>
             )}
-            {cd.source==="competitor"&&cd.comp_link&&<a href={cd.comp_link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.comp_link}</a>}
+            {cd.comp_link&&<a href={cd.comp_link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.comp_link}</a>}
 
             {/* Page checklist — from testing stage onwards */}
             {dn&&!["new","approved","design_approval","scripted"].includes(cd.stage)&&(
