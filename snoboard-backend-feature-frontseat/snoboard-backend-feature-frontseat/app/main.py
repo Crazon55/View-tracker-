@@ -1367,9 +1367,6 @@ async def tracker_migrate():
             continue
 
         existing = client.table("tracker_ideas").select("id").eq("title", title).execute().data
-        if existing:
-            skipped += 1
-            continue
 
         # Determine niche from source or default to FBS
         niche_id = niche_map["FBS"]  # default
@@ -1377,15 +1374,26 @@ async def tracker_migrate():
         old_status = idea.get("status", "draft")
         stage = status_to_stage.get(old_status, "new")
 
+        source = "competitor" if idea.get("source") == "repurposed" else "original"
         row = {
             "title": title,
-            "source": "competitor" if idea.get("source") == "repurposed" else "original",
+            "source": source,
             "niche_id": niche_id,
             "stage": stage,
-            "link": idea.get("comp_link") or idea.get("yt_url") or None,
-            "notes": idea.get("timestamps") or None,
             "created_by": idea.get("created_by") or idea.get("executor_name") or None,
+            "hook_variations": idea.get("hook_variations") or [],
+            "music_ref": None,
+            "yt_url": idea.get("yt_url") or None,
+            "yt_timestamps": idea.get("timestamps") or None,
+            "comp_link": idea.get("comp_link") or None,
+            "type": "reel",
         }
+        # If already exists, UPDATE it with full data instead of skipping
+        if existing:
+            client.table("tracker_ideas").update(row).eq("id", existing[0]["id"]).execute()
+            migrated += 1
+            continue
+
         client.table("tracker_ideas").insert(row).execute()
         migrated += 1
 
