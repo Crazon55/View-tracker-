@@ -112,7 +112,7 @@ export const updateTrackerNiche = (id: string, data: { name?: string; pages?: st
 export const deleteTrackerNiche = (id: string) =>
   fetchApi<any>(`/api/v1/tracker/niches/${id}`, { method: "DELETE" });
 
-export const getTrackerIdeas = () => fetchApi<any[]>("/api/v1/tracker/ideas");
+export const getTrackerIdeas = (type?: string) => fetchApi<any[]>(`/api/v1/tracker/ideas${type ? `?type=${type}` : ""}`);
 export const createTrackerIdea = (data: any) =>
   fetchApi<any>("/api/v1/tracker/ideas", { method: "POST", body: JSON.stringify(data) });
 export const updateTrackerIdea = (id: string, data: any) =>

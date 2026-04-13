@@ -8,17 +8,17 @@ import {
   createTrackerPosting, updateTrackerPosting, deleteTrackerPosting,
 } from "@/services/api";
 
-const STAGES = ["new","approved","base_edit","testing","batch_edit","scale","kill","done"];
-const SL: Record<string,string> = { new:"New ideas", approved:"Approved", base_edit:"Base edit", testing:"Testing", batch_edit:"Batch edit", scale:"Scale", kill:"Killed", done:"Done" };
+const STAGES = ["new","approved","design_approval","scripted","testing","batch_production","scheduled","uploaded"];
+const SL: Record<string,string> = { new:"New ideas", approved:"Approved", design_approval:"Design approval", scripted:"Scripted", testing:"Testing", batch_production:"Batch production", scheduled:"Scheduled", uploaded:"Uploaded" };
 const SC: Record<string,{bg:string;text:string;dot:string}> = {
   new:{ bg:"rgba(74,127,212,0.15)",text:"#7BB0FF",dot:"#4A7FD4" },
   approved:{ bg:"rgba(45,158,95,0.15)",text:"#5AE0A0",dot:"#2D9E5F" },
-  base_edit:{ bg:"rgba(123,97,196,0.15)",text:"#B49EFF",dot:"#7B61C4" },
-  testing:{ bg:"rgba(212,149,42,0.15)",text:"#F0C060",dot:"#D4952A" },
-  batch_edit:{ bg:"rgba(212,118,42,0.15)",text:"#F0A050",dot:"#D4762A" },
-  scale:{ bg:"rgba(29,158,117,0.15)",text:"#50E0B0",dot:"#1D9E75" },
-  kill:{ bg:"rgba(201,59,59,0.15)",text:"#FF7070",dot:"#C93B3B" },
-  done:{ bg:"rgba(138,138,128,0.15)",text:"#a1a1aa",dot:"#8A8A80" },
+  design_approval:{ bg:"rgba(123,97,196,0.15)",text:"#B49EFF",dot:"#7B61C4" },
+  scripted:{ bg:"rgba(212,149,42,0.15)",text:"#F0C060",dot:"#D4952A" },
+  testing:{ bg:"rgba(212,118,42,0.15)",text:"#F0A050",dot:"#D4762A" },
+  batch_production:{ bg:"rgba(29,158,117,0.15)",text:"#50E0B0",dot:"#1D9E75" },
+  scheduled:{ bg:"rgba(83,74,183,0.15)",text:"#9B8FFF",dot:"#534AB7" },
+  uploaded:{ bg:"rgba(138,138,128,0.15)",text:"#a1a1aa",dot:"#8A8A80" },
 };
 const PT: Record<string,{label:string;color:string;bg:string}> = {
   below:{ label:"Below",color:"#FF7070",bg:"rgba(201,59,59,0.15)" },
@@ -46,8 +46,6 @@ function mapIdea(raw: any): any {
     createdAt: raw.created_at ? new Date(raw.created_at).getTime() : Date.now(),
     hook_variations: raw.hook_variations || [],
     music_ref: raw.music_ref || null,
-    yt_url: raw.yt_url || null,
-    yt_timestamps: raw.yt_timestamps || null,
     comp_link: raw.comp_link || null,
     postings: (raw.tracker_postings || []).map((p: any) => ({
       id: p.id,
@@ -301,7 +299,7 @@ function AnalyticsView({ideas,niches,nicheFilter,pageFilter,dateFrom,dateTo,setD
   );
 }
 
-export default function ContentTracker(){
+export default function PostTracker(){
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -311,8 +309,8 @@ export default function ContentTracker(){
     queryFn: getTrackerNiches,
   });
   const { data: rawIdeas = [], isLoading: ideasLoading } = useQuery({
-    queryKey: ["tracker-ideas"],
-    queryFn: () => getTrackerIdeas("reel"),
+    queryKey: ["tracker-ideas-post"],
+    queryFn: () => getTrackerIdeas("post"),
   });
 
   const niches = rawNiches as any[];
@@ -321,7 +319,7 @@ export default function ContentTracker(){
 
   // ---- Mutations ----
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ["tracker-ideas"] });
+    queryClient.invalidateQueries({ queryKey: ["tracker-ideas-post"] });
     queryClient.invalidateQueries({ queryKey: ["tracker-niches"] });
   };
 
@@ -375,14 +373,14 @@ export default function ContentTracker(){
   const [draggingId,setDraggingId]=useState<string|null>(null);
   const [dropStage,setDropStage]=useState<string|null>(null);
 
-  // ---- Local UI state (unchanged) ----
+  // ---- Local UI state ----
   const [addOpen,setAddOpen]=useState(false);
   const [detailIdea,setDetailIdea]=useState<any>(null);
   const [settingsOpen,setSettingsOpen]=useState(false);
   const [addNicheOpen,setAddNicheOpen]=useState(false);
   const [editNiche,setEditNiche]=useState<any>(null);
   const [newNiche,setNewNiche]=useState({name:"",pages:""});
-  const [newIdea,setNewIdea]=useState({title:"",source:"original",nicheId:"",hook_variations:"",music_ref:"",yt_url:"",yt_timestamps:"",comp_link:""});
+  const [newIdea,setNewIdea]=useState({title:"",source:"original",nicheId:"",hook_variations:"",music_ref:"",comp_link:""});
   const [viewMode,setViewMode]=useState("board");
   const [nicheFilter,setNicheFilter]=useState("all");
   const [pageFilter,setPageFilter]=useState("all");
@@ -404,14 +402,12 @@ export default function ContentTracker(){
       niche_id: newIdea.nicheId,
       hook_variations: hookLines.length > 0 ? hookLines : null,
       music_ref: newIdea.music_ref.trim() || null,
-      yt_url: newIdea.yt_url.trim() || null,
-      yt_timestamps: newIdea.yt_timestamps.trim() || null,
       comp_link: newIdea.source === "competitor" ? (newIdea.comp_link.trim() || null) : null,
       stage: "new",
-      type: "reel",
+      type: "post",
       created_by: user?.email || null,
     });
-    setNewIdea({title:"",source:"original",nicheId:"",hook_variations:"",music_ref:"",yt_url:"",yt_timestamps:"",comp_link:""});
+    setNewIdea({title:"",source:"original",nicheId:"",hook_variations:"",music_ref:"",comp_link:""});
     setAddOpen(false);
   }
   function moveIdea(id: string, ns: string){
@@ -471,13 +467,14 @@ export default function ContentTracker(){
   const dn=cd?niches.find(n=>n.id===cd.nicheId):null;
 
   const sa: Record<string, {label:string;stage:string;style:React.CSSProperties}[]>={
-    new:[{label:"Approve",stage:"approved",style:bp},{label:"Reject",stage:"kill",style:{...bs,color:"#C93B3B"}}],
-    approved:[{label:"Start base edit",stage:"base_edit",style:bp}],
-    base_edit:[{label:"Start testing",stage:"testing",style:bp}],
-    testing:[{label:"Move to batch edit",stage:"batch_edit",style:bp},{label:"Kill it",stage:"kill",style:{...bs,color:"#C93B3B"}}],
-    batch_edit:[{label:"Scale it",stage:"scale",style:{...bp,background:"#1D9E75"}}],
-    scale:[{label:"Mark done",stage:"done",style:bp}],
-    kill:[],done:[],
+    new:[{label:"Approve",stage:"approved",style:bp}],
+    approved:[{label:"Approve design",stage:"design_approval",style:bp}],
+    design_approval:[{label:"Mark scripted",stage:"scripted",style:bp}],
+    scripted:[{label:"Start testing",stage:"testing",style:bp}],
+    testing:[{label:"Move to batch",stage:"batch_production",style:bp}],
+    batch_production:[{label:"Schedule",stage:"scheduled",style:{...bp,background:"#534AB7"}}],
+    scheduled:[{label:"Mark uploaded",stage:"uploaded",style:{...bp,background:"#1D9E75"}}],
+    uploaded:[],
   };
 
   const counts: Record<string,number>={};STAGES.forEach(s=>{counts[s]=filteredIdeas.filter(i=>i.stage===s).length;});
@@ -490,7 +487,7 @@ export default function ContentTracker(){
         <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
         <div style={{textAlign:"center"}}>
           <div style={{width:36,height:36,border:"3px solid #27272a",borderTopColor:"#7c3aed",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 14px"}}/>
-          <p style={{fontSize:13,color:"#71717a"}}>Loading content tracker...</p>
+          <p style={{fontSize:13,color:"#71717a"}}>Loading post tracker...</p>
           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
       </div>
@@ -505,7 +502,7 @@ export default function ContentTracker(){
       <div style={{padding:"20px 24px 12px 70px",borderBottom:"1px solid #27272a",background:"#09090b"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
           <div>
-            <h1 style={{margin:0,fontSize:20,fontWeight:700,letterSpacing:"-0.03em"}}>Content tracker</h1>
+            <h1 style={{margin:0,fontSize:20,fontWeight:700,letterSpacing:"-0.03em"}}>Post tracker</h1>
             <p style={{margin:"3px 0 0",fontSize:12,color:"#71717a"}}>{ideas.length} ideas · {niches.length} niches · {niches.reduce((a: number,n: any)=>a+n.pages.length,0)} pages</p>
           </div>
         </div>
@@ -591,21 +588,15 @@ export default function ContentTracker(){
       {/* Add Idea */}
       <Modal open={addOpen} onClose={()=>setAddOpen(false)} title="Add new idea">
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
-          <div><label style={ls}>Title / description *</label><input value={newIdea.title} onChange={e=>setNewIdea(p=>({...p,title:e.target.value}))} placeholder="e.g. Morning routine montage with dramatic voiceover" style={is}/></div>
+          <div><label style={ls}>Title / description *</label><input value={newIdea.title} onChange={e=>setNewIdea(p=>({...p,title:e.target.value}))} placeholder="e.g. Carousel post about morning routines" style={is}/></div>
           <div style={{display:"flex",gap:10}}>
             <div style={{flex:1}}><label style={ls}>Source</label><div style={{display:"flex",gap:6}}>{SOURCES.map(s=><button key={s} onClick={()=>setNewIdea(p=>({...p,source:s}))} style={{flex:1,padding:"8px 10px",borderRadius:8,border:newIdea.source===s?"2px solid #7c3aed":"1.5px solid #3f3f46",background:newIdea.source===s?"#27272a":"#18181b",fontSize:12,fontWeight:600,cursor:"pointer",textTransform:"capitalize"}}>{s}</button>)}</div></div>
             <div style={{flex:1}}><label style={ls}>Niche *</label><select value={newIdea.nicheId} onChange={e=>setNewIdea(p=>({...p,nicheId:e.target.value}))} style={{...is,cursor:"pointer"}}><option value="">Select niche</option>{niches.map(n=><option key={n.id} value={n.id}>{n.name} ({n.pages.length} pages)</option>)}</select></div>
           </div>
           <div><label style={ls}>Hook variations (one per line)</label><textarea value={newIdea.hook_variations} onChange={e=>setNewIdea(p=>({...p,hook_variations:e.target.value}))} rows={4} placeholder={"Hook variation 1\nHook variation 2\nHook variation 3"} style={{...is,resize:"vertical",minHeight:80}}/></div>
           <div><label style={ls}>Music reference / suggestions</label><input value={newIdea.music_ref} onChange={e=>setNewIdea(p=>({...p,music_ref:e.target.value}))} placeholder="e.g. Dark cinematic, trending audio XYZ" style={is}/></div>
-          {newIdea.source==="original"&&(
-            <div style={{display:"flex",gap:10}}>
-              <div style={{flex:1}}><label style={ls}>YT link (original source)</label><input value={newIdea.yt_url} onChange={e=>setNewIdea(p=>({...p,yt_url:e.target.value}))} placeholder="https://youtube.com/watch?v=..." style={is}/></div>
-              <div style={{flex:"0 0 140px"}}><label style={ls}>YT timestamps</label><input value={newIdea.yt_timestamps} onChange={e=>setNewIdea(p=>({...p,yt_timestamps:e.target.value}))} placeholder="0:30-1:45" style={is}/></div>
-            </div>
-          )}
           {newIdea.source==="competitor"&&(
-            <div><label style={ls}>Comp link</label><input value={newIdea.comp_link} onChange={e=>setNewIdea(p=>({...p,comp_link:e.target.value}))} placeholder="Competitor reel / post URL" style={is}/></div>
+            <div><label style={ls}>Comp link</label><input value={newIdea.comp_link} onChange={e=>setNewIdea(p=>({...p,comp_link:e.target.value}))} placeholder="Competitor post URL" style={is}/></div>
           )}
           <button onClick={addIdeaFn} disabled={!newIdea.title.trim()||!newIdea.nicheId} style={{...bp,opacity:(!newIdea.title.trim()||!newIdea.nicheId)?0.4:1,marginTop:2}}>Add idea</button>
         </div>
@@ -627,15 +618,8 @@ export default function ContentTracker(){
             <div style={{display:"flex",gap:10}}>
               <div style={{flex:1}}><label style={ls}>Music reference / suggestions</label><input defaultValue={cd.music_ref||""} key={cd.id+"_music"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{music_ref:e.target.value.trim()||null}})} placeholder="e.g. Dark cinematic, trending audio" style={is}/></div>
             </div>
-            {cd.source==="original"&&(
-              <div style={{display:"flex",gap:10}}>
-                <div style={{flex:1}}><label style={ls}>YT link (original source)</label><input defaultValue={cd.yt_url||""} key={cd.id+"_yturl"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{yt_url:e.target.value.trim()||null}})} placeholder="https://youtube.com/watch?v=..." style={is}/></div>
-                <div style={{flex:"0 0 140px"}}><label style={ls}>YT timestamps</label><input defaultValue={cd.yt_timestamps||""} key={cd.id+"_ytts"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{yt_timestamps:e.target.value.trim()||null}})} placeholder="0:30-1:45" style={is}/></div>
-              </div>
-            )}
-            {cd.source==="original"&&cd.yt_url&&<a href={cd.yt_url} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.yt_url}</a>}
             {cd.source==="competitor"&&(
-              <div><label style={ls}>Comp link</label><input defaultValue={cd.comp_link||""} key={cd.id+"_comp"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{comp_link:e.target.value.trim()||null}})} placeholder="Competitor reel / post URL" style={is}/></div>
+              <div><label style={ls}>Comp link</label><input defaultValue={cd.comp_link||""} key={cd.id+"_comp"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{comp_link:e.target.value.trim()||null}})} placeholder="Competitor post URL" style={is}/></div>
             )}
             {cd.source==="competitor"&&cd.comp_link&&<a href={cd.comp_link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.comp_link}</a>}
 
