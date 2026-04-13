@@ -386,7 +386,7 @@ export default function PostTracker(){
   const [addNicheOpen,setAddNicheOpen]=useState(false);
   const [editNiche,setEditNiche]=useState<any>(null);
   const [newNiche,setNewNiche]=useState({name:"",pages:""});
-  const [newIdea,setNewIdea]=useState({title:"",source:"original",nicheId:"",format:"static",main_page_hook:"",created_by_name:"",content_pillar:"",content_bucket:"",hook_variations:"",comp_link:""});
+  const [newIdea,setNewIdea]=useState({title:"",source:"original",nicheId:"",format:"static",main_page_hook:"",content_pillar:"",content_bucket:"",hook_variations:"",comp_link:""});
   const [viewMode,setViewMode]=useState("board");
   const [nicheFilter,setNicheFilter]=useState("all");
   const [pageFilter,setPageFilter]=useState("all");
@@ -414,9 +414,9 @@ export default function PostTracker(){
       comp_link: newIdea.source === "competitor" ? (newIdea.comp_link.trim() || null) : null,
       stage: "new",
       type: "post",
-      created_by: newIdea.created_by_name.trim() || user?.email || null,
+      created_by: user?.user_metadata?.full_name || user?.email?.split("@")[0] || user?.email || null,
     });
-    setNewIdea({title:"",source:"original",nicheId:"",format:"static",main_page_hook:"",created_by_name:"",content_pillar:"",content_bucket:"",hook_variations:"",comp_link:""});
+    setNewIdea({title:"",source:"original",nicheId:"",format:"static",main_page_hook:"",content_pillar:"",content_bucket:"",hook_variations:"",comp_link:""});
     setAddOpen(false);
   }
   function moveIdea(id: string, ns: string){
@@ -604,7 +604,7 @@ export default function PostTracker(){
           </div>
           <div style={{display:"flex",gap:10}}>
             <div style={{flex:1}}><label style={ls}>Niche *</label><select value={newIdea.nicheId} onChange={e=>setNewIdea(p=>({...p,nicheId:e.target.value}))} style={{...is,cursor:"pointer"}}><option value="">Select niche</option>{niches.map(n=><option key={n.id} value={n.id}>{n.name} ({n.pages.length} pages)</option>)}</select></div>
-            <div style={{flex:1}}><label style={ls}>Created by</label><input value={newIdea.created_by_name} onChange={e=>setNewIdea(p=>({...p,created_by_name:e.target.value}))} placeholder="Name" style={is}/></div>
+            <div style={{flex:1}}><label style={ls}>Created by</label><div style={{...is,background:"#27272a",color:"#a1a1aa"}}>{user?.user_metadata?.full_name || user?.email?.split("@")[0] || "—"}</div></div>
           </div>
           <div><label style={ls}>Main page hook</label><input value={newIdea.main_page_hook} onChange={e=>setNewIdea(p=>({...p,main_page_hook:e.target.value}))} placeholder="The main hook for the lead page" style={is}/></div>
           <div><label style={ls}>Hook variations (one per line)</label><textarea value={newIdea.hook_variations} onChange={e=>setNewIdea(p=>({...p,hook_variations:e.target.value}))} rows={3} placeholder={"Hook variation 1\nHook variation 2\nHook variation 3"} style={{...is,resize:"vertical",minHeight:60}}/></div>
