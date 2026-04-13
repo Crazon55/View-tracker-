@@ -213,7 +213,6 @@ const navItems: NavItem[] = [
   { to: "/content-tracker", label: "Reel Tracker", icon: ClipboardList },
   { to: "/post-tracker", label: "Post Tracker", icon: Image },
   { to: "/post-ips", label: "Post IPs", icon: Image },
-  { to: "/pipeline", label: "Pipeline", icon: Kanban },
   { to: "/stage1-tracker", label: "Stage 1 Tracker", icon: BarChart3 },
   { to: "/competitor-research", label: "Competitor Research", icon: Telescope },
   { to: "/growth", label: "Growth", icon: TrendingUp },
