@@ -91,7 +91,7 @@ function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove,stage}: {po:any;
     const t = perfTag && PT[perfTag] ? PT[perfTag] : null;
     return(
       <div style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}} onClick={()=>setEditing(true)}>
-        <div style={{width:20,height:20,borderRadius:5,background:stageColor,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
+        <div onClick={e=>{e.stopPropagation();onRemove();}} title="Remove page" style={{width:20,height:20,borderRadius:5,background:stageColor,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,cursor:"pointer"}}><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
         <span style={{fontSize:13,fontWeight:600,color:"#fff"}}>@{page}</span>
         {po.views!=null&&<span style={{fontSize:12,fontWeight:700,color:"#fff",fontFamily:"monospace"}}>{fmtNum(po.views)}</span>}
         {!po.views&&<span style={{fontSize:11,color:"#52525b"}}>no views yet</span>}
