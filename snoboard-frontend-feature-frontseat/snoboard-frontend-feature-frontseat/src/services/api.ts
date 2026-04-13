@@ -103,6 +103,30 @@ export const createContentEntry = (data: any) => fetchApi<any>("/api/v1/content-
 export const updateContentEntry = (id: string, data: any) => fetchApi<any>(`/api/v1/content-entries/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const deleteContentEntry = (id: string) => fetchApi<any>(`/api/v1/content-entries/${id}`, { method: "DELETE" });
 
+// Content Tracker
+export const getTrackerNiches = () => fetchApi<any[]>("/api/v1/tracker/niches");
+export const createTrackerNiche = (data: { name: string; pages: string[] }) =>
+  fetchApi<any>("/api/v1/tracker/niches", { method: "POST", body: JSON.stringify(data) });
+export const updateTrackerNiche = (id: string, data: { name?: string; pages?: string[] }) =>
+  fetchApi<any>(`/api/v1/tracker/niches/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export const deleteTrackerNiche = (id: string) =>
+  fetchApi<any>(`/api/v1/tracker/niches/${id}`, { method: "DELETE" });
+
+export const getTrackerIdeas = () => fetchApi<any[]>("/api/v1/tracker/ideas");
+export const createTrackerIdea = (data: any) =>
+  fetchApi<any>("/api/v1/tracker/ideas", { method: "POST", body: JSON.stringify(data) });
+export const updateTrackerIdea = (id: string, data: any) =>
+  fetchApi<any>(`/api/v1/tracker/ideas/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export const deleteTrackerIdea = (id: string) =>
+  fetchApi<any>(`/api/v1/tracker/ideas/${id}`, { method: "DELETE" });
+
+export const createTrackerPosting = (ideaId: string, data: any) =>
+  fetchApi<any>(`/api/v1/tracker/ideas/${ideaId}/postings`, { method: "POST", body: JSON.stringify(data) });
+export const updateTrackerPosting = (id: string, data: any) =>
+  fetchApi<any>(`/api/v1/tracker/postings/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export const deleteTrackerPosting = (id: string) =>
+  fetchApi<any>(`/api/v1/tracker/postings/${id}`, { method: "DELETE" });
+
 // Competitor Research
 export type CompetitorCategory = "fbs_reels" | "tech_reels" | "fbs_posts";
 export const getCompetitorContent = (category: CompetitorCategory, bucket?: string) =>
