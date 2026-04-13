@@ -591,44 +591,48 @@ export default function ContentTracker(){
             )}
             {cd.source==="competitor"&&cd.comp_link&&<a href={cd.comp_link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.comp_link}</a>}
 
-            {/* Page checklist */}
-            {["testing","scale","done"].includes(cd.stage)&&dn&&(
+            {/* Page checklist — available for ALL stages */}
+            {dn&&(
               <div>
-                <label style={{...ls,marginBottom:8}}>Pages in {dn.name} — pick date & schedule</label>
-                {dn.pages.map((page: string)=>{const isP=pp.includes(page);const pi=(cd.postings||[]).findIndex((p: any)=>p.page===page);const po=pi>=0?cd.postings[pi]:null;const perf=po?gPerf(po.views,po.baselineViews):null;const dk=`${cd.id}_${page}`;return(
+                <label style={{...ls,marginBottom:8}}>Pages in {dn.name} — select, schedule & track</label>
+                {dn.pages.map((page: string)=>{const isP=pp.includes(page);const pi=(cd.postings||[]).findIndex((p: any)=>p.page===page);const po=pi>=0?cd.postings[pi]:null;const dk=`${cd.id}_${page}`;return(
                   <div key={page} style={{padding:"10px 12px",background:isP?"#1a1a2e":"#18181b",borderRadius:8,marginBottom:4,border:isP?"1.5px solid #3f3f46":"1px solid #27272a"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                     {isP?(
-                      <>
-                        <div onClick={()=>togglePage(cd.id,page,0,"")} style={{width:20,height:20,borderRadius:5,background:"#1a1a1a",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
-                        <span style={{fontSize:13,fontWeight:600,color:"#fff",minWidth:100}}>{page}</span>
-                        <span style={{fontSize:11,color:"#52525b",whiteSpace:"nowrap"}}>{fmtD(po.date)}</span>
-                        <div style={{display:"flex",alignItems:"center",gap:5,flex:1,minWidth:130}}>
-                          <input type="number" value={po.views??""} placeholder="Views" onClick={e=>e.stopPropagation()} onChange={e=>updateViews(cd.id,pi,e.target.value)} style={{width:80,padding:"5px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:12,background:"#18181b"}}/>
-                          <span style={{fontSize:10,color:"#52525b"}}>/ {(po.baselineViews||0).toLocaleString()}</span>
+                      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                        {/* Row 1: Page name + date + uncheck */}
+                        <div style={{display:"flex",alignItems:"center",gap:10}}>
+                          <div onClick={()=>togglePage(cd.id,page,0,"")} style={{width:20,height:20,borderRadius:5,background:"#7c3aed",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
+                          <span style={{fontSize:13,fontWeight:600,color:"#fff",flex:1}}>@{page}</span>
+                          <span style={{fontSize:11,color:"#71717a",whiteSpace:"nowrap"}}>{po?.date ? fmtD(po.date) : "No date"}</span>
                         </div>
-                        {perf&&<PB tag={perf}/>}
-                      </>
+                        {/* Row 2: Views + Baseline + Perf tag */}
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginLeft:30,flexWrap:"wrap"}}>
+                          <div style={{display:"flex",alignItems:"center",gap:4}}>
+                            <span style={{fontSize:10,color:"#52525b"}}>Views</span>
+                            <input type="number" value={po?.views??""} placeholder="0" onClick={e=>e.stopPropagation()} onChange={e=>updateViews(cd.id,pi,e.target.value)} style={{width:80,padding:"5px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:12,background:"#09090b",color:"#fff"}}/>
+                          </div>
+                          <div style={{display:"flex",alignItems:"center",gap:4}}>
+                            <span style={{fontSize:10,color:"#52525b"}}>Base</span>
+                            <span style={{fontSize:12,color:"#71717a",fontFamily:"monospace"}}>{(po?.baselineViews||0).toLocaleString()}</span>
+                          </div>
+                          {/* Performance tag buttons */}
+                          <div style={{display:"flex",gap:3,marginLeft:"auto"}}>
+                            {(["below","baseline","topline","viral"] as const).map(tag=>{const t=PT[tag];const active=po?.perf_tag===tag;return(
+                              <button key={tag} onClick={()=>updatePostingMut.mutate({id:po.id,data:{perf_tag:tag}})} style={{padding:"3px 8px",borderRadius:5,border:active?`2px solid ${t.color}`:"1px solid #3f3f46",background:active?t.bg:"transparent",color:active?t.color:"#52525b",fontSize:9,fontWeight:600,cursor:"pointer",transition:"all 0.15s"}}>{t.label}</button>
+                            );})}
+                          </div>
+                        </div>
+                      </div>
                     ):(
-                      <>
-                        <div style={{width:20,height:20,borderRadius:5,border:"1.5px solid #d0cec6",background:"#18181b",flexShrink:0}}/>
-                        <span style={{fontSize:13,fontWeight:500,color:"#71717a",minWidth:100}}>{page}</span>
-                        <input type="date" value={scheduleDate[dk]?.date||""} onChange={e=>setScheduleDate(p=>({...p,[dk]:{...p[dk],date:e.target.value}}))} style={{padding:"4px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:11,background:"#18181b",color:"#a1a1aa"}}/>
-                        <input type="number" value={scheduleDate[dk]?.baseline||""} placeholder="Baseline" onChange={e=>setScheduleDate(p=>({...p,[dk]:{...p[dk],baseline:e.target.value}}))} style={{width:75,padding:"4px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:11,background:"#18181b"}}/>
-                        <button onClick={()=>{const sd=scheduleDate[dk];if(!sd?.date)return;togglePage(cd.id,page,sd?.baseline||0,sd.date);setScheduleDate(p=>{const n={...p};delete n[dk];return n;});}} disabled={!scheduleDate[dk]?.date} style={{padding:"4px 12px",borderRadius:7,border:"none",fontSize:11,fontWeight:600,cursor:"pointer",background:scheduleDate[dk]?.date?"#7c3aed":"#3f3f46",color:scheduleDate[dk]?.date?"#fff":"#52525b"}}>Schedule</button>
-                      </>
-                    )}
-                    </div>
-                    {/* Performance tag selector for assigned pages */}
-                    {isP&&po&&(
-                      <div style={{display:"flex",gap:4,marginTop:8,marginLeft:30}}>
-                        {(["below","baseline","topline","viral"] as const).map(tag=>{const t=PT[tag];const active=po.perf_tag===tag;return(
-                          <button key={tag} onClick={()=>updatePostingMut.mutate({id:po.id,data:{perf_tag:tag}})} style={{padding:"3px 10px",borderRadius:6,border:active?`2px solid ${t.color}`:"1.5px solid #3f3f46",background:active?t.bg:"transparent",color:active?t.color:"#71717a",fontSize:10,fontWeight:600,cursor:"pointer",transition:"all 0.15s"}}>{t.label}</button>
-                        );})}
+                      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                        <div onClick={()=>{const sd=scheduleDate[dk];togglePage(cd.id,page,sd?.baseline||0,sd?.date||today());setScheduleDate(p=>{const n={...p};delete n[dk];return n;});}} style={{width:20,height:20,borderRadius:5,border:"1.5px solid #3f3f46",background:"#18181b",cursor:"pointer",flexShrink:0}}/>
+                        <span style={{fontSize:13,fontWeight:500,color:"#71717a",minWidth:80}}>@{page}</span>
+                        <input type="date" value={scheduleDate[dk]?.date||""} onChange={e=>setScheduleDate(p=>({...p,[dk]:{...p[dk],date:e.target.value}}))} style={{padding:"4px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:11,background:"#09090b",color:"#a1a1aa"}}/>
+                        <input type="number" value={scheduleDate[dk]?.baseline||""} placeholder="Baseline" onChange={e=>setScheduleDate(p=>({...p,[dk]:{...p[dk],baseline:e.target.value}}))} style={{width:75,padding:"4px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:11,background:"#09090b"}}/>
                       </div>
                     )}
                   </div>);})}
-                <div style={{marginTop:8,fontSize:11,color:"#52525b"}}>{pp.length}/{dn.pages.length} pages assigned</div>
+                <div style={{marginTop:8,fontSize:11,color:"#52525b"}}>{pp.length}/{dn.pages.length} pages selected</div>
               </div>
             )}
             <button onClick={()=>deleteIdea(cd.id)} style={{...bs,color:"#FF7070",borderColor:"#3f3f46",marginTop:6,fontSize:12}}>Delete idea</button>
