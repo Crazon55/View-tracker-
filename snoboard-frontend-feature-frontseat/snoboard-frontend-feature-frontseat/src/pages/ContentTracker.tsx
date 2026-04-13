@@ -296,10 +296,6 @@ export default function ContentTracker(){
             <h1 style={{margin:0,fontSize:20,fontWeight:700,letterSpacing:"-0.03em"}}>Content tracker</h1>
             <p style={{margin:"3px 0 0",fontSize:12,color:"#71717a"}}>{ideas.length} ideas · {niches.length} niches · {niches.reduce((a,n)=>a+n.pages.length,0)} pages</p>
           </div>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            <button onClick={()=>setSettingsOpen(true)} style={bs}>Niches</button>
-            <button onClick={()=>setAddOpen(true)} style={bp}>+ New idea</button>
-          </div>
         </div>
         <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap",alignItems:"center"}}>
           <select value={nicheFilter} onChange={e=>{setNicheFilter(e.target.value);setPageFilter("all");}} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:12,background:"#09090b",cursor:"pointer"}}>
@@ -316,6 +312,10 @@ export default function ContentTracker(){
             {["board","list","calendar","analytics"].map(v=>(
               <button key={v} onClick={()=>setViewMode(v)} style={{padding:"5px 12px",border:"none",fontSize:12,fontWeight:500,cursor:"pointer",background:viewMode===v?"#3f3f46":"transparent",color:viewMode===v?"#fff":"#71717a",boxShadow:viewMode===v?"0 1px 3px rgba(0,0,0,0.06)":"none",textTransform:"capitalize"}}>{v}</button>
             ))}
+          </div>
+          <div style={{marginLeft:"auto",display:"flex",gap:8}}>
+            <button onClick={()=>setSettingsOpen(true)} style={bs}>Niches</button>
+            <button onClick={()=>setAddOpen(true)} style={bp}>+ New idea</button>
           </div>
         </div>
       </div>
