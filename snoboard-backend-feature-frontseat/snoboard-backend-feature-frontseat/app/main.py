@@ -1373,3 +1373,52 @@ async def tracker_migrate():
         migrated += 1
 
     return {"success": True, "migrated": migrated, "skipped": skipped}
+
+
+@app.post("/api/v1/tracker/populate-niche-pages")
+async def tracker_populate_niche_pages():
+    """Populate niche pages from the existing pages table + hardcoded Marketing niche."""
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+
+    # Get all pages from the pages table
+    all_pages = client.table("pages").select("handle").execute().data or []
+    handles = [p["handle"] for p in all_pages if p.get("handle")]
+
+    # Classify using same logic as frontend
+    tech_handles = []
+    fbs_handles = []
+    for h in handles:
+        lower = h.lower()
+        if "tech" in lower or lower in ("ai.cracked", "goodai", "indianaipage", "neworderai"):
+            tech_handles.append(h)
+        else:
+            fbs_handles.append(h)
+
+    marketing_handles = [
+        "mktg.crunch", "themahaanmarketing", "marketingvenom",
+        "therisingbrands", "mktg.wtf", "101xMarketing",
+    ]
+
+    # Ensure niches exist and update their pages
+    existing = client.table("tracker_niches").select("id,name").execute().data or []
+    niche_map = {n["name"]: n["id"] for n in existing}
+
+    updates = {
+        "FBS": fbs_handles,
+        "Tech": tech_handles,
+        "Marketing": marketing_handles,
+    }
+
+    for name, pages in updates.items():
+        if name in niche_map:
+            client.table("tracker_niches").update({"pages": pages}).eq("id", niche_map[name]).execute()
+        else:
+            client.table("tracker_niches").insert({"name": name, "pages": pages}).execute()
+
+    return {
+        "success": True,
+        "FBS": len(fbs_handles),
+        "Tech": len(tech_handles),
+        "Marketing": len(marketing_handles),
+    }
