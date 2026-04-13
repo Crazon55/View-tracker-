@@ -550,10 +550,12 @@ export default function ContentTracker(){
           </div>
           <div><label style={ls}>Hook variations (one per line)</label><textarea value={newIdea.hook_variations} onChange={e=>setNewIdea(p=>({...p,hook_variations:e.target.value}))} rows={4} placeholder={"Hook variation 1\nHook variation 2\nHook variation 3"} style={{...is,resize:"vertical",minHeight:80}}/></div>
           <div><label style={ls}>Music reference / suggestions</label><input value={newIdea.music_ref} onChange={e=>setNewIdea(p=>({...p,music_ref:e.target.value}))} placeholder="e.g. Dark cinematic, trending audio XYZ" style={is}/></div>
-          <div style={{display:"flex",gap:10}}>
-            <div style={{flex:1}}><label style={ls}>YT link</label><input value={newIdea.yt_url} onChange={e=>setNewIdea(p=>({...p,yt_url:e.target.value}))} placeholder="https://youtube.com/watch?v=..." style={is}/></div>
-            <div style={{flex:"0 0 140px"}}><label style={ls}>YT timestamps</label><input value={newIdea.yt_timestamps} onChange={e=>setNewIdea(p=>({...p,yt_timestamps:e.target.value}))} placeholder="0:30-1:45" style={is}/></div>
-          </div>
+          {newIdea.source==="original"&&(
+            <div style={{display:"flex",gap:10}}>
+              <div style={{flex:1}}><label style={ls}>YT link (original source)</label><input value={newIdea.yt_url} onChange={e=>setNewIdea(p=>({...p,yt_url:e.target.value}))} placeholder="https://youtube.com/watch?v=..." style={is}/></div>
+              <div style={{flex:"0 0 140px"}}><label style={ls}>YT timestamps</label><input value={newIdea.yt_timestamps} onChange={e=>setNewIdea(p=>({...p,yt_timestamps:e.target.value}))} placeholder="0:30-1:45" style={is}/></div>
+            </div>
+          )}
           {newIdea.source==="competitor"&&(
             <div><label style={ls}>Comp link</label><input value={newIdea.comp_link} onChange={e=>setNewIdea(p=>({...p,comp_link:e.target.value}))} placeholder="Competitor reel / post URL" style={is}/></div>
           )}
@@ -577,14 +579,17 @@ export default function ContentTracker(){
             <div style={{display:"flex",gap:10}}>
               <div style={{flex:1}}><label style={ls}>Music reference / suggestions</label><input defaultValue={cd.music_ref||""} key={cd.id+"_music"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{music_ref:e.target.value.trim()||null}})} placeholder="e.g. Dark cinematic, trending audio" style={is}/></div>
             </div>
-            <div style={{display:"flex",gap:10}}>
-              <div style={{flex:1}}><label style={ls}>YT link</label><input defaultValue={cd.yt_url||""} key={cd.id+"_yturl"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{yt_url:e.target.value.trim()||null}})} placeholder="https://youtube.com/watch?v=..." style={is}/></div>
-              <div style={{flex:"0 0 140px"}}><label style={ls}>YT timestamps</label><input defaultValue={cd.yt_timestamps||""} key={cd.id+"_ytts"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{yt_timestamps:e.target.value.trim()||null}})} placeholder="0:30-1:45" style={is}/></div>
-            </div>
+            {cd.source==="original"&&(
+              <div style={{display:"flex",gap:10}}>
+                <div style={{flex:1}}><label style={ls}>YT link (original source)</label><input defaultValue={cd.yt_url||""} key={cd.id+"_yturl"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{yt_url:e.target.value.trim()||null}})} placeholder="https://youtube.com/watch?v=..." style={is}/></div>
+                <div style={{flex:"0 0 140px"}}><label style={ls}>YT timestamps</label><input defaultValue={cd.yt_timestamps||""} key={cd.id+"_ytts"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{yt_timestamps:e.target.value.trim()||null}})} placeholder="0:30-1:45" style={is}/></div>
+              </div>
+            )}
+            {cd.source==="original"&&cd.yt_url&&<a href={cd.yt_url} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.yt_url}</a>}
             {cd.source==="competitor"&&(
               <div><label style={ls}>Comp link</label><input defaultValue={cd.comp_link||""} key={cd.id+"_comp"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{comp_link:e.target.value.trim()||null}})} placeholder="Competitor reel / post URL" style={is}/></div>
             )}
-            {cd.yt_url&&<a href={cd.yt_url} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.yt_url}</a>}
+            {cd.source==="competitor"&&cd.comp_link&&<a href={cd.comp_link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.comp_link}</a>}
 
             {/* Page checklist */}
             {["testing","scale","done"].includes(cd.stage)&&dn&&(
