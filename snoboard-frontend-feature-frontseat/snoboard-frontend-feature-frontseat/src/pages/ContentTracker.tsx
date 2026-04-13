@@ -97,7 +97,7 @@ function CalendarView({ideas,niches,nicheFilter,pageFilter,onClickIdea,weekStart
   const ncm=useMemo(()=>{const p=["#4A7FD4","#1D9E75","#D4952A","#534AB7","#D85A30","#D4537E","#639922","#185FA5"];const m: Record<string,string>={};niches.forEach((n: any,i: number)=>{m[n.id]=p[i%p.length];});return m;},[niches]);
   const entries=useMemo(()=>{const r: any[]=[];ideas.forEach((idea: any)=>{(idea.postings||[]).forEach((p: any)=>{if(!p.date)return;if(nicheFilter!=="all"&&idea.nicheId!==nicheFilter)return;if(pageFilter!=="all"&&p.page!==pageFilter)return;r.push({idea,posting:p});});});return r;},[ideas,nicheFilter,pageFilter]);
   return(
-    <div style={{padding:"16px 20px 24px"}}>
+    <div style={{padding:"16px 24px 24px 70px"}}>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
         <button onClick={()=>setWeekStart(addD(weekStart,-7))} style={{background:"none",border:"1px solid #3f3f46",borderRadius:7,padding:"5px 11px",cursor:"pointer",fontSize:12,fontWeight:500}}>←</button>
         <button onClick={()=>setWeekStart(getMonday(today()))} style={{background:"none",border:"1px solid #3f3f46",borderRadius:7,padding:"5px 11px",cursor:"pointer",fontSize:12,fontWeight:500}}>Today</button>
@@ -173,7 +173,7 @@ function AnalyticsView({ideas,niches,nicheFilter,pageFilter,dateFrom,dateTo,setD
   const cardS={background:"#18181b",borderRadius:12,padding:"16px 18px",border:"1px solid #27272a"};
 
   return(
-    <div style={{padding:"16px 20px 24px",maxWidth:900}}>
+    <div style={{padding:"16px 24px 24px 70px",maxWidth:900}}>
       <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:16,flexWrap:"wrap"}}>
         <span style={{fontSize:12,fontWeight:600,color:"#71717a",textTransform:"uppercase",letterSpacing:"0.04em"}}>Period</span>
         <input type="date" value={dateFrom} onChange={(e: any)=>setDateFrom(e.target.value)} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:12,background:"#09090b"}}/>
@@ -444,7 +444,7 @@ export default function ContentTracker(){
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 
       {/* Header — left padded to clear hamburger menu */}
-      <div style={{padding:"16px 20px 12px 60px",borderBottom:"1px solid #27272a",background:"#09090b"}}>
+      <div style={{padding:"20px 24px 12px 70px",borderBottom:"1px solid #27272a",background:"#09090b"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
           <div>
             <h1 style={{margin:0,fontSize:20,fontWeight:700,letterSpacing:"-0.03em"}}>Content tracker</h1>
@@ -476,7 +476,7 @@ export default function ContentTracker(){
 
       {/* Board — drag-and-drop */}
       {viewMode==="board"&&(
-        <div style={{display:"flex",gap:8,padding:"12px 10px 24px",overflowX:"auto",minHeight:"calc(100vh - 130px)"}}>
+        <div style={{display:"flex",gap:10,padding:"16px 24px 24px 70px",overflowX:"auto",minHeight:"calc(100vh - 130px)"}}>
           {STAGES.map(stage=>(
             <div key={stage} style={{minWidth:200,maxWidth:240,flex:"1 0 200px"}}
               onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect="move";setDropStage(stage);}}
@@ -503,7 +503,7 @@ export default function ContentTracker(){
 
       {/* List */}
       {viewMode==="list"&&(
-        <div style={{padding:"14px 20px",maxWidth:860}}>
+        <div style={{padding:"14px 24px 14px 70px",maxWidth:960}}>
           {STAGES.filter(s=>counts[s]>0).map(stage=>(
             <div key={stage} style={{marginBottom:18}}>
               <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:7}}>
@@ -603,9 +603,13 @@ export default function ContentTracker(){
                   <button onClick={()=>deleteNiche(n.id)} style={{background:"none",border:"none",fontSize:11,color:"#C93B3B",cursor:"pointer",fontWeight:500}}>Remove</button>
                 </div>
               </div>
-              <div style={{display:"flex",gap:4,marginTop:5,flexWrap:"wrap"}}>
-                {n.pages.map((p: string)=><span key={p} style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:"#27272a",color:"#a1a1aa"}}>{p}</span>)}
+              <div style={{display:"flex",gap:4,marginTop:6,flexWrap:"wrap"}}>
+                {n.pages.length > 0
+                  ? n.pages.map((p: string)=><span key={p} style={{fontSize:10,padding:"3px 8px",borderRadius:5,background:"#27272a",color:"#a1a1aa"}}>@{p.replace(/^@/,"")}</span>)
+                  : <span style={{fontSize:11,color:"#52525b",fontStyle:"italic"}}>No pages — click Edit to add</span>
+                }
               </div>
+              <div style={{marginTop:4,fontSize:10,color:"#3f3f46"}}>{n.pages.length} pages</div>
             </div>
           ))}
           <button onClick={()=>setAddNicheOpen(true)} style={bs}>+ Add niche</button>
