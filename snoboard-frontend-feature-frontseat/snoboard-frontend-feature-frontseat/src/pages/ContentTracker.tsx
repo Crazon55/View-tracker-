@@ -77,7 +77,7 @@ function IdeaCard({idea,niches,onClick}: {idea:any;niches:any[];onClick:()=>void
   const pc=idea.postings?.length||0;
   const bp=idea.postings?.reduce((b: string|null, p: any)=>{const t=gPerf(p.views,p.baselineViews);const o: Record<string,number>={viral:4,topline:3,baseline:2,below:1};return(o[t||""]||0)>(o[b||""]||0)?t:b;},null);
   return(
-    <div onClick={onClick} style={{background:"#18181b",borderRadius:10,padding:"11px 13px",marginBottom:5,border:"1px solid #27272a",cursor:"pointer",transition:"box-shadow 0.15s"}}
+    <div onClick={onClick} style={{background:"#18181b",borderRadius:10,padding:"11px 13px",marginBottom:5,border:"1px solid #27272a",cursor:"grab",transition:"box-shadow 0.15s"}}
       onMouseEnter={e=>(e.currentTarget.style.boxShadow="0 3px 12px rgba(0,0,0,0.3)")} onMouseLeave={e=>(e.currentTarget.style.boxShadow="none")}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
         <p style={{margin:0,fontSize:13,fontWeight:500,color:"#fff",lineHeight:1.35,flex:1}}>{idea.title}</p>
@@ -318,6 +318,10 @@ export default function ContentTracker(){
     onError: () => toast.error("Failed to delete niche"),
   });
 
+  // ---- Drag-and-drop state ----
+  const [draggingId,setDraggingId]=useState<string|null>(null);
+  const [dropStage,setDropStage]=useState<string|null>(null);
+
   // ---- Local UI state (unchanged) ----
   const [addOpen,setAddOpen]=useState(false);
   const [detailIdea,setDetailIdea]=useState<any>(null);
@@ -470,19 +474,25 @@ export default function ContentTracker(){
         </div>
       </div>
 
-      {/* Board */}
+      {/* Board — drag-and-drop */}
       {viewMode==="board"&&(
         <div style={{display:"flex",gap:8,padding:"12px 10px 24px",overflowX:"auto",minHeight:"calc(100vh - 130px)"}}>
           {STAGES.map(stage=>(
-            <div key={stage} style={{minWidth:200,maxWidth:240,flex:"1 0 200px"}}>
+            <div key={stage} style={{minWidth:200,maxWidth:240,flex:"1 0 200px"}}
+              onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect="move";setDropStage(stage);}}
+              onDragLeave={()=>setDropStage(null)}
+              onDrop={e=>{e.preventDefault();const ideaId=e.dataTransfer.getData("text/plain");if(ideaId&&ideaId!==""){moveIdea(ideaId,stage);}setDraggingId(null);setDropStage(null);}}
+            >
               <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 4px 8px"}}>
                 <span style={{width:7,height:7,borderRadius:"50%",background:SC[stage].dot}}/>
                 <span style={{fontSize:11,fontWeight:600,color:SC[stage].text}}>{SL[stage]}</span>
                 <span style={{fontSize:10,color:"#52525b",fontWeight:500}}>{counts[stage]}</span>
               </div>
-              <div style={{minHeight:50,padding:1}}>
+              <div style={{minHeight:50,padding:1,borderRadius:9,transition:"all 0.15s",border:dropStage===stage?"2px solid #7c3aed":"2px solid transparent",background:dropStage===stage?"rgba(124,58,237,0.05)":"transparent"}}>
                 {filteredIdeas.filter(i=>i.stage===stage).sort((a,b)=>b.createdAt-a.createdAt).map(idea=>(
-                  <IdeaCard key={idea.id} idea={idea} niches={niches} onClick={()=>openDetail(idea)}/>
+                  <div key={idea.id} draggable onDragStart={e=>{setDraggingId(idea.id);e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain",idea.id);}} onDragEnd={()=>{setDraggingId(null);setDropStage(null);}} style={{opacity:draggingId===idea.id?0.4:1,transition:"opacity 0.15s"}}>
+                    <IdeaCard idea={idea} niches={niches} onClick={()=>openDetail(idea)}/>
+                  </div>
                 ))}
                 {counts[stage]===0&&<div style={{padding:"24px 12px",textAlign:"center",color:"#3f3f46",fontSize:11,border:"1.5px dashed #3f3f46",borderRadius:9}}>Empty</div>}
               </div>
