@@ -79,7 +79,27 @@ function Modal({open,onClose,title,children,wide}: {open:boolean;onClose:()=>voi
 }
 
 function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove}: {po:any;page:string;fmtD:(d:string)=>string;PT:any;updatePostingMut:any;onRemove:()=>void}){
+  const hasSaved = po.views !== null && po.views !== undefined;
+  const [editing,setEditing]=useState(!hasSaved);
   const [views,setViews]=useState(po.views?.toString()||"");
+  const [perfTag,setPerfTag]=useState(po.perf_tag||"");
+  const fmtNum = (n: number) => { if(n>=1000000) return (n/1000000).toFixed(1)+"M"; if(n>=1000) return (n/1000).toFixed(1)+"k"; return n.toString(); };
+
+  if(!editing && hasSaved){
+    // Compact saved view
+    const t = perfTag && PT[perfTag] ? PT[perfTag] : null;
+    return(
+      <div style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}} onClick={()=>setEditing(true)}>
+        <div style={{width:20,height:20,borderRadius:5,background:"#22c55e",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
+        <span style={{fontSize:13,fontWeight:600,color:"#fff"}}>@{page}</span>
+        <span style={{fontSize:12,fontWeight:700,color:"#fff",fontFamily:"monospace"}}>{fmtNum(po.views)}</span>
+        {t&&<span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:99,background:t.bg,color:t.color}}>{t.label}</span>}
+        <span style={{fontSize:11,color:"#52525b",marginLeft:"auto",whiteSpace:"nowrap"}}>{po.date ? fmtD(po.date) : ""}</span>
+        <span style={{fontSize:10,color:"#3f3f46"}}>click to edit</span>
+      </div>
+    );
+  }
+
   return(
     <div style={{display:"flex",flexDirection:"column",gap:8}}>
       <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -92,13 +112,14 @@ function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove}: {po:any;page:s
         <input type="number" value={views} onChange={e=>setViews(e.target.value)} placeholder="Enter views" style={{width:100,padding:"5px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:12,background:"#09090b",color:"#fff"}}/>
       </div>
       <div style={{display:"flex",gap:4,marginLeft:30}}>
-        {(["below","baseline","topline","viral"] as const).map(tag=>{const t=PT[tag];const active=po.perf_tag===tag;return(
-          <button key={tag} onClick={()=>updatePostingMut.mutate({id:po.id,data:{perf_tag:tag}})} style={{padding:"4px 10px",borderRadius:6,border:active?`2px solid ${t.color}`:"1px solid #3f3f46",background:active?t.bg:"transparent",color:active?t.color:"#52525b",fontSize:10,fontWeight:600,cursor:"pointer",transition:"all 0.15s"}}>{t.label}</button>
+        {(["below","baseline","topline","viral"] as const).map(tag=>{const t=PT[tag];const active=perfTag===tag;return(
+          <button key={tag} onClick={()=>setPerfTag(tag)} style={{padding:"4px 10px",borderRadius:6,border:active?`2px solid ${t.color}`:"1px solid #3f3f46",background:active?t.bg:"transparent",color:active?t.color:"#52525b",fontSize:10,fontWeight:600,cursor:"pointer",transition:"all 0.15s"}}>{t.label}</button>
         );})}
       </div>
       <div style={{display:"flex",gap:6,marginLeft:30,marginTop:2}}>
-        <button onClick={()=>{const v=Number(views)||null;console.log("Saving posting",po.id,"views:",v);updatePostingMut.mutate({id:po.id,data:{views:v}});}} disabled={updatePostingMut.isPending} style={{padding:"5px 16px",borderRadius:7,border:"none",fontSize:11,fontWeight:600,cursor:"pointer",background:updatePostingMut.isPending?"#52525b":"#7c3aed",color:"#fff"}}>{updatePostingMut.isPending?"Saving...":"Save"}</button>
-        <button onClick={onRemove} style={{padding:"5px 12px",borderRadius:7,border:"1px solid #3f3f46",fontSize:11,fontWeight:500,cursor:"pointer",background:"transparent",color:"#FF7070"}}>Remove</button>
+        <button onClick={()=>{updatePostingMut.mutate({id:po.id,data:{views:Number(views)||null,perf_tag:perfTag||null}},{onSuccess:()=>setEditing(false)});}} disabled={updatePostingMut.isPending} style={{padding:"5px 16px",borderRadius:7,border:"none",fontSize:11,fontWeight:600,cursor:"pointer",background:updatePostingMut.isPending?"#52525b":"#7c3aed",color:"#fff"}}>{updatePostingMut.isPending?"Saving...":"Save"}</button>
+        {hasSaved&&<button onClick={()=>setEditing(false)} style={{padding:"5px 12px",borderRadius:7,border:"1px solid #3f3f46",fontSize:11,fontWeight:500,cursor:"pointer",background:"transparent",color:"#a1a1aa"}}>Cancel</button>}
+        <button onClick={onRemove} style={{padding:"5px 12px",borderRadius:7,border:"1px solid #3f3f46",fontSize:11,fontWeight:500,cursor:"pointer",background:"transparent",color:"#FF7070",marginLeft:"auto"}}>Remove</button>
       </div>
     </div>
   );
