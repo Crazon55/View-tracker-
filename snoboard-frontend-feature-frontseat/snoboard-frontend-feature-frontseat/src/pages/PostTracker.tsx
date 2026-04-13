@@ -685,10 +685,13 @@ export default function PostTracker(){
             {dn&&!["new","approved","design_approval","scripted"].includes(cd.stage)&&(
               <div>
                 <label style={{...ls,marginBottom:8}}>Pages in {dn.name} — select, schedule & track</label>
-                {dn.pages.map((page: string)=>{const isP=pp.includes(page);const pi=(cd.postings||[]).findIndex((p: any)=>p.page===page);const po=pi>=0?cd.postings[pi]:null;const dk=`${cd.id}_${page}`;return(
-                  <div key={page} style={{padding:"10px 12px",background:isP?"#1a1a2e":"#18181b",borderRadius:8,marginBottom:4,border:isP?"1.5px solid #3f3f46":"1px solid #27272a"}}>
+                {dn.pages.map((page: string)=>{const isP=pp.includes(page);const pi=(cd.postings||[]).findIndex((p: any)=>p.page===page);const po=pi>=0?cd.postings[pi]:null;const dk=`${cd.id}_${page}`;
+                  const sBorder=isP?(cd.stage==="testing"?"1.5px solid rgba(212,149,42,0.4)":(cd.stage==="scheduled"||cd.stage==="uploaded")?"1.5px solid rgba(34,197,94,0.4)":"1.5px solid #3f3f46"):"1px solid #27272a";
+                  const sBg=isP?(cd.stage==="testing"?"rgba(212,149,42,0.04)":(cd.stage==="scheduled"||cd.stage==="uploaded")?"rgba(34,197,94,0.04)":"#1a1a2e"):"#18181b";
+                  return(
+                  <div key={page} style={{padding:"10px 12px",background:sBg,borderRadius:8,marginBottom:4,border:sBorder}}>
                     {isP&&po?(
-                      <PostingCard key={po.id} po={po} page={page} fmtD={fmtD} PT={PT} updatePostingMut={updatePostingMut} onRemove={()=>togglePage(cd.id,page,0,"")}/>
+                      <PostingCard key={po.id} po={po} page={page} fmtD={fmtD} PT={PT} updatePostingMut={updatePostingMut} onRemove={()=>togglePage(cd.id,page,0,"")} stage={cd.stage}/>
                     ):(
                       <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                         <div onClick={()=>{const sd=scheduleDate[dk];togglePage(cd.id,page,sd?.baseline||0,sd?.date||today());setScheduleDate(p=>{const n={...p};delete n[dk];return n;});}} style={{width:20,height:20,borderRadius:5,border:"1.5px solid #3f3f46",background:"#18181b",cursor:"pointer",flexShrink:0}}/>
