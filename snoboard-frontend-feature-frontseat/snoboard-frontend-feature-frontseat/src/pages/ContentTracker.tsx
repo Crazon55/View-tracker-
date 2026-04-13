@@ -605,15 +605,15 @@ export default function ContentTracker(){
                           <span style={{fontSize:13,fontWeight:600,color:"#fff",flex:1}}>@{page}</span>
                           <span style={{fontSize:11,color:"#71717a",whiteSpace:"nowrap"}}>{po?.date ? fmtD(po.date) : "No date"}</span>
                         </div>
-                        {/* Row 2: Views + Baseline + Perf tag */}
+                        {/* Row 2: Views + Baseline (editable) + Perf tag */}
                         <div style={{display:"flex",alignItems:"center",gap:8,marginLeft:30,flexWrap:"wrap"}}>
                           <div style={{display:"flex",alignItems:"center",gap:4}}>
-                            <span style={{fontSize:10,color:"#52525b"}}>Views</span>
-                            <input type="number" value={po?.views??""} placeholder="0" onClick={e=>e.stopPropagation()} onChange={e=>updateViews(cd.id,pi,e.target.value)} style={{width:80,padding:"5px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:12,background:"#09090b",color:"#fff"}}/>
+                            <span style={{fontSize:10,color:"#71717a",fontWeight:600}}>Views</span>
+                            <input type="number" defaultValue={po?.views??""} key={`${po?.id}_views`} placeholder="—" onBlur={e=>{const v=Number(e.target.value)||null;updatePostingMut.mutate({id:po.id,data:{views:v}});}} style={{width:80,padding:"5px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:12,background:"#09090b",color:"#fff"}}/>
                           </div>
                           <div style={{display:"flex",alignItems:"center",gap:4}}>
-                            <span style={{fontSize:10,color:"#52525b"}}>Base</span>
-                            <span style={{fontSize:12,color:"#71717a",fontFamily:"monospace"}}>{(po?.baselineViews||0).toLocaleString()}</span>
+                            <span style={{fontSize:10,color:"#71717a",fontWeight:600}}>Baseline</span>
+                            <input type="number" defaultValue={po?.baselineViews||""} key={`${po?.id}_base`} placeholder="—" onBlur={e=>{const v=Number(e.target.value)||0;updatePostingMut.mutate({id:po.id,data:{baseline_views:v}});}} style={{width:80,padding:"5px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:12,background:"#09090b",color:"#a1a1aa"}}/>
                           </div>
                           {/* Performance tag buttons */}
                           <div style={{display:"flex",gap:3,marginLeft:"auto"}}>
