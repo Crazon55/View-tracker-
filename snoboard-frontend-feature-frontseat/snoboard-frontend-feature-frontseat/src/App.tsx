@@ -5,7 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { getDeadlines } from "@/services/api";
 import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, BarChart3, Scissors, Telescope } from "lucide-react";
+import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, BarChart3, Scissors, Telescope, ClipboardList } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -25,6 +25,7 @@ import PostIPsView from "./pages/PostIPsView";
 import PipelineView from "./pages/PipelineView";
 import Stage1Tracker from "./pages/Stage1Tracker";
 import CompetitorResearch from "./pages/CompetitorResearch";
+import ContentTracker from "./pages/ContentTracker";
 import RoleSelect from "./pages/RoleSelect";
 import NotFound from "./pages/NotFound";
 
@@ -208,8 +209,7 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/ideas", label: "Original Ideas", icon: Lightbulb },
-  { to: "/competitor-ideas", label: "Competitor Ideas", icon: Swords },
+  { to: "/content-tracker", label: "Content Tracker", icon: ClipboardList },
   { to: "/post-ips", label: "Post IPs", icon: Image },
   { to: "/pipeline", label: "Pipeline", icon: Kanban },
   { to: "/stage1-tracker", label: "Stage 1 Tracker", icon: BarChart3 },
@@ -282,8 +282,7 @@ function AppLayout() {
 
   const isFullScreen =
     location.pathname === "/" ||
-    location.pathname === "/ideas" ||
-    location.pathname === "/competitor-ideas" ||
+    location.pathname === "/content-tracker" ||
     location.pathname === "/post-ips" ||
     location.pathname === "/pipeline" ||
     location.pathname === "/stage1-tracker" ||
@@ -310,6 +309,7 @@ function AppLayout() {
         </div>
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/content-tracker" element={<ContentTracker />} />
           <Route path="/ideas" element={<IdeaEngine />} />
           <Route path="/competitor-ideas" element={<CompetitorIdeas />} />
           <Route path="/page/:pageId" element={<PageDetail />} />
