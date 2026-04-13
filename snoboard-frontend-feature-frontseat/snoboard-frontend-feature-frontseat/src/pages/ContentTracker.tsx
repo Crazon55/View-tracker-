@@ -409,7 +409,7 @@ export default function ContentTracker(){
       comp_link: newIdea.source === "competitor" ? (newIdea.comp_link.trim() || null) : null,
       stage: "new",
       type: "reel",
-      created_by: user?.email || null,
+      created_by: user?.user_metadata?.full_name || user?.email?.split("@")[0] || user?.email || null,
     });
     setNewIdea({title:"",source:"original",nicheId:"",hook_variations:"",music_ref:"",yt_url:"",yt_timestamps:"",comp_link:""});
     setAddOpen(false);
