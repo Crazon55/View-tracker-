@@ -26,6 +26,7 @@ import PipelineView from "./pages/PipelineView";
 import Stage1Tracker from "./pages/Stage1Tracker";
 import CompetitorResearch from "./pages/CompetitorResearch";
 import ContentTracker from "./pages/ContentTracker";
+import PostTracker from "./pages/PostTracker";
 import RoleSelect from "./pages/RoleSelect";
 import NotFound from "./pages/NotFound";
 
@@ -209,7 +210,8 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/content-tracker", label: "Content Tracker", icon: ClipboardList },
+  { to: "/content-tracker", label: "Reel Tracker", icon: ClipboardList },
+  { to: "/post-tracker", label: "Post Tracker", icon: Image },
   { to: "/post-ips", label: "Post IPs", icon: Image },
   { to: "/pipeline", label: "Pipeline", icon: Kanban },
   { to: "/stage1-tracker", label: "Stage 1 Tracker", icon: BarChart3 },
@@ -283,6 +285,7 @@ function AppLayout() {
   const isFullScreen =
     location.pathname === "/" ||
     location.pathname === "/content-tracker" ||
+    location.pathname === "/post-tracker" ||
     location.pathname === "/post-ips" ||
     location.pathname === "/pipeline" ||
     location.pathname === "/stage1-tracker" ||
@@ -310,6 +313,7 @@ function AppLayout() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/content-tracker" element={<ContentTracker />} />
+          <Route path="/post-tracker" element={<PostTracker />} />
           <Route path="/ideas" element={<IdeaEngine />} />
           <Route path="/competitor-ideas" element={<CompetitorIdeas />} />
           <Route path="/page/:pageId" element={<PageDetail />} />
