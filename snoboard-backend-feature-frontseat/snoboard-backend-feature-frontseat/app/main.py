@@ -1425,12 +1425,23 @@ async def tracker_populate_niche_pages():
         "therisingbrands", "mktg.wtf", "101xMarketing",
     ]
 
+    garfields_handles = [
+        "bizzindia", "startupbydog", "ceohustleadvice",
+        "millionaire.founders", "richindianceo", "indianbusinesscom",
+        "founderswtf", "therisingfounder", "entrepreneursindia.co", "therealfoundr",
+    ]
+
+    goofies_handles = [
+        "foundersinindia", "indianfounderco", "startupcoded", "startupin24hrs",
+    ]
+
     # Ensure niches exist and update their pages
     existing = client.table("tracker_niches").select("id,name").execute().data or []
     niche_map = {n["name"]: n["id"] for n in existing}
 
     updates = {
-        "FBS": fbs_handles,
+        "FBS - Garfields": garfields_handles,
+        "FBS - Goofies": goofies_handles,
         "Tech": tech_handles,
         "Marketing": marketing_handles,
     }
@@ -1441,9 +1452,18 @@ async def tracker_populate_niche_pages():
         else:
             client.table("tracker_niches").insert({"name": name, "pages": pages}).execute()
 
+    # Migrate old FBS ideas to Garfields by default (can be manually reassigned)
+    if "FBS" in niche_map and "FBS - Garfields" in niche_map:
+        old_fbs_id = niche_map["FBS"]
+        new_garfields_id = niche_map["FBS - Garfields"]
+        client.table("tracker_ideas").update({"niche_id": new_garfields_id}).eq("niche_id", old_fbs_id).execute()
+        # Delete old FBS niche
+        client.table("tracker_niches").delete().eq("id", old_fbs_id).execute()
+
     return {
         "success": True,
-        "FBS": len(fbs_handles),
+        "FBS - Garfields": len(garfields_handles),
+        "FBS - Goofies": len(goofies_handles),
         "Tech": len(tech_handles),
         "Marketing": len(marketing_handles),
     }
