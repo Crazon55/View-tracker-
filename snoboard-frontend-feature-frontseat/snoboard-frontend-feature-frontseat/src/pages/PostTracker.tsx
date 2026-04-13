@@ -47,6 +47,10 @@ function mapIdea(raw: any): any {
     hook_variations: raw.hook_variations || [],
     music_ref: raw.music_ref || null,
     comp_link: raw.comp_link || null,
+    format: raw.format || null,
+    main_page_hook: raw.main_page_hook || null,
+    content_pillar: raw.content_pillar || null,
+    content_bucket: raw.content_bucket || null,
     postings: (raw.tracker_postings || []).map((p: any) => ({
       id: p.id,
       page: p.page,
@@ -134,9 +138,11 @@ function IdeaCard({idea,niches,onClick}: {idea:any;niches:any[];onClick:()=>void
         <p style={{margin:0,fontSize:13,fontWeight:500,color:"#fff",lineHeight:1.35,flex:1}}>{idea.title}</p>
         {bp&&<PB tag={bp}/>}
       </div>
-      <div style={{display:"flex",gap:5,marginTop:6,flexWrap:"wrap",alignItems:"center"}}>
+      <div style={{display:"flex",gap:4,marginTop:6,flexWrap:"wrap",alignItems:"center"}}>
         <span style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:idea.source==="competitor"?"#EEEDFE":"#E8F5EE",color:idea.source==="competitor"?"#534AB7":"#1A5E3A",fontWeight:500}}>{idea.source==="competitor"?"Comp":"Orig"}</span>
+        {idea.format&&<span style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:"#18181b",color:"#a1a1aa",fontWeight:500,textTransform:"capitalize",border:"1px solid #3f3f46"}}>{idea.format}</span>}
         {niche&&<span style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:"#27272a",color:"#a1a1aa",fontWeight:500}}>{niche.name}</span>}
+        {idea.content_pillar&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:99,background:"rgba(124,58,237,0.15)",color:"#B49EFF",fontWeight:500}}>{idea.content_pillar}</span>}
         {pc>0&&<span style={{fontSize:10,color:"#52525b",fontWeight:500}}>{pc}pg</span>}
       </div>
     </div>
@@ -380,7 +386,7 @@ export default function PostTracker(){
   const [addNicheOpen,setAddNicheOpen]=useState(false);
   const [editNiche,setEditNiche]=useState<any>(null);
   const [newNiche,setNewNiche]=useState({name:"",pages:""});
-  const [newIdea,setNewIdea]=useState({title:"",source:"original",nicheId:"",hook_variations:"",music_ref:"",comp_link:""});
+  const [newIdea,setNewIdea]=useState({title:"",source:"original",nicheId:"",format:"static",main_page_hook:"",created_by_name:"",content_pillar:"",content_bucket:"",hook_variations:"",comp_link:""});
   const [viewMode,setViewMode]=useState("board");
   const [nicheFilter,setNicheFilter]=useState("all");
   const [pageFilter,setPageFilter]=useState("all");
@@ -400,14 +406,17 @@ export default function PostTracker(){
       title: newIdea.title.trim(),
       source: newIdea.source,
       niche_id: newIdea.nicheId,
+      format: newIdea.format,
+      main_page_hook: newIdea.main_page_hook.trim() || null,
+      content_pillar: newIdea.content_pillar || null,
+      content_bucket: newIdea.content_bucket || null,
       hook_variations: hookLines.length > 0 ? hookLines : null,
-      music_ref: newIdea.music_ref.trim() || null,
       comp_link: newIdea.source === "competitor" ? (newIdea.comp_link.trim() || null) : null,
       stage: "new",
       type: "post",
-      created_by: user?.email || null,
+      created_by: newIdea.created_by_name.trim() || user?.email || null,
     });
-    setNewIdea({title:"",source:"original",nicheId:"",hook_variations:"",music_ref:"",comp_link:""});
+    setNewIdea({title:"",source:"original",nicheId:"",format:"static",main_page_hook:"",created_by_name:"",content_pillar:"",content_bucket:"",hook_variations:"",comp_link:""});
     setAddOpen(false);
   }
   function moveIdea(id: string, ns: string){
@@ -586,15 +595,35 @@ export default function PostTracker(){
       {viewMode==="analytics"&&<AnalyticsView ideas={ideas} niches={niches} nicheFilter={nicheFilter} pageFilter={pageFilter} dateFrom={dateFrom} dateTo={dateTo} setDateFrom={setDateFrom} setDateTo={setDateTo} setPageFilter={setPageFilter} onClickIdea={openDetail}/>}
 
       {/* Add Idea */}
-      <Modal open={addOpen} onClose={()=>setAddOpen(false)} title="Add new idea">
+      <Modal open={addOpen} onClose={()=>setAddOpen(false)} title="Add new post idea">
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
-          <div><label style={ls}>Title / description *</label><input value={newIdea.title} onChange={e=>setNewIdea(p=>({...p,title:e.target.value}))} placeholder="e.g. Carousel post about morning routines" style={is}/></div>
+          <div><label style={ls}>Idea name *</label><input value={newIdea.title} onChange={e=>setNewIdea(p=>({...p,title:e.target.value}))} placeholder="e.g. Top 10 startups that failed in 2026" style={is}/></div>
           <div style={{display:"flex",gap:10}}>
             <div style={{flex:1}}><label style={ls}>Source</label><div style={{display:"flex",gap:6}}>{SOURCES.map(s=><button key={s} onClick={()=>setNewIdea(p=>({...p,source:s}))} style={{flex:1,padding:"8px 10px",borderRadius:8,border:newIdea.source===s?"2px solid #7c3aed":"1.5px solid #3f3f46",background:newIdea.source===s?"#27272a":"#18181b",fontSize:12,fontWeight:600,cursor:"pointer",textTransform:"capitalize"}}>{s}</button>)}</div></div>
-            <div style={{flex:1}}><label style={ls}>Niche *</label><select value={newIdea.nicheId} onChange={e=>setNewIdea(p=>({...p,nicheId:e.target.value}))} style={{...is,cursor:"pointer"}}><option value="">Select niche</option>{niches.map(n=><option key={n.id} value={n.id}>{n.name} ({n.pages.length} pages)</option>)}</select></div>
+            <div style={{flex:1}}><label style={ls}>Format</label><div style={{display:"flex",gap:6}}>{["static","carousel"].map(f=><button key={f} onClick={()=>setNewIdea(p=>({...p,format:f}))} style={{flex:1,padding:"8px 10px",borderRadius:8,border:newIdea.format===f?"2px solid #7c3aed":"1.5px solid #3f3f46",background:newIdea.format===f?"#27272a":"#18181b",fontSize:12,fontWeight:600,cursor:"pointer",textTransform:"capitalize"}}>{f}</button>)}</div></div>
           </div>
-          <div><label style={ls}>Hook variations (one per line)</label><textarea value={newIdea.hook_variations} onChange={e=>setNewIdea(p=>({...p,hook_variations:e.target.value}))} rows={4} placeholder={"Hook variation 1\nHook variation 2\nHook variation 3"} style={{...is,resize:"vertical",minHeight:80}}/></div>
-          <div><label style={ls}>Music reference / suggestions</label><input value={newIdea.music_ref} onChange={e=>setNewIdea(p=>({...p,music_ref:e.target.value}))} placeholder="e.g. Dark cinematic, trending audio XYZ" style={is}/></div>
+          <div style={{display:"flex",gap:10}}>
+            <div style={{flex:1}}><label style={ls}>Niche *</label><select value={newIdea.nicheId} onChange={e=>setNewIdea(p=>({...p,nicheId:e.target.value}))} style={{...is,cursor:"pointer"}}><option value="">Select niche</option>{niches.map(n=><option key={n.id} value={n.id}>{n.name} ({n.pages.length} pages)</option>)}</select></div>
+            <div style={{flex:1}}><label style={ls}>Created by</label><input value={newIdea.created_by_name} onChange={e=>setNewIdea(p=>({...p,created_by_name:e.target.value}))} placeholder="Name" style={is}/></div>
+          </div>
+          <div><label style={ls}>Main page hook</label><input value={newIdea.main_page_hook} onChange={e=>setNewIdea(p=>({...p,main_page_hook:e.target.value}))} placeholder="The main hook for the lead page" style={is}/></div>
+          <div><label style={ls}>Hook variations (one per line)</label><textarea value={newIdea.hook_variations} onChange={e=>setNewIdea(p=>({...p,hook_variations:e.target.value}))} rows={3} placeholder={"Hook variation 1\nHook variation 2\nHook variation 3"} style={{...is,resize:"vertical",minHeight:60}}/></div>
+          <div style={{display:"flex",gap:10}}>
+            <div style={{flex:1}}>
+              <label style={ls}>Content pillar</label>
+              <select value={newIdea.content_pillar} onChange={e=>setNewIdea(p=>({...p,content_pillar:e.target.value}))} style={{...is,cursor:"pointer"}}>
+                <option value="">Select pillar</option>
+                {["News","Static - Quote","Memes","Informational","Case Study","MM","Blue Ocean"].map(p=><option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+            <div style={{flex:1}}>
+              <label style={ls}>Content bucket</label>
+              <select value={newIdea.content_bucket} onChange={e=>setNewIdea(p=>({...p,content_bucket:e.target.value}))} style={{...is,cursor:"pointer"}}>
+                <option value="">Select bucket</option>
+                {["Events in India","Stories","Merger","Before & After Comparison","Charts/Tables/Stats","Tips/Business Ideas","Net Worth","Case Studies","Quotes","Local News","Govt Policies","Stock Market","Startup News","Tech/AI News"].map(b=><option key={b} value={b}>{b}</option>)}
+              </select>
+            </div>
+          </div>
           {newIdea.source==="competitor"&&(
             <div><label style={ls}>Comp link</label><input value={newIdea.comp_link} onChange={e=>setNewIdea(p=>({...p,comp_link:e.target.value}))} placeholder="Competitor post URL" style={is}/></div>
           )}
@@ -609,14 +638,31 @@ export default function PostTracker(){
             <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
               <span style={{fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:99,background:SC[cd.stage].bg,color:SC[cd.stage].text}}>{SL[cd.stage]}</span>
               <span style={{fontSize:11,padding:"3px 9px",borderRadius:99,background:cd.source==="competitor"?"#EEEDFE":"#E8F5EE",color:cd.source==="competitor"?"#534AB7":"#1A5E3A",fontWeight:500}}>{cd.source==="competitor"?"Competitor":"Original"}</span>
+              {cd.format&&<span style={{fontSize:11,padding:"3px 9px",borderRadius:99,background:"#18181b",color:"#a1a1aa",fontWeight:500,textTransform:"capitalize",border:"1px solid #3f3f46"}}>{cd.format}</span>}
               {dn&&<span style={{fontSize:11,padding:"3px 9px",borderRadius:99,background:"#27272a",color:"#a1a1aa",fontWeight:500}}>{dn.name}</span>}
+              {cd.content_pillar&&<span style={{fontSize:10,padding:"2px 8px",borderRadius:99,background:"rgba(124,58,237,0.15)",color:"#B49EFF",fontWeight:500}}>{cd.content_pillar}</span>}
+              {cd.content_bucket&&<span style={{fontSize:10,padding:"2px 8px",borderRadius:99,background:"rgba(212,149,42,0.15)",color:"#F0C060",fontWeight:500}}>{cd.content_bucket}</span>}
             </div>
             {sa[cd.stage]?.length>0&&<div style={{display:"flex",gap:6}}>{sa[cd.stage].map(a=><button key={a.stage} onClick={()=>moveIdea(cd.id,a.stage)} style={a.style}>{a.label}</button>)}</div>}
 
             {/* Editable fields */}
+            <div><label style={ls}>Main page hook</label><input defaultValue={cd.main_page_hook||""} key={cd.id+"_hook"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{main_page_hook:e.target.value.trim()||null}})} placeholder="The main hook for the lead page" style={is}/></div>
             <div><label style={ls}>Hook variations</label><textarea defaultValue={(cd.hook_variations||[]).join("\n")} key={cd.id+"_hooks"} onBlur={e=>{const lines=e.target.value.split("\n").map((l: string)=>l.trim()).filter(Boolean);updateIdeaMut.mutate({id:cd.id,data:{hook_variations:lines.length>0?lines:null}});}} rows={3} placeholder="One hook per line" style={{...is,resize:"vertical",minHeight:60}}/></div>
             <div style={{display:"flex",gap:10}}>
-              <div style={{flex:1}}><label style={ls}>Music reference / suggestions</label><input defaultValue={cd.music_ref||""} key={cd.id+"_music"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{music_ref:e.target.value.trim()||null}})} placeholder="e.g. Dark cinematic, trending audio" style={is}/></div>
+              <div style={{flex:1}}>
+                <label style={ls}>Content pillar</label>
+                <select defaultValue={cd.content_pillar||""} key={cd.id+"_pillar"} onChange={e=>updateIdeaMut.mutate({id:cd.id,data:{content_pillar:e.target.value||null}})} style={{...is,cursor:"pointer"}}>
+                  <option value="">Select pillar</option>
+                  {["News","Static - Quote","Memes","Informational","Case Study","MM","Blue Ocean"].map(p=><option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+              <div style={{flex:1}}>
+                <label style={ls}>Content bucket</label>
+                <select defaultValue={cd.content_bucket||""} key={cd.id+"_bucket"} onChange={e=>updateIdeaMut.mutate({id:cd.id,data:{content_bucket:e.target.value||null}})} style={{...is,cursor:"pointer"}}>
+                  <option value="">Select bucket</option>
+                  {["Events in India","Stories","Merger","Before & After Comparison","Charts/Tables/Stats","Tips/Business Ideas","Net Worth","Case Studies","Quotes","Local News","Govt Policies","Stock Market","Startup News","Tech/AI News"].map(b=><option key={b} value={b}>{b}</option>)}
+                </select>
+              </div>
             </div>
             {cd.source==="competitor"&&(
               <div><label style={ls}>Comp link</label><input defaultValue={cd.comp_link||""} key={cd.id+"_comp"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{comp_link:e.target.value.trim()||null}})} placeholder="Competitor post URL" style={is}/></div>

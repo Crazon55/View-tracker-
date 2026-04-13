@@ -1254,6 +1254,10 @@ async def tracker_ideas_create(request: Request):
         "yt_timestamps": body.get("yt_timestamps"),
         "comp_link": body.get("comp_link"),
         "type": body.get("type", "reel"),
+        "format": body.get("format"),
+        "main_page_hook": body.get("main_page_hook"),
+        "content_pillar": body.get("content_pillar"),
+        "content_bucket": body.get("content_bucket"),
     }
     # Remove None values so Supabase doesn't store explicit nulls for optional fields
     row = {k: v for k, v in row.items() if v is not None}
@@ -1267,7 +1271,7 @@ async def tracker_ideas_update(idea_id: str, request: Request):
     from app.database.client import get_supabase_client
     client = get_supabase_client()
     body = await request.json()
-    allowed_keys = {"title", "source", "niche_id", "stage", "link", "notes", "hook_variations", "music_ref", "yt_url", "yt_timestamps", "comp_link", "type"}
+    allowed_keys = {"title", "source", "niche_id", "stage", "link", "notes", "hook_variations", "music_ref", "yt_url", "yt_timestamps", "comp_link", "type", "format", "main_page_hook", "content_pillar", "content_bucket"}
     allowed = {k: v for k, v in body.items() if k in allowed_keys}
     client.table("tracker_ideas").update(allowed).eq("id", idea_id).execute()
     return {"success": True}
