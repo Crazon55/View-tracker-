@@ -84,8 +84,8 @@ function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove,stage}: {po:any;
   const [perfTag,setPerfTag]=useState(po.perf_tag||"");
   const fmtNum = (n: number) => { if(n>=1000000) return (n/1000000).toFixed(1)+"M"; if(n>=1000) return (n/1000).toFixed(1)+"k"; return n.toString(); };
 
-  // Stage-based colors
-  const stageColor = stage==="testing"?"#D4952A":stage==="kill"?"#C93B3B":(stage==="scale"||stage==="done")?"#22c55e":"#7c3aed";
+  // Stage-based colors: testing=orange, batch_edit=blue, kill=red, scale/done=green
+  const stageColor = stage==="testing"?"#D4952A":stage==="batch_edit"?"#4A7FD4":stage==="kill"?"#C93B3B":(stage==="scale"||stage==="done")?"#22c55e":"#7c3aed";
 
   if(!editing){
     const t = perfTag && PT[perfTag] ? PT[perfTag] : null;
@@ -96,6 +96,7 @@ function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove,stage}: {po:any;
         {po.views!=null&&<span style={{fontSize:12,fontWeight:700,color:"#fff",fontFamily:"monospace"}}>{fmtNum(po.views)}</span>}
         {!po.views&&<span style={{fontSize:11,color:"#52525b"}}>no views yet</span>}
         {t&&<span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:99,background:t.bg,color:t.color}}>{t.label}</span>}
+        {po.views!=null&&(stage==="batch_edit"||stage==="scale"||stage==="done")&&<span style={{fontSize:9,fontWeight:600,padding:"1px 6px",borderRadius:99,background:"rgba(212,149,42,0.15)",color:"#D4952A",border:"1px solid rgba(212,149,42,0.3)"}}>TESTED</span>}
         <span style={{fontSize:11,color:"#52525b",marginLeft:"auto",whiteSpace:"nowrap"}}>{po.date ? fmtD(po.date) : ""}</span>
       </div>
     );
@@ -655,8 +656,8 @@ export default function ContentTracker(){
               <div>
                 <label style={{...ls,marginBottom:8}}>Pages in {dn.name} — select, schedule & track</label>
                 {dn.pages.map((page: string)=>{const isP=pp.includes(page);const pi=(cd.postings||[]).findIndex((p: any)=>p.page===page);const po=pi>=0?cd.postings[pi]:null;const dk=`${cd.id}_${page}`;
-                  const sBorder=isP?(cd.stage==="testing"?"1.5px solid rgba(212,149,42,0.4)":cd.stage==="kill"?"1.5px solid rgba(201,59,59,0.4)":(cd.stage==="scale"||cd.stage==="done")?"1.5px solid rgba(34,197,94,0.4)":"1.5px solid #3f3f46"):"1px solid #27272a";
-                  const sBg=isP?(cd.stage==="testing"?"rgba(212,149,42,0.04)":cd.stage==="kill"?"rgba(201,59,59,0.04)":(cd.stage==="scale"||cd.stage==="done")?"rgba(34,197,94,0.04)":"#1a1a2e"):"#18181b";
+                  const sBorder=isP?(cd.stage==="testing"?"1.5px solid rgba(212,149,42,0.4)":cd.stage==="batch_edit"?"1.5px solid rgba(74,127,212,0.4)":cd.stage==="kill"?"1.5px solid rgba(201,59,59,0.4)":(cd.stage==="scale"||cd.stage==="done")?"1.5px solid rgba(34,197,94,0.4)":"1.5px solid #3f3f46"):"1px solid #27272a";
+                  const sBg=isP?(cd.stage==="testing"?"rgba(212,149,42,0.04)":cd.stage==="batch_edit"?"rgba(74,127,212,0.04)":cd.stage==="kill"?"rgba(201,59,59,0.04)":(cd.stage==="scale"||cd.stage==="done")?"rgba(34,197,94,0.04)":"#1a1a2e"):"#18181b";
                   return(
                   <div key={page} style={{padding:"10px 12px",background:sBg,borderRadius:8,marginBottom:4,border:sBorder}}>
                     {isP&&po?(
