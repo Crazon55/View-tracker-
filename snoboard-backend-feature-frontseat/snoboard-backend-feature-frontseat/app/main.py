@@ -1182,3 +1182,194 @@ async def competitor_update(category: str, entry_id: str, update: dict):
 
     client.table(table).update(filtered).eq("id", entry_id).execute()
     return {"success": True}
+
+
+# ===================== Content Tracker =====================
+
+# --- Niches ---
+@app.get("/api/v1/tracker/niches")
+async def tracker_niches_list():
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    data = client.table("tracker_niches").select("*").order("created_at").execute().data or []
+    return {"success": True, "data": data}
+
+
+@app.post("/api/v1/tracker/niches")
+async def tracker_niches_create(request: Request):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    body = await request.json()
+    row = {"name": body["name"], "pages": body.get("pages", [])}
+    result = client.table("tracker_niches").insert(row).execute().data[0]
+    return {"success": True, "data": result}
+
+
+@app.put("/api/v1/tracker/niches/{niche_id}")
+async def tracker_niches_update(niche_id: str, request: Request):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    body = await request.json()
+    allowed = {k: v for k, v in body.items() if k in ("name", "pages")}
+    client.table("tracker_niches").update(allowed).eq("id", niche_id).execute()
+    return {"success": True}
+
+
+@app.delete("/api/v1/tracker/niches/{niche_id}")
+async def tracker_niches_delete(niche_id: str):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    client.table("tracker_niches").delete().eq("id", niche_id).execute()
+    return {"success": True}
+
+
+# --- Ideas ---
+@app.get("/api/v1/tracker/ideas")
+async def tracker_ideas_list():
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    ideas = client.table("tracker_ideas").select("*, tracker_niches(id,name,pages), tracker_postings(*)").order("created_at", desc=True).execute().data or []
+    return {"success": True, "data": ideas}
+
+
+@app.post("/api/v1/tracker/ideas")
+async def tracker_ideas_create(request: Request):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    body = await request.json()
+    row = {
+        "title": body["title"],
+        "source": body.get("source", "original"),
+        "niche_id": body.get("niche_id") or body.get("nicheId"),
+        "stage": body.get("stage", "new"),
+        "link": body.get("link"),
+        "notes": body.get("notes"),
+        "created_by": body.get("created_by"),
+    }
+    result = client.table("tracker_ideas").insert(row).execute().data[0]
+    return {"success": True, "data": result}
+
+
+@app.put("/api/v1/tracker/ideas/{idea_id}")
+async def tracker_ideas_update(idea_id: str, request: Request):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    body = await request.json()
+    allowed = {k: v for k, v in body.items() if k in ("title", "source", "niche_id", "stage", "link", "notes")}
+    client.table("tracker_ideas").update(allowed).eq("id", idea_id).execute()
+    return {"success": True}
+
+
+@app.delete("/api/v1/tracker/ideas/{idea_id}")
+async def tracker_ideas_delete(idea_id: str):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    client.table("tracker_ideas").delete().eq("id", idea_id).execute()
+    return {"success": True}
+
+
+# --- Postings ---
+@app.post("/api/v1/tracker/ideas/{idea_id}/postings")
+async def tracker_postings_create(idea_id: str, request: Request):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    body = await request.json()
+    row = {
+        "idea_id": idea_id,
+        "page": body["page"],
+        "date": body.get("date"),
+        "baseline_views": int(body.get("baseline_views") or body.get("baselineViews") or 0),
+        "views": int(body["views"]) if body.get("views") is not None else None,
+    }
+    result = client.table("tracker_postings").insert(row).execute().data[0]
+    return {"success": True, "data": result}
+
+
+@app.put("/api/v1/tracker/postings/{posting_id}")
+async def tracker_postings_update(posting_id: str, request: Request):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    body = await request.json()
+    allowed = {k: v for k, v in body.items() if k in ("page", "date", "baseline_views", "views")}
+    if "views" in allowed and allowed["views"] is not None:
+        allowed["views"] = int(allowed["views"])
+    if "baseline_views" in allowed:
+        allowed["baseline_views"] = int(allowed["baseline_views"])
+    client.table("tracker_postings").update(allowed).eq("id", posting_id).execute()
+    return {"success": True}
+
+
+@app.delete("/api/v1/tracker/postings/{posting_id}")
+async def tracker_postings_delete(posting_id: str):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    client.table("tracker_postings").delete().eq("id", posting_id).execute()
+    return {"success": True}
+
+
+# --- Migrate old ideas to tracker ---
+@app.post("/api/v1/tracker/migrate")
+async def tracker_migrate():
+    """One-time migration: copies ideas from the old `ideas` table into tracker_ideas.
+    Creates two niches (FBS, Tech) based on page handle classification.
+    Maps old statuses to new stages."""
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+
+    # Create niches if they don't exist
+    existing_niches = client.table("tracker_niches").select("id,name").execute().data or []
+    niche_map = {n["name"]: n["id"] for n in existing_niches}
+
+    if "FBS" not in niche_map:
+        fbs = client.table("tracker_niches").insert({"name": "FBS", "pages": []}).execute().data[0]
+        niche_map["FBS"] = fbs["id"]
+    if "Tech" not in niche_map:
+        tech = client.table("tracker_niches").insert({"name": "Tech", "pages": []}).execute().data[0]
+        niche_map["Tech"] = tech["id"]
+
+    # Fetch old ideas
+    old_ideas = client.table("ideas").select("*").execute().data or []
+
+    # Status mapping: old → new stage
+    status_to_stage = {
+        "draft": "new",
+        "active": "approved",
+        "in_progress": "base_edit",
+        "completed": "done",
+        "ready": "testing",
+        "exhausted": "done",
+    }
+
+    migrated = 0
+    skipped = 0
+    for idea in old_ideas:
+        # Skip if already migrated (check by title match)
+        title = idea.get("hook", "")
+        if not title:
+            skipped += 1
+            continue
+
+        existing = client.table("tracker_ideas").select("id").eq("title", title).execute().data
+        if existing:
+            skipped += 1
+            continue
+
+        # Determine niche from source or default to FBS
+        niche_id = niche_map["FBS"]  # default
+
+        old_status = idea.get("status", "draft")
+        stage = status_to_stage.get(old_status, "new")
+
+        row = {
+            "title": title,
+            "source": "competitor" if idea.get("source") == "repurposed" else "original",
+            "niche_id": niche_id,
+            "stage": stage,
+            "link": idea.get("comp_link") or idea.get("yt_url") or None,
+            "notes": idea.get("timestamps") or None,
+            "created_by": idea.get("created_by") or idea.get("executor_name") or None,
+        }
+        client.table("tracker_ideas").insert(row).execute()
+        migrated += 1
+
+    return {"success": True, "migrated": migrated, "skipped": skipped}

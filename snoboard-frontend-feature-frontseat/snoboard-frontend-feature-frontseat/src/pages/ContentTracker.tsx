@@ -1,4 +1,12 @@
 import { useState, useMemo } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
+import {
+  getTrackerNiches, createTrackerNiche, updateTrackerNiche, deleteTrackerNiche,
+  getTrackerIdeas, createTrackerIdea, updateTrackerIdea, deleteTrackerIdea,
+  createTrackerPosting, updateTrackerPosting, deleteTrackerPosting,
+} from "@/services/api";
 
 const STAGES = ["new","approved","base_edit","testing","batch_edit","scale","kill","done"];
 const SL: Record<string,string> = { new:"New ideas", approved:"Approved", base_edit:"Base edit", testing:"Testing", batch_edit:"Batch edit", scale:"Scale", kill:"Killed", done:"Done" };
@@ -19,13 +27,7 @@ const PT: Record<string,{label:string;color:string;bg:string}> = {
   viral:{ label:"Viral",color:"#B49EFF",bg:"rgba(123,97,196,0.15)" },
 };
 const SOURCES = ["original","competitor"];
-const DEFAULT_NICHES = [
-  { id:"n1", name:"Motivation", pages:["@motivate.daily","@grindset.hub","@mindset.wins","@rise.repeat","@boss.quotes"] },
-  { id:"n2", name:"Finance", pages:["@cash.plays","@money.brain","@invest.101","@wealth.path"] },
-  { id:"n3", name:"Fitness", pages:["@gym.clips","@fitlife.co","@gains.daily"] },
-];
 
-const gid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const today = () => new Date().toISOString().slice(0,10);
 const fmtD = (d: string) => { const dt=new Date(d+"T00:00:00"); return dt.toLocaleDateString("en-US",{month:"short",day:"numeric"}); };
 const fmtDFull = (d: string) => { const dt=new Date(d+"T00:00:00"); return dt.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}); };
@@ -35,6 +37,22 @@ const getMonday = (d: string) => { const dt=new Date(d+"T00:00:00"); const day=d
 const addD = (s: string, n: number) => { const d=new Date(s+"T00:00:00"); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); };
 const getWD = (m: string) => Array.from({length:7},(_,i)=>addD(m,i));
 const monthStart = () => { const d=new Date(); return new Date(d.getFullYear(),d.getMonth(),1).toISOString().slice(0,10); };
+
+/** Map a raw API idea to the shape the UI expects */
+function mapIdea(raw: any): any {
+  return {
+    ...raw,
+    nicheId: raw.niche_id,
+    createdAt: raw.created_at ? new Date(raw.created_at).getTime() : Date.now(),
+    postings: (raw.tracker_postings || []).map((p: any) => ({
+      id: p.id,
+      page: p.page,
+      date: p.date,
+      baselineViews: p.baseline_views,
+      views: p.views,
+    })),
+  };
+}
 
 function PB({tag}: {tag: string|null}){ if(!tag||!PT[tag]) return null; const t=PT[tag]; return <span style={{display:"inline-block",fontSize:10,fontWeight:600,padding:"1px 7px",borderRadius:99,background:t.bg,color:t.color}}>{t.label}</span>; }
 
@@ -231,8 +249,76 @@ function AnalyticsView({ideas,niches,nicheFilter,pageFilter,dateFrom,dateTo,setD
 }
 
 export default function ContentTracker(){
-  const [niches,setNiches]=useState(DEFAULT_NICHES);
-  const [ideas,setIdeas]=useState<any[]>([]);
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  // ---- Data fetching via react-query ----
+  const { data: rawNiches = [], isLoading: nichesLoading } = useQuery({
+    queryKey: ["tracker-niches"],
+    queryFn: getTrackerNiches,
+  });
+  const { data: rawIdeas = [], isLoading: ideasLoading } = useQuery({
+    queryKey: ["tracker-ideas"],
+    queryFn: getTrackerIdeas,
+  });
+
+  const niches = rawNiches as any[];
+  const ideas = useMemo(() => (rawIdeas as any[]).map(mapIdea), [rawIdeas]);
+  const isLoading = nichesLoading || ideasLoading;
+
+  // ---- Mutations ----
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["tracker-ideas"] });
+    queryClient.invalidateQueries({ queryKey: ["tracker-niches"] });
+  };
+
+  const createIdeaMut = useMutation({
+    mutationFn: (data: any) => createTrackerIdea(data),
+    onSuccess: () => { invalidate(); toast.success("Idea created"); },
+    onError: () => toast.error("Failed to create idea"),
+  });
+  const updateIdeaMut = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => updateTrackerIdea(id, data),
+    onSuccess: () => { invalidate(); },
+    onError: () => toast.error("Failed to update idea"),
+  });
+  const deleteIdeaMut = useMutation({
+    mutationFn: (id: string) => deleteTrackerIdea(id),
+    onSuccess: () => { invalidate(); toast.success("Idea deleted"); },
+    onError: () => toast.error("Failed to delete idea"),
+  });
+  const createPostingMut = useMutation({
+    mutationFn: ({ ideaId, data }: { ideaId: string; data: any }) => createTrackerPosting(ideaId, data),
+    onSuccess: () => { invalidate(); toast.success("Posting added"); },
+    onError: () => toast.error("Failed to add posting"),
+  });
+  const updatePostingMut = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => updateTrackerPosting(id, data),
+    onSuccess: () => { invalidate(); },
+    onError: () => toast.error("Failed to update posting"),
+  });
+  const deletePostingMut = useMutation({
+    mutationFn: (id: string) => deleteTrackerPosting(id),
+    onSuccess: () => { invalidate(); toast.success("Posting removed"); },
+    onError: () => toast.error("Failed to remove posting"),
+  });
+  const createNicheMut = useMutation({
+    mutationFn: (data: { name: string; pages: string[] }) => createTrackerNiche(data),
+    onSuccess: () => { invalidate(); toast.success("Niche created"); },
+    onError: () => toast.error("Failed to create niche"),
+  });
+  const updateNicheMut = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: { name?: string; pages?: string[] } }) => updateTrackerNiche(id, data),
+    onSuccess: () => { invalidate(); toast.success("Niche updated"); },
+    onError: () => toast.error("Failed to update niche"),
+  });
+  const deleteNicheMut = useMutation({
+    mutationFn: (id: string) => deleteTrackerNiche(id),
+    onSuccess: () => { invalidate(); toast.success("Niche deleted"); },
+    onError: () => toast.error("Failed to delete niche"),
+  });
+
+  // ---- Local UI state (unchanged) ----
   const [addOpen,setAddOpen]=useState(false);
   const [detailIdea,setDetailIdea]=useState<any>(null);
   const [settingsOpen,setSettingsOpen]=useState(false);
@@ -251,18 +337,68 @@ export default function ContentTracker(){
   const filteredIdeas=nicheFilter==="all"?ideas:ideas.filter(i=>i.nicheId===nicheFilter);
   const allPagesForFilter=nicheFilter==="all"?niches.flatMap(n=>n.pages):(niches.find(n=>n.id===nicheFilter)?.pages||[]);
 
-  function addIdeaFn(){if(!newIdea.title.trim()||!newIdea.nicheId)return;setIdeas(p=>[...p,{...newIdea,id:gid(),stage:"new",postings:[],createdAt:Date.now()}]);setNewIdea({title:"",source:"original",nicheId:"",link:"",notes:""});setAddOpen(false);}
-  function moveIdea(id: string, ns: string){setIdeas(p=>p.map(i=>i.id===id?{...i,stage:ns}:i));}
-  function deleteIdea(id: string){setIdeas(p=>p.filter(i=>i.id!==id));setDetailIdea(null);}
+  // ---- Actions wired to mutations ----
+  function addIdeaFn(){
+    if(!newIdea.title.trim()||!newIdea.nicheId)return;
+    createIdeaMut.mutate({
+      title: newIdea.title.trim(),
+      source: newIdea.source,
+      niche_id: newIdea.nicheId,
+      link: newIdea.link || null,
+      notes: newIdea.notes || null,
+      stage: "new",
+      created_by: user?.email || null,
+    });
+    setNewIdea({title:"",source:"original",nicheId:"",link:"",notes:""});
+    setAddOpen(false);
+  }
+  function moveIdea(id: string, ns: string){
+    updateIdeaMut.mutate({ id, data: { stage: ns } });
+  }
+  function deleteIdea(id: string){
+    deleteIdeaMut.mutate(id);
+    setDetailIdea(null);
+  }
 
   function togglePage(iid: string, page: string, bv: any, date: string){
-    setIdeas(p=>p.map(i=>{if(i.id!==iid)return i;const ex=(i.postings||[]).findIndex((pp: any)=>pp.page===page);if(ex>=0)return{...i,postings:i.postings.filter((_: any,idx: number)=>idx!==ex)};return{...i,postings:[...(i.postings||[]),{page,baselineViews:Number(bv)||0,views:null,date:date||today()}]};}));
+    const idea = ideas.find(i => i.id === iid);
+    if (!idea) return;
+    const existing = (idea.postings || []).find((pp: any) => pp.page === page);
+    if (existing) {
+      // Remove posting
+      deletePostingMut.mutate(existing.id);
+    } else {
+      // Create posting
+      createPostingMut.mutate({
+        ideaId: iid,
+        data: { page, baseline_views: Number(bv) || 0, date: date || today() },
+      });
+    }
   }
-  function updateViews(iid: string, pi: number, v: string){setIdeas(p=>p.map(i=>{if(i.id!==iid)return i;const ps=[...i.postings];ps[pi]={...ps[pi],views:Number(v)||null};return{...i,postings:ps};}));}
+  function updateViews(iid: string, pi: number, v: string){
+    const idea = ideas.find(i => i.id === iid);
+    if (!idea) return;
+    const posting = idea.postings?.[pi];
+    if (!posting?.id) return;
+    updatePostingMut.mutate({ id: posting.id, data: { views: Number(v) || null } });
+  }
 
-  function addNiche(){if(!newNiche.name.trim())return;const pages=newNiche.pages.split(",").map(p=>p.trim()).filter(Boolean);setNiches(p=>[...p,{id:gid(),name:newNiche.name.trim(),pages}]);setNewNiche({name:"",pages:""});setAddNicheOpen(false);}
-  function deleteNiche(id: string){setNiches(p=>p.filter(n=>n.id!==id));setIdeas(p=>p.filter(i=>i.nicheId!==id));}
-  function saveEditNiche(){if(!editNiche||!editNiche.name.trim())return;const pages=editNiche.pagesStr.split(",").map((p: string)=>p.trim()).filter(Boolean);setNiches(p=>p.map(n=>n.id===editNiche.id?{...n,name:editNiche.name.trim(),pages}:n));setEditNiche(null);}
+  function addNiche(){
+    if(!newNiche.name.trim())return;
+    const pages=newNiche.pages.split(",").map(p=>p.trim()).filter(Boolean);
+    createNicheMut.mutate({ name: newNiche.name.trim(), pages });
+    setNewNiche({name:"",pages:""});
+    setAddNicheOpen(false);
+  }
+  function deleteNiche(id: string){
+    deleteNicheMut.mutate(id);
+  }
+  function saveEditNiche(){
+    if(!editNiche||!editNiche.name.trim())return;
+    const pages=editNiche.pagesStr.split(",").map((p: string)=>p.trim()).filter(Boolean);
+    updateNicheMut.mutate({ id: editNiche.id, data: { name: editNiche.name.trim(), pages } });
+    setEditNiche(null);
+  }
 
   const is: React.CSSProperties={width:"100%",padding:"9px 13px",border:"1.5px solid #3f3f46",borderRadius:9,fontSize:13,outline:"none",background:"#09090b",boxSizing:"border-box"};
   const ls: React.CSSProperties={display:"block",fontSize:11,fontWeight:600,color:"#71717a",marginBottom:4,letterSpacing:"0.04em",textTransform:"uppercase"};
@@ -285,6 +421,20 @@ export default function ContentTracker(){
   const counts: Record<string,number>={};STAGES.forEach(s=>{counts[s]=filteredIdeas.filter(i=>i.stage===s).length;});
   function openDetail(idea: any){setDetailIdea(idea);setScheduleDate({});}
 
+  // ---- Loading spinner ----
+  if(isLoading){
+    return(
+      <div style={{fontFamily:"'DM Sans','Helvetica Neue',sans-serif",minHeight:"100vh",background:"#09090b",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+        <div style={{textAlign:"center"}}>
+          <div style={{width:36,height:36,border:"3px solid #27272a",borderTopColor:"#7c3aed",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 14px"}}/>
+          <p style={{fontSize:13,color:"#71717a"}}>Loading content tracker...</p>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      </div>
+    );
+  }
+
   return(
     <div style={{fontFamily:"'DM Sans','Helvetica Neue',sans-serif",minHeight:"100vh",background:"#09090b",color:"#fff"}}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
@@ -294,7 +444,7 @@ export default function ContentTracker(){
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
           <div>
             <h1 style={{margin:0,fontSize:20,fontWeight:700,letterSpacing:"-0.03em"}}>Content tracker</h1>
-            <p style={{margin:"3px 0 0",fontSize:12,color:"#71717a"}}>{ideas.length} ideas · {niches.length} niches · {niches.reduce((a,n)=>a+n.pages.length,0)} pages</p>
+            <p style={{margin:"3px 0 0",fontSize:12,color:"#71717a"}}>{ideas.length} ideas · {niches.length} niches · {niches.reduce((a: number,n: any)=>a+n.pages.length,0)} pages</p>
           </div>
         </div>
         <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap",alignItems:"center"}}>
