@@ -1245,7 +1245,15 @@ async def tracker_ideas_create(request: Request):
         "link": body.get("link"),
         "notes": body.get("notes"),
         "created_by": body.get("created_by"),
+        "hook_variations": body.get("hook_variations") or [],
+        "music_ref": body.get("music_ref"),
+        "yt_url": body.get("yt_url"),
+        "yt_timestamps": body.get("yt_timestamps"),
+        "comp_link": body.get("comp_link"),
     }
+    # Remove None values so Supabase doesn't store explicit nulls for optional fields
+    row = {k: v for k, v in row.items() if v is not None}
+    row.setdefault("title", body["title"])
     result = client.table("tracker_ideas").insert(row).execute().data[0]
     return {"success": True, "data": result}
 
@@ -1255,7 +1263,8 @@ async def tracker_ideas_update(idea_id: str, request: Request):
     from app.database.client import get_supabase_client
     client = get_supabase_client()
     body = await request.json()
-    allowed = {k: v for k, v in body.items() if k in ("title", "source", "niche_id", "stage", "link", "notes")}
+    allowed_keys = {"title", "source", "niche_id", "stage", "link", "notes", "hook_variations", "music_ref", "yt_url", "yt_timestamps", "comp_link"}
+    allowed = {k: v for k, v in body.items() if k in allowed_keys}
     client.table("tracker_ideas").update(allowed).eq("id", idea_id).execute()
     return {"success": True}
 
@@ -1290,7 +1299,7 @@ async def tracker_postings_update(posting_id: str, request: Request):
     from app.database.client import get_supabase_client
     client = get_supabase_client()
     body = await request.json()
-    allowed = {k: v for k, v in body.items() if k in ("page", "date", "baseline_views", "views")}
+    allowed = {k: v for k, v in body.items() if k in ("page", "date", "baseline_views", "views", "perf_tag")}
     if "views" in allowed and allowed["views"] is not None:
         allowed["views"] = int(allowed["views"])
     if "baseline_views" in allowed:

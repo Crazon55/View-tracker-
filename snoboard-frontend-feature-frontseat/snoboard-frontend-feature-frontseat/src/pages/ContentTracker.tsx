@@ -44,12 +44,18 @@ function mapIdea(raw: any): any {
     ...raw,
     nicheId: raw.niche_id,
     createdAt: raw.created_at ? new Date(raw.created_at).getTime() : Date.now(),
+    hook_variations: raw.hook_variations || [],
+    music_ref: raw.music_ref || null,
+    yt_url: raw.yt_url || null,
+    yt_timestamps: raw.yt_timestamps || null,
+    comp_link: raw.comp_link || null,
     postings: (raw.tracker_postings || []).map((p: any) => ({
       id: p.id,
       page: p.page,
       date: p.date,
       baselineViews: p.baseline_views,
       views: p.views,
+      perf_tag: p.perf_tag || null,
     })),
   };
 }
@@ -329,7 +335,7 @@ export default function ContentTracker(){
   const [addNicheOpen,setAddNicheOpen]=useState(false);
   const [editNiche,setEditNiche]=useState<any>(null);
   const [newNiche,setNewNiche]=useState({name:"",pages:""});
-  const [newIdea,setNewIdea]=useState({title:"",source:"original",nicheId:"",link:"",notes:""});
+  const [newIdea,setNewIdea]=useState({title:"",source:"original",nicheId:"",hook_variations:"",music_ref:"",yt_url:"",yt_timestamps:"",comp_link:""});
   const [viewMode,setViewMode]=useState("board");
   const [nicheFilter,setNicheFilter]=useState("all");
   const [pageFilter,setPageFilter]=useState("all");
@@ -344,16 +350,20 @@ export default function ContentTracker(){
   // ---- Actions wired to mutations ----
   function addIdeaFn(){
     if(!newIdea.title.trim()||!newIdea.nicheId)return;
+    const hookLines = newIdea.hook_variations.split("\n").map(l=>l.trim()).filter(Boolean);
     createIdeaMut.mutate({
       title: newIdea.title.trim(),
       source: newIdea.source,
       niche_id: newIdea.nicheId,
-      link: newIdea.link || null,
-      notes: newIdea.notes || null,
+      hook_variations: hookLines.length > 0 ? hookLines : null,
+      music_ref: newIdea.music_ref.trim() || null,
+      yt_url: newIdea.yt_url.trim() || null,
+      yt_timestamps: newIdea.yt_timestamps.trim() || null,
+      comp_link: newIdea.source === "competitor" ? (newIdea.comp_link.trim() || null) : null,
       stage: "new",
       created_by: user?.email || null,
     });
-    setNewIdea({title:"",source:"original",nicheId:"",link:"",notes:""});
+    setNewIdea({title:"",source:"original",nicheId:"",hook_variations:"",music_ref:"",yt_url:"",yt_timestamps:"",comp_link:""});
     setAddOpen(false);
   }
   function moveIdea(id: string, ns: string){
@@ -533,13 +543,20 @@ export default function ContentTracker(){
       {/* Add Idea */}
       <Modal open={addOpen} onClose={()=>setAddOpen(false)} title="Add new idea">
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
-          <div><label style={ls}>Idea title / description</label><input value={newIdea.title} onChange={e=>setNewIdea(p=>({...p,title:e.target.value}))} placeholder="e.g. Morning routine montage with dramatic voiceover" style={is}/></div>
+          <div><label style={ls}>Title / description *</label><input value={newIdea.title} onChange={e=>setNewIdea(p=>({...p,title:e.target.value}))} placeholder="e.g. Morning routine montage with dramatic voiceover" style={is}/></div>
           <div style={{display:"flex",gap:10}}>
             <div style={{flex:1}}><label style={ls}>Source</label><div style={{display:"flex",gap:6}}>{SOURCES.map(s=><button key={s} onClick={()=>setNewIdea(p=>({...p,source:s}))} style={{flex:1,padding:"8px 10px",borderRadius:8,border:newIdea.source===s?"2px solid #7c3aed":"1.5px solid #3f3f46",background:newIdea.source===s?"#27272a":"#18181b",fontSize:12,fontWeight:600,cursor:"pointer",textTransform:"capitalize"}}>{s}</button>)}</div></div>
-            <div style={{flex:1}}><label style={ls}>Niche</label><select value={newIdea.nicheId} onChange={e=>setNewIdea(p=>({...p,nicheId:e.target.value}))} style={{...is,cursor:"pointer"}}><option value="">Select niche</option>{niches.map(n=><option key={n.id} value={n.id}>{n.name} ({n.pages.length} pages)</option>)}</select></div>
+            <div style={{flex:1}}><label style={ls}>Niche *</label><select value={newIdea.nicheId} onChange={e=>setNewIdea(p=>({...p,nicheId:e.target.value}))} style={{...is,cursor:"pointer"}}><option value="">Select niche</option>{niches.map(n=><option key={n.id} value={n.id}>{n.name} ({n.pages.length} pages)</option>)}</select></div>
           </div>
-          <div><label style={ls}>Reference link (optional)</label><input value={newIdea.link} onChange={e=>setNewIdea(p=>({...p,link:e.target.value}))} placeholder="Instagram reel URL" style={is}/></div>
-          <div><label style={ls}>Notes (optional)</label><textarea value={newIdea.notes} onChange={e=>setNewIdea(p=>({...p,notes:e.target.value}))} rows={2} placeholder="Any context..." style={{...is,resize:"vertical"}}/></div>
+          <div><label style={ls}>Hook variations (one per line)</label><textarea value={newIdea.hook_variations} onChange={e=>setNewIdea(p=>({...p,hook_variations:e.target.value}))} rows={4} placeholder={"Hook variation 1\nHook variation 2\nHook variation 3"} style={{...is,resize:"vertical",minHeight:80}}/></div>
+          <div><label style={ls}>Music reference / suggestions</label><input value={newIdea.music_ref} onChange={e=>setNewIdea(p=>({...p,music_ref:e.target.value}))} placeholder="e.g. Dark cinematic, trending audio XYZ" style={is}/></div>
+          <div style={{display:"flex",gap:10}}>
+            <div style={{flex:1}}><label style={ls}>YT link</label><input value={newIdea.yt_url} onChange={e=>setNewIdea(p=>({...p,yt_url:e.target.value}))} placeholder="https://youtube.com/watch?v=..." style={is}/></div>
+            <div style={{flex:"0 0 140px"}}><label style={ls}>YT timestamps</label><input value={newIdea.yt_timestamps} onChange={e=>setNewIdea(p=>({...p,yt_timestamps:e.target.value}))} placeholder="0:30-1:45" style={is}/></div>
+          </div>
+          {newIdea.source==="competitor"&&(
+            <div><label style={ls}>Comp link</label><input value={newIdea.comp_link} onChange={e=>setNewIdea(p=>({...p,comp_link:e.target.value}))} placeholder="Competitor reel / post URL" style={is}/></div>
+          )}
           <button onClick={addIdeaFn} disabled={!newIdea.title.trim()||!newIdea.nicheId} style={{...bp,opacity:(!newIdea.title.trim()||!newIdea.nicheId)?0.4:1,marginTop:2}}>Add idea</button>
         </div>
       </Modal>
@@ -553,16 +570,29 @@ export default function ContentTracker(){
               <span style={{fontSize:11,padding:"3px 9px",borderRadius:99,background:cd.source==="competitor"?"#EEEDFE":"#E8F5EE",color:cd.source==="competitor"?"#534AB7":"#1A5E3A",fontWeight:500}}>{cd.source==="competitor"?"Competitor":"Original"}</span>
               {dn&&<span style={{fontSize:11,padding:"3px 9px",borderRadius:99,background:"#27272a",color:"#a1a1aa",fontWeight:500}}>{dn.name}</span>}
             </div>
-            {cd.link&&<a href={cd.link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.link}</a>}
-            {cd.notes&&<p style={{fontSize:12,color:"#71717a",margin:0,lineHeight:1.4}}>{cd.notes}</p>}
             {sa[cd.stage]?.length>0&&<div style={{display:"flex",gap:6}}>{sa[cd.stage].map(a=><button key={a.stage} onClick={()=>moveIdea(cd.id,a.stage)} style={a.style}>{a.label}</button>)}</div>}
+
+            {/* Editable fields */}
+            <div><label style={ls}>Hook variations</label><textarea defaultValue={(cd.hook_variations||[]).join("\n")} key={cd.id+"_hooks"} onBlur={e=>{const lines=e.target.value.split("\n").map((l: string)=>l.trim()).filter(Boolean);updateIdeaMut.mutate({id:cd.id,data:{hook_variations:lines.length>0?lines:null}});}} rows={3} placeholder="One hook per line" style={{...is,resize:"vertical",minHeight:60}}/></div>
+            <div style={{display:"flex",gap:10}}>
+              <div style={{flex:1}}><label style={ls}>Music reference / suggestions</label><input defaultValue={cd.music_ref||""} key={cd.id+"_music"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{music_ref:e.target.value.trim()||null}})} placeholder="e.g. Dark cinematic, trending audio" style={is}/></div>
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <div style={{flex:1}}><label style={ls}>YT link</label><input defaultValue={cd.yt_url||""} key={cd.id+"_yturl"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{yt_url:e.target.value.trim()||null}})} placeholder="https://youtube.com/watch?v=..." style={is}/></div>
+              <div style={{flex:"0 0 140px"}}><label style={ls}>YT timestamps</label><input defaultValue={cd.yt_timestamps||""} key={cd.id+"_ytts"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{yt_timestamps:e.target.value.trim()||null}})} placeholder="0:30-1:45" style={is}/></div>
+            </div>
+            {cd.source==="competitor"&&(
+              <div><label style={ls}>Comp link</label><input defaultValue={cd.comp_link||""} key={cd.id+"_comp"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{comp_link:e.target.value.trim()||null}})} placeholder="Competitor reel / post URL" style={is}/></div>
+            )}
+            {cd.yt_url&&<a href={cd.yt_url} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.yt_url}</a>}
 
             {/* Page checklist */}
             {["testing","scale","done"].includes(cd.stage)&&dn&&(
               <div>
                 <label style={{...ls,marginBottom:8}}>Pages in {dn.name} — pick date & schedule</label>
                 {dn.pages.map((page: string)=>{const isP=pp.includes(page);const pi=(cd.postings||[]).findIndex((p: any)=>p.page===page);const po=pi>=0?cd.postings[pi]:null;const perf=po?gPerf(po.views,po.baselineViews):null;const dk=`${cd.id}_${page}`;return(
-                  <div key={page} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:isP?"#1a1a2e":"#18181b",borderRadius:8,marginBottom:4,border:isP?"1.5px solid #3f3f46":"1px solid #27272a",flexWrap:"wrap"}}>
+                  <div key={page} style={{padding:"10px 12px",background:isP?"#1a1a2e":"#18181b",borderRadius:8,marginBottom:4,border:isP?"1.5px solid #3f3f46":"1px solid #27272a"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                     {isP?(
                       <>
                         <div onClick={()=>togglePage(cd.id,page,0,"")} style={{width:20,height:20,borderRadius:5,background:"#1a1a1a",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
@@ -582,6 +612,15 @@ export default function ContentTracker(){
                         <input type="number" value={scheduleDate[dk]?.baseline||""} placeholder="Baseline" onChange={e=>setScheduleDate(p=>({...p,[dk]:{...p[dk],baseline:e.target.value}}))} style={{width:75,padding:"4px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:11,background:"#18181b"}}/>
                         <button onClick={()=>{const sd=scheduleDate[dk];if(!sd?.date)return;togglePage(cd.id,page,sd?.baseline||0,sd.date);setScheduleDate(p=>{const n={...p};delete n[dk];return n;});}} disabled={!scheduleDate[dk]?.date} style={{padding:"4px 12px",borderRadius:7,border:"none",fontSize:11,fontWeight:600,cursor:"pointer",background:scheduleDate[dk]?.date?"#7c3aed":"#3f3f46",color:scheduleDate[dk]?.date?"#fff":"#52525b"}}>Schedule</button>
                       </>
+                    )}
+                    </div>
+                    {/* Performance tag selector for assigned pages */}
+                    {isP&&po&&(
+                      <div style={{display:"flex",gap:4,marginTop:8,marginLeft:30}}>
+                        {(["below","baseline","topline","viral"] as const).map(tag=>{const t=PT[tag];const active=po.perf_tag===tag;return(
+                          <button key={tag} onClick={()=>updatePostingMut.mutate({id:po.id,data:{perf_tag:tag}})} style={{padding:"3px 10px",borderRadius:6,border:active?`2px solid ${t.color}`:"1.5px solid #3f3f46",background:active?t.bg:"transparent",color:active?t.color:"#71717a",fontSize:10,fontWeight:600,cursor:"pointer",transition:"all 0.15s"}}>{t.label}</button>
+                        );})}
+                      </div>
                     )}
                   </div>);})}
                 <div style={{marginTop:8,fontSize:11,color:"#52525b"}}>{pp.length}/{dn.pages.length} pages assigned</div>
