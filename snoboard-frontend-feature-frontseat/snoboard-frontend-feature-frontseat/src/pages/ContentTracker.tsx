@@ -289,14 +289,14 @@ export default function ContentTracker(){
     <div style={{fontFamily:"'DM Sans','Helvetica Neue',sans-serif",minHeight:"100vh",background:"#09090b",color:"#fff"}}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 
-      {/* Header */}
-      <div style={{padding:"16px 20px 12px",borderBottom:"1px solid #27272a",background:"#18181b"}}>
+      {/* Header — left padded to clear hamburger menu */}
+      <div style={{padding:"16px 20px 12px 60px",borderBottom:"1px solid #27272a",background:"#09090b"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
           <div>
             <h1 style={{margin:0,fontSize:20,fontWeight:700,letterSpacing:"-0.03em"}}>Content tracker</h1>
             <p style={{margin:"3px 0 0",fontSize:12,color:"#71717a"}}>{ideas.length} ideas · {niches.length} niches · {niches.reduce((a,n)=>a+n.pages.length,0)} pages</p>
           </div>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
             <button onClick={()=>setSettingsOpen(true)} style={bs}>Niches</button>
             <button onClick={()=>setAddOpen(true)} style={bp}>+ New idea</button>
           </div>
@@ -437,7 +437,7 @@ export default function ContentTracker(){
           {niches.map(n=>(
             <div key={n.id} style={{padding:"10px 12px",background:"#09090b",borderRadius:9,border:"1px solid #27272a"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span style={{fontSize:13,fontWeight:600}}>{n.name}</span>
+                <span style={{fontSize:13,fontWeight:600,color:"#fff"}}>{n.name}</span>
                 <div style={{display:"flex",gap:8}}>
                   <button onClick={()=>setEditNiche({id:n.id,name:n.name,pagesStr:n.pages.join(", ")})} style={{background:"none",border:"none",fontSize:11,color:"#4A7FD4",cursor:"pointer",fontWeight:500}}>Edit</button>
                   <button onClick={()=>deleteNiche(n.id)} style={{background:"none",border:"none",fontSize:11,color:"#C93B3B",cursor:"pointer",fontWeight:500}}>Remove</button>
