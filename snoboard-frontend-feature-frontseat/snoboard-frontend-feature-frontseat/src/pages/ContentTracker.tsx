@@ -49,6 +49,7 @@ function mapIdea(raw: any): any {
     yt_url: raw.yt_url || null,
     yt_timestamps: raw.yt_timestamps || null,
     comp_link: raw.comp_link || null,
+    tags: raw.tags || [],
     postings: (raw.tracker_postings || []).map((p: any) => ({
       id: p.id,
       page: p.page,
@@ -147,6 +148,7 @@ function IdeaCard({idea,niches,onClick}: {idea:any;niches:any[];onClick:()=>void
       </div>
       {/* Info row */}
       <div style={{marginTop:5,display:"flex",flexDirection:"column",gap:2}}>
+        {idea.tags?.includes("comp_research")&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:99,background:"rgba(212,118,42,0.15)",color:"#F0A050",fontWeight:600,alignSelf:"flex-start"}}>COMP RESEARCH</span>}
         {idea.created_by&&<span style={{fontSize:10,color:"#52525b"}}>by {idea.created_by}</span>}
         {hv>0&&<span style={{fontSize:10,color:"#52525b"}}>{hv} hook{hv>1?"s":""}</span>}
         {idea.music_ref&&<span style={{fontSize:10,color:"#3f3f46",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>♪ {idea.music_ref}</span>}
@@ -401,8 +403,10 @@ export default function ContentTracker(){
   const [scheduleDate,setScheduleDate]=useState<Record<string,any>>({});
   const [dateFrom,setDateFrom]=useState(monthStart());
   const [dateTo,setDateTo]=useState(today());
+  const [compResearchFilter,setCompResearchFilter]=useState(false);
 
-  const filteredIdeas=nicheFilter==="all"?ideas:ideas.filter(i=>i.nicheId===nicheFilter);
+  const nicheFiltered=nicheFilter==="all"?ideas:ideas.filter(i=>i.nicheId===nicheFilter);
+  const filteredIdeas=compResearchFilter?nicheFiltered.filter(i=>i.tags?.includes("comp_research")):nicheFiltered;
   const allPagesForFilter=nicheFilter==="all"?niches.flatMap(n=>n.pages):(niches.find(n=>n.id===nicheFilter)?.pages||[]);
 
   // ---- Actions wired to mutations ----
@@ -536,7 +540,8 @@ export default function ContentTracker(){
               <button key={v} onClick={()=>setViewMode(v)} style={{padding:"5px 12px",border:"none",fontSize:12,fontWeight:500,cursor:"pointer",background:viewMode===v?"#3f3f46":"transparent",color:viewMode===v?"#fff":"#71717a",boxShadow:viewMode===v?"0 1px 3px rgba(0,0,0,0.06)":"none",textTransform:"capitalize"}}>{v}</button>
             ))}
           </div>
-          <div style={{marginLeft:"auto",display:"flex",gap:8}}>
+          <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
+            <button onClick={()=>setCompResearchFilter(!compResearchFilter)} style={{padding:"5px 12px",borderRadius:7,border:compResearchFilter?"2px solid #F0A050":"1px solid #3f3f46",background:compResearchFilter?"rgba(212,118,42,0.15)":"transparent",color:compResearchFilter?"#F0A050":"#71717a",fontSize:11,fontWeight:600,cursor:"pointer"}}>Comp Research</button>
             <button onClick={()=>setSettingsOpen(true)} style={bs}>Niches</button>
             <button onClick={()=>setAddOpen(true)} style={bp}>+ New idea</button>
           </div>

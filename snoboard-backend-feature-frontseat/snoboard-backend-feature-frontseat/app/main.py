@@ -1181,6 +1181,42 @@ async def competitor_update(category: str, entry_id: str, update: dict):
         raise HTTPException(status_code=400, detail="No valid fields to update.")
 
     client.table(table).update(filtered).eq("id", entry_id).execute()
+
+    # Feature 2: If marking as "used", auto-create a tracker idea
+    if filtered.get("usage") == "used":
+        try:
+            entry = client.table(table).select("*").eq("id", entry_id).execute().data
+            if entry:
+                e = entry[0]
+                idea_type = "post" if category == "fbs_posts" else "reel"
+                idea_title = e.get("account_name", "") or e.get("account_handle", "")
+
+                # Check if already created (avoid duplicates)
+                existing_idea = client.table("tracker_ideas").select("id").eq("comp_link", e.get("url", "")).execute().data
+                if not existing_idea:
+                    # Find a default niche (first FBS niche)
+                    niches = client.table("tracker_niches").select("id,name").execute().data or []
+                    niche_id = None
+                    for n in niches:
+                        if "garfield" in n["name"].lower() or "fbs" in n["name"].lower():
+                            niche_id = n["id"]
+                            break
+                    if not niche_id and niches:
+                        niche_id = niches[0]["id"]
+
+                    client.table("tracker_ideas").insert({
+                        "title": idea_title,
+                        "source": "competitor",
+                        "comp_link": e.get("url"),
+                        "type": idea_type,
+                        "stage": "new",
+                        "niche_id": niche_id,
+                        "tags": ["comp_research"],
+                        "created_by": "comp research",
+                    }).execute()
+        except Exception:
+            pass  # Don't fail the usage update if idea creation fails
+
     return {"success": True}
 
 
@@ -1254,6 +1290,7 @@ async def tracker_ideas_create(request: Request):
         "yt_timestamps": body.get("yt_timestamps"),
         "comp_link": body.get("comp_link"),
         "type": body.get("type", "reel"),
+        "tags": body.get("tags") or [],
         "format": body.get("format"),
         "main_page_hook": body.get("main_page_hook"),
         "content_pillar": body.get("content_pillar"),
@@ -1271,7 +1308,7 @@ async def tracker_ideas_update(idea_id: str, request: Request):
     from app.database.client import get_supabase_client
     client = get_supabase_client()
     body = await request.json()
-    allowed_keys = {"title", "source", "niche_id", "stage", "link", "notes", "hook_variations", "music_ref", "yt_url", "yt_timestamps", "comp_link", "type", "format", "main_page_hook", "content_pillar", "content_bucket"}
+    allowed_keys = {"title", "source", "niche_id", "stage", "link", "notes", "hook_variations", "music_ref", "yt_url", "yt_timestamps", "comp_link", "type", "tags", "format", "main_page_hook", "content_pillar", "content_bucket"}
     allowed = {k: v for k, v in body.items() if k in allowed_keys}
     client.table("tracker_ideas").update(allowed).eq("id", idea_id).execute()
     return {"success": True}
@@ -1285,7 +1322,60 @@ async def tracker_ideas_delete(idea_id: str):
     return {"success": True}
 
 
-# --- Postings ---
+# --- Postings (with content_entries sync) ---
+
+def _sync_posting_to_content_entry(client, posting_id: str):
+    """Sync a tracker posting to content_entries so it shows in IP pages."""
+    posting = client.table("tracker_postings").select("*, tracker_ideas(id,title,type)").eq("id", posting_id).execute().data
+    if not posting:
+        return
+    p = posting[0]
+    idea = p.get("tracker_ideas") or {}
+    handle = p.get("page", "")
+    if not handle:
+        return
+
+    # Find page_id by handle
+    pages = client.table("pages").select("id").eq("handle", handle).execute().data
+    if not pages:
+        return
+    page_id = pages[0]["id"]
+
+    idea_name = idea.get("title", "")
+    content_type = "carousel" if idea.get("type") == "post" else "reel"
+
+    entry_data = {
+        "page_id": page_id,
+        "idea_name": idea_name,
+        "content_type": content_type,
+        "idea_status": "scheduled",
+        "upload_date": p.get("date"),
+        "views": p.get("views") or 0,
+        "ips": handle,
+        "created_by": "tracker",
+    }
+
+    # Upsert: check if entry exists for this idea+page combo
+    existing = client.table("content_entries").select("id").eq("idea_name", idea_name).eq("ips", handle).execute().data
+    if existing:
+        client.table("content_entries").update(entry_data).eq("id", existing[0]["id"]).execute()
+    else:
+        client.table("content_entries").insert(entry_data).execute()
+
+
+def _remove_content_entry_for_posting(client, posting_id: str):
+    """Remove the synced content_entry when a posting is deleted."""
+    posting = client.table("tracker_postings").select("page, tracker_ideas(title)").eq("id", posting_id).execute().data
+    if not posting:
+        return
+    p = posting[0]
+    idea = p.get("tracker_ideas") or {}
+    handle = p.get("page", "")
+    idea_name = idea.get("title", "")
+    if handle and idea_name:
+        client.table("content_entries").delete().eq("idea_name", idea_name).eq("ips", handle).eq("created_by", "tracker").execute()
+
+
 @app.post("/api/v1/tracker/ideas/{idea_id}/postings")
 async def tracker_postings_create(idea_id: str, request: Request):
     from app.database.client import get_supabase_client
@@ -1299,6 +1389,11 @@ async def tracker_postings_create(idea_id: str, request: Request):
         "views": int(body["views"]) if body.get("views") is not None else None,
     }
     result = client.table("tracker_postings").insert(row).execute().data[0]
+    # Sync to content_entries
+    try:
+        _sync_posting_to_content_entry(client, result["id"])
+    except Exception:
+        pass  # Don't fail the posting creation if sync fails
     return {"success": True, "data": result}
 
 
@@ -1313,6 +1408,11 @@ async def tracker_postings_update(posting_id: str, request: Request):
     if "baseline_views" in allowed:
         allowed["baseline_views"] = int(allowed["baseline_views"])
     client.table("tracker_postings").update(allowed).eq("id", posting_id).execute()
+    # Sync to content_entries
+    try:
+        _sync_posting_to_content_entry(client, posting_id)
+    except Exception:
+        pass
     return {"success": True}
 
 
@@ -1320,6 +1420,11 @@ async def tracker_postings_update(posting_id: str, request: Request):
 async def tracker_postings_delete(posting_id: str):
     from app.database.client import get_supabase_client
     client = get_supabase_client()
+    # Remove synced content_entry first
+    try:
+        _remove_content_entry_for_posting(client, posting_id)
+    except Exception:
+        pass
     client.table("tracker_postings").delete().eq("id", posting_id).execute()
     return {"success": True}
 
