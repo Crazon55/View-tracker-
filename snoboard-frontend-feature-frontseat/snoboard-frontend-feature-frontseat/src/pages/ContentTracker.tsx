@@ -79,28 +79,24 @@ function Modal({open,onClose,title,children,wide}: {open:boolean;onClose:()=>voi
 }
 
 function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove,stage}: {po:any;page:string;fmtD:(d:string)=>string;PT:any;updatePostingMut:any;onRemove:()=>void;stage?:string}){
-  const hasSaved = po.views !== null && po.views !== undefined;
-  const [editing,setEditing]=useState(!hasSaved);
+  const [editing,setEditing]=useState(false);
   const [views,setViews]=useState(po.views?.toString()||"");
   const [perfTag,setPerfTag]=useState(po.perf_tag||"");
   const fmtNum = (n: number) => { if(n>=1000000) return (n/1000000).toFixed(1)+"M"; if(n>=1000) return (n/1000).toFixed(1)+"k"; return n.toString(); };
 
-  // Stage-based colors: testing=orange, kill=red, scale/done=green
+  // Stage-based colors
   const stageColor = stage==="testing"?"#D4952A":stage==="kill"?"#C93B3B":(stage==="scale"||stage==="done")?"#22c55e":"#7c3aed";
-  const stageBorder = stage==="testing"?"rgba(212,149,42,0.3)":stage==="kill"?"rgba(201,59,59,0.3)":(stage==="scale"||stage==="done")?"rgba(34,197,94,0.3)":"#3f3f46";
-  const stageBg = stage==="testing"?"rgba(212,149,42,0.06)":stage==="kill"?"rgba(201,59,59,0.06)":(stage==="scale"||stage==="done")?"rgba(34,197,94,0.06)":"#1a1a2e";
 
-  if(!editing && hasSaved){
-    // Compact saved view
+  if(!editing){
     const t = perfTag && PT[perfTag] ? PT[perfTag] : null;
     return(
       <div style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}} onClick={()=>setEditing(true)}>
         <div style={{width:20,height:20,borderRadius:5,background:stageColor,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
         <span style={{fontSize:13,fontWeight:600,color:"#fff"}}>@{page}</span>
-        <span style={{fontSize:12,fontWeight:700,color:"#fff",fontFamily:"monospace"}}>{fmtNum(po.views)}</span>
+        {po.views!=null&&<span style={{fontSize:12,fontWeight:700,color:"#fff",fontFamily:"monospace"}}>{fmtNum(po.views)}</span>}
+        {!po.views&&<span style={{fontSize:11,color:"#52525b"}}>no views yet</span>}
         {t&&<span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:99,background:t.bg,color:t.color}}>{t.label}</span>}
         <span style={{fontSize:11,color:"#52525b",marginLeft:"auto",whiteSpace:"nowrap"}}>{po.date ? fmtD(po.date) : ""}</span>
-        <span style={{fontSize:10,color:"#3f3f46"}}>click to edit</span>
       </div>
     );
   }
@@ -108,7 +104,7 @@ function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove,stage}: {po:any;
   return(
     <div style={{display:"flex",flexDirection:"column",gap:8}}>
       <div style={{display:"flex",alignItems:"center",gap:10}}>
-        <div style={{width:20,height:20,borderRadius:5,background:"#7c3aed",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
+        <div style={{width:20,height:20,borderRadius:5,background:stageColor,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
         <span style={{fontSize:13,fontWeight:600,color:"#fff",flex:1}}>@{page}</span>
         <span style={{fontSize:11,color:"#71717a",whiteSpace:"nowrap"}}>{po.date ? fmtD(po.date) : "No date"}</span>
       </div>
@@ -123,7 +119,7 @@ function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove,stage}: {po:any;
       </div>
       <div style={{display:"flex",gap:6,marginLeft:30,marginTop:2}}>
         <button onClick={()=>{updatePostingMut.mutate({id:po.id,data:{views:Number(views)||null,perf_tag:perfTag||null}},{onSuccess:()=>setEditing(false)});}} disabled={updatePostingMut.isPending} style={{padding:"5px 16px",borderRadius:7,border:"none",fontSize:11,fontWeight:600,cursor:"pointer",background:updatePostingMut.isPending?"#52525b":"#7c3aed",color:"#fff"}}>{updatePostingMut.isPending?"Saving...":"Save"}</button>
-        {hasSaved&&<button onClick={()=>setEditing(false)} style={{padding:"5px 12px",borderRadius:7,border:"1px solid #3f3f46",fontSize:11,fontWeight:500,cursor:"pointer",background:"transparent",color:"#a1a1aa"}}>Cancel</button>}
+        <button onClick={()=>setEditing(false)} style={{padding:"5px 12px",borderRadius:7,border:"1px solid #3f3f46",fontSize:11,fontWeight:500,cursor:"pointer",background:"transparent",color:"#a1a1aa"}}>Cancel</button>
         <button onClick={onRemove} style={{padding:"5px 12px",borderRadius:7,border:"1px solid #3f3f46",fontSize:11,fontWeight:500,cursor:"pointer",background:"transparent",color:"#FF7070",marginLeft:"auto"}}>Remove</button>
       </div>
     </div>
