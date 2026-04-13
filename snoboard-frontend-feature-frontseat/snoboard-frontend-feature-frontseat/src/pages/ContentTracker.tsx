@@ -97,7 +97,7 @@ function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove}: {po:any;page:s
         );})}
       </div>
       <div style={{display:"flex",gap:6,marginLeft:30,marginTop:2}}>
-        <button onClick={()=>{updatePostingMut.mutate({id:po.id,data:{views:Number(views)||null}});}} style={{padding:"5px 16px",borderRadius:7,border:"none",fontSize:11,fontWeight:600,cursor:"pointer",background:"#7c3aed",color:"#fff"}}>Save</button>
+        <button onClick={()=>{const v=Number(views)||null;console.log("Saving posting",po.id,"views:",v);updatePostingMut.mutate({id:po.id,data:{views:v}});}} disabled={updatePostingMut.isPending} style={{padding:"5px 16px",borderRadius:7,border:"none",fontSize:11,fontWeight:600,cursor:"pointer",background:updatePostingMut.isPending?"#52525b":"#7c3aed",color:"#fff"}}>{updatePostingMut.isPending?"Saving...":"Save"}</button>
         <button onClick={onRemove} style={{padding:"5px 12px",borderRadius:7,border:"1px solid #3f3f46",fontSize:11,fontWeight:500,cursor:"pointer",background:"transparent",color:"#FF7070"}}>Remove</button>
       </div>
     </div>
@@ -326,8 +326,8 @@ export default function ContentTracker(){
   });
   const updatePostingMut = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => updateTrackerPosting(id, data),
-    onSuccess: () => { invalidate(); },
-    onError: () => toast.error("Failed to update posting"),
+    onSuccess: () => { invalidate(); toast.success("Saved!"); },
+    onError: () => toast.error("Failed to save"),
   });
   const deletePostingMut = useMutation({
     mutationFn: (id: string) => deleteTrackerPosting(id),
