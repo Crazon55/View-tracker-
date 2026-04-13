@@ -78,19 +78,24 @@ function Modal({open,onClose,title,children,wide}: {open:boolean;onClose:()=>voi
   );
 }
 
-function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove}: {po:any;page:string;fmtD:(d:string)=>string;PT:any;updatePostingMut:any;onRemove:()=>void}){
+function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove,stage}: {po:any;page:string;fmtD:(d:string)=>string;PT:any;updatePostingMut:any;onRemove:()=>void;stage?:string}){
   const hasSaved = po.views !== null && po.views !== undefined;
   const [editing,setEditing]=useState(!hasSaved);
   const [views,setViews]=useState(po.views?.toString()||"");
   const [perfTag,setPerfTag]=useState(po.perf_tag||"");
   const fmtNum = (n: number) => { if(n>=1000000) return (n/1000000).toFixed(1)+"M"; if(n>=1000) return (n/1000).toFixed(1)+"k"; return n.toString(); };
 
+  // Stage-based colors: testing=orange, kill=red, scale/done=green
+  const stageColor = stage==="testing"?"#D4952A":stage==="kill"?"#C93B3B":(stage==="scale"||stage==="done")?"#22c55e":"#7c3aed";
+  const stageBorder = stage==="testing"?"rgba(212,149,42,0.3)":stage==="kill"?"rgba(201,59,59,0.3)":(stage==="scale"||stage==="done")?"rgba(34,197,94,0.3)":"#3f3f46";
+  const stageBg = stage==="testing"?"rgba(212,149,42,0.06)":stage==="kill"?"rgba(201,59,59,0.06)":(stage==="scale"||stage==="done")?"rgba(34,197,94,0.06)":"#1a1a2e";
+
   if(!editing && hasSaved){
     // Compact saved view
     const t = perfTag && PT[perfTag] ? PT[perfTag] : null;
     return(
       <div style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}} onClick={()=>setEditing(true)}>
-        <div style={{width:20,height:20,borderRadius:5,background:"#22c55e",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
+        <div style={{width:20,height:20,borderRadius:5,background:stageColor,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
         <span style={{fontSize:13,fontWeight:600,color:"#fff"}}>@{page}</span>
         <span style={{fontSize:12,fontWeight:700,color:"#fff",fontFamily:"monospace"}}>{fmtNum(po.views)}</span>
         {t&&<span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:99,background:t.bg,color:t.color}}>{t.label}</span>}
@@ -653,10 +658,13 @@ export default function ContentTracker(){
             {dn&&!["new","approved","base_edit"].includes(cd.stage)&&(
               <div>
                 <label style={{...ls,marginBottom:8}}>Pages in {dn.name} — select, schedule & track</label>
-                {dn.pages.map((page: string)=>{const isP=pp.includes(page);const pi=(cd.postings||[]).findIndex((p: any)=>p.page===page);const po=pi>=0?cd.postings[pi]:null;const dk=`${cd.id}_${page}`;return(
-                  <div key={page} style={{padding:"10px 12px",background:isP?"#1a1a2e":"#18181b",borderRadius:8,marginBottom:4,border:isP?"1.5px solid #3f3f46":"1px solid #27272a"}}>
+                {dn.pages.map((page: string)=>{const isP=pp.includes(page);const pi=(cd.postings||[]).findIndex((p: any)=>p.page===page);const po=pi>=0?cd.postings[pi]:null;const dk=`${cd.id}_${page}`;
+                  const sBorder=isP?(cd.stage==="testing"?"1.5px solid rgba(212,149,42,0.4)":cd.stage==="kill"?"1.5px solid rgba(201,59,59,0.4)":(cd.stage==="scale"||cd.stage==="done")?"1.5px solid rgba(34,197,94,0.4)":"1.5px solid #3f3f46"):"1px solid #27272a";
+                  const sBg=isP?(cd.stage==="testing"?"rgba(212,149,42,0.04)":cd.stage==="kill"?"rgba(201,59,59,0.04)":(cd.stage==="scale"||cd.stage==="done")?"rgba(34,197,94,0.04)":"#1a1a2e"):"#18181b";
+                  return(
+                  <div key={page} style={{padding:"10px 12px",background:sBg,borderRadius:8,marginBottom:4,border:sBorder}}>
                     {isP&&po?(
-                      <PostingCard key={po.id} po={po} page={page} fmtD={fmtD} PT={PT} updatePostingMut={updatePostingMut} onRemove={()=>togglePage(cd.id,page,0,"")}/>
+                      <PostingCard key={po.id} po={po} page={page} fmtD={fmtD} PT={PT} updatePostingMut={updatePostingMut} onRemove={()=>togglePage(cd.id,page,0,"")} stage={cd.stage}/>
                     ):(
                       <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                         <div onClick={()=>{const sd=scheduleDate[dk];togglePage(cd.id,page,sd?.baseline||0,sd?.date||today());setScheduleDate(p=>{const n={...p};delete n[dk];return n;});}} style={{width:20,height:20,borderRadius:5,border:"1.5px solid #3f3f46",background:"#18181b",cursor:"pointer",flexShrink:0}}/>
