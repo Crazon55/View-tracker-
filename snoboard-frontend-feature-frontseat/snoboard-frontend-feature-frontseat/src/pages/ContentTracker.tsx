@@ -597,30 +597,41 @@ export default function ContentTracker(){
                 <label style={{...ls,marginBottom:8}}>Pages in {dn.name} — select, schedule & track</label>
                 {dn.pages.map((page: string)=>{const isP=pp.includes(page);const pi=(cd.postings||[]).findIndex((p: any)=>p.page===page);const po=pi>=0?cd.postings[pi]:null;const dk=`${cd.id}_${page}`;return(
                   <div key={page} style={{padding:"10px 12px",background:isP?"#1a1a2e":"#18181b",borderRadius:8,marginBottom:4,border:isP?"1.5px solid #3f3f46":"1px solid #27272a"}}>
-                    {isP?(
+                    {isP&&po?(
                       <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                        {/* Row 1: Page name + date + uncheck */}
+                        {/* Row 1: Page name + date */}
                         <div style={{display:"flex",alignItems:"center",gap:10}}>
-                          <div onClick={()=>togglePage(cd.id,page,0,"")} style={{width:20,height:20,borderRadius:5,background:"#7c3aed",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
+                          <div style={{width:20,height:20,borderRadius:5,background:"#7c3aed",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
                           <span style={{fontSize:13,fontWeight:600,color:"#fff",flex:1}}>@{page}</span>
-                          <span style={{fontSize:11,color:"#71717a",whiteSpace:"nowrap"}}>{po?.date ? fmtD(po.date) : "No date"}</span>
+                          <span style={{fontSize:11,color:"#71717a",whiteSpace:"nowrap"}}>{po.date ? fmtD(po.date) : "No date"}</span>
                         </div>
-                        {/* Row 2: Views + Baseline (editable) + Perf tag */}
+                        {/* Row 2: Views + Baseline inputs */}
                         <div style={{display:"flex",alignItems:"center",gap:8,marginLeft:30,flexWrap:"wrap"}}>
                           <div style={{display:"flex",alignItems:"center",gap:4}}>
                             <span style={{fontSize:10,color:"#71717a",fontWeight:600}}>Views</span>
-                            <input type="number" defaultValue={po?.views??""} key={`${po?.id}_views`} placeholder="—" onBlur={e=>{const v=Number(e.target.value)||null;updatePostingMut.mutate({id:po.id,data:{views:v}});}} style={{width:80,padding:"5px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:12,background:"#09090b",color:"#fff"}}/>
+                            <input type="number" id={`v_${po.id}`} defaultValue={po.views??""} key={`${po.id}_views`} placeholder="—" style={{width:80,padding:"5px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:12,background:"#09090b",color:"#fff"}}/>
                           </div>
                           <div style={{display:"flex",alignItems:"center",gap:4}}>
                             <span style={{fontSize:10,color:"#71717a",fontWeight:600}}>Baseline</span>
-                            <input type="number" defaultValue={po?.baselineViews||""} key={`${po?.id}_base`} placeholder="—" onBlur={e=>{const v=Number(e.target.value)||0;updatePostingMut.mutate({id:po.id,data:{baseline_views:v}});}} style={{width:80,padding:"5px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:12,background:"#09090b",color:"#a1a1aa"}}/>
+                            <input type="number" id={`b_${po.id}`} defaultValue={po.baselineViews||""} key={`${po.id}_base`} placeholder="—" style={{width:80,padding:"5px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:12,background:"#09090b",color:"#a1a1aa"}}/>
                           </div>
-                          {/* Performance tag buttons */}
-                          <div style={{display:"flex",gap:3,marginLeft:"auto"}}>
-                            {(["below","baseline","topline","viral"] as const).map(tag=>{const t=PT[tag];const active=po?.perf_tag===tag;return(
-                              <button key={tag} onClick={()=>updatePostingMut.mutate({id:po.id,data:{perf_tag:tag}})} style={{padding:"3px 8px",borderRadius:5,border:active?`2px solid ${t.color}`:"1px solid #3f3f46",background:active?t.bg:"transparent",color:active?t.color:"#52525b",fontSize:9,fontWeight:600,cursor:"pointer",transition:"all 0.15s"}}>{t.label}</button>
-                            );})}
-                          </div>
+                        </div>
+                        {/* Row 3: Perf tags */}
+                        <div style={{display:"flex",gap:3,marginLeft:30}}>
+                          {(["below","baseline","topline","viral"] as const).map(tag=>{const t=PT[tag];const active=po.perf_tag===tag;return(
+                            <button key={tag} onClick={()=>updatePostingMut.mutate({id:po.id,data:{perf_tag:tag}})} style={{padding:"4px 10px",borderRadius:6,border:active?`2px solid ${t.color}`:"1px solid #3f3f46",background:active?t.bg:"transparent",color:active?t.color:"#52525b",fontSize:10,fontWeight:600,cursor:"pointer",transition:"all 0.15s"}}>{t.label}</button>
+                          );})}
+                        </div>
+                        {/* Row 4: Save + Remove */}
+                        <div style={{display:"flex",gap:6,marginLeft:30,marginTop:2}}>
+                          <button onClick={()=>{
+                            const vEl=document.getElementById(`v_${po.id}`) as HTMLInputElement;
+                            const bEl=document.getElementById(`b_${po.id}`) as HTMLInputElement;
+                            const views=vEl?Number(vEl.value)||null:po.views;
+                            const baseline=bEl?Number(bEl.value)||0:po.baselineViews;
+                            updatePostingMut.mutate({id:po.id,data:{views,baseline_views:baseline}});
+                          }} style={{padding:"5px 16px",borderRadius:7,border:"none",fontSize:11,fontWeight:600,cursor:"pointer",background:"#7c3aed",color:"#fff"}}>Save</button>
+                          <button onClick={()=>togglePage(cd.id,page,0,"")} style={{padding:"5px 12px",borderRadius:7,border:"1px solid #3f3f46",fontSize:11,fontWeight:500,cursor:"pointer",background:"transparent",color:"#FF7070"}}>Remove</button>
                         </div>
                       </div>
                     ):(
