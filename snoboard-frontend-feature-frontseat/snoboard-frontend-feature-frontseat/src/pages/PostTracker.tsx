@@ -145,6 +145,12 @@ function IdeaCard({idea,niches,onClick}: {idea:any;niches:any[];onClick:()=>void
         {idea.content_pillar&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:99,background:"rgba(124,58,237,0.15)",color:"#B49EFF",fontWeight:500}}>{idea.content_pillar}</span>}
         {pc>0&&<span style={{fontSize:10,color:"#52525b",fontWeight:500}}>{pc}pg</span>}
       </div>
+      {/* Info row */}
+      <div style={{marginTop:5,display:"flex",flexDirection:"column",gap:2}}>
+        {idea.created_by&&<span style={{fontSize:10,color:"#52525b"}}>by {idea.created_by}</span>}
+        {idea.main_page_hook&&<span style={{fontSize:10,color:"#71717a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{idea.main_page_hook}</span>}
+        {idea.content_bucket&&<span style={{fontSize:9,color:"#3f3f46"}}>{idea.content_bucket}</span>}
+      </div>
     </div>
   );
 }
@@ -669,8 +675,8 @@ export default function PostTracker(){
             )}
             {cd.source==="competitor"&&cd.comp_link&&<a href={cd.comp_link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.comp_link}</a>}
 
-            {/* Page checklist — available for ALL stages */}
-            {dn&&(
+            {/* Page checklist — from testing stage onwards */}
+            {dn&&!["new","approved","design_approval","scripted"].includes(cd.stage)&&(
               <div>
                 <label style={{...ls,marginBottom:8}}>Pages in {dn.name} — select, schedule & track</label>
                 {dn.pages.map((page: string)=>{const isP=pp.includes(page);const pi=(cd.postings||[]).findIndex((p: any)=>p.page===page);const po=pi>=0?cd.postings[pi]:null;const dk=`${cd.id}_${page}`;return(
