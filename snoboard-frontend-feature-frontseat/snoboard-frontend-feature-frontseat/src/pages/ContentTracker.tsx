@@ -49,6 +49,7 @@ function mapIdea(raw: any): any {
     yt_url: raw.yt_url || null,
     yt_timestamps: raw.yt_timestamps || null,
     comp_link: raw.comp_link || null,
+    frame_link: raw.frame_link || null,
     tags: raw.tags || [],
     postings: (raw.tracker_postings || []).map((p: any) => ({
       id: p.id,
@@ -153,6 +154,7 @@ function IdeaCard({idea,niches,onClick}: {idea:any;niches:any[];onClick:()=>void
         {hv>0&&<span style={{fontSize:10,color:"#52525b"}}>{hv} hook{hv>1?"s":""}</span>}
         {idea.music_ref&&<span style={{fontSize:10,color:"#3f3f46",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>♪ {idea.music_ref}</span>}
         {idea.yt_url&&<span style={{fontSize:10,color:"#4A7FD4",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>YT ↗</span>}
+        {idea.frame_link&&<span style={{fontSize:10,color:"#F0A050",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>Frame ↗</span>}
       </div>
     </div>
   );
@@ -395,7 +397,7 @@ export default function ContentTracker(){
   const [addNicheOpen,setAddNicheOpen]=useState(false);
   const [editNiche,setEditNiche]=useState<any>(null);
   const [newNiche,setNewNiche]=useState({name:"",pages:""});
-  const [newIdea,setNewIdea]=useState({title:"",source:"original",nicheId:"",hook_variations:"",music_ref:"",yt_url:"",yt_timestamps:"",comp_link:""});
+  const [newIdea,setNewIdea]=useState({title:"",source:"original",nicheId:"",hook_variations:"",music_ref:"",yt_url:"",yt_timestamps:"",comp_link:"",frame_link:""});
   const [viewMode,setViewMode]=useState("board");
   const [nicheFilter,setNicheFilter]=useState("all");
   const [pageFilter,setPageFilter]=useState("all");
@@ -422,11 +424,12 @@ export default function ContentTracker(){
       yt_url: newIdea.yt_url.trim() || null,
       yt_timestamps: newIdea.yt_timestamps.trim() || null,
       comp_link: newIdea.source === "competitor" ? (newIdea.comp_link.trim() || null) : null,
+      frame_link: newIdea.frame_link.trim() || null,
       stage: "new",
       type: "reel",
       created_by: user?.user_metadata?.full_name || user?.email?.split("@")[0] || user?.email || null,
     });
-    setNewIdea({title:"",source:"original",nicheId:"",hook_variations:"",music_ref:"",yt_url:"",yt_timestamps:"",comp_link:""});
+    setNewIdea({title:"",source:"original",nicheId:"",hook_variations:"",music_ref:"",yt_url:"",yt_timestamps:"",comp_link:"",frame_link:""});
     setAddOpen(false);
   }
   function moveIdea(id: string, ns: string){
@@ -615,6 +618,7 @@ export default function ContentTracker(){
           <div><label style={ls}>Created by</label><div style={{...is,background:"#27272a",color:"#a1a1aa"}}>{user?.user_metadata?.full_name || user?.email?.split("@")[0] || "—"}</div></div>
           <div><label style={ls}>Hook variations (one per line)</label><textarea value={newIdea.hook_variations} onChange={e=>setNewIdea(p=>({...p,hook_variations:e.target.value}))} rows={4} placeholder={"Hook variation 1\nHook variation 2\nHook variation 3"} style={{...is,resize:"vertical",minHeight:80}}/></div>
           <div><label style={ls}>Music reference / suggestions</label><input value={newIdea.music_ref} onChange={e=>setNewIdea(p=>({...p,music_ref:e.target.value}))} placeholder="e.g. Dark cinematic, trending audio XYZ" style={is}/></div>
+          <div><label style={ls}>Frame link</label><input value={newIdea.frame_link} onChange={e=>setNewIdea(p=>({...p,frame_link:e.target.value}))} placeholder="Google Drive / reference frames link" style={is}/></div>
           {newIdea.source==="original"&&(
             <div style={{display:"flex",gap:10}}>
               <div style={{flex:1}}><label style={ls}>YT link (original source)</label><input value={newIdea.yt_url} onChange={e=>setNewIdea(p=>({...p,yt_url:e.target.value}))} placeholder="https://youtube.com/watch?v=..." style={is}/></div>
@@ -644,6 +648,8 @@ export default function ContentTracker(){
             <div style={{display:"flex",gap:10}}>
               <div style={{flex:1}}><label style={ls}>Music reference / suggestions</label><input defaultValue={cd.music_ref||""} key={cd.id+"_music"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{music_ref:e.target.value.trim()||null}})} placeholder="e.g. Dark cinematic, trending audio" style={is}/></div>
             </div>
+            <div><label style={ls}>Frame link</label><input defaultValue={cd.frame_link||""} key={cd.id+"_frame"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{frame_link:e.target.value.trim()||null}})} placeholder="Google Drive / reference frames link" style={is}/></div>
+            {cd.frame_link&&<a href={cd.frame_link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.frame_link}</a>}
             {cd.source==="original"&&(
               <div style={{display:"flex",gap:10}}>
                 <div style={{flex:1}}><label style={ls}>YT link (original source)</label><input defaultValue={cd.yt_url||""} key={cd.id+"_yturl"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{yt_url:e.target.value.trim()||null}})} placeholder="https://youtube.com/watch?v=..." style={is}/></div>
