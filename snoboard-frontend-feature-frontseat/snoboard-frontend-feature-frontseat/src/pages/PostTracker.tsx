@@ -403,9 +403,18 @@ export default function PostTracker(){
   const [dateFrom,setDateFrom]=useState(monthStart());
   const [dateTo,setDateTo]=useState(today());
   const [compResearchFilter,setCompResearchFilter]=useState(false);
+  const [filterDateFrom,setFilterDateFrom]=useState("");
+  const [filterDateTo,setFilterDateTo]=useState("");
 
   const nicheFiltered=nicheFilter==="all"?ideas:ideas.filter(i=>i.nicheId===nicheFilter);
-  const filteredIdeas=compResearchFilter?nicheFiltered.filter(i=>i.tags?.includes("comp_research")):nicheFiltered;
+  const compFiltered=compResearchFilter?nicheFiltered.filter(i=>i.tags?.includes("comp_research")):nicheFiltered;
+  const filteredIdeas=(filterDateFrom||filterDateTo)?compFiltered.filter(i=>{
+    const d=i.created_at ? i.created_at.slice(0,10) : "";
+    if(!d) return false;
+    if(filterDateFrom && d<filterDateFrom) return false;
+    if(filterDateTo && d>filterDateTo) return false;
+    return true;
+  }):compFiltered;
   const allPagesForFilter=nicheFilter==="all"?niches.flatMap(n=>n.pages):(niches.find(n=>n.id===nicheFilter)?.pages||[]);
 
   // ---- Actions wired to mutations ----
@@ -541,7 +550,13 @@ export default function PostTracker(){
               <button key={v} onClick={()=>setViewMode(v)} style={{padding:"5px 12px",border:"none",fontSize:12,fontWeight:500,cursor:"pointer",background:viewMode===v?"#3f3f46":"transparent",color:viewMode===v?"#fff":"#71717a",boxShadow:viewMode===v?"0 1px 3px rgba(0,0,0,0.06)":"none",textTransform:"capitalize"}}>{v}</button>
             ))}
           </div>
-          <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
+          <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <div style={{display:"flex",alignItems:"center",gap:4}}>
+              <input type="date" value={filterDateFrom} onChange={e=>setFilterDateFrom(e.target.value)} title="From" style={{padding:"5px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:11,background:"#09090b",color:"#a1a1aa",cursor:"pointer"}}/>
+              <span style={{fontSize:10,color:"#52525b"}}>→</span>
+              <input type="date" value={filterDateTo} onChange={e=>setFilterDateTo(e.target.value)} title="To" style={{padding:"5px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:11,background:"#09090b",color:"#a1a1aa",cursor:"pointer"}}/>
+              {(filterDateFrom||filterDateTo)&&<button onClick={()=>{setFilterDateFrom("");setFilterDateTo("");}} style={{padding:"3px 7px",borderRadius:5,border:"none",fontSize:11,cursor:"pointer",background:"transparent",color:"#71717a"}}>✕</button>}
+            </div>
             <button onClick={()=>setCompResearchFilter(!compResearchFilter)} style={{padding:"5px 12px",borderRadius:7,border:compResearchFilter?"2px solid #F0A050":"1px solid #3f3f46",background:compResearchFilter?"rgba(212,118,42,0.15)":"transparent",color:compResearchFilter?"#F0A050":"#71717a",fontSize:11,fontWeight:600,cursor:"pointer"}}>Comp Research</button>
             <button onClick={()=>setSettingsOpen(true)} style={bs}>Niches</button>
             <button onClick={()=>setAddOpen(true)} style={bp}>+ New idea</button>
