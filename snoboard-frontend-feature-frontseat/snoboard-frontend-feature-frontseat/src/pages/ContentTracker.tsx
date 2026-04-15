@@ -238,6 +238,27 @@ function AnalyticsView({ideas,niches,nicheFilter,pageFilter,dateFrom,dateTo,setD
     return Object.values(map).sort((a,b)=>b.totalViews-a.totalViews).slice(0,10);
   },[ideas,nicheFilter,pageFilter,dateFrom,dateTo]);
 
+  // Top contributors: who made how many ideas + their total views + done/scale count
+  const contributors = useMemo(()=>{
+    const map: Record<string,{name:string;total:number;done:number;totalViews:number;winners:number}> = {};
+    ideas.forEach((idea: any)=>{
+      if(nicheFilter!=="all"&&idea.nicheId!==nicheFilter) return;
+      const name = (idea.created_by||"Unknown").trim() || "Unknown";
+      if(!map[name]) map[name]={name,total:0,done:0,totalViews:0,winners:0};
+      map[name].total++;
+      if(idea.stage==="done"||idea.stage==="scale") map[name].done++;
+      (idea.postings||[]).forEach((p: any)=>{
+        if(!p.date||!p.views) return;
+        if(p.date<dateFrom||p.date>dateTo) return;
+        if(pageFilter!=="all"&&p.page!==pageFilter) return;
+        map[name].totalViews+=p.views;
+        const perf=gPerf(p.views,p.baselineViews);
+        if(perf==="topline"||perf==="viral") map[name].winners++;
+      });
+    });
+    return Object.values(map).sort((a,b)=>b.totalViews-a.totalViews||b.done-a.done);
+  },[ideas,nicheFilter,pageFilter,dateFrom,dateTo]);
+
   const cardS={background:"#18181b",borderRadius:12,padding:"16px 18px",border:"1px solid #27272a"};
 
   return(
@@ -298,6 +319,31 @@ function AnalyticsView({ideas,niches,nicheFilter,pageFilter,dateFrom,dateTo,setD
           );
         })}
       </div>
+
+      {contributors.length>0&&(
+        <div style={{...cardS,marginBottom:18}}>
+          <div style={{fontSize:12,fontWeight:600,color:"#fff",marginBottom:10}}>Top contributors</div>
+          <div style={{display:"grid",gridTemplateColumns:"minmax(140px,2fr) 1fr 1fr 1fr 1fr",gap:10,padding:"6px 0",borderBottom:"1px solid #27272a",fontSize:10,color:"#71717a",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.04em"}}>
+            <span>Name</span>
+            <span style={{textAlign:"right"}}>Ideas</span>
+            <span style={{textAlign:"right"}}>Done</span>
+            <span style={{textAlign:"right"}}>Winners</span>
+            <span style={{textAlign:"right"}}>Views</span>
+          </div>
+          {contributors.map((c: any,i: number)=>(
+            <div key={c.name} style={{display:"grid",gridTemplateColumns:"minmax(140px,2fr) 1fr 1fr 1fr 1fr",gap:10,padding:"8px 0",borderBottom:"1px solid #27272a",alignItems:"center"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:11,fontWeight:700,color:i===0?"#F0C060":i===1?"#a1a1aa":i===2?"#D4762A":"#52525b",minWidth:18}}>#{i+1}</span>
+                <span style={{fontSize:13,fontWeight:600,color:"#fff"}}>{c.name}</span>
+              </div>
+              <span style={{fontSize:13,fontWeight:600,color:"#fff",textAlign:"right",fontFamily:"monospace"}}>{c.total}</span>
+              <span style={{fontSize:13,fontWeight:600,color:"#50E0B0",textAlign:"right",fontFamily:"monospace"}}>{c.done}</span>
+              <span style={{fontSize:13,fontWeight:600,color:"#B49EFF",textAlign:"right",fontFamily:"monospace"}}>{c.winners}</span>
+              <span style={{fontSize:13,fontWeight:600,color:"#fff",textAlign:"right",fontFamily:"monospace"}}>{fmtNum(c.totalViews)}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {topIdeas.length>0&&(
         <div style={cardS}>
