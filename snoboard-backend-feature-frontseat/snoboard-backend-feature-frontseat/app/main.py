@@ -1538,7 +1538,10 @@ async def tracker_populate_niche_pages():
     ]
 
     goofies_handles = [
-        "foundersinindia", "indianfounderco", "startupcoded", "startupin24hrs",
+        "lolxfounders", "fii", "ifc", "bip", "indiastartupstory",
+        "elitefounders", "foundersoncrack", "entrepreneurial.india",
+        "indiasbestfounder", "businesscracked", "indianfoundrs",
+        "realindianbusiness", "theprimefounder", "startupcoded",
     ]
 
     # Ensure niches exist and update their pages
