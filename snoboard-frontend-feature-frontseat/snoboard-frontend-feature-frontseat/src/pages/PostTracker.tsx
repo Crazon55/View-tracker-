@@ -675,6 +675,7 @@ export default function PostTracker(){
             {sa[cd.stage]?.length>0&&<div style={{display:"flex",gap:6}}>{sa[cd.stage].map(a=><button key={a.stage} onClick={()=>moveIdea(cd.id,a.stage)} style={a.style}>{a.label}</button>)}</div>}
 
             {/* Editable fields */}
+            <div><label style={ls}>Niche</label><select value={cd.nicheId||""} key={cd.id+"_niche"} onChange={e=>updateIdeaMut.mutate({id:cd.id,data:{niche_id:e.target.value||null}})} style={{...is,cursor:"pointer"}}><option value="">Select niche</option>{niches.map((n: any)=><option key={n.id} value={n.id}>{n.name} ({n.pages.length} pages)</option>)}</select></div>
             <div><label style={ls}>Main page hook</label><input defaultValue={cd.main_page_hook||""} key={cd.id+"_hook"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{main_page_hook:e.target.value.trim()||null}})} placeholder="The main hook for the lead page" style={is}/></div>
             <div><label style={ls}>Hook variations</label><textarea defaultValue={(cd.hook_variations||[]).join("\n")} key={cd.id+"_hooks"} onBlur={e=>{const lines=e.target.value.split("\n").map((l: string)=>l.trim()).filter(Boolean);updateIdeaMut.mutate({id:cd.id,data:{hook_variations:lines.length>0?lines:null}});}} rows={3} placeholder="One hook per line" style={{...is,resize:"vertical",minHeight:60}}/></div>
             <div style={{display:"flex",gap:10}}>
