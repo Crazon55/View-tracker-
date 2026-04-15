@@ -405,6 +405,7 @@ export default function PostTracker(){
   const [compResearchFilter,setCompResearchFilter]=useState(false);
   const [filterDateFrom,setFilterDateFrom]=useState("");
   const [filterDateTo,setFilterDateTo]=useState("");
+  const [collapsedStages,setCollapsedStages]=useState<Record<string,boolean>>({});
 
   const nicheFiltered=nicheFilter==="all"?ideas:ideas.filter(i=>i.nicheId===nicheFilter);
   const compFiltered=compResearchFilter?nicheFiltered.filter(i=>i.tags?.includes("comp_research")):nicheFiltered;
@@ -594,22 +595,22 @@ export default function PostTracker(){
       {/* List */}
       {viewMode==="list"&&(
         <div style={{padding:"14px 24px 14px 70px",maxWidth:960}}>
-          {STAGES.filter(s=>counts[s]>0).map(stage=>(
+          {STAGES.filter(s=>counts[s]>0).map(stage=>{const collapsed=collapsedStages[stage];return(
             <div key={stage} style={{marginBottom:18}}>
-              <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:7}}>
+              <div onClick={()=>setCollapsedStages(p=>({...p,[stage]:!p[stage]}))} style={{display:"flex",alignItems:"center",gap:7,marginBottom:7,cursor:"pointer",userSelect:"none"}}>
+                <span style={{fontSize:10,color:"#71717a",transform:collapsed?"rotate(-90deg)":"rotate(0deg)",transition:"transform 0.15s",display:"inline-block"}}>▼</span>
                 <span style={{width:7,height:7,borderRadius:"50%",background:SC[stage].dot}}/>
                 <span style={{fontSize:13,fontWeight:600,color:SC[stage].text}}>{SL[stage]}</span>
                 <span style={{fontSize:11,color:"#52525b"}}>{counts[stage]}</span>
               </div>
-              {filteredIdeas.filter(i=>i.stage===stage).map(idea=>{const niche=niches.find(n=>n.id===idea.nicheId);return(
+              {!collapsed&&filteredIdeas.filter(i=>i.stage===stage).map(idea=>{const niche=niches.find(n=>n.id===idea.nicheId);return(
                 <div key={idea.id} onClick={()=>openDetail(idea)} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:"#18181b",borderRadius:8,marginBottom:3,border:"1px solid #27272a",cursor:"pointer",fontSize:13}}>
                   <span style={{flex:1,fontWeight:500}}>{idea.title}</span>
                   <span style={{fontSize:11,color:"#52525b"}}>{niche?.name}</span>
                   <span style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:idea.source==="competitor"?"#EEEDFE":"#E8F5EE",color:idea.source==="competitor"?"#534AB7":"#1A5E3A",fontWeight:500}}>{idea.source==="competitor"?"Comp":"Orig"}</span>
                   {idea.postings?.length>0&&<span style={{fontSize:10,color:"#52525b"}}>{idea.postings.length}pg</span>}
                 </div>);})}
-            </div>
-          ))}
+            </div>);})}
           {filteredIdeas.length===0&&<p style={{textAlign:"center",color:"#52525b",padding:40,fontSize:13}}>No ideas yet.</p>}
         </div>
       )}
