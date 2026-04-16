@@ -332,3 +332,10 @@
 .animate-float {
   animation: float 6s ease-in-out infinite;
 }
+
+/* Make native date/time input calendar & clock icons white */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+}

@@ -969,7 +969,7 @@ export default function IdeaEngine() {
 
                     {/* Deadline */}
                     <div className="flex items-center py-2.5 border-b border-zinc-800/50">
-                      <div className="flex items-center gap-2.5 w-40 shrink-0"><Calendar className="w-4 h-4 text-zinc-600" /><span className="text-xs text-zinc-500">Deadline</span></div>
+                      <div className="flex items-center gap-2.5 w-40 shrink-0"><Calendar className="w-4 h-4 text-white" /><span className="text-xs text-zinc-500">Deadline</span></div>
                       <Input type="date" className="h-8 text-sm bg-transparent border-zinc-800 hover:border-zinc-700 focus:border-violet-500/50 w-40 cursor-pointer" value={ed.deadline} onChange={(e) => set("deadline", e.target.value)} onClick={(e) => (e.target as HTMLInputElement).showPicker?.()} />
                     </div>
 
