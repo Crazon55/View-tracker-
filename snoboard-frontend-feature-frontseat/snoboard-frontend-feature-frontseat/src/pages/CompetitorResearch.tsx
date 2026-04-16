@@ -258,7 +258,7 @@ export default function CompetitorResearch() {
                               </div>
                             </>)}
                             <div className="flex items-center gap-1.5 text-xs">
-                              <Calendar className="w-3 h-3 text-zinc-600" />
+                              <Calendar className="w-3 h-3 text-white" />
                               <span className="text-zinc-500">{entry.posted_at?.slice(0, 10) || "—"}</span>
                             </div>
                           </div>

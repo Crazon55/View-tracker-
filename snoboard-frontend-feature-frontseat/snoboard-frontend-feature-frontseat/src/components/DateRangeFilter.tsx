@@ -88,7 +88,7 @@ export default function DateRangeFilter({ from, to, onChange }: DateRangeFilterP
     <div className="space-y-3">
       {/* Preset pills */}
       <div className="flex flex-wrap items-center gap-1.5">
-        <CalendarDays className="w-4 h-4 text-zinc-500 mr-1" />
+        <CalendarDays className="w-4 h-4 text-white mr-1" />
         {presets.map((p) => (
           <button
             key={p.value}
