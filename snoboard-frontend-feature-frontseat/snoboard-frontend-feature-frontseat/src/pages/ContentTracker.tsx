@@ -8,18 +8,18 @@ import {
   createTrackerPosting, updateTrackerPosting, deleteTrackerPosting,
 } from "@/services/api";
 
-const STAGES = ["new","approved","base_edit","testing","batch_edit","idea_bank","scale","kill","done"];
-const SL: Record<string,string> = { new:"New ideas", approved:"Approved", base_edit:"Base edit", testing:"Testing", batch_edit:"Batch edit", idea_bank:"Idea bank", scale:"Scale", kill:"Killed", done:"Done" };
+const STAGES = ["new","approved","base_edit","testing","proven_ideas","idea_bank","scheduled","posted","kill"];
+const SL: Record<string,string> = { new:"New ideas", approved:"Approved", base_edit:"Base edit", testing:"Testing", proven_ideas:"Proven ideas", idea_bank:"Idea bank", scheduled:"Scheduled", posted:"Posted", kill:"Killed" };
 const SC: Record<string,{bg:string;text:string;dot:string}> = {
   new:{ bg:"rgba(74,127,212,0.15)",text:"#7BB0FF",dot:"#4A7FD4" },
   approved:{ bg:"rgba(45,158,95,0.15)",text:"#5AE0A0",dot:"#2D9E5F" },
   base_edit:{ bg:"rgba(123,97,196,0.15)",text:"#B49EFF",dot:"#7B61C4" },
   testing:{ bg:"rgba(212,149,42,0.15)",text:"#F0C060",dot:"#D4952A" },
-  batch_edit:{ bg:"rgba(212,118,42,0.15)",text:"#F0A050",dot:"#D4762A" },
+  proven_ideas:{ bg:"rgba(29,158,117,0.15)",text:"#50E0B0",dot:"#1D9E75" },
   idea_bank:{ bg:"rgba(168,85,247,0.15)",text:"#C4A0FF",dot:"#A855F7" },
-  scale:{ bg:"rgba(29,158,117,0.15)",text:"#50E0B0",dot:"#1D9E75" },
+  scheduled:{ bg:"rgba(83,74,183,0.15)",text:"#9B8FFF",dot:"#534AB7" },
+  posted:{ bg:"rgba(45,158,95,0.15)",text:"#5AE0A0",dot:"#2D9E5F" },
   kill:{ bg:"rgba(201,59,59,0.15)",text:"#FF7070",dot:"#C93B3B" },
-  done:{ bg:"rgba(138,138,128,0.15)",text:"#a1a1aa",dot:"#8A8A80" },
 };
 const PT: Record<string,{label:string;color:string;bg:string}> = {
   below:{ label:"Below",color:"#FF7070",bg:"rgba(201,59,59,0.15)" },
@@ -89,8 +89,8 @@ function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove,stage}: {po:any;
   const [postDate,setPostDate]=useState(po.date||"");
   const fmtNum = (n: number) => { if(n>=1000000) return (n/1000000).toFixed(1)+"M"; if(n>=1000) return (n/1000).toFixed(1)+"k"; return n.toString(); };
 
-  // Stage-based colors: testing=orange, batch_edit=blue, kill=red, scale/done=green
-  const stageColor = stage==="testing"?"#D4952A":stage==="batch_edit"?"#4A7FD4":stage==="idea_bank"?"#A855F7":stage==="kill"?"#C93B3B":(stage==="scale"||stage==="done")?"#22c55e":"#7c3aed";
+  
+  const stageColor = stage==="testing"?"#D4952A":stage==="proven_ideas"?"#1D9E75":stage==="idea_bank"?"#A855F7":stage==="kill"?"#C93B3B":stage==="scheduled"?"#534AB7":stage==="posted"?"#2D9E5F":"#7c3aed";
 
   if(!editing){
     const t = perfTag && PT[perfTag] ? PT[perfTag] : null;
@@ -101,7 +101,7 @@ function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove,stage}: {po:any;
         {po.views!=null&&<span style={{fontSize:12,fontWeight:700,color:"#fff",fontFamily:"monospace"}}>{fmtNum(po.views)}</span>}
         {!po.views&&<span style={{fontSize:11,color:"#52525b"}}>no views yet</span>}
         {t&&<span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:99,background:t.bg,color:t.color}}>{t.label}</span>}
-        {po.views!=null&&(stage==="batch_edit"||stage==="scale"||stage==="done")&&<span style={{fontSize:9,fontWeight:600,padding:"1px 6px",borderRadius:99,background:"rgba(212,149,42,0.15)",color:"#D4952A",border:"1px solid rgba(212,149,42,0.3)"}}>TESTED</span>}
+        {po.views!=null&&(stage==="proven_ideas"||stage==="scheduled"||stage==="posted")&&<span style={{fontSize:9,fontWeight:600,padding:"1px 6px",borderRadius:99,background:"rgba(212,149,42,0.15)",color:"#D4952A",border:"1px solid rgba(212,149,42,0.3)"}}>TESTED</span>}
         <span style={{fontSize:11,color:"#52525b",marginLeft:"auto",whiteSpace:"nowrap"}}>{po.date ? fmtD(po.date) : ""}</span>
       </div>
     );
@@ -252,7 +252,7 @@ function AnalyticsView({ideas,niches,nicheFilter,pageFilter,dateFrom,dateTo,setD
       const name = (idea.created_by||"Unknown").trim() || "Unknown";
       if(!map[name]) map[name]={name,total:0,done:0,totalViews:0,winners:0};
       map[name].total++;
-      if(idea.stage==="done"||idea.stage==="scale") map[name].done++;
+      if(idea.stage==="posted"||idea.stage==="scheduled") map[name].done++;
       (idea.postings||[]).forEach((p: any)=>{
         if(!p.date||!p.views) return;
         if(p.date<dateFrom||p.date>dateTo) return;
@@ -565,11 +565,11 @@ export default function ContentTracker(){
     new:[{label:"Approve",stage:"approved",style:bp},{label:"Reject",stage:"kill",style:{...bs,color:"#C93B3B"}}],
     approved:[{label:"Start base edit",stage:"base_edit",style:bp}],
     base_edit:[{label:"Start testing",stage:"testing",style:bp}],
-    testing:[{label:"Move to batch edit",stage:"batch_edit",style:bp},{label:"Kill it",stage:"kill",style:{...bs,color:"#C93B3B"}}],
-    batch_edit:[{label:"Scale it",stage:"scale",style:{...bp,background:"#1D9E75"}},{label:"Save for later",stage:"idea_bank",style:{...bp,background:"#A855F7"}}],
-    idea_bank:[{label:"Move to scale",stage:"scale",style:{...bp,background:"#1D9E75"}},{label:"Send back to batch",stage:"batch_edit",style:bs}],
-    scale:[{label:"Mark done",stage:"done",style:bp}],
-    kill:[],done:[],
+    testing:[{label:"Proven / Batch edit",stage:"proven_ideas",style:{...bp,background:"#1D9E75"}},{label:"Kill it",stage:"kill",style:{...bs,color:"#C93B3B"}}],
+    proven_ideas:[{label:"Schedule",stage:"scheduled",style:{...bp,background:"#534AB7"}},{label:"Save for later",stage:"idea_bank",style:{...bp,background:"#A855F7"}}],
+    idea_bank:[{label:"Move to proven",stage:"proven_ideas",style:{...bp,background:"#1D9E75"}}],
+    scheduled:[{label:"Mark posted",stage:"posted",style:{...bp,background:"#2D9E5F"}}],
+    posted:[],kill:[],
   };
 
   const counts: Record<string,number>={};STAGES.forEach(s=>{counts[s]=filteredIdeas.filter(i=>i.stage===s).length;});
@@ -750,12 +750,12 @@ export default function ContentTracker(){
             {cd.source==="competitor"&&cd.comp_link&&<a href={cd.comp_link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.comp_link}</a>}
 
             {/* Page checklist — from testing stage onwards */}
-            {cdPages.length>0&&!["new","approved","base_edit","idea_bank"].includes(cd.stage)&&(
+            {cdPages.length>0&&!["new","approved","base_edit"].includes(cd.stage)&&(
               <div>
                 <label style={{...ls,marginBottom:8}}>Pages ({cdNiches.map((n: any)=>n.name).join(", ")}) — select, schedule & track</label>
                 {cdPages.map((page: string)=>{const isP=pp.includes(page);const pi=(cd.postings||[]).findIndex((p: any)=>p.page===page);const po=pi>=0?cd.postings[pi]:null;const dk=`${cd.id}_${page}`;
-                  const sBorder=isP?(cd.stage==="testing"?"1.5px solid rgba(212,149,42,0.4)":cd.stage==="batch_edit"?"1.5px solid rgba(74,127,212,0.4)":cd.stage==="idea_bank"?"1.5px solid rgba(168,85,247,0.4)":cd.stage==="kill"?"1.5px solid rgba(201,59,59,0.4)":(cd.stage==="scale"||cd.stage==="done")?"1.5px solid rgba(34,197,94,0.4)":"1.5px solid #3f3f46"):"1px solid #27272a";
-                  const sBg=isP?(cd.stage==="testing"?"rgba(212,149,42,0.04)":cd.stage==="batch_edit"?"rgba(74,127,212,0.04)":cd.stage==="idea_bank"?"rgba(168,85,247,0.04)":cd.stage==="kill"?"rgba(201,59,59,0.04)":(cd.stage==="scale"||cd.stage==="done")?"rgba(34,197,94,0.04)":"#1a1a2e"):"#18181b";
+                  const sBorder=isP?(cd.stage==="testing"?"1.5px solid rgba(212,149,42,0.4)":cd.stage==="proven_ideas"?"1.5px solid rgba(29,158,117,0.4)":cd.stage==="idea_bank"?"1.5px solid rgba(168,85,247,0.4)":cd.stage==="kill"?"1.5px solid rgba(201,59,59,0.4)":(cd.stage==="scheduled"||cd.stage==="posted")?"1.5px solid rgba(34,197,94,0.4)":"1.5px solid #3f3f46"):"1px solid #27272a";
+                  const sBg=isP?(cd.stage==="testing"?"rgba(212,149,42,0.04)":cd.stage==="proven_ideas"?"rgba(29,158,117,0.04)":cd.stage==="idea_bank"?"rgba(168,85,247,0.04)":cd.stage==="kill"?"rgba(201,59,59,0.04)":(cd.stage==="scheduled"||cd.stage==="posted")?"rgba(34,197,94,0.04)":"#1a1a2e"):"#18181b";
                   return(
                   <div key={page} style={{padding:"10px 12px",background:sBg,borderRadius:8,marginBottom:4,border:sBorder}}>
                     {isP&&po?(
