@@ -445,6 +445,7 @@ export default function ContentTracker(){
   // ---- Local UI state (unchanged) ----
   const [addOpen,setAddOpen]=useState(false);
   const [detailIdea,setDetailIdea]=useState<any>(null);
+  const [detailNicheIds,setDetailNicheIds]=useState<string[]>([]);
   const [settingsOpen,setSettingsOpen]=useState(false);
   const [addNicheOpen,setAddNicheOpen]=useState(false);
   const [editNiche,setEditNiche]=useState<any>(null);
@@ -550,7 +551,7 @@ export default function ContentTracker(){
   const bs: React.CSSProperties={padding:"9px 20px",background:"#27272a",color:"#e4e4e7",border:"1px solid #3f3f46",borderRadius:9,fontSize:13,fontWeight:500,cursor:"pointer"};
 
   const cd=detailIdea?ideas.find(i=>i.id===detailIdea.id)||detailIdea:null;
-  const cdNiches=cd?niches.filter((n: any)=>(cd.nicheIds||[]).includes(n.id)):[];
+  const cdNiches=cd?niches.filter((n: any)=>detailNicheIds.includes(n.id)):[];
   const cdPages=cdNiches.flatMap((n: any)=>n.pages||[]).filter((v: string,i: number,a: string[])=>a.indexOf(v)===i);
 
   const sa: Record<string, {label:string;stage:string;style:React.CSSProperties}[]>={
@@ -565,7 +566,7 @@ export default function ContentTracker(){
   };
 
   const counts: Record<string,number>={};STAGES.forEach(s=>{counts[s]=filteredIdeas.filter(i=>i.stage===s).length;});
-  function openDetail(idea: any){setDetailIdea(idea);setScheduleDate({});}
+  function openDetail(idea: any){setDetailIdea(idea);setDetailNicheIds(idea.nicheIds||[]);setScheduleDate({});}
 
   // ---- Loading spinner ----
   if(isLoading){
@@ -722,7 +723,7 @@ export default function ContentTracker(){
             {sa[cd.stage]?.length>0&&<div style={{display:"flex",gap:6}}>{sa[cd.stage].map(a=><button key={a.stage} onClick={()=>moveIdea(cd.id,a.stage)} style={a.style}>{a.label}</button>)}</div>}
 
             {/* Editable fields */}
-            <div><label style={ls}>Niches</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{niches.map((n: any)=>{const sel=(cd.nicheIds||[]).includes(n.id);return <button key={n.id} onClick={()=>{const cur=cd.nicheIds||[];const next=sel?cur.filter((x: string)=>x!==n.id):[...cur,n.id];updateIdeaMut.mutate({id:cd.id,data:{niche_ids:next}});}} style={{padding:"6px 12px",borderRadius:8,border:sel?"2px solid #7c3aed":"1.5px solid #3f3f46",background:sel?"#27272a":"#18181b",fontSize:12,fontWeight:600,cursor:"pointer",color:sel?"#fff":"#71717a"}}>{n.name}</button>;})}</div></div>
+            <div><label style={ls}>Niches</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{niches.map((n: any)=>{const sel=detailNicheIds.includes(n.id);return <button key={n.id} onClick={()=>{const next=sel?detailNicheIds.filter((x: string)=>x!==n.id):[...detailNicheIds,n.id];setDetailNicheIds(next);updateIdeaMut.mutate({id:cd.id,data:{niche_ids:next}});}} style={{padding:"6px 12px",borderRadius:8,border:sel?"2px solid #7c3aed":"1.5px solid #3f3f46",background:sel?"#27272a":"#18181b",fontSize:12,fontWeight:600,cursor:"pointer",color:sel?"#fff":"#71717a"}}>{n.name}</button>;})}</div></div>
             <div><label style={ls}>Hook variations</label><textarea defaultValue={(cd.hook_variations||[]).join("\n")} key={cd.id+"_hooks"} onBlur={e=>{const lines=e.target.value.split("\n").map((l: string)=>l.trim()).filter(Boolean);updateIdeaMut.mutate({id:cd.id,data:{hook_variations:lines.length>0?lines:null}});}} rows={3} placeholder="One hook per line" style={{...is,resize:"vertical",minHeight:60}}/></div>
             <div style={{display:"flex",gap:10}}>
               <div style={{flex:1}}><label style={ls}>Music reference / suggestions</label><input defaultValue={cd.music_ref||""} key={cd.id+"_music"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{music_ref:e.target.value.trim()||null}})} placeholder="e.g. Dark cinematic, trending audio" style={is}/></div>
