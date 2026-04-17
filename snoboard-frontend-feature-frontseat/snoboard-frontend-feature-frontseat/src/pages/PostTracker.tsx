@@ -40,9 +40,10 @@ const monthStart = () => { const d=new Date(); return new Date(d.getFullYear(),d
 
 /** Map a raw API idea to the shape the UI expects */
 function mapIdea(raw: any): any {
+  const nicheIds: string[] = (raw.niche_ids && raw.niche_ids.length > 0) ? raw.niche_ids : (raw.niche_id ? [raw.niche_id] : []);
   return {
     ...raw,
-    nicheId: raw.niche_id,
+    nicheIds,
     createdAt: raw.created_at ? new Date(raw.created_at).getTime() : Date.now(),
     hook_variations: raw.hook_variations || [],
     music_ref: raw.music_ref || null,
@@ -133,7 +134,7 @@ function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove}: {po:any;page:s
 }
 
 function IdeaCard({idea,niches,onClick}: {idea:any;niches:any[];onClick:()=>void}){
-  const niche=niches.find((n: any)=>n.id===idea.nicheId);
+  const ideaNiches=niches.filter((n: any)=>(idea.nicheIds||[]).includes(n.id));
   const pc=idea.postings?.length||0;
   const bp=idea.postings?.reduce((b: string|null, p: any)=>{const t=gPerf(p.views,p.baselineViews);const o: Record<string,number>={viral:4,topline:3,baseline:2,below:1};return(o[t||""]||0)>(o[b||""]||0)?t:b;},null);
   return(
@@ -146,7 +147,7 @@ function IdeaCard({idea,niches,onClick}: {idea:any;niches:any[];onClick:()=>void
       <div style={{display:"flex",gap:4,marginTop:6,flexWrap:"wrap",alignItems:"center"}}>
         <span style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:idea.source==="competitor"?"#EEEDFE":"#E8F5EE",color:idea.source==="competitor"?"#534AB7":"#1A5E3A",fontWeight:500}}>{idea.source==="competitor"?"Comp":"Orig"}</span>
         {idea.format&&<span style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:"#18181b",color:"#a1a1aa",fontWeight:500,textTransform:"capitalize",border:"1px solid #3f3f46"}}>{idea.format}</span>}
-        {niche&&<span style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:"#27272a",color:"#a1a1aa",fontWeight:500}}>{niche.name}</span>}
+        {ideaNiches.map((n: any)=><span key={n.id} style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:"#27272a",color:"#a1a1aa",fontWeight:500}}>{n.name}</span>)}
         {idea.content_pillar&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:99,background:"rgba(124,58,237,0.15)",color:"#B49EFF",fontWeight:500}}>{idea.content_pillar}</span>}
         {pc>0&&<span style={{fontSize:10,color:"#52525b",fontWeight:500}}>{pc}pg</span>}
       </div>
@@ -164,7 +165,7 @@ function IdeaCard({idea,niches,onClick}: {idea:any;niches:any[];onClick:()=>void
 function CalendarView({ideas,niches,nicheFilter,pageFilter,onClickIdea,weekStart,setWeekStart}: any){
   const days=getWD(weekStart); const dl=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
   const ncm=useMemo(()=>{const p=["#4A7FD4","#1D9E75","#D4952A","#534AB7","#D85A30","#D4537E","#639922","#185FA5"];const m: Record<string,string>={};niches.forEach((n: any,i: number)=>{m[n.id]=p[i%p.length];});return m;},[niches]);
-  const entries=useMemo(()=>{const r: any[]=[];ideas.forEach((idea: any)=>{(idea.postings||[]).forEach((p: any)=>{if(!p.date)return;if(nicheFilter!=="all"&&idea.nicheId!==nicheFilter)return;if(pageFilter!=="all"&&p.page!==pageFilter)return;r.push({idea,posting:p});});});return r;},[ideas,nicheFilter,pageFilter]);
+  const entries=useMemo(()=>{const r: any[]=[];ideas.forEach((idea: any)=>{(idea.postings||[]).forEach((p: any)=>{if(!p.date)return;if(nicheFilter!=="all"&&!(idea.nicheIds||[]).includes(nicheFilter))return;if(pageFilter!=="all"&&p.page!==pageFilter)return;r.push({idea,posting:p});});});return r;},[ideas,nicheFilter,pageFilter]);
   return(
     <div style={{padding:"16px 24px 24px 70px"}}>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
@@ -177,7 +178,7 @@ function CalendarView({ideas,niches,nicheFilter,pageFilter,onClickIdea,weekStart
         {days.map((day: string,i: number)=>{const isT=day===today();const de=entries.filter((e: any)=>e.posting.date===day);return(
           <div key={day} style={{background:isT?"#1a1a14":"#18181b",minHeight:120,display:"flex",flexDirection:"column"}}>
             <div style={{padding:"6px 6px 3px",borderBottom:"1px solid #27272a"}}><span style={{fontSize:10,fontWeight:600,color:isT?"#D4952A":"#999"}}>{dl[i]}</span><span style={{fontSize:12,fontWeight:isT?700:500,color:isT?"#1a1a1a":"#666",marginLeft:5}}>{new Date(day+"T00:00:00").getDate()}</span></div>
-            <div style={{padding:"3px 3px 6px",flex:1,overflow:"auto"}}>{de.map((e: any,idx: number)=>{const perf=gPerf(e.posting.views,e.posting.baselineViews);const nc=ncm[e.idea.nicheId]||"#888";return(
+            <div style={{padding:"3px 3px 6px",flex:1,overflow:"auto"}}>{de.map((e: any,idx: number)=>{const perf=gPerf(e.posting.views,e.posting.baselineViews);const nc=ncm[(e.idea.nicheIds||[])[0]]||"#888";return(
               <div key={idx} onClick={()=>onClickIdea(e.idea)} style={{padding:"4px 6px",marginBottom:2,borderRadius:5,fontSize:10,background:`${nc}11`,borderLeft:`3px solid ${nc}`,cursor:"pointer"}}>
                 <div style={{fontWeight:600,color:"#fff",lineHeight:1.3,marginBottom:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.idea.title}</div>
                 <div style={{display:"flex",gap:3,alignItems:"center",flexWrap:"wrap"}}><span style={{color:"#71717a",fontWeight:500}}>{e.posting.page}</span>{e.posting.views&&<span style={{color:"#52525b"}}>· {fmtNum(e.posting.views)}</span>}{perf&&<PB tag={perf}/>}</div>
@@ -198,7 +199,7 @@ function AnalyticsView({ideas,niches,nicheFilter,pageFilter,dateFrom,dateTo,setD
     const pageMap: Record<string,{views:number;posts:number;best:string|null}>={};
     const dailyMap: Record<string,number>={};
     ideas.forEach((idea: any)=>{
-      if(nicheFilter!=="all"&&idea.nicheId!==nicheFilter) return;
+      if(nicheFilter!=="all"&&!(idea.nicheIds||[]).includes(nicheFilter)) return;
       (idea.postings||[]).forEach((p: any)=>{
         if(!p.date||!p.views) return;
         if(p.date<dateFrom||p.date>dateTo) return;
@@ -224,7 +225,7 @@ function AnalyticsView({ideas,niches,nicheFilter,pageFilter,dateFrom,dateTo,setD
   const topIdeas = useMemo(()=>{
     const map: Record<string,{idea:any;totalViews:number;bestPerf:string|null}>={};
     ideas.forEach((idea: any)=>{
-      if(nicheFilter!=="all"&&idea.nicheId!==nicheFilter) return;
+      if(nicheFilter!=="all"&&!(idea.nicheIds||[]).includes(nicheFilter)) return;
       (idea.postings||[]).forEach((p: any)=>{
         if(!p.date||!p.views) return;
         if(p.date<dateFrom||p.date>dateTo) return;
@@ -242,7 +243,7 @@ function AnalyticsView({ideas,niches,nicheFilter,pageFilter,dateFrom,dateTo,setD
   const contributors = useMemo(()=>{
     const map: Record<string,{name:string;total:number;done:number;totalViews:number;winners:number}> = {};
     ideas.forEach((idea: any)=>{
-      if(nicheFilter!=="all"&&idea.nicheId!==nicheFilter) return;
+      if(nicheFilter!=="all"&&!(idea.nicheIds||[]).includes(nicheFilter)) return;
       const name = (idea.created_by||"Unknown").trim() || "Unknown";
       if(!map[name]) map[name]={name,total:0,done:0,totalViews:0,winners:0};
       map[name].total++;
@@ -443,7 +444,7 @@ export default function PostTracker(){
   const [addNicheOpen,setAddNicheOpen]=useState(false);
   const [editNiche,setEditNiche]=useState<any>(null);
   const [newNiche,setNewNiche]=useState({name:"",pages:""});
-  const [newIdea,setNewIdea]=useState({title:"",source:"original",nicheId:"",format:"static",main_page_hook:"",content_pillar:"",content_bucket:"",hook_variations:"",comp_link:""});
+  const [newIdea,setNewIdea]=useState({title:"",source:"original",nicheIds:[] as string[],format:"static",main_page_hook:"",content_pillar:"",content_bucket:"",hook_variations:"",comp_link:""});
   const [viewMode,setViewMode]=useState("board");
   const [nicheFilter,setNicheFilter]=useState("all");
   const [pageFilter,setPageFilter]=useState("all");
@@ -457,7 +458,7 @@ export default function PostTracker(){
   const [filterDateTo,setFilterDateTo]=useState("");
   const [collapsedStages,setCollapsedStages]=useState<Record<string,boolean>>({});
 
-  const nicheFiltered=nicheFilter==="all"?ideas:ideas.filter(i=>i.nicheId===nicheFilter);
+  const nicheFiltered=nicheFilter==="all"?ideas:ideas.filter(i=>(i.nicheIds||[]).includes(nicheFilter));
   const sourceFiltered=sourceFilter==="all"?nicheFiltered:nicheFiltered.filter(i=>i.source===sourceFilter);
   const compFiltered=compResearchFilter?sourceFiltered.filter(i=>i.tags?.includes("comp_research")):sourceFiltered;
   const filteredIdeas=(filterDateFrom||filterDateTo)?compFiltered.filter(i=>{
@@ -467,16 +468,16 @@ export default function PostTracker(){
     if(filterDateTo && d>filterDateTo) return false;
     return true;
   }):compFiltered;
-  const allPagesForFilter=nicheFilter==="all"?niches.flatMap(n=>n.pages):(niches.find(n=>n.id===nicheFilter)?.pages||[]);
+  const allPagesForFilter=nicheFilter==="all"?niches.flatMap((n: any)=>n.pages):(niches.find((n: any)=>n.id===nicheFilter)?.pages||[]);
 
   // ---- Actions wired to mutations ----
   function addIdeaFn(){
-    if(!newIdea.title.trim()||!newIdea.nicheId)return;
+    if(!newIdea.title.trim()||newIdea.nicheIds.length===0)return;
     const hookLines = newIdea.hook_variations.split("\n").map(l=>l.trim()).filter(Boolean);
     createIdeaMut.mutate({
       title: newIdea.title.trim(),
       source: newIdea.source,
-      niche_id: newIdea.nicheId,
+      niche_ids: newIdea.nicheIds,
       format: newIdea.format,
       main_page_hook: newIdea.main_page_hook.trim() || null,
       content_pillar: newIdea.content_pillar || null,
@@ -487,7 +488,7 @@ export default function PostTracker(){
       type: "post",
       created_by: user?.user_metadata?.full_name || user?.email?.split("@")[0] || user?.email || null,
     });
-    setNewIdea({title:"",source:"original",nicheId:"",format:"static",main_page_hook:"",content_pillar:"",content_bucket:"",hook_variations:"",comp_link:""});
+    setNewIdea({title:"",source:"original",nicheIds:[],format:"static",main_page_hook:"",content_pillar:"",content_bucket:"",hook_variations:"",comp_link:""});
     setAddOpen(false);
   }
   function moveIdea(id: string, ns: string){
@@ -544,7 +545,8 @@ export default function PostTracker(){
   const bs: React.CSSProperties={padding:"9px 20px",background:"#27272a",color:"#e4e4e7",border:"1px solid #3f3f46",borderRadius:9,fontSize:13,fontWeight:500,cursor:"pointer"};
 
   const cd=detailIdea?ideas.find(i=>i.id===detailIdea.id)||detailIdea:null;
-  const dn=cd?niches.find(n=>n.id===cd.nicheId):null;
+  const cdNiches=cd?niches.filter((n: any)=>(cd.nicheIds||[]).includes(n.id)):[];
+  const cdPages=cdNiches.flatMap((n: any)=>n.pages||[]).filter((v: string,i: number,a: string[])=>a.indexOf(v)===i);
 
   const sa: Record<string, {label:string;stage:string;style:React.CSSProperties}[]>={
     new:[{label:"Approve",stage:"approved",style:bp}],
@@ -659,10 +661,10 @@ export default function PostTracker(){
                 <span style={{fontSize:13,fontWeight:600,color:SC[stage].text}}>{SL[stage]}</span>
                 <span style={{fontSize:11,color:"#52525b"}}>{counts[stage]}</span>
               </div>
-              {!collapsed&&filteredIdeas.filter(i=>i.stage===stage).map(idea=>{const niche=niches.find(n=>n.id===idea.nicheId);return(
+              {!collapsed&&filteredIdeas.filter(i=>i.stage===stage).map(idea=>{const ideaNiches=niches.filter((n: any)=>(idea.nicheIds||[]).includes(n.id));return(
                 <div key={idea.id} onClick={()=>openDetail(idea)} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:"#18181b",borderRadius:8,marginBottom:3,border:"1px solid #27272a",cursor:"pointer",fontSize:13}}>
                   <span style={{flex:1,fontWeight:500}}>{idea.title}</span>
-                  <span style={{fontSize:11,color:"#52525b"}}>{niche?.name}</span>
+                  <span style={{fontSize:11,color:"#52525b"}}>{ideaNiches.map((n: any)=>n.name).join(", ")}</span>
                   <span style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:idea.source==="competitor"?"#EEEDFE":"#E8F5EE",color:idea.source==="competitor"?"#534AB7":"#1A5E3A",fontWeight:500}}>{idea.source==="competitor"?"Comp":"Orig"}</span>
                   {idea.postings?.length>0&&<span style={{fontSize:10,color:"#52525b"}}>{idea.postings.length}pg</span>}
                 </div>);})}
@@ -686,7 +688,7 @@ export default function PostTracker(){
             <div style={{flex:1}}><label style={ls}>Format</label><div style={{display:"flex",gap:6}}>{["static","carousel"].map(f=><button key={f} onClick={()=>setNewIdea(p=>({...p,format:f}))} style={{flex:1,padding:"8px 10px",borderRadius:8,border:newIdea.format===f?"2px solid #7c3aed":"1.5px solid #3f3f46",background:newIdea.format===f?"#27272a":"#18181b",fontSize:12,fontWeight:600,cursor:"pointer",textTransform:"capitalize"}}>{f}</button>)}</div></div>
           </div>
           <div style={{display:"flex",gap:10}}>
-            <div style={{flex:1}}><label style={ls}>Niche *</label><select value={newIdea.nicheId} onChange={e=>setNewIdea(p=>({...p,nicheId:e.target.value}))} style={{...is,cursor:"pointer"}}><option value="">Select niche</option>{niches.map(n=><option key={n.id} value={n.id}>{n.name} ({n.pages.length} pages)</option>)}</select></div>
+            <div style={{flex:1}}><label style={ls}>Niches *</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{niches.map((n: any)=>{const sel=newIdea.nicheIds.includes(n.id);return <button key={n.id} type="button" onClick={()=>setNewIdea(p=>({...p,nicheIds:sel?p.nicheIds.filter(x=>x!==n.id):[...p.nicheIds,n.id]}))} style={{padding:"6px 12px",borderRadius:8,border:sel?"2px solid #7c3aed":"1.5px solid #3f3f46",background:sel?"#27272a":"#18181b",fontSize:12,fontWeight:600,cursor:"pointer",color:sel?"#fff":"#71717a"}}>{n.name}</button>;})}</div></div>
             <div style={{flex:1}}><label style={ls}>Created by</label><div style={{...is,background:"#27272a",color:"#a1a1aa"}}>{user?.user_metadata?.full_name || user?.email?.split("@")[0] || "—"}</div></div>
           </div>
           <div><label style={ls}>Main page hook</label><input value={newIdea.main_page_hook} onChange={e=>setNewIdea(p=>({...p,main_page_hook:e.target.value}))} placeholder="The main hook for the lead page" style={is}/></div>
@@ -713,7 +715,7 @@ export default function PostTracker(){
           {newIdea.source==="competitor"&&(
             <div><label style={ls}>Comp link</label><input value={newIdea.comp_link} onChange={e=>setNewIdea(p=>({...p,comp_link:e.target.value}))} placeholder="Competitor post URL" style={is}/></div>
           )}
-          <button onClick={addIdeaFn} disabled={!newIdea.title.trim()||!newIdea.nicheId} style={{...bp,opacity:(!newIdea.title.trim()||!newIdea.nicheId)?0.4:1,marginTop:2}}>Add idea</button>
+          <button onClick={addIdeaFn} disabled={!newIdea.title.trim()||newIdea.nicheIds.length===0} style={{...bp,opacity:(!newIdea.title.trim()||newIdea.nicheIds.length===0)?0.4:1,marginTop:2}}>Add idea</button>
         </div>
       </Modal>
 
@@ -725,14 +727,14 @@ export default function PostTracker(){
               <span style={{fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:99,background:SC[cd.stage].bg,color:SC[cd.stage].text}}>{SL[cd.stage]}</span>
               <span style={{fontSize:11,padding:"3px 9px",borderRadius:99,background:cd.source==="competitor"?"#EEEDFE":"#E8F5EE",color:cd.source==="competitor"?"#534AB7":"#1A5E3A",fontWeight:500}}>{cd.source==="competitor"?"Competitor":"Original"}</span>
               {cd.format&&<span style={{fontSize:11,padding:"3px 9px",borderRadius:99,background:"#18181b",color:"#a1a1aa",fontWeight:500,textTransform:"capitalize",border:"1px solid #3f3f46"}}>{cd.format}</span>}
-              {dn&&<span style={{fontSize:11,padding:"3px 9px",borderRadius:99,background:"#27272a",color:"#a1a1aa",fontWeight:500}}>{dn.name}</span>}
+              {cdNiches.map((n: any)=><span key={n.id} style={{fontSize:11,padding:"3px 9px",borderRadius:99,background:"#27272a",color:"#a1a1aa",fontWeight:500}}>{n.name}</span>)}
               {cd.content_pillar&&<span style={{fontSize:10,padding:"2px 8px",borderRadius:99,background:"rgba(124,58,237,0.15)",color:"#B49EFF",fontWeight:500}}>{cd.content_pillar}</span>}
               {cd.content_bucket&&<span style={{fontSize:10,padding:"2px 8px",borderRadius:99,background:"rgba(212,149,42,0.15)",color:"#F0C060",fontWeight:500}}>{cd.content_bucket}</span>}
             </div>
             {sa[cd.stage]?.length>0&&<div style={{display:"flex",gap:6}}>{sa[cd.stage].map(a=><button key={a.stage} onClick={()=>moveIdea(cd.id,a.stage)} style={a.style}>{a.label}</button>)}</div>}
 
             {/* Editable fields */}
-            <div><label style={ls}>Niche</label><select value={cd.nicheId||""} key={cd.id+"_niche"} onChange={e=>updateIdeaMut.mutate({id:cd.id,data:{niche_id:e.target.value||null}})} style={{...is,cursor:"pointer"}}><option value="">Select niche</option>{niches.map((n: any)=><option key={n.id} value={n.id}>{n.name} ({n.pages.length} pages)</option>)}</select></div>
+            <div><label style={ls}>Niches</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{niches.map((n: any)=>{const sel=(cd.nicheIds||[]).includes(n.id);return <button key={n.id} onClick={()=>{const cur=cd.nicheIds||[];const next=sel?cur.filter((x: string)=>x!==n.id):[...cur,n.id];updateIdeaMut.mutate({id:cd.id,data:{niche_ids:next}});}} style={{padding:"6px 12px",borderRadius:8,border:sel?"2px solid #7c3aed":"1.5px solid #3f3f46",background:sel?"#27272a":"#18181b",fontSize:12,fontWeight:600,cursor:"pointer",color:sel?"#fff":"#71717a"}}>{n.name}</button>;})}</div></div>
             <div><label style={ls}>Main page hook</label><input defaultValue={cd.main_page_hook||""} key={cd.id+"_hook"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{main_page_hook:e.target.value.trim()||null}})} placeholder="The main hook for the lead page" style={is}/></div>
             <div><label style={ls}>Hook variations</label><textarea defaultValue={(cd.hook_variations||[]).join("\n")} key={cd.id+"_hooks"} onBlur={e=>{const lines=e.target.value.split("\n").map((l: string)=>l.trim()).filter(Boolean);updateIdeaMut.mutate({id:cd.id,data:{hook_variations:lines.length>0?lines:null}});}} rows={3} placeholder="One hook per line" style={{...is,resize:"vertical",minHeight:60}}/></div>
             <div style={{display:"flex",gap:10}}>
@@ -760,10 +762,10 @@ export default function PostTracker(){
             {cd.comp_link&&<a href={cd.comp_link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.comp_link}</a>}
 
             {/* Page checklist — from testing stage onwards */}
-            {dn&&!["new","approved","design_approval","scripted"].includes(cd.stage)&&(
+            {cdPages.length>0&&!["new","approved","design_approval","scripted"].includes(cd.stage)&&(
               <div>
-                <label style={{...ls,marginBottom:8}}>Pages in {dn.name} — select, schedule & track</label>
-                {dn.pages.map((page: string)=>{const isP=pp.includes(page);const pi=(cd.postings||[]).findIndex((p: any)=>p.page===page);const po=pi>=0?cd.postings[pi]:null;const dk=`${cd.id}_${page}`;
+                <label style={{...ls,marginBottom:8}}>Pages ({cdNiches.map((n: any)=>n.name).join(", ")}) — select, schedule & track</label>
+                {cdPages.map((page: string)=>{const isP=pp.includes(page);const pi=(cd.postings||[]).findIndex((p: any)=>p.page===page);const po=pi>=0?cd.postings[pi]:null;const dk=`${cd.id}_${page}`;
                   const sBorder=isP?(cd.stage==="testing"?"1.5px solid rgba(212,149,42,0.4)":(cd.stage==="scheduled"||cd.stage==="uploaded")?"1.5px solid rgba(34,197,94,0.4)":"1.5px solid #3f3f46"):"1px solid #27272a";
                   const sBg=isP?(cd.stage==="testing"?"rgba(212,149,42,0.04)":(cd.stage==="scheduled"||cd.stage==="uploaded")?"rgba(34,197,94,0.04)":"#1a1a2e"):"#18181b";
                   return(
@@ -779,7 +781,7 @@ export default function PostTracker(){
                       </div>
                     )}
                   </div>);})}
-                <div style={{marginTop:8,fontSize:11,color:"#52525b"}}>{pp.length}/{dn.pages.length} pages selected</div>
+                <div style={{marginTop:8,fontSize:11,color:"#52525b"}}>{pp.length}/{cdPages.length} pages selected</div>
               </div>
             )}
             <button onClick={()=>deleteIdea(cd.id)} style={{...bs,color:"#FF7070",borderColor:"#3f3f46",marginTop:6,fontSize:12}}>Delete idea</button>

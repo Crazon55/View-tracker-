@@ -1276,10 +1276,16 @@ async def tracker_ideas_create(request: Request):
     from app.database.client import get_supabase_client
     client = get_supabase_client()
     body = await request.json()
+    niche_ids = body.get("niche_ids") or []
+    if not niche_ids:
+        single = body.get("niche_id") or body.get("nicheId")
+        if single:
+            niche_ids = [single]
     row = {
         "title": body["title"],
         "source": body.get("source", "original"),
-        "niche_id": body.get("niche_id") or body.get("nicheId"),
+        "niche_id": niche_ids[0] if niche_ids else None,
+        "niche_ids": niche_ids,
         "stage": body.get("stage", "new"),
         "link": body.get("link"),
         "notes": body.get("notes"),
@@ -1309,8 +1315,10 @@ async def tracker_ideas_update(idea_id: str, request: Request):
     from app.database.client import get_supabase_client
     client = get_supabase_client()
     body = await request.json()
-    allowed_keys = {"title", "source", "niche_id", "stage", "link", "notes", "hook_variations", "music_ref", "yt_url", "yt_timestamps", "comp_link", "type", "tags", "frame_link", "format", "main_page_hook", "content_pillar", "content_bucket"}
+    allowed_keys = {"title", "source", "niche_id", "niche_ids", "stage", "link", "notes", "hook_variations", "music_ref", "yt_url", "yt_timestamps", "comp_link", "type", "tags", "frame_link", "format", "main_page_hook", "content_pillar", "content_bucket"}
     allowed = {k: v for k, v in body.items() if k in allowed_keys}
+    if "niche_ids" in allowed:
+        allowed["niche_id"] = allowed["niche_ids"][0] if allowed["niche_ids"] else None
     client.table("tracker_ideas").update(allowed).eq("id", idea_id).execute()
     return {"success": True}
 
