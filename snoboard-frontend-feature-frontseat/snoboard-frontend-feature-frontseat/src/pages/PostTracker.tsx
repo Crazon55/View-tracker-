@@ -452,12 +452,14 @@ export default function PostTracker(){
   const [dateFrom,setDateFrom]=useState(monthStart());
   const [dateTo,setDateTo]=useState(today());
   const [compResearchFilter,setCompResearchFilter]=useState(false);
+  const [sourceFilter,setSourceFilter]=useState("all");
   const [filterDateFrom,setFilterDateFrom]=useState("");
   const [filterDateTo,setFilterDateTo]=useState("");
   const [collapsedStages,setCollapsedStages]=useState<Record<string,boolean>>({});
 
   const nicheFiltered=nicheFilter==="all"?ideas:ideas.filter(i=>i.nicheId===nicheFilter);
-  const compFiltered=compResearchFilter?nicheFiltered.filter(i=>i.tags?.includes("comp_research")):nicheFiltered;
+  const sourceFiltered=sourceFilter==="all"?nicheFiltered:nicheFiltered.filter(i=>i.source===sourceFilter);
+  const compFiltered=compResearchFilter?sourceFiltered.filter(i=>i.tags?.includes("comp_research")):sourceFiltered;
   const filteredIdeas=(filterDateFrom||filterDateTo)?compFiltered.filter(i=>{
     const d=i.created_at ? i.created_at.slice(0,10) : "";
     if(!d) return false;
@@ -589,6 +591,11 @@ export default function PostTracker(){
             <option value="all">All niches</option>
             {niches.map(n=><option key={n.id} value={n.id}>{n.name}</option>)}
           </select>
+          <div style={{display:"flex",background:"#27272a",borderRadius:7,overflow:"hidden",border:"1px solid #3f3f46"}}>
+            {([["all","All"],["original","Original"],["competitor","Comp"]] as const).map(([val,label])=>(
+              <button key={val} onClick={()=>setSourceFilter(val)} style={{padding:"5px 12px",border:"none",fontSize:12,fontWeight:500,cursor:"pointer",background:sourceFilter===val?(val==="original"?"#1A5E3A":val==="competitor"?"#534AB7":"#3f3f46"):"transparent",color:sourceFilter===val?"#fff":"#71717a"}}>{label}</button>
+            ))}
+          </div>
           {(viewMode==="calendar"||viewMode==="analytics")&&(
             <select value={pageFilter} onChange={e=>setPageFilter(e.target.value)} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:12,background:"#09090b",cursor:"pointer"}}>
               <option value="all">All pages</option>
