@@ -8,15 +8,14 @@ import {
   createTrackerPosting, updateTrackerPosting, deleteTrackerPosting,
 } from "@/services/api";
 
-const STAGES = ["new","approved","base_edit","testing","proven_ideas","idea_bank","scheduled","posted","kill"];
-const SL: Record<string,string> = { new:"New ideas", approved:"Approved", base_edit:"Base edit", testing:"Testing", proven_ideas:"Proven ideas", idea_bank:"Idea bank", scheduled:"Scheduled", posted:"Posted", kill:"Killed" };
+const STAGES = ["new","approved","base_edit","testing","proven_ideas","scheduled","posted","kill"];
+const SL: Record<string,string> = { new:"New ideas", approved:"Approved", base_edit:"Base edit", testing:"Testing", proven_ideas:"Proven ideas/ Batch edit", scheduled:"Scheduled", posted:"Posted", kill:"Killed" };
 const SC: Record<string,{bg:string;text:string;dot:string}> = {
   new:{ bg:"rgba(74,127,212,0.15)",text:"#7BB0FF",dot:"#4A7FD4" },
   approved:{ bg:"rgba(45,158,95,0.15)",text:"#5AE0A0",dot:"#2D9E5F" },
   base_edit:{ bg:"rgba(123,97,196,0.15)",text:"#B49EFF",dot:"#7B61C4" },
   testing:{ bg:"rgba(212,149,42,0.15)",text:"#F0C060",dot:"#D4952A" },
   proven_ideas:{ bg:"rgba(29,158,117,0.15)",text:"#50E0B0",dot:"#1D9E75" },
-  idea_bank:{ bg:"rgba(168,85,247,0.15)",text:"#C4A0FF",dot:"#A855F7" },
   scheduled:{ bg:"rgba(83,74,183,0.15)",text:"#9B8FFF",dot:"#534AB7" },
   posted:{ bg:"rgba(45,158,95,0.15)",text:"#5AE0A0",dot:"#2D9E5F" },
   kill:{ bg:"rgba(201,59,59,0.15)",text:"#FF7070",dot:"#C93B3B" },
@@ -90,7 +89,7 @@ function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove,stage}: {po:any;
   const fmtNum = (n: number) => { if(n>=1000000) return (n/1000000).toFixed(1)+"M"; if(n>=1000) return (n/1000).toFixed(1)+"k"; return n.toString(); };
 
   
-  const stageColor = stage==="testing"?"#D4952A":stage==="proven_ideas"?"#1D9E75":stage==="idea_bank"?"#A855F7":stage==="kill"?"#C93B3B":stage==="scheduled"?"#534AB7":stage==="posted"?"#2D9E5F":"#7c3aed";
+  const stageColor = stage==="testing"?"#D4952A":stage==="proven_ideas"?"#1D9E75":stage==="kill"?"#C93B3B":stage==="scheduled"?"#534AB7":stage==="posted"?"#2D9E5F":"#7c3aed";
 
   if(!editing){
     const t = perfTag && PT[perfTag] ? PT[perfTag] : null;
@@ -566,8 +565,7 @@ export default function ContentTracker(){
     approved:[{label:"Start base edit",stage:"base_edit",style:bp}],
     base_edit:[{label:"Start testing",stage:"testing",style:bp}],
     testing:[{label:"Proven / Batch edit",stage:"proven_ideas",style:{...bp,background:"#1D9E75"}},{label:"Kill it",stage:"kill",style:{...bs,color:"#C93B3B"}}],
-    proven_ideas:[{label:"Schedule",stage:"scheduled",style:{...bp,background:"#534AB7"}},{label:"Save for later",stage:"idea_bank",style:{...bp,background:"#A855F7"}}],
-    idea_bank:[{label:"Move to proven",stage:"proven_ideas",style:{...bp,background:"#1D9E75"}}],
+    proven_ideas:[{label:"Schedule",stage:"scheduled",style:{...bp,background:"#534AB7"}}],
     scheduled:[{label:"Mark posted",stage:"posted",style:{...bp,background:"#2D9E5F"}}],
     posted:[],kill:[],
   };
@@ -754,8 +752,8 @@ export default function ContentTracker(){
               <div>
                 <label style={{...ls,marginBottom:8}}>Pages ({cdNiches.map((n: any)=>n.name).join(", ")}) — select, schedule & track</label>
                 {cdPages.map((page: string)=>{const isP=pp.includes(page);const pi=(cd.postings||[]).findIndex((p: any)=>p.page===page);const po=pi>=0?cd.postings[pi]:null;const dk=`${cd.id}_${page}`;
-                  const sBorder=isP?(cd.stage==="testing"?"1.5px solid rgba(212,149,42,0.4)":cd.stage==="proven_ideas"?"1.5px solid rgba(29,158,117,0.4)":cd.stage==="idea_bank"?"1.5px solid rgba(168,85,247,0.4)":cd.stage==="kill"?"1.5px solid rgba(201,59,59,0.4)":(cd.stage==="scheduled"||cd.stage==="posted")?"1.5px solid rgba(34,197,94,0.4)":"1.5px solid #3f3f46"):"1px solid #27272a";
-                  const sBg=isP?(cd.stage==="testing"?"rgba(212,149,42,0.04)":cd.stage==="proven_ideas"?"rgba(29,158,117,0.04)":cd.stage==="idea_bank"?"rgba(168,85,247,0.04)":cd.stage==="kill"?"rgba(201,59,59,0.04)":(cd.stage==="scheduled"||cd.stage==="posted")?"rgba(34,197,94,0.04)":"#1a1a2e"):"#18181b";
+                  const sBorder=isP?(cd.stage==="testing"?"1.5px solid rgba(212,149,42,0.4)":cd.stage==="proven_ideas"?"1.5px solid rgba(29,158,117,0.4)":cd.stage==="kill"?"1.5px solid rgba(201,59,59,0.4)":(cd.stage==="scheduled"||cd.stage==="posted")?"1.5px solid rgba(34,197,94,0.4)":"1.5px solid #3f3f46"):"1px solid #27272a";
+                  const sBg=isP?(cd.stage==="testing"?"rgba(212,149,42,0.04)":cd.stage==="proven_ideas"?"rgba(29,158,117,0.04)":cd.stage==="kill"?"rgba(201,59,59,0.04)":(cd.stage==="scheduled"||cd.stage==="posted")?"rgba(34,197,94,0.04)":"#1a1a2e"):"#18181b";
                   return(
                   <div key={page} style={{padding:"10px 12px",background:sBg,borderRadius:8,marginBottom:4,border:sBorder}}>
                     {isP&&po?(
