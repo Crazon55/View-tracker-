@@ -13,11 +13,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
-} from "@/components/ui/dialog";
-import {
   Plus, Trash2, TrendingUp, TrendingDown, ExternalLink,
-  ChevronDown, ChevronUp, BarChart3, CheckCircle2, Clock,
+  ChevronDown, ChevronUp, CheckCircle2, Clock,
   AlertTriangle, Save, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -57,7 +54,6 @@ export default function SixDayTracker() {
   const pageSummaries = monthData?.page_summaries || [];
   const monthDate = monthData?.month_date || `${selectedMonth}-01`;
 
-  // Always compute 5 cycles client-side so the page is never blank
   const cycles = useMemo(() => {
     const serverCycles = monthData?.cycles || [];
     if (serverCycles.length === 5) return serverCycles;
@@ -78,6 +74,7 @@ export default function SixDayTracker() {
         status: today < r.start ? "upcoming" : today <= r.end ? "active" : "done",
         entries: [],
         top_content: [],
+        page_content: {},
         filled_count: 0,
         total_pages: pages.length,
       };
@@ -101,7 +98,6 @@ export default function SixDayTracker() {
   return (
     <div className="min-h-screen bg-zinc-950 pt-20 pb-12 px-4 sm:px-6">
       <div className="max-w-6xl mx-auto">
-        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl sm:text-3xl font-black text-white uppercase tracking-wider">
@@ -130,7 +126,6 @@ export default function SixDayTracker() {
           </div>
         </div>
 
-        {/* Overdue deadline banner */}
         {overdueCycles.length > 0 && (
           <div className="mb-5 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
@@ -147,7 +142,6 @@ export default function SixDayTracker() {
           </div>
         )}
 
-        {/* Month navigator */}
         <div className="flex items-center gap-3 mb-6">
           <button onClick={() => shiftMonth(-1)} className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors">
             <ChevronLeft className="w-5 h-5" />
@@ -177,6 +171,7 @@ export default function SixDayTracker() {
                 onToggle={() => setExpandedCycle(expandedCycle === cycle.cycle ? null : cycle.cycle)}
                 qc={qc}
                 userEmail={user?.email || ""}
+                selectedMonth={selectedMonth}
               />
             ))}
           </div>
@@ -200,7 +195,7 @@ function fmtShort(d: string) {
 
 /* ──────── Cycle Card ──────── */
 function CycleCard({
-  cycle, pages, monthDate, expanded, onToggle, qc, userEmail,
+  cycle, pages, monthDate, expanded, onToggle, qc, userEmail, selectedMonth,
 }: {
   cycle: any;
   pages: any[];
@@ -209,12 +204,11 @@ function CycleCard({
   onToggle: () => void;
   qc: any;
   userEmail: string;
+  selectedMonth: string;
 }) {
-  const entries: any[] = cycle.entries || [];
-  const topContent: any[] = cycle.top_content || [];
-
-  const totalViews = entries.reduce((s: number, e: any) => s + (e.views || 0), 0);
-  const filledCount = entries.length;
+  const allContent: any[] = cycle.top_content || [];
+  const totalViews = allContent.reduce((s: number, t: any) => s + (t.views || 0), 0);
+  const filledPages = new Set(allContent.map((t: any) => t.page_id).filter(Boolean));
 
   const statusIcon = cycle.status === "done"
     ? <CheckCircle2 className="w-4 h-4 text-emerald-400" />
@@ -262,9 +256,9 @@ function CycleCard({
             <p className="text-lg font-black text-white tabular-nums">{fmt(totalViews)}</p>
           </div>
           <div className="hidden sm:block text-right">
-            <p className="text-xs text-zinc-500">Filled</p>
+            <p className="text-xs text-zinc-500">IPs Filled</p>
             <p className="text-sm font-bold text-zinc-300">
-              {filledCount}/{pages.length}
+              {filledPages.size}/{pages.length}
             </p>
           </div>
           {expanded ? <ChevronUp className="w-5 h-5 text-zinc-500" /> : <ChevronDown className="w-5 h-5 text-zinc-500" />}
@@ -280,25 +274,17 @@ function CycleCard({
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="border-t border-zinc-800 p-5 sm:p-6 space-y-6">
-              {/* Entry fill form */}
-              <CycleFillForm
-                cycle={cycle}
-                pages={pages}
-                entries={entries}
-                monthDate={monthDate}
-                qc={qc}
-                userEmail={userEmail}
-              />
-
-              {/* Top Content */}
-              <TopContentSection
-                topContent={topContent}
-                monthDate={monthDate}
-                cycleNumber={cycle.cycle}
-                pages={pages}
-                qc={qc}
-              />
+            <div className="border-t border-zinc-800 p-5 sm:p-6 space-y-2">
+              {pages.map((p: any) => (
+                <IPDropdown
+                  key={p.id}
+                  page={p}
+                  cycle={cycle}
+                  monthDate={monthDate}
+                  qc={qc}
+                  userEmail={userEmail}
+                />
+              ))}
             </div>
           </motion.div>
         )}
@@ -308,375 +294,246 @@ function CycleCard({
 }
 
 
-/* ──────── Cycle Fill Form (all IPs at once) ──────── */
-function CycleFillForm({
-  cycle, pages, entries, monthDate, qc, userEmail,
+/* ──────── IP Dropdown (one per page inside a cycle) ──────── */
+function IPDropdown({
+  page, cycle, monthDate, qc, userEmail,
 }: {
+  page: any;
   cycle: any;
-  pages: any[];
-  entries: any[];
   monthDate: string;
   qc: any;
   userEmail: string;
 }) {
-  const entryMap = useMemo(() => {
-    const m: Record<string, any> = {};
-    for (const e of entries) m[e.page_id] = e;
-    return m;
-  }, [entries]);
+  const [open, setOpen] = useState(false);
+  const [addMode, setAddMode] = useState(false);
+  const [newLink, setNewLink] = useState("");
+  const [newViews, setNewViews] = useState("");
+  const [newType, setNewType] = useState("reel");
 
-  const [drafts, setDrafts] = useState<Record<string, string>>(() => {
-    const d: Record<string, string> = {};
-    for (const p of pages) {
-      const existing = entryMap[p.id];
-      d[p.id] = existing ? String(existing.views || 0) : "";
-    }
-    return d;
-  });
+  const allContent: any[] = cycle.top_content || [];
+  const items = allContent.filter((t: any) => t.page_id === page.id);
+  const totalViews = items.reduce((s: number, t: any) => s + (t.views || 0), 0);
 
-  const bulkMut = useMutation({
-    mutationFn: bulkSaveSixDayEntries,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["six-day-month"] }),
-  });
-
-  function saveAll() {
-    const items = pages
-      .filter((p: any) => drafts[p.id] !== "")
-      .map((p: any) => ({ page_id: p.id, views: Number(drafts[p.id]) || 0 }));
-    if (items.length === 0) return;
-    bulkMut.mutate({
-      month: monthDate,
-      cycle_number: cycle.cycle,
-      filled_by: userEmail,
-      entries: items,
-    });
-  }
-
-  const singleMut = useMutation({
-    mutationFn: upsertSixDayEntry,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["six-day-month"] }),
-  });
-
-  function saveSingle(pageId: string) {
-    const views = Number(drafts[pageId]) || 0;
-    singleMut.mutate({
-      month: monthDate,
-      cycle_number: cycle.cycle,
-      page_id: pageId,
-      views,
-      filled_by: userEmail,
-    });
-  }
-
-  const hasChanges = pages.some((p: any) => {
-    const existing = entryMap[p.id];
-    const draft = drafts[p.id];
-    if (!existing && draft !== "" && draft !== "0") return true;
-    if (existing && String(existing.views || 0) !== draft) return true;
-    return false;
-  });
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-          Views per IP
-        </h3>
-        <Button
-          size="sm"
-          onClick={saveAll}
-          disabled={!hasChanges || bulkMut.isPending}
-          className="gap-1.5 text-xs bg-violet-600 hover:bg-violet-700 disabled:opacity-40"
-        >
-          <Save className="w-3 h-3" />
-          {bulkMut.isPending ? "Saving..." : "Save All"}
-        </Button>
-      </div>
-
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-[10px] uppercase tracking-wider text-zinc-500 border-b border-zinc-800">
-              <th className="text-left py-2 pr-3">IP</th>
-              <th className="text-left py-2 px-2 w-32">Views (6 days)</th>
-              <th className="text-left py-2 px-2">Status</th>
-              <th className="py-2 pl-2 w-16"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {pages.map((p: any) => {
-              const existing = entryMap[p.id];
-              const isFilled = !!existing;
-              return (
-                <tr key={p.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/20 transition-colors">
-                  <td className="py-2.5 pr-3">
-                    <span className="text-white font-medium">{p.name || p.handle}</span>
-                    <span className="text-zinc-600 text-xs ml-2">@{p.handle}</span>
-                  </td>
-                  <td className="py-2.5 px-2">
-                    <Input
-                      type="number"
-                      value={drafts[p.id] ?? ""}
-                      onChange={(e) => setDrafts((prev) => ({ ...prev, [p.id]: e.target.value }))}
-                      onKeyDown={(e) => { if (e.key === "Enter") saveSingle(p.id); }}
-                      placeholder="0"
-                      className="h-8 w-28 text-xs bg-zinc-800 border-zinc-700 text-white tabular-nums"
-                    />
-                  </td>
-                  <td className="py-2.5 px-2">
-                    {isFilled ? (
-                      <span className="inline-flex items-center gap-1 text-emerald-400 text-xs">
-                        <CheckCircle2 className="w-3 h-3" /> Filled
-                      </span>
-                    ) : (
-                      <span className="text-zinc-600 text-xs">—</span>
-                    )}
-                  </td>
-                  <td className="py-2.5 pl-2">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => saveSingle(p.id)}
-                      disabled={singleMut.isPending}
-                      className="h-7 text-[10px] text-zinc-400 hover:text-white"
-                    >
-                      Save
-                    </Button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-
-/* ──────── Top Content Section ──────── */
-function TopContentSection({
-  topContent, monthDate, cycleNumber, pages, qc,
-}: {
-  topContent: any[];
-  monthDate: string;
-  cycleNumber: number;
-  pages: any[];
-  qc: any;
-}) {
   const createMut = useMutation({
     mutationFn: createSixDayTopContent,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["six-day-month"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["six-day-month"] });
+      setNewLink("");
+      setNewViews("");
+      setNewType("reel");
+      setAddMode(false);
+    },
   });
+
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Record<string, any> }) =>
       updateSixDayTopContent(id, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["six-day-month"] }),
   });
+
   const deleteMut = useMutation({
     mutationFn: deleteSixDayTopContent,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["six-day-month"] }),
   });
 
+  function handleAdd() {
+    if (!newLink) return;
+    createMut.mutate({
+      month: monthDate,
+      cycle_number: cycle.cycle,
+      link: newLink,
+      views: Number(newViews) || 0,
+      page_id: page.id,
+      page_handle: page.handle,
+      content_type: newType,
+    });
+  }
+
   return (
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-          Top 5–10 Reels / Posts
-        </h3>
-        <AddTopContentDialog
-          monthDate={monthDate}
-          cycleNumber={cycleNumber}
-          pages={pages}
-          onAdd={(d) => createMut.mutate(d)}
-        />
-      </div>
-      {topContent.length === 0 ? (
-        <p className="text-xs text-zinc-600 py-4 text-center">No top content added yet.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-[10px] uppercase tracking-wider text-zinc-500 border-b border-zinc-800">
-                <th className="text-left py-2 pr-3">Link</th>
-                <th className="text-right py-2 px-2">Views</th>
-                <th className="text-left py-2 px-2">Page</th>
-                <th className="text-left py-2 px-2">Type</th>
-                <th className="py-2 pl-2 w-8"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {topContent
-                .sort((a: any, b: any) => (b.views || 0) - (a.views || 0))
-                .map((item: any) => (
-                  <TopContentRow
-                    key={item.id}
-                    item={item}
-                    onUpdate={(id, data) => updateMut.mutate({ id, data })}
-                    onDelete={(id) => deleteMut.mutate(id)}
-                  />
-                ))}
-            </tbody>
-          </table>
+    <div className="border border-zinc-800 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/30 transition-colors"
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <div className={`w-2 h-2 rounded-full shrink-0 ${items.length > 0 ? "bg-emerald-400" : "bg-zinc-700"}`} />
+          <span className="text-white font-semibold text-sm truncate">{page.name || page.handle}</span>
+          <span className="text-zinc-600 text-xs">@{page.handle}</span>
         </div>
-      )}
+        <div className="flex items-center gap-4 shrink-0">
+          <div className="text-right">
+            <span className="text-white font-bold text-sm tabular-nums">{fmt(totalViews)}</span>
+            <span className="text-zinc-600 text-xs ml-1.5">{items.length} item{items.length !== 1 ? "s" : ""}</span>
+          </div>
+          {open ? <ChevronUp className="w-4 h-4 text-zinc-500" /> : <ChevronDown className="w-4 h-4 text-zinc-500" />}
+        </div>
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="overflow-hidden"
+          >
+            <div className="border-t border-zinc-800 bg-zinc-950/50 p-4 space-y-3">
+              {items.length > 0 && (
+                <div className="space-y-1.5">
+                  {items
+                    .sort((a: any, b: any) => (b.views || 0) - (a.views || 0))
+                    .map((item: any) => (
+                      <ContentItemRow
+                        key={item.id}
+                        item={item}
+                        onUpdate={(data) => updateMut.mutate({ id: item.id, data })}
+                        onDelete={() => deleteMut.mutate(item.id)}
+                      />
+                    ))}
+                  <div className="flex justify-end pt-1">
+                    <span className="text-xs text-zinc-500">Total: <span className="text-white font-bold">{fmt(totalViews)}</span></span>
+                  </div>
+                </div>
+              )}
+
+              {items.length === 0 && !addMode && (
+                <p className="text-xs text-zinc-600 text-center py-2">No content added yet</p>
+              )}
+
+              {addMode ? (
+                <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 space-y-2">
+                  <div className="flex gap-2">
+                    <Input
+                      value={newLink}
+                      onChange={(e) => setNewLink(e.target.value)}
+                      placeholder="Instagram link..."
+                      className="h-8 text-xs bg-zinc-800 border-zinc-700 text-white flex-1"
+                    />
+                    <Input
+                      type="number"
+                      value={newViews}
+                      onChange={(e) => setNewViews(e.target.value)}
+                      placeholder="Views"
+                      className="h-8 w-24 text-xs bg-zinc-800 border-zinc-700 text-white tabular-nums"
+                    />
+                    <Select value={newType} onValueChange={setNewType}>
+                      <SelectTrigger className="h-8 w-20 text-xs bg-zinc-800 border-zinc-700 text-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-zinc-800 border-zinc-700">
+                        <SelectItem value="reel" className="text-white text-xs">Reel</SelectItem>
+                        <SelectItem value="post" className="text-white text-xs">Post</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => { setAddMode(false); setNewLink(""); setNewViews(""); }}
+                      className="h-7 text-xs text-zinc-400"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleAdd}
+                      disabled={!newLink || createMut.isPending}
+                      className="h-7 text-xs bg-violet-600 hover:bg-violet-700"
+                    >
+                      {createMut.isPending ? "Adding..." : "Add"}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setAddMode(true)}
+                  className="flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 transition-colors px-1"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add reel / post
+                </button>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
 
-/* ──────── Top Content Row ──────── */
-function TopContentRow({ item, onUpdate, onDelete }: {
+/* ──────── Content Item Row ──────── */
+function ContentItemRow({ item, onUpdate, onDelete }: {
   item: any;
-  onUpdate: (id: string, data: Record<string, any>) => void;
-  onDelete: (id: string) => void;
+  onUpdate: (data: Record<string, any>) => void;
+  onDelete: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [link, setLink] = useState(item.link || "");
   const [views, setViews] = useState(String(item.views || 0));
-  const [handle, setHandle] = useState(item.page_handle || "");
   const [type, setType] = useState(item.content_type || "reel");
 
   function save() {
-    onUpdate(item.id, { link, views: Number(views), page_handle: handle, content_type: type });
+    onUpdate({ link, views: Number(views), content_type: type });
     setEditing(false);
   }
 
   if (editing) {
     return (
-      <tr className="border-b border-zinc-800/50 bg-zinc-800/20">
-        <td className="py-2 pr-3">
-          <Input value={link} onChange={(e) => setLink(e.target.value)} className="h-7 text-xs bg-zinc-800 border-zinc-700 text-white" />
-        </td>
-        <td className="py-2 px-1">
-          <Input value={views} onChange={(e) => setViews(e.target.value)} className="h-7 w-20 text-xs bg-zinc-800 border-zinc-700 text-white text-right ml-auto" />
-        </td>
-        <td className="py-2 px-1">
-          <Input value={handle} onChange={(e) => setHandle(e.target.value)} className="h-7 w-24 text-xs bg-zinc-800 border-zinc-700 text-white" />
-        </td>
-        <td className="py-2 px-1">
-          <Select value={type} onValueChange={setType}>
-            <SelectTrigger className="h-7 w-20 text-xs bg-zinc-800 border-zinc-700 text-white"><SelectValue /></SelectTrigger>
-            <SelectContent className="bg-zinc-800 border-zinc-700">
-              <SelectItem value="reel" className="text-white">Reel</SelectItem>
-              <SelectItem value="post" className="text-white">Post</SelectItem>
-            </SelectContent>
-          </Select>
-        </td>
-        <td className="py-2 pl-2 flex items-center gap-1">
-          <Button size="sm" onClick={save} className="h-7 text-xs bg-violet-600 hover:bg-violet-700">Save</Button>
-          <button onClick={() => setEditing(false)} className="text-zinc-600 hover:text-zinc-400 text-xs ml-1">x</button>
-        </td>
-      </tr>
+      <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-700 rounded-lg p-2">
+        <Input
+          value={link}
+          onChange={(e) => setLink(e.target.value)}
+          className="h-7 text-xs bg-zinc-800 border-zinc-700 text-white flex-1"
+        />
+        <Input
+          type="number"
+          value={views}
+          onChange={(e) => setViews(e.target.value)}
+          className="h-7 w-24 text-xs bg-zinc-800 border-zinc-700 text-white text-right tabular-nums"
+        />
+        <Select value={type} onValueChange={setType}>
+          <SelectTrigger className="h-7 w-20 text-xs bg-zinc-800 border-zinc-700 text-white">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="bg-zinc-800 border-zinc-700">
+            <SelectItem value="reel" className="text-white text-xs">Reel</SelectItem>
+            <SelectItem value="post" className="text-white text-xs">Post</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button size="sm" onClick={save} className="h-7 text-xs bg-violet-600 hover:bg-violet-700 px-2">
+          <Save className="w-3 h-3" />
+        </Button>
+        <button onClick={() => setEditing(false)} className="text-zinc-600 hover:text-zinc-400 text-xs px-1">✕</button>
+      </div>
     );
   }
 
   return (
-    <tr
-      className="border-b border-zinc-800/50 hover:bg-zinc-800/20 cursor-pointer transition-colors group"
-      onClick={() => setEditing(true)}
-    >
-      <td className="py-2.5 pr-3">
-        <a
-          href={item.link}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className="text-violet-400 hover:text-violet-300 text-xs flex items-center gap-1 max-w-[200px] truncate"
-        >
-          <ExternalLink className="w-3 h-3 shrink-0" />
-          {item.link?.replace(/https?:\/\/(www\.)?instagram\.com\//, "").slice(0, 30)}
-        </a>
-      </td>
-      <td className="py-2.5 px-2 text-right text-white tabular-nums font-semibold">{fmt(item.views || 0)}</td>
-      <td className="py-2.5 px-2 text-zinc-400 text-xs">{item.page_handle ? `@${item.page_handle}` : "—"}</td>
-      <td className="py-2.5 px-2">
-        <Badge variant="outline" className={`text-[10px] ${
-          item.content_type === "reel" ? "border-purple-500/30 text-purple-400" : "border-emerald-500/30 text-emerald-400"
-        }`}>
-          {item.content_type === "reel" ? "Reel" : "Post"}
-        </Badge>
-      </td>
-      <td className="py-2.5 pl-2">
-        <button
-          onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
-          className="opacity-0 group-hover:opacity-100 text-red-400/60 hover:text-red-400 transition-all"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
+    <div className="flex items-center gap-3 group px-2 py-1.5 rounded-lg hover:bg-zinc-800/30 transition-colors">
+      <Badge variant="outline" className={`text-[9px] shrink-0 ${
+        item.content_type === "reel" ? "border-purple-500/30 text-purple-400" : "border-emerald-500/30 text-emerald-400"
+      }`}>
+        {item.content_type === "reel" ? "Reel" : "Post"}
+      </Badge>
+      <a
+        href={item.link}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-violet-400 hover:text-violet-300 text-xs flex items-center gap-1 min-w-0 truncate flex-1"
+      >
+        <ExternalLink className="w-3 h-3 shrink-0" />
+        <span className="truncate">{item.link?.replace(/https?:\/\/(www\.)?instagram\.com\//, "").slice(0, 40)}</span>
+      </a>
+      <span className="text-white font-bold text-xs tabular-nums shrink-0">{fmt(item.views || 0)}</span>
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+        <button onClick={() => setEditing(true)} className="text-zinc-500 hover:text-white text-xs px-1">Edit</button>
+        <button onClick={onDelete} className="text-red-400/60 hover:text-red-400">
+          <Trash2 className="w-3 h-3" />
         </button>
-      </td>
-    </tr>
-  );
-}
-
-
-/* ──────── Add Top Content Dialog ──────── */
-function AddTopContentDialog({
-  monthDate, cycleNumber, pages, onAdd,
-}: {
-  monthDate: string;
-  cycleNumber: number;
-  pages: any[];
-  onAdd: (d: any) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [link, setLink] = useState("");
-  const [views, setViews] = useState("0");
-  const [handle, setHandle] = useState("");
-  const [type, setType] = useState("reel");
-
-  function handleAdd() {
-    if (!link) return;
-    onAdd({ month: monthDate, cycle_number: cycleNumber, link, views: Number(views), page_handle: handle, content_type: type });
-    setOpen(false);
-    setLink(""); setViews("0"); setHandle(""); setType("reel");
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" variant="outline" className="gap-1 text-xs border-zinc-700 text-zinc-400 hover:text-white hover:border-violet-500/50">
-          <Plus className="w-3 h-3" /> Add
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="bg-zinc-900 border-zinc-800 text-white max-w-md">
-        <DialogHeader><DialogTitle>Add Top Reel / Post</DialogTitle></DialogHeader>
-        <div className="space-y-3 mt-2">
-          <div>
-            <label className="text-xs text-zinc-400 mb-1 block">Link</label>
-            <Input value={link} onChange={(e) => setLink(e.target.value)} className="bg-zinc-800 border-zinc-700 text-white" placeholder="https://www.instagram.com/reel/..." />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-zinc-400 mb-1 block">Views</label>
-              <Input value={views} onChange={(e) => setViews(e.target.value)} className="bg-zinc-800 border-zinc-700 text-white" />
-            </div>
-            <div>
-              <label className="text-xs text-zinc-400 mb-1 block">Page</label>
-              <Select value={handle} onValueChange={setHandle}>
-                <SelectTrigger className="bg-zinc-800 border-zinc-700 text-white"><SelectValue placeholder="Select..." /></SelectTrigger>
-                <SelectContent className="bg-zinc-800 border-zinc-700">
-                  {pages.map((p: any) => (
-                    <SelectItem key={p.id} value={p.handle} className="text-white">@{p.handle}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div>
-            <label className="text-xs text-zinc-400 mb-1 block">Type</label>
-            <Select value={type} onValueChange={setType}>
-              <SelectTrigger className="bg-zinc-800 border-zinc-700 text-white"><SelectValue /></SelectTrigger>
-              <SelectContent className="bg-zinc-800 border-zinc-700">
-                <SelectItem value="reel" className="text-white">Reel</SelectItem>
-                <SelectItem value="post" className="text-white">Post</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <Button onClick={handleAdd} disabled={!link} className="w-full bg-violet-600 hover:bg-violet-700">Add</Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }
 
@@ -734,7 +591,6 @@ function ReconcileView({
 
   return (
     <div className="space-y-6">
-      {/* Summary cards */}
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
           <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Cycle Sum</p>
