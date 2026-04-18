@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getSixDayMonth, bulkSaveSixDayEntries, upsertSixDayEntry,
   createSixDayTopContent, updateSixDayTopContent, deleteSixDayTopContent,
-  upsertSixDayActual, getSixDayDeadlines,
+  upsertSixDayActual, getSixDayDeadlines, getPages,
 } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
@@ -49,8 +49,20 @@ export default function SixDayTracker() {
     refetchInterval: 120_000,
   });
 
+  const { data: allPagesRaw } = useQuery({
+    queryKey: ["pages-list"],
+    queryFn: async () => {
+      const res = await getPages();
+      return Array.isArray(res) ? res : (res as any)?.data ?? [];
+    },
+    staleTime: 300_000,
+  });
+
   const overdueCycles = deadlineData?.overdue_cycles || [];
-  const pages = monthData?.pages || [];
+  const serverPages = monthData?.pages || [];
+  const pages = serverPages.length > 0
+    ? serverPages
+    : (allPagesRaw || []).map((p: any) => ({ id: p.id, handle: p.handle, name: p.name, stage: p.stage ?? 1 }));
   const pageSummaries = monthData?.page_summaries || [];
   const monthDate = monthData?.month_date || `${selectedMonth}-01`;
 
