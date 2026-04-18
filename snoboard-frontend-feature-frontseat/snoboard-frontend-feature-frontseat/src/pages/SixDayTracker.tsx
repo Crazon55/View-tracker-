@@ -321,6 +321,7 @@ function IPDropdown({
   const [newLink, setNewLink] = useState("");
   const [newViews, setNewViews] = useState("");
   const [newType, setNewType] = useState("reel");
+  const [newPerf, setNewPerf] = useState("baseline");
 
   const allContent: any[] = cycle.top_content || [];
   const items = allContent.filter((t: any) => t.page_id === page.id);
@@ -333,6 +334,7 @@ function IPDropdown({
       setNewLink("");
       setNewViews("");
       setNewType("reel");
+      setNewPerf("baseline");
       setAddMode(false);
     },
   });
@@ -358,6 +360,7 @@ function IPDropdown({
       page_id: page.id,
       page_handle: page.handle,
       content_type: newType,
+      perf_tag: newPerf,
     });
   }
 
@@ -429,6 +432,8 @@ function IPDropdown({
                       placeholder="Views"
                       className="h-8 w-24 text-xs bg-zinc-800 border-zinc-700 text-white tabular-nums"
                     />
+                  </div>
+                  <div className="flex gap-2">
                     <Select value={newType} onValueChange={setNewType}>
                       <SelectTrigger className="h-8 w-20 text-xs bg-zinc-800 border-zinc-700 text-white">
                         <SelectValue />
@@ -438,12 +443,23 @@ function IPDropdown({
                         <SelectItem value="post" className="text-white text-xs">Post</SelectItem>
                       </SelectContent>
                     </Select>
+                    <Select value={newPerf} onValueChange={setNewPerf}>
+                      <SelectTrigger className="h-8 flex-1 text-xs bg-zinc-800 border-zinc-700 text-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-zinc-800 border-zinc-700">
+                        <SelectItem value="below_baseline" className="text-white text-xs">Below Baseline</SelectItem>
+                        <SelectItem value="baseline" className="text-white text-xs">Baseline</SelectItem>
+                        <SelectItem value="above_baseline" className="text-white text-xs">Above Baseline</SelectItem>
+                        <SelectItem value="topline" className="text-white text-xs">Topline</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="flex justify-end gap-2">
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => { setAddMode(false); setNewLink(""); setNewViews(""); }}
+                      onClick={() => { setAddMode(false); setNewLink(""); setNewViews(""); setNewPerf("baseline"); }}
                       className="h-7 text-xs text-zinc-400"
                     >
                       Cancel
@@ -475,6 +491,22 @@ function IPDropdown({
 }
 
 
+const PERF_TAGS = [
+  { value: "below_baseline", label: "Below Baseline", color: "border-red-500/30 text-red-400", bg: "bg-red-500/10" },
+  { value: "baseline", label: "Baseline", color: "border-zinc-500/30 text-zinc-400", bg: "bg-zinc-500/10" },
+  { value: "above_baseline", label: "Above Baseline", color: "border-emerald-500/30 text-emerald-400", bg: "bg-emerald-500/10" },
+  { value: "topline", label: "Topline", color: "border-amber-500/30 text-amber-400", bg: "bg-amber-500/10" },
+] as const;
+
+function perfBadge(tag: string | null | undefined) {
+  const t = PERF_TAGS.find((p) => p.value === tag) || PERF_TAGS[1];
+  return (
+    <Badge variant="outline" className={`text-[9px] shrink-0 ${t.color}`}>
+      {t.label}
+    </Badge>
+  );
+}
+
 /* ──────── Content Item Row ──────── */
 function ContentItemRow({ item, onUpdate, onDelete }: {
   item: any;
@@ -485,50 +517,66 @@ function ContentItemRow({ item, onUpdate, onDelete }: {
   const [link, setLink] = useState(item.link || "");
   const [views, setViews] = useState(String(item.views || 0));
   const [type, setType] = useState(item.content_type || "reel");
+  const [perf, setPerf] = useState(item.perf_tag || "baseline");
 
   function save() {
-    onUpdate({ link, views: Number(views), content_type: type });
+    onUpdate({ link, views: Number(views), content_type: type, perf_tag: perf });
     setEditing(false);
   }
 
   if (editing) {
     return (
-      <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-700 rounded-lg p-2">
-        <Input
-          value={link}
-          onChange={(e) => setLink(e.target.value)}
-          className="h-7 text-xs bg-zinc-800 border-zinc-700 text-white flex-1"
-        />
-        <Input
-          type="number"
-          value={views}
-          onChange={(e) => setViews(e.target.value)}
-          className="h-7 w-24 text-xs bg-zinc-800 border-zinc-700 text-white text-right tabular-nums"
-        />
-        <Select value={type} onValueChange={setType}>
-          <SelectTrigger className="h-7 w-20 text-xs bg-zinc-800 border-zinc-700 text-white">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="bg-zinc-800 border-zinc-700">
-            <SelectItem value="reel" className="text-white text-xs">Reel</SelectItem>
-            <SelectItem value="post" className="text-white text-xs">Post</SelectItem>
-          </SelectContent>
-        </Select>
-        <Button size="sm" onClick={save} className="h-7 text-xs bg-violet-600 hover:bg-violet-700 px-2">
-          <Save className="w-3 h-3" />
-        </Button>
-        <button onClick={() => setEditing(false)} className="text-zinc-600 hover:text-zinc-400 text-xs px-1">✕</button>
+      <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-2 space-y-2">
+        <div className="flex items-center gap-2">
+          <Input
+            value={link}
+            onChange={(e) => setLink(e.target.value)}
+            className="h-7 text-xs bg-zinc-800 border-zinc-700 text-white flex-1"
+          />
+          <Input
+            type="number"
+            value={views}
+            onChange={(e) => setViews(e.target.value)}
+            className="h-7 w-24 text-xs bg-zinc-800 border-zinc-700 text-white text-right tabular-nums"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Select value={type} onValueChange={setType}>
+            <SelectTrigger className="h-7 w-20 text-xs bg-zinc-800 border-zinc-700 text-white">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-zinc-800 border-zinc-700">
+              <SelectItem value="reel" className="text-white text-xs">Reel</SelectItem>
+              <SelectItem value="post" className="text-white text-xs">Post</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={perf} onValueChange={setPerf}>
+            <SelectTrigger className="h-7 flex-1 text-xs bg-zinc-800 border-zinc-700 text-white">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-zinc-800 border-zinc-700">
+              {PERF_TAGS.map((p) => (
+                <SelectItem key={p.value} value={p.value} className="text-white text-xs">{p.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button size="sm" onClick={save} className="h-7 text-xs bg-violet-600 hover:bg-violet-700 px-2">
+            <Save className="w-3 h-3" />
+          </Button>
+          <button onClick={() => setEditing(false)} className="text-zinc-600 hover:text-zinc-400 text-xs px-1">✕</button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex items-center gap-3 group px-2 py-1.5 rounded-lg hover:bg-zinc-800/30 transition-colors">
+    <div className="flex items-center gap-2 group px-2 py-1.5 rounded-lg hover:bg-zinc-800/30 transition-colors">
       <Badge variant="outline" className={`text-[9px] shrink-0 ${
         item.content_type === "reel" ? "border-purple-500/30 text-purple-400" : "border-emerald-500/30 text-emerald-400"
       }`}>
         {item.content_type === "reel" ? "Reel" : "Post"}
       </Badge>
+      {perfBadge(item.perf_tag)}
       <a
         href={item.link}
         target="_blank"

@@ -1804,6 +1804,7 @@ async def six_day_top_content_create(request: Request):
         "page_handle": page_handle,
         "page_id": page_id,
         "content_type": body.get("content_type", "reel"),
+        "perf_tag": body.get("perf_tag"),
     }
     result = client.table("six_day_top_content").insert(row).execute().data[0]
     _sync_six_day_entry(client, body["month"], int(body["cycle_number"]), page_id)
@@ -1815,7 +1816,7 @@ async def six_day_top_content_update(item_id: str, request: Request):
     from app.database.client import get_supabase_client
     client = get_supabase_client()
     body = await request.json()
-    allowed = {k: v for k, v in body.items() if k in ("link", "views", "page_handle", "content_type", "page_id")}
+    allowed = {k: v for k, v in body.items() if k in ("link", "views", "page_handle", "content_type", "page_id", "perf_tag")}
     if "views" in allowed:
         allowed["views"] = int(allowed["views"])
     client.table("six_day_top_content").update(allowed).eq("id", item_id).execute()
