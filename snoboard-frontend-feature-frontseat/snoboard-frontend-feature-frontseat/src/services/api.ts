@@ -138,6 +138,46 @@ export const updateCompetitorEntry = (category: CompetitorCategory, id: string, 
 export const scheduleIdea = (ideaId: string) =>
   fetchApi<any>(`/api/v1/schedule-idea/${ideaId}`, { method: "POST" });
 
+// 6-Day Performance Tracker
+export const getSixDayMonth = (month: string) =>
+  fetchApi<any>(`/api/v1/six-day/month/${month}`);
+
+export const upsertSixDayEntry = (data: {
+  month: string; cycle_number: number; page_id: string;
+  views?: number; filled_by?: string;
+}) => fetchApi<any>("/api/v1/six-day/entries", { method: "POST", body: JSON.stringify(data) });
+
+export const bulkSaveSixDayEntries = (data: {
+  month: string; cycle_number: number; filled_by?: string;
+  entries: { page_id: string; views: number }[];
+}) => fetchApi<any>("/api/v1/six-day/entries/bulk", { method: "POST", body: JSON.stringify(data) });
+
+export const deleteSixDayEntry = (id: string) =>
+  fetchApi<any>(`/api/v1/six-day/entries/${id}`, { method: "DELETE" });
+
+export const createSixDayTopContent = (data: {
+  month: string; cycle_number: number; link: string;
+  views?: number; page_handle?: string; content_type?: string;
+}) => fetchApi<any>("/api/v1/six-day/top-content", { method: "POST", body: JSON.stringify(data) });
+export const updateSixDayTopContent = (id: string, data: Record<string, any>) =>
+  fetchApi<any>(`/api/v1/six-day/top-content/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export const deleteSixDayTopContent = (id: string) =>
+  fetchApi<any>(`/api/v1/six-day/top-content/${id}`, { method: "DELETE" });
+
+export const upsertSixDayActual = (data: {
+  month: string; page_id: string; actual_views: number;
+  filled_by?: string; notes?: string;
+}) => fetchApi<any>("/api/v1/six-day/actuals", { method: "POST", body: JSON.stringify(data) });
+
+export const getSixDayConfig = () => fetchApi<any>("/api/v1/six-day/config");
+export const setSixDayConfig = (data: { assigned_email?: string; assigned_role?: string }) =>
+  fetchApi<any>("/api/v1/six-day/config", { method: "POST", body: JSON.stringify(data) });
+
+export const getSixDayDeadlines = () => fetchApi<any>("/api/v1/six-day/deadlines");
+
+export const getSixDayPageData = (pageId: string, month?: string) =>
+  fetchApi<any>(`/api/v1/six-day/page/${pageId}${month ? `?month=${month}` : ""}`);
+
 // Deadlines
 export const getDeadlines = (role?: string) =>
   fetchApi<any[]>(role ? `/api/v1/deadlines/${encodeURIComponent(role)}` : "/api/v1/deadlines");

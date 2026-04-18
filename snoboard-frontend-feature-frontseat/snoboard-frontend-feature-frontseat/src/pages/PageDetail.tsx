@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getPageDetail, getContentEntries, createContentEntry, updateContentEntry, deleteContentEntry, getPages, getIdeas } from "@/services/api";
+import { getPageDetail, getContentEntries, createContentEntry, updateContentEntry, deleteContentEntry, getPages, getIdeas, getSixDayPageData } from "@/services/api";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import type { Page } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
-import { ArrowLeft, ExternalLink, Plus, Trash2, Pencil, Check, X, Calendar, Table2, ChevronLeft, ChevronRight, TrendingUp } from "lucide-react";
+import { ArrowLeft, ExternalLink, Plus, Trash2, Pencil, Check, X, Calendar, Table2, ChevronLeft, ChevronRight, TrendingUp, BarChart3 } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -108,6 +108,13 @@ export default function PageDetail() {
 
   const { data: allPages = [] } = useQuery<Page[]>({ queryKey: ["pages"], queryFn: getPages });
   const { data: allIdeas = [] } = useQuery<any[]>({ queryKey: ["ideas"], queryFn: getIdeas });
+
+  const sixDayMonth = chartMonth;
+  const { data: sixDayData } = useQuery({
+    queryKey: ["six-day-page", pageId, sixDayMonth],
+    queryFn: () => getSixDayPageData(pageId!, sixDayMonth),
+    enabled: !!pageId,
+  });
 
   const createMut = useMutation({
     mutationFn: createContentEntry,
@@ -517,6 +524,103 @@ export default function PageDetail() {
                   <Line type="monotone" dataKey="views" stroke="#a855f7" strokeWidth={2.5} dot={{ r: 2, fill: "#a855f7" }} activeDot={{ r: 5 }} />
                 </LineChart>
               </ResponsiveContainer>
+            </div>
+          );
+        })()}
+
+        {/* 6-Day Cycle Breakdown */}
+        {sixDayData && (() => {
+          const cycles = sixDayData.cycles || [];
+          const sum = sixDayData.cycle_views_sum || 0;
+          const actual = sixDayData.actual_views;
+          const drift = sixDayData.drift;
+          const topContent = sixDayData.top_content || [];
+          const filledCycles = cycles.filter((c: any) => c.filled).length;
+
+          return (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 mb-8">
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5 text-violet-400" />
+                  <h3 className="text-sm uppercase tracking-[0.2em] text-zinc-400 font-semibold">6-Day Cycles</h3>
+                  <Badge variant="outline" className="border-zinc-700 text-zinc-500 text-[10px] ml-2">
+                    {filledCycles}/{cycles.length} filled
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-4">
+                  {actual != null && (
+                    <div className="text-right">
+                      <p className="text-[9px] uppercase text-zinc-500">IG Dashboard</p>
+                      <p className="text-sm font-bold text-white tabular-nums">{formatCompact(actual)}</p>
+                    </div>
+                  )}
+                  <div className="text-right">
+                    <p className="text-[9px] uppercase text-zinc-500">Cycle Total</p>
+                    <p className="text-sm font-bold text-white tabular-nums">{formatCompact(sum)}</p>
+                  </div>
+                  {drift != null && (
+                    <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${
+                      drift > 0 ? "bg-emerald-500/10 text-emerald-400" : drift < 0 ? "bg-red-500/10 text-red-400" : "bg-zinc-800 text-zinc-500"
+                    }`}>
+                      {drift > 0 ? <TrendingUp className="w-3 h-3" /> : drift < 0 ? <ArrowLeft className="w-3 h-3 rotate-[225deg]" /> : null}
+                      {drift > 0 ? "+" : ""}{formatCompact(drift)}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Cycle bars */}
+              <div className="grid grid-cols-5 gap-2 mb-4">
+                {cycles.map((c: any) => {
+                  const maxViews = Math.max(...cycles.map((cc: any) => cc.views || 0), 1);
+                  const heightPct = c.views ? Math.max((c.views / maxViews) * 100, 8) : 4;
+                  const startDay = c.start?.slice(8, 10);
+                  const endDay = c.end?.slice(8, 10);
+                  return (
+                    <div key={c.cycle} className="flex flex-col items-center">
+                      <div className="w-full h-24 flex items-end justify-center bg-zinc-800/30 rounded-lg overflow-hidden">
+                        <div
+                          className={`w-full rounded-t transition-all ${c.filled ? "bg-gradient-to-t from-violet-600 to-violet-400" : "bg-zinc-700/50"}`}
+                          style={{ height: `${heightPct}%` }}
+                        />
+                      </div>
+                      <p className="text-xs font-bold text-white tabular-nums mt-2">
+                        {c.views != null ? formatCompact(c.views) : "—"}
+                      </p>
+                      <p className="text-[10px] text-zinc-500">{startDay}–{endDay}</p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Top content for this IP */}
+              {topContent.length > 0 && (
+                <div className="border-t border-zinc-800 pt-4">
+                  <p className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold mb-2">Top Content This Cycle</p>
+                  <div className="space-y-1.5">
+                    {topContent.slice(0, 5).map((item: any, i: number) => (
+                      <div key={item.id} className="flex items-center gap-3 text-xs">
+                        <span className="text-zinc-600 tabular-nums w-4">{i + 1}.</span>
+                        <a
+                          href={item.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-violet-400 hover:text-violet-300 truncate max-w-[200px] flex items-center gap-1"
+                        >
+                          <ExternalLink className="w-3 h-3 shrink-0" />
+                          {item.link?.replace(/https?:\/\/(www\.)?instagram\.com\//, "").slice(0, 30)}
+                        </a>
+                        <span className="text-white font-bold tabular-nums ml-auto">{formatCompact(item.views || 0)}</span>
+                        <Badge variant="outline" className={`text-[9px] ${
+                          item.content_type === "reel" ? "border-purple-500/30 text-purple-400" : "border-emerald-500/30 text-emerald-400"
+                        }`}>
+                          {item.content_type === "reel" ? "Reel" : "Post"}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })()}

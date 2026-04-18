@@ -1584,3 +1584,412 @@ async def tracker_populate_niche_pages():
         "Tech": len(tech_handles),
         "Marketing": len(marketing_handles),
     }
+
+
+# ===================== 6-Day Performance Tracker =====================
+# Cycles are deterministic — never stored, always computed:
+#   Cycle 1: 1st–6th  |  Cycle 2: 7th–12th  |  Cycle 3: 13th–18th
+#   Cycle 4: 19th–24th  |  Cycle 5: 25th–end-of-month
+
+import calendar as _cal
+
+
+def _six_day_cycles(year: int, month: int) -> list[dict]:
+    last = _cal.monthrange(year, month)[1]
+    return [
+        {"cycle": 1, "start": f"{year}-{month:02d}-01", "end": f"{year}-{month:02d}-06",
+         "deadline": f"{year}-{month:02d}-07"},
+        {"cycle": 2, "start": f"{year}-{month:02d}-07", "end": f"{year}-{month:02d}-12",
+         "deadline": f"{year}-{month:02d}-13"},
+        {"cycle": 3, "start": f"{year}-{month:02d}-13", "end": f"{year}-{month:02d}-18",
+         "deadline": f"{year}-{month:02d}-19"},
+        {"cycle": 4, "start": f"{year}-{month:02d}-19", "end": f"{year}-{month:02d}-24",
+         "deadline": f"{year}-{month:02d}-25"},
+        {"cycle": 5, "start": f"{year}-{month:02d}-25", "end": f"{year}-{month:02d}-{last:02d}",
+         "deadline": f"{year}-{month:02d}-{last:02d}"},
+    ]
+
+
+@app.get("/api/v1/six-day/month/{month_str}")
+async def six_day_month_data(month_str: str):
+    """Return all cycles, entries, top-content and actuals for a month (YYYY-MM).
+    Cycles are computed; entries/top-content/actuals come from the DB."""
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+
+    parts = month_str.split("-")
+    year, mon = int(parts[0]), int(parts[1])
+    month_date = f"{year}-{mon:02d}-01"
+    cycles = _six_day_cycles(year, mon)
+
+    pages = client.table("pages").select("id,handle,name,stage").order("name").execute().data or []
+
+    entries = (
+        client.table("six_day_entries")
+        .select("*")
+        .eq("month", month_date)
+        .execute()
+        .data or []
+    )
+
+    top_content = (
+        client.table("six_day_top_content")
+        .select("*")
+        .eq("month", month_date)
+        .order("views", desc=True)
+        .execute()
+        .data or []
+    )
+
+    actuals = (
+        client.table("six_day_monthly_actuals")
+        .select("*")
+        .eq("month", month_date)
+        .execute()
+        .data or []
+    )
+
+    config = client.table("six_day_config").select("*").limit(1).execute().data
+    config_row = config[0] if config else None
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    for c in cycles:
+        c["status"] = "upcoming" if today < c["start"] else ("active" if today <= c["end"] else "done")
+        c_entries = [e for e in entries if e["cycle_number"] == c["cycle"]]
+        c["entries"] = c_entries
+        c["filled_count"] = len(c_entries)
+        c["total_pages"] = len(pages)
+        c_top = [t for t in top_content if t["cycle_number"] == c["cycle"]]
+        c["top_content"] = c_top
+
+    actuals_map = {a["page_id"]: a for a in actuals}
+
+    page_summaries = []
+    for p in pages:
+        pid = p["id"]
+        cycle_views = sum(e["views"] or 0 for e in entries if e["page_id"] == pid)
+        actual_row = actuals_map.get(pid)
+        actual_views = actual_row["actual_views"] if actual_row else None
+        page_summaries.append({
+            "page_id": pid,
+            "handle": p["handle"],
+            "name": p.get("name"),
+            "stage": p.get("stage", 1),
+            "cycle_views_sum": cycle_views,
+            "actual_views": actual_views,
+            "drift": (actual_views - cycle_views) if actual_views is not None else None,
+            "actual_row": actual_row,
+        })
+
+    page_summaries.sort(key=lambda x: x["cycle_views_sum"], reverse=True)
+
+    return {
+        "success": True,
+        "data": {
+            "month": month_str,
+            "month_date": month_date,
+            "cycles": cycles,
+            "pages": [{"id": p["id"], "handle": p["handle"], "name": p.get("name"), "stage": p.get("stage", 1)} for p in pages],
+            "page_summaries": page_summaries,
+            "top_content": top_content,
+            "config": config_row,
+        },
+    }
+
+
+# --- Upsert entry (one IP, one cycle) ---
+@app.post("/api/v1/six-day/entries")
+async def six_day_entries_upsert(request: Request):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    body = await request.json()
+    month = body["month"]
+    cycle_number = int(body["cycle_number"])
+    page_id = body["page_id"]
+    views = int(body.get("views", 0))
+    filled_by = body.get("filled_by", "")
+
+    row = {
+        "month": month,
+        "cycle_number": cycle_number,
+        "page_id": page_id,
+        "views": views,
+        "filled_by": filled_by,
+        "filled_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    existing = (
+        client.table("six_day_entries")
+        .select("id")
+        .eq("month", month)
+        .eq("cycle_number", cycle_number)
+        .eq("page_id", page_id)
+        .execute()
+        .data
+    )
+    if existing:
+        result = client.table("six_day_entries").update(row).eq("id", existing[0]["id"]).execute().data[0]
+    else:
+        result = client.table("six_day_entries").insert(row).execute().data[0]
+    return {"success": True, "data": result}
+
+
+# --- Bulk-save entries for a whole cycle ---
+@app.post("/api/v1/six-day/entries/bulk")
+async def six_day_entries_bulk(request: Request):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    body = await request.json()
+    month = body["month"]
+    cycle_number = int(body["cycle_number"])
+    items = body.get("entries", [])
+    filled_by = body.get("filled_by", "")
+    now_ts = datetime.now(timezone.utc).isoformat()
+
+    saved = 0
+    for item in items:
+        page_id = item["page_id"]
+        views = int(item.get("views", 0))
+        row = {
+            "month": month, "cycle_number": cycle_number,
+            "page_id": page_id, "views": views,
+            "filled_by": filled_by, "filled_at": now_ts,
+        }
+        existing = (
+            client.table("six_day_entries")
+            .select("id").eq("month", month)
+            .eq("cycle_number", cycle_number).eq("page_id", page_id)
+            .execute().data
+        )
+        if existing:
+            client.table("six_day_entries").update(row).eq("id", existing[0]["id"]).execute()
+        else:
+            client.table("six_day_entries").insert(row).execute()
+        saved += 1
+
+    return {"success": True, "saved": saved}
+
+
+@app.delete("/api/v1/six-day/entries/{entry_id}")
+async def six_day_entries_delete(entry_id: str):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    client.table("six_day_entries").delete().eq("id", entry_id).execute()
+    return {"success": True}
+
+
+# --- Top Content ---
+@app.post("/api/v1/six-day/top-content")
+async def six_day_top_content_create(request: Request):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    body = await request.json()
+    row = {
+        "month": body["month"],
+        "cycle_number": int(body["cycle_number"]),
+        "link": body["link"],
+        "views": int(body.get("views", 0)),
+        "page_handle": body.get("page_handle", ""),
+        "content_type": body.get("content_type", "reel"),
+    }
+    result = client.table("six_day_top_content").insert(row).execute().data[0]
+    return {"success": True, "data": result}
+
+
+@app.put("/api/v1/six-day/top-content/{item_id}")
+async def six_day_top_content_update(item_id: str, request: Request):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    body = await request.json()
+    allowed = {k: v for k, v in body.items() if k in ("link", "views", "page_handle", "content_type")}
+    if "views" in allowed:
+        allowed["views"] = int(allowed["views"])
+    client.table("six_day_top_content").update(allowed).eq("id", item_id).execute()
+    return {"success": True}
+
+
+@app.delete("/api/v1/six-day/top-content/{item_id}")
+async def six_day_top_content_delete(item_id: str):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    client.table("six_day_top_content").delete().eq("id", item_id).execute()
+    return {"success": True}
+
+
+# --- Monthly Actuals (reconciliation) ---
+@app.post("/api/v1/six-day/actuals")
+async def six_day_actuals_upsert(request: Request):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    body = await request.json()
+    month = body["month"]
+    page_id = body["page_id"]
+    actual_views = int(body.get("actual_views", 0))
+    filled_by = body.get("filled_by", "")
+    notes = body.get("notes", "")
+
+    row = {
+        "month": month, "page_id": page_id,
+        "actual_views": actual_views, "notes": notes,
+        "filled_by": filled_by,
+        "filled_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    existing = (
+        client.table("six_day_monthly_actuals")
+        .select("id").eq("month", month).eq("page_id", page_id)
+        .execute().data
+    )
+    if existing:
+        result = client.table("six_day_monthly_actuals").update(row).eq("id", existing[0]["id"]).execute().data[0]
+    else:
+        result = client.table("six_day_monthly_actuals").insert(row).execute().data[0]
+    return {"success": True, "data": result}
+
+
+# --- Config (who is assigned) ---
+@app.get("/api/v1/six-day/config")
+async def six_day_config_get():
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    data = client.table("six_day_config").select("*").limit(1).execute().data
+    return {"success": True, "data": data[0] if data else None}
+
+
+@app.post("/api/v1/six-day/config")
+async def six_day_config_set(request: Request):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    body = await request.json()
+    existing = client.table("six_day_config").select("id").limit(1).execute().data
+    row = {
+        "assigned_email": body.get("assigned_email", ""),
+        "assigned_role": body.get("assigned_role", ""),
+    }
+    if existing:
+        result = client.table("six_day_config").update(row).eq("id", existing[0]["id"]).execute().data[0]
+    else:
+        result = client.table("six_day_config").insert(row).execute().data[0]
+    return {"success": True, "data": result}
+
+
+# --- Deadline feed for the 6-day tracker ---
+@app.get("/api/v1/six-day/deadlines")
+async def six_day_deadlines():
+    """Returns unfilled cycles whose deadline has passed or is today."""
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+
+    now = datetime.now(timezone.utc)
+    year, mon = now.year, now.month
+    month_date = f"{year}-{mon:02d}-01"
+    today = now.strftime("%Y-%m-%d")
+    cycles = _six_day_cycles(year, mon)
+
+    pages = client.table("pages").select("id,handle,name").execute().data or []
+    entries = (
+        client.table("six_day_entries")
+        .select("page_id,cycle_number")
+        .eq("month", month_date)
+        .execute()
+        .data or []
+    )
+    filled_set = {(e["page_id"], e["cycle_number"]) for e in entries}
+
+    overdue = []
+    for c in cycles:
+        if today >= c["deadline"]:
+            missing = [p for p in pages if (p["id"], c["cycle"]) not in filled_set]
+            if missing:
+                overdue.append({
+                    "cycle": c["cycle"],
+                    "start": c["start"],
+                    "end": c["end"],
+                    "deadline": c["deadline"],
+                    "missing_count": len(missing),
+                    "missing_pages": [{"id": p["id"], "handle": p["handle"], "name": p.get("name")} for p in missing[:5]],
+                })
+
+    config = client.table("six_day_config").select("*").limit(1).execute().data
+    return {
+        "success": True,
+        "data": {
+            "overdue_cycles": overdue,
+            "config": config[0] if config else None,
+        },
+    }
+
+
+# --- Per-IP 6-day data (shown on the IP detail page) ---
+@app.get("/api/v1/six-day/page/{page_id}")
+async def six_day_page_data(page_id: str, month: str | None = None):
+    """Return 6-day cycle data for a single IP, used on the IP detail page."""
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+
+    if not month:
+        month = datetime.now(timezone.utc).strftime("%Y-%m")
+
+    parts = month.split("-")
+    year, mon = int(parts[0]), int(parts[1])
+    month_date = f"{year}-{mon:02d}-01"
+    cycles = _six_day_cycles(year, mon)
+
+    entries = (
+        client.table("six_day_entries")
+        .select("*")
+        .eq("month", month_date)
+        .eq("page_id", page_id)
+        .execute()
+        .data or []
+    )
+    entry_map = {e["cycle_number"]: e for e in entries}
+
+    top_content = (
+        client.table("six_day_top_content")
+        .select("*")
+        .eq("month", month_date)
+        .order("views", desc=True)
+        .execute()
+        .data or []
+    )
+
+    page_info = client.table("pages").select("handle").eq("id", page_id).execute().data
+    handle = page_info[0]["handle"] if page_info else ""
+    page_top = [t for t in top_content if (t.get("page_handle") or "").lower() == handle.lower()]
+
+    actual_row = (
+        client.table("six_day_monthly_actuals")
+        .select("*")
+        .eq("month", month_date)
+        .eq("page_id", page_id)
+        .execute()
+        .data
+    )
+
+    cycle_views_sum = sum(e.get("views", 0) or 0 for e in entries)
+    actual_views = actual_row[0]["actual_views"] if actual_row else None
+
+    cycle_data = []
+    for c in cycles:
+        entry = entry_map.get(c["cycle"])
+        cycle_data.append({
+            "cycle": c["cycle"],
+            "start": c["start"],
+            "end": c["end"],
+            "views": entry["views"] if entry else None,
+            "filled": entry is not None,
+        })
+
+    return {
+        "success": True,
+        "data": {
+            "month": month,
+            "cycles": cycle_data,
+            "cycle_views_sum": cycle_views_sum,
+            "actual_views": actual_views,
+            "drift": (actual_views - cycle_views_sum) if actual_views is not None else None,
+            "top_content": page_top[:10],
+        },
+    }
