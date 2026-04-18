@@ -198,9 +198,11 @@ export default function SixDayTracker() {
           </p>
           <Button
             type="button"
-            variant={tab === "reconcile" ? "secondary" : "outline"}
+            variant="default"
             size="sm"
-            className="shrink-0 border-violet-500/40 text-violet-300 hover:bg-violet-600/20"
+            className={`shrink-0 border-0 bg-violet-600 text-white shadow-lg shadow-violet-600/20 hover:bg-violet-700 ${
+              tab === "reconcile" ? "ring-2 ring-violet-400/40" : ""
+            }`}
             onClick={() => setTab("reconcile")}
           >
             Open month-end correction
