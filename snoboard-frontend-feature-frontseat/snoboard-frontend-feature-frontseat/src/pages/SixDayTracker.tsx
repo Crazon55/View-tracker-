@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, useMemo, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import {
   getSixDayMonth, bulkSaveSixDayEntries, upsertSixDayEntry,
   createSixDayTopContent, updateSixDayTopContent, deleteSixDayTopContent,
@@ -38,11 +38,12 @@ export default function SixDayTracker() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   });
 
-  const { data: monthData, isLoading } = useQuery({
+  const { data: monthData, isFetching: monthFetching, isPending: monthPending } = useQuery({
     queryKey: ["six-day-month", selectedMonth],
     queryFn: () => getSixDayMonth(selectedMonth),
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
+    placeholderData: keepPreviousData,
   });
 
   const { data: deadlineData } = useQuery({
@@ -53,7 +54,7 @@ export default function SixDayTracker() {
     refetchOnWindowFocus: false,
   });
 
-  const { data: allPagesRaw } = useQuery({
+  const { data: allPagesRaw, isPending: pagesPending } = useQuery({
     queryKey: ["pages-list"],
     queryFn: async () => {
       const res = await getPages();
@@ -112,6 +113,22 @@ export default function SixDayTracker() {
 
   const totalCycleViews = pageSummaries.reduce((s: number, p: any) => s + (p.cycle_views_sum || 0), 0);
 
+  const reconcileRows = useMemo(() => {
+    if (pageSummaries.length > 0) return pageSummaries;
+    return (pages || []).map((p: any) => ({
+      page_id: p.id,
+      handle: p.handle,
+      name: p.name,
+      cycle_views_sum: 0,
+      actual_views: null as number | null,
+    }));
+  }, [pageSummaries, pages]);
+
+  function invalidateSixDayAndGrowth() {
+    qc.invalidateQueries({ queryKey: ["six-day-month"] });
+    qc.invalidateQueries({ queryKey: ["growth-data"] });
+  }
+
   return (
     <div className="min-h-screen bg-zinc-950 pt-20 pb-12 px-4 sm:px-6">
       <div className="max-w-6xl mx-auto">
@@ -136,7 +153,7 @@ export default function SixDayTracker() {
                       : "text-zinc-500 hover:text-zinc-300"
                   }`}
                 >
-                  {v === "cycles" ? "Cycles" : "Reconcile"}
+                  {v === "cycles" ? "Cycles" : "Month-end fix"}
                 </button>
               ))}
             </div>
@@ -170,14 +187,36 @@ export default function SixDayTracker() {
           <Badge variant="outline" className="border-zinc-700 text-zinc-400 text-xs ml-2">
             {fmt(totalCycleViews)} total views
           </Badge>
+          {monthFetching && (
+            <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Updating…</span>
+          )}
         </div>
 
-        {isLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+        <div className="mb-5 rounded-xl border border-zinc-800 bg-zinc-900/80 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <p className="text-sm text-zinc-400">
+            <span className="text-white font-medium">Month-end:</span> Enter Instagram dashboard totals to fix drift vs cycle sums. Same numbers feed the <span className="text-violet-400">Growth</span> chart after you save.
+          </p>
+          <Button
+            type="button"
+            variant={tab === "reconcile" ? "secondary" : "outline"}
+            size="sm"
+            className="shrink-0 border-violet-500/40 text-violet-300 hover:bg-violet-600/20"
+            onClick={() => setTab("reconcile")}
+          >
+            Open month-end correction
+          </Button>
+        </div>
+
+        {pagesPending && pages.length === 0 ? (
+          <div className="flex items-center justify-center gap-3 py-16 text-zinc-500 text-sm">
+            <div className="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+            Loading page list…
           </div>
         ) : tab === "cycles" ? (
           <div className="space-y-3">
+            {monthPending && !monthData && (
+              <p className="text-xs text-zinc-500 text-center py-1">Loading saved cycle data…</p>
+            )}
             {cycles.map((cycle: any) => (
               <CycleCard
                 key={cycle.cycle}
@@ -189,15 +228,17 @@ export default function SixDayTracker() {
                 qc={qc}
                 userEmail={user?.email || ""}
                 selectedMonth={selectedMonth}
+                onDataChange={invalidateSixDayAndGrowth}
               />
             ))}
           </div>
         ) : (
           <ReconcileView
-            pageSummaries={pageSummaries}
+            reconcileRows={reconcileRows}
             monthDate={monthDate}
             qc={qc}
             userEmail={user?.email || ""}
+            onSaved={invalidateSixDayAndGrowth}
           />
         )}
       </div>
@@ -212,7 +253,7 @@ function fmtShort(d: string) {
 
 /* ──────── Cycle Card ──────── */
 function CycleCard({
-  cycle, pages, monthDate, expanded, onToggle, qc, userEmail, selectedMonth,
+  cycle, pages, monthDate, expanded, onToggle, qc, userEmail, selectedMonth, onDataChange,
 }: {
   cycle: any;
   pages: any[];
@@ -222,6 +263,7 @@ function CycleCard({
   qc: any;
   userEmail: string;
   selectedMonth: string;
+  onDataChange: () => void;
 }) {
   const allContent: any[] = cycle.top_content || [];
   const totalViews = allContent.reduce((s: number, t: any) => s + (t.views || 0), 0);
@@ -300,6 +342,7 @@ function CycleCard({
                   monthDate={monthDate}
                   qc={qc}
                   userEmail={userEmail}
+                  onDataChange={onDataChange}
                 />
               ))}
             </div>
@@ -313,13 +356,14 @@ function CycleCard({
 
 /* ──────── IP Dropdown (one per page inside a cycle) ──────── */
 function IPDropdown({
-  page, cycle, monthDate, qc, userEmail,
+  page, cycle, monthDate, qc, userEmail, onDataChange,
 }: {
   page: any;
   cycle: any;
   monthDate: string;
   qc: any;
   userEmail: string;
+  onDataChange: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [addMode, setAddMode] = useState(false);
@@ -336,6 +380,7 @@ function IPDropdown({
     mutationFn: createSixDayTopContent,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["six-day-month"] });
+      onDataChange();
       setNewLink("");
       setNewViews("");
       setNewType("reel");
@@ -347,12 +392,18 @@ function IPDropdown({
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Record<string, any> }) =>
       updateSixDayTopContent(id, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["six-day-month"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["six-day-month"] });
+      onDataChange();
+    },
   });
 
   const deleteMut = useMutation({
     mutationFn: deleteSixDayTopContent,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["six-day-month"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["six-day-month"] });
+      onDataChange();
+    },
   });
 
   function handleAdd() {
@@ -605,24 +656,30 @@ function ContentItemRow({ item, onUpdate, onDelete }: {
 
 /* ──────── Reconcile View (month-end actuals) ──────── */
 function ReconcileView({
-  pageSummaries, monthDate, qc, userEmail,
+  reconcileRows, monthDate, qc, userEmail, onSaved,
 }: {
-  pageSummaries: any[];
+  reconcileRows: any[];
   monthDate: string;
   qc: any;
   userEmail: string;
+  onSaved: () => void;
 }) {
-  const [drafts, setDrafts] = useState<Record<string, string>>(() => {
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+
+  useEffect(() => {
     const d: Record<string, string> = {};
-    for (const p of pageSummaries) {
+    for (const p of reconcileRows) {
       d[p.page_id] = p.actual_views != null ? String(p.actual_views) : "";
     }
-    return d;
-  });
+    setDrafts(d);
+  }, [monthDate, reconcileRows]);
 
   const actualMut = useMutation({
     mutationFn: upsertSixDayActual,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["six-day-month"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["six-day-month"] });
+      onSaved();
+    },
   });
 
   function saveSingle(pageId: string) {
@@ -637,7 +694,7 @@ function ReconcileView({
   }
 
   function saveAll() {
-    for (const p of pageSummaries) {
+    for (const p of reconcileRows) {
       const val = drafts[p.page_id];
       if (val !== "" && val !== String(p.actual_views ?? "")) {
         actualMut.mutate({
@@ -650,8 +707,12 @@ function ReconcileView({
     }
   }
 
-  const totalCycle = pageSummaries.reduce((s: number, p: any) => s + (p.cycle_views_sum || 0), 0);
-  const totalActual = pageSummaries.reduce((s: number, p: any) => s + (p.actual_views || 0), 0);
+  const totalCycle = reconcileRows.reduce((s: number, p: any) => s + (p.cycle_views_sum || 0), 0);
+  const totalActual = reconcileRows.reduce((s: number, p: any) => {
+    const d = drafts[p.page_id];
+    if (d !== undefined && d !== "") return s + (Number(d) || 0);
+    return s + (p.actual_views ?? 0);
+  }, 0);
   const totalDrift = totalActual - totalCycle;
 
   return (
@@ -708,7 +769,7 @@ function ReconcileView({
               </tr>
             </thead>
             <tbody>
-              {pageSummaries.map((p: any) => {
+              {reconcileRows.map((p: any) => {
                 const actual = drafts[p.page_id] !== "" ? Number(drafts[p.page_id]) : null;
                 const drift = actual != null ? actual - (p.cycle_views_sum || 0) : null;
                 return (
