@@ -157,7 +157,7 @@ export const deleteSixDayEntry = (id: string) =>
 
 export const createSixDayTopContent = (data: {
   month: string; cycle_number: number; link: string;
-  views?: number; page_handle?: string; content_type?: string;
+  views?: number; page_handle?: string; page_id?: string; content_type?: string;
 }) => fetchApi<any>("/api/v1/six-day/top-content", { method: "POST", body: JSON.stringify(data) });
 export const updateSixDayTopContent = (id: string, data: Record<string, any>) =>
   fetchApi<any>(`/api/v1/six-day/top-content/${id}`, { method: "PUT", body: JSON.stringify(data) });

@@ -1662,6 +1662,11 @@ async def six_day_month_data(month_str: str):
         c["total_pages"] = len(pages)
         c_top = [t for t in top_content if t["cycle_number"] == c["cycle"]]
         c["top_content"] = c_top
+        page_content: dict[str, list] = {}
+        for t in c_top:
+            pid = t.get("page_id") or "unknown"
+            page_content.setdefault(pid, []).append(t)
+        c["page_content"] = page_content
 
     actuals_map = {a["page_id"]: a for a in actuals}
 
@@ -1785,15 +1790,23 @@ async def six_day_top_content_create(request: Request):
     from app.database.client import get_supabase_client
     client = get_supabase_client()
     body = await request.json()
+    page_id = body.get("page_id")
+    page_handle = body.get("page_handle", "")
+    if page_id and not page_handle:
+        p = client.table("pages").select("handle").eq("id", page_id).execute().data
+        if p:
+            page_handle = p[0]["handle"]
     row = {
         "month": body["month"],
         "cycle_number": int(body["cycle_number"]),
         "link": body["link"],
         "views": int(body.get("views", 0)),
-        "page_handle": body.get("page_handle", ""),
+        "page_handle": page_handle,
+        "page_id": page_id,
         "content_type": body.get("content_type", "reel"),
     }
     result = client.table("six_day_top_content").insert(row).execute().data[0]
+    _sync_six_day_entry(client, body["month"], int(body["cycle_number"]), page_id)
     return {"success": True, "data": result}
 
 
@@ -1802,10 +1815,13 @@ async def six_day_top_content_update(item_id: str, request: Request):
     from app.database.client import get_supabase_client
     client = get_supabase_client()
     body = await request.json()
-    allowed = {k: v for k, v in body.items() if k in ("link", "views", "page_handle", "content_type")}
+    allowed = {k: v for k, v in body.items() if k in ("link", "views", "page_handle", "content_type", "page_id")}
     if "views" in allowed:
         allowed["views"] = int(allowed["views"])
     client.table("six_day_top_content").update(allowed).eq("id", item_id).execute()
+    item = client.table("six_day_top_content").select("month,cycle_number,page_id").eq("id", item_id).execute().data
+    if item:
+        _sync_six_day_entry(client, item[0]["month"], item[0]["cycle_number"], item[0].get("page_id"))
     return {"success": True}
 
 
@@ -1813,8 +1829,38 @@ async def six_day_top_content_update(item_id: str, request: Request):
 async def six_day_top_content_delete(item_id: str):
     from app.database.client import get_supabase_client
     client = get_supabase_client()
+    item = client.table("six_day_top_content").select("month,cycle_number,page_id").eq("id", item_id).execute().data
     client.table("six_day_top_content").delete().eq("id", item_id).execute()
+    if item:
+        _sync_six_day_entry(client, item[0]["month"], item[0]["cycle_number"], item[0].get("page_id"))
     return {"success": True}
+
+
+def _sync_six_day_entry(client, month: str, cycle_number: int, page_id: str | None):
+    """Re-compute six_day_entries.views as the sum of top_content views for this IP+cycle."""
+    if not page_id:
+        return
+    items = (
+        client.table("six_day_top_content")
+        .select("views")
+        .eq("month", month)
+        .eq("cycle_number", cycle_number)
+        .eq("page_id", page_id)
+        .execute().data or []
+    )
+    total = sum(i.get("views", 0) or 0 for i in items)
+    existing = (
+        client.table("six_day_entries")
+        .select("id").eq("month", month)
+        .eq("cycle_number", cycle_number).eq("page_id", page_id)
+        .execute().data
+    )
+    row = {"month": month, "cycle_number": cycle_number, "page_id": page_id, "views": total,
+           "filled_at": datetime.now(timezone.utc).isoformat()}
+    if existing:
+        client.table("six_day_entries").update(row).eq("id", existing[0]["id"]).execute()
+    else:
+        client.table("six_day_entries").insert(row).execute()
 
 
 # --- Monthly Actuals (reconciliation) ---
