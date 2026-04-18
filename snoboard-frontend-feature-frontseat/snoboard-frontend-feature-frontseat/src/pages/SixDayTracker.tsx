@@ -53,10 +53,36 @@ export default function SixDayTracker() {
   });
 
   const overdueCycles = deadlineData?.overdue_cycles || [];
-  const cycles = monthData?.cycles || [];
   const pages = monthData?.pages || [];
   const pageSummaries = monthData?.page_summaries || [];
   const monthDate = monthData?.month_date || `${selectedMonth}-01`;
+
+  // Always compute 5 cycles client-side so the page is never blank
+  const cycles = useMemo(() => {
+    const serverCycles = monthData?.cycles || [];
+    if (serverCycles.length === 5) return serverCycles;
+    const [y, m] = selectedMonth.split("-").map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    const ranges = [
+      { cycle: 1, start: `${selectedMonth}-01`, end: `${selectedMonth}-06` },
+      { cycle: 2, start: `${selectedMonth}-07`, end: `${selectedMonth}-12` },
+      { cycle: 3, start: `${selectedMonth}-13`, end: `${selectedMonth}-18` },
+      { cycle: 4, start: `${selectedMonth}-19`, end: `${selectedMonth}-24` },
+      { cycle: 5, start: `${selectedMonth}-25`, end: `${selectedMonth}-${String(lastDay).padStart(2, "0")}` },
+    ];
+    const today = new Date().toISOString().slice(0, 10);
+    return ranges.map((r) => {
+      const server = serverCycles.find((c: any) => c.cycle === r.cycle);
+      return server || {
+        ...r,
+        status: today < r.start ? "upcoming" : today <= r.end ? "active" : "done",
+        entries: [],
+        top_content: [],
+        filled_count: 0,
+        total_pages: pages.length,
+      };
+    });
+  }, [monthData, selectedMonth, pages.length]);
 
   const monthLabel = useMemo(() => {
     const [y, m] = selectedMonth.split("-");
