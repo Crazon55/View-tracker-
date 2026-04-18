@@ -41,12 +41,16 @@ export default function SixDayTracker() {
   const { data: monthData, isLoading } = useQuery({
     queryKey: ["six-day-month", selectedMonth],
     queryFn: () => getSixDayMonth(selectedMonth),
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: deadlineData } = useQuery({
     queryKey: ["six-day-deadlines"],
     queryFn: getSixDayDeadlines,
+    staleTime: 5 * 60_000,
     refetchInterval: 120_000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: allPagesRaw } = useQuery({
@@ -56,6 +60,7 @@ export default function SixDayTracker() {
       return Array.isArray(res) ? res : (res as any)?.data ?? [];
     },
     staleTime: 300_000,
+    refetchOnWindowFocus: false,
   });
 
   const overdueCycles = deadlineData?.overdue_cycles || [];
