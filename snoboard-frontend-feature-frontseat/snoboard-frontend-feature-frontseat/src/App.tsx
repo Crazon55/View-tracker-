@@ -27,6 +27,7 @@ import Stage1Tracker from "./pages/Stage1Tracker";
 import CompetitorResearch from "./pages/CompetitorResearch";
 import ContentTracker from "./pages/ContentTracker";
 import PostTracker from "./pages/PostTracker";
+import SixDayTracker from "./pages/SixDayTracker";
 import RoleSelect from "./pages/RoleSelect";
 import NotFound from "./pages/NotFound";
 
@@ -214,6 +215,7 @@ const navItems: NavItem[] = [
   { to: "/post-tracker", label: "Post Tracker", icon: Image },
   { to: "/post-ips", label: "Post IPs", icon: Image },
   { to: "/stage1-tracker", label: "Stage 1 Tracker", icon: BarChart3 },
+  { to: "/six-day-tracker", label: "6-Day Tracker", icon: Radio },
   { to: "/competitor-research", label: "Competitor Research", icon: Telescope },
   { to: "/growth", label: "Growth", icon: TrendingUp },
   { to: "/pages", label: "IP's", icon: Users },
@@ -289,6 +291,7 @@ function AppLayout() {
     location.pathname === "/pipeline" ||
     location.pathname === "/stage1-tracker" ||
     location.pathname === "/competitor-research" ||
+    location.pathname === "/six-day-tracker" ||
     location.pathname.startsWith("/post-ips/") ||
     location.pathname.startsWith("/page/");
 
@@ -321,6 +324,7 @@ function AppLayout() {
           <Route path="/pipeline" element={<PipelineView />} />
           <Route path="/stage1-tracker" element={<Stage1Tracker />} />
           <Route path="/competitor-research" element={<CompetitorResearch />} />
+          <Route path="/six-day-tracker" element={<SixDayTracker />} />
         </Routes>
       </div>
     );
