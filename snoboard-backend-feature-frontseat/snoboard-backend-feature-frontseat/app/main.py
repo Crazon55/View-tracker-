@@ -1047,6 +1047,74 @@ async def get_growth_data():
                     "category": page.get("category", ""),
                 })
 
+    # --- Merge 6-day tracker into growth: reconciled IG actuals override; else cycle sums ---
+    six_entries = client.table("six_day_entries").select("page_id,month,views").execute().data or []
+    six_actuals = client.table("six_day_monthly_actuals").select("page_id,month,actual_views").execute().data or []
+
+    handle_to_id = {p["handle"]: p["id"] for p in pages}
+    id_to_page = {p["id"]: p for p in pages}
+
+    cycle_sum: dict[tuple[str, str], int] = {}
+    for e in six_entries:
+        pid, mon = e.get("page_id"), e.get("month")
+        if not pid or not mon:
+            continue
+        mp = mon[:7] if isinstance(mon, str) else str(mon)[:7]
+        cycle_sum[(pid, mp)] = cycle_sum.get((pid, mp), 0) + int(e.get("views") or 0)
+
+    actual_map: dict[tuple[str, str], int] = {}
+    for a in six_actuals:
+        pid, mon = a.get("page_id"), a.get("month")
+        if not pid or not mon:
+            continue
+        mp = mon[:7] if isinstance(mon, str) else str(mon)[:7]
+        actual_map[(pid, mp)] = int(a.get("actual_views") or 0)
+
+    six_keys = set(cycle_sum.keys()) | set(actual_map.keys())
+
+    for row in data:
+        h = row.get("handle")
+        if not h or h == "total":
+            continue
+        pid = handle_to_id.get(h)
+        if not pid:
+            continue
+        mp = (row.get("month") or "")[:7]
+        if len(mp) < 7:
+            continue
+        k = (pid, mp)
+        if k in actual_map:
+            row["views"] = actual_map[k]
+        elif cycle_sum.get(k, 0) > 0:
+            row["views"] = cycle_sum[k]
+
+    present = {
+        (handle_to_id.get(r.get("handle")), (r.get("month") or "")[:7])
+        for r in data if r.get("handle") and r.get("handle") != "total"
+    }
+
+    for (pid, mp) in six_keys:
+        if not pid or (pid, mp) in present:
+            continue
+        p = id_to_page.get(pid)
+        if not p:
+            continue
+        if (pid, mp) in actual_map:
+            total = actual_map[(pid, mp)]
+        else:
+            total = cycle_sum.get((pid, mp), 0)
+        if (pid, mp) not in actual_map and total <= 0:
+            continue
+        data.append({
+            "id": f"six-day-{pid}-{mp}",
+            "handle": p["handle"],
+            "stage": p.get("stage", 1),
+            "month": f"{mp}-01",
+            "views": total,
+            "followers_gained": 0,
+            "category": p.get("category", ""),
+        })
+
     return {"success": True, "data": data}
 
 

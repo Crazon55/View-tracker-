@@ -165,6 +165,8 @@ export default function GrowthView() {
   const { data: growthData = [], isLoading } = useQuery({
     queryKey: ["growth-data"],
     queryFn: fetchGrowthData,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
   // Group by month
