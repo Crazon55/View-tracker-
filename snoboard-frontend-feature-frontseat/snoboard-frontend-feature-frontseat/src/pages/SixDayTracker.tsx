@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import {
-  getSixDayMonth, bulkSaveSixDayEntries, upsertSixDayEntry,
+  getSixDayMonth, upsertSixDayEntry,
   createSixDayTopContent, updateSixDayTopContent, deleteSixDayTopContent,
   upsertSixDayActual, getSixDayDeadlines, getPages,
 } from "@/services/api";
@@ -267,9 +267,9 @@ function CycleCard({
   selectedMonth: string;
   onDataChange: () => void;
 }) {
-  const allContent: any[] = cycle.top_content || [];
-  const totalViews = allContent.reduce((s: number, t: any) => s + (t.views || 0), 0);
-  const filledPages = new Set(allContent.map((t: any) => t.page_id).filter(Boolean));
+  const entries: any[] = cycle.entries || [];
+  const totalViews = entries.reduce((s: number, e: any) => s + (e.views || 0), 0);
+  const filledCount = typeof cycle.filled_count === "number" ? cycle.filled_count : entries.length;
 
   const statusIcon = cycle.status === "done"
     ? <CheckCircle2 className="w-4 h-4 text-emerald-400" />
@@ -319,7 +319,7 @@ function CycleCard({
           <div className="hidden sm:block text-right">
             <p className="text-xs text-zinc-500">IPs Filled</p>
             <p className="text-sm font-bold text-zinc-300">
-              {filledPages.size}/{pages.length}
+              {filledCount}/{pages.length}
             </p>
           </div>
           {expanded ? <ChevronUp className="w-5 h-5 text-zinc-500" /> : <ChevronDown className="w-5 h-5 text-zinc-500" />}
@@ -363,7 +363,7 @@ const PERF_TAGS_CONST = [
   { value: "topline", label: "Topline" },
 ] as const;
 
-/* ──────── IP Dropdown (one per page inside a cycle) ──────── */
+/* ──────── IP row: weekly inputs + topline links (same card) ──────── */
 function IPDropdown({
   page, cycle, monthDate, qc, userEmail, onDataChange,
 }: {
@@ -374,25 +374,47 @@ function IPDropdown({
   userEmail: string;
   onDataChange: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [addMode, setAddMode] = useState(false);
   const [newLink, setNewLink] = useState("");
   const [newViews, setNewViews] = useState("");
   const [newType, setNewType] = useState("reel");
-  const [newPerf, setNewPerf] = useState("baseline");
 
-  const allContent: any[] = cycle.top_content || [];
-  const items = allContent.filter((t: any) => t.page_id === page.id);
-  const totalViews = items.reduce((s: number, t: any) => s + (t.views || 0), 0);
-  const reelViews = items.filter((t: any) => t.content_type === "reel").reduce((s: number, t: any) => s + (t.views || 0), 0);
-  const postViews = items.filter((t: any) => t.content_type === "post").reduce((s: number, t: any) => s + (t.views || 0), 0);
-  const reelPct = totalViews > 0 ? Math.round((reelViews / totalViews) * 100) : 0;
-  const postPct = totalViews > 0 ? Math.round((postViews / totalViews) * 100) : 0;
-
-  // Entry-level perf tags for this IP+cycle
   const entry = (cycle.entries || []).find((e: any) => e.page_id === page.id);
-  const reelPerf = entry?.reel_perf_tag || "";
-  const postPerf = entry?.post_perf_tag || "";
+  const allContent: any[] = cycle.top_content || [];
+  const toplineItems = allContent.filter((t: any) => t.page_id === page.id);
+  const toplineViewsSum = toplineItems.reduce((s: number, t: any) => s + (t.views || 0), 0);
+
+  const [weekViews, setWeekViews] = useState("");
+  const [reelPctStr, setReelPctStr] = useState("");
+  const [postPctStr, setPostPctStr] = useState("");
+  const [reelPerfSel, setReelPerfSel] = useState("baseline");
+  const [postPerfSel, setPostPerfSel] = useState("baseline");
+
+  useEffect(() => {
+    setWeekViews(String((entry?.views as number | undefined) ?? 0));
+    setReelPctStr(entry?.reel_pct != null && entry.reel_pct !== "" ? String(entry.reel_pct) : "");
+    setPostPctStr(entry?.post_pct != null && entry.post_pct !== "" ? String(entry.post_pct) : "");
+    setReelPerfSel(entry?.reel_perf_tag || "baseline");
+    setPostPerfSel(entry?.post_perf_tag || "baseline");
+  }, [
+    page.id,
+    cycle.cycle,
+    monthDate,
+    entry?.id,
+    entry?.views,
+    entry?.reel_pct,
+    entry?.post_pct,
+    entry?.reel_perf_tag,
+    entry?.post_perf_tag,
+  ]);
+
+  function parseOptionalPct(s: string): number | null {
+    const t = s.trim();
+    if (t === "") return null;
+    const n = Number(t);
+    if (Number.isNaN(n)) return null;
+    return Math.max(0, Math.min(100, Math.round(n)));
+  }
 
   const upsertEntryMut = useMutation({
     mutationFn: (data: Record<string, any>) => upsertSixDayEntry(data),
@@ -402,15 +424,23 @@ function IPDropdown({
     },
   });
 
-  function setEntryPerf(field: "reel_perf_tag" | "post_perf_tag", val: string) {
-    upsertEntryMut.mutate({
+  function entryPayload(overrides: Record<string, any> = {}) {
+    return {
       month: monthDate,
       cycle_number: cycle.cycle,
       page_id: page.id,
-      views: totalViews,
-      filled_by: userEmail,
-      [field]: val || null,
-    });
+      views: Math.max(0, Number(weekViews) || 0),
+      reel_pct: parseOptionalPct(reelPctStr),
+      post_pct: parseOptionalPct(postPctStr),
+      reel_perf_tag: reelPerfSel,
+      post_perf_tag: postPerfSel,
+      filled_by: userEmail || "",
+      ...overrides,
+    };
+  }
+
+  function saveEntry(overrides: Record<string, any> = {}) {
+    upsertEntryMut.mutate(entryPayload(overrides));
   }
 
   const createMut = useMutation({
@@ -421,7 +451,6 @@ function IPDropdown({
       setNewLink("");
       setNewViews("");
       setNewType("reel");
-      setNewPerf("baseline");
       setAddMode(false);
     },
   });
@@ -453,191 +482,198 @@ function IPDropdown({
       page_id: page.id,
       page_handle: page.handle,
       content_type: newType,
-      perf_tag: newPerf,
     });
   }
 
+  const hasData = !!entry || toplineItems.length > 0;
+
   return (
-    <div className="border border-zinc-800 rounded-xl overflow-hidden">
-      <div className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-zinc-800/30 transition-colors">
-        {/* IP name (click to expand) */}
-        <button onClick={() => setOpen(!open)} className="flex items-center gap-2 min-w-0 flex-1 text-left">
-          <div className={`w-2 h-2 rounded-full shrink-0 ${items.length > 0 ? "bg-emerald-400" : "bg-zinc-700"}`} />
-          {open ? <ChevronUp className="w-3.5 h-3.5 text-zinc-500 shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 text-zinc-500 shrink-0" />}
-          <div className="min-w-0">
-            <span className="text-white font-semibold text-sm truncate block">{page.name || page.handle}</span>
-            <span className="text-zinc-600 text-[10px]">@{page.handle}</span>
+    <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/30">
+      <div className="p-3 sm:p-4 space-y-3">
+        <div className="flex flex-col xl:flex-row xl:items-end gap-3 xl:gap-2">
+          <div className="flex items-center gap-2 min-w-0 xl:w-[200px] shrink-0">
+            <div className={`w-2 h-2 rounded-full shrink-0 ${hasData ? "bg-emerald-400" : "bg-zinc-700"}`} />
+            <div className="min-w-0">
+              <span className="text-white font-semibold text-sm truncate block">{page.name || page.handle}</span>
+              <span className="text-zinc-600 text-[10px]">@{page.handle}</span>
+            </div>
           </div>
-        </button>
-        {/* Total views */}
-        <div className="w-20 text-right shrink-0">
-          <p className="text-[9px] uppercase tracking-wider text-zinc-600">Total</p>
-          <p className="text-white font-bold text-sm tabular-nums">{fmt(totalViews)}</p>
+
+          <div className="flex flex-wrap items-end gap-x-2 gap-y-2 flex-1 xl:justify-end">
+            <div className="w-[4.75rem] shrink-0">
+              <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Total</p>
+              <Input
+                type="number"
+                min={0}
+                value={weekViews}
+                onChange={(e) => setWeekViews(e.target.value)}
+                onBlur={() => saveEntry()}
+                disabled={upsertEntryMut.isPending}
+                className="h-7 text-xs bg-zinc-800 border-zinc-700 text-white tabular-nums px-2"
+              />
+            </div>
+            <div className="w-[3.75rem] shrink-0">
+              <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Reel %</p>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={reelPctStr}
+                onChange={(e) => setReelPctStr(e.target.value)}
+                onBlur={() => saveEntry()}
+                disabled={upsertEntryMut.isPending}
+                className="h-7 text-xs bg-zinc-800 border-zinc-700 text-purple-300 tabular-nums px-2"
+              />
+            </div>
+            <div className="w-[3.75rem] shrink-0">
+              <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Post %</p>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={postPctStr}
+                onChange={(e) => setPostPctStr(e.target.value)}
+                onBlur={() => saveEntry()}
+                disabled={upsertEntryMut.isPending}
+                className="h-7 text-xs bg-zinc-800 border-zinc-700 text-emerald-300 tabular-nums px-2"
+              />
+            </div>
+            <div className="w-[8.5rem] shrink-0">
+              <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Reel perf</p>
+              <Select
+                value={reelPerfSel}
+                onValueChange={(v) => {
+                  setReelPerfSel(v);
+                  upsertEntryMut.mutate(entryPayload({ reel_perf_tag: v }));
+                }}
+                disabled={upsertEntryMut.isPending}
+              >
+                <SelectTrigger className="h-7 text-[10px] bg-zinc-800 border-zinc-700 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-zinc-800 border-zinc-700">
+                  {PERF_TAGS_CONST.map((p) => (
+                    <SelectItem key={p.value} value={p.value} className="text-white text-[10px]">{p.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="w-[8.5rem] shrink-0">
+              <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Post perf</p>
+              <Select
+                value={postPerfSel}
+                onValueChange={(v) => {
+                  setPostPerfSel(v);
+                  upsertEntryMut.mutate(entryPayload({ post_perf_tag: v }));
+                }}
+                disabled={upsertEntryMut.isPending}
+              >
+                <SelectTrigger className="h-7 text-[10px] bg-zinc-800 border-zinc-700 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-zinc-800 border-zinc-700">
+                  {PERF_TAGS_CONST.map((p) => (
+                    <SelectItem key={p.value} value={p.value} className="text-white text-[10px]">{p.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </div>
-        {/* Reel % */}
-        <div className="w-16 text-right shrink-0">
-          <p className="text-[9px] uppercase tracking-wider text-zinc-600">Reel</p>
-          <p className="text-purple-400 font-bold text-sm tabular-nums">{reelPct}%</p>
-        </div>
-        {/* Post % */}
-        <div className="w-16 text-right shrink-0">
-          <p className="text-[9px] uppercase tracking-wider text-zinc-600">Post</p>
-          <p className="text-emerald-400 font-bold text-sm tabular-nums">{postPct}%</p>
-        </div>
-        {/* Reel perf tag */}
-        <div className="w-32 shrink-0">
-          <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Reel perf</p>
-          <Select value={reelPerf || "none"} onValueChange={(v) => setEntryPerf("reel_perf_tag", v === "none" ? "" : v)}>
-            <SelectTrigger className="h-7 text-[10px] bg-zinc-800 border-zinc-700 text-white">
-              <SelectValue placeholder="—" />
-            </SelectTrigger>
-            <SelectContent className="bg-zinc-800 border-zinc-700">
-              <SelectItem value="none" className="text-zinc-400 text-[10px]">—</SelectItem>
-              {PERF_TAGS_CONST.map((p) => (
-                <SelectItem key={p.value} value={p.value} className="text-white text-[10px]">{p.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        {/* Post perf tag */}
-        <div className="w-32 shrink-0">
-          <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Post perf</p>
-          <Select value={postPerf || "none"} onValueChange={(v) => setEntryPerf("post_perf_tag", v === "none" ? "" : v)}>
-            <SelectTrigger className="h-7 text-[10px] bg-zinc-800 border-zinc-700 text-white">
-              <SelectValue placeholder="—" />
-            </SelectTrigger>
-            <SelectContent className="bg-zinc-800 border-zinc-700">
-              <SelectItem value="none" className="text-zinc-400 text-[10px]">—</SelectItem>
-              {PERF_TAGS_CONST.map((p) => (
-                <SelectItem key={p.value} value={p.value} className="text-white text-[10px]">{p.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+
+        <div className="border-t border-zinc-800/90 pt-3 space-y-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <p className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">
+              Topline posts / reels
+            </p>
+            {toplineItems.length > 0 && (
+              <span className="text-[10px] text-zinc-500">
+                Sum of link views: <span className="text-zinc-300 font-bold tabular-nums">{fmt(toplineViewsSum)}</span>
+              </span>
+            )}
+          </div>
+
+          {toplineItems.length > 0 && (
+            <div className="space-y-1.5 rounded-lg border border-zinc-800/80 bg-zinc-950/40 p-2">
+              {toplineItems
+                .slice()
+                .sort((a: any, b: any) => (b.views || 0) - (a.views || 0))
+                .map((item: any) => (
+                  <ContentItemRow
+                    key={item.id}
+                    item={item}
+                    onUpdate={(data) => updateMut.mutate({ id: item.id, data })}
+                    onDelete={() => deleteMut.mutate(item.id)}
+                  />
+                ))}
+            </div>
+          )}
+
+          {toplineItems.length === 0 && !addMode && (
+            <p className="text-xs text-zinc-600 text-center py-1">No topline links yet — add Instagram URLs below.</p>
+          )}
+
+          {addMode ? (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 space-y-2">
+              <div className="flex flex-wrap gap-2">
+                <Input
+                  value={newLink}
+                  onChange={(e) => setNewLink(e.target.value)}
+                  placeholder="Instagram link…"
+                  className="h-8 text-xs bg-zinc-800 border-zinc-700 text-white flex-1 min-w-[160px]"
+                />
+                <Input
+                  type="number"
+                  min={0}
+                  value={newViews}
+                  onChange={(e) => setNewViews(e.target.value)}
+                  placeholder="Views"
+                  className="h-8 w-24 text-xs bg-zinc-800 border-zinc-700 text-white tabular-nums"
+                />
+                <Select value={newType} onValueChange={setNewType}>
+                  <SelectTrigger className="h-8 w-[5.5rem] text-xs bg-zinc-800 border-zinc-700 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-zinc-800 border-zinc-700">
+                    <SelectItem value="reel" className="text-white text-xs">Reel</SelectItem>
+                    <SelectItem value="post" className="text-white text-xs">Post</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => { setAddMode(false); setNewLink(""); setNewViews(""); }}
+                  className="h-7 text-xs text-zinc-400"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleAdd}
+                  disabled={!newLink || createMut.isPending}
+                  className="h-7 text-xs bg-violet-600 hover:bg-violet-700"
+                >
+                  {createMut.isPending ? "Adding…" : "Add link"}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAddMode(true)}
+              className="flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" /> Add topline link
+            </button>
+          )}
         </div>
       </div>
-
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            className="overflow-hidden"
-          >
-            <div className="border-t border-zinc-800 bg-zinc-950/50 p-4 space-y-3">
-              {items.length > 0 && (
-                <div className="space-y-1.5">
-                  {items
-                    .sort((a: any, b: any) => (b.views || 0) - (a.views || 0))
-                    .map((item: any) => (
-                      <ContentItemRow
-                        key={item.id}
-                        item={item}
-                        onUpdate={(data) => updateMut.mutate({ id: item.id, data })}
-                        onDelete={() => deleteMut.mutate(item.id)}
-                      />
-                    ))}
-                  <div className="flex justify-end pt-1">
-                    <span className="text-xs text-zinc-500">Total: <span className="text-white font-bold">{fmt(totalViews)}</span></span>
-                  </div>
-                </div>
-              )}
-
-              {items.length === 0 && !addMode && (
-                <p className="text-xs text-zinc-600 text-center py-2">No content added yet</p>
-              )}
-
-              {addMode ? (
-                <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 space-y-2">
-                  <div className="flex gap-2">
-                    <Input
-                      value={newLink}
-                      onChange={(e) => setNewLink(e.target.value)}
-                      placeholder="Instagram link..."
-                      className="h-8 text-xs bg-zinc-800 border-zinc-700 text-white flex-1"
-                    />
-                    <Input
-                      type="number"
-                      value={newViews}
-                      onChange={(e) => setNewViews(e.target.value)}
-                      placeholder="Views"
-                      className="h-8 w-24 text-xs bg-zinc-800 border-zinc-700 text-white tabular-nums"
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <Select value={newType} onValueChange={setNewType}>
-                      <SelectTrigger className="h-8 w-20 text-xs bg-zinc-800 border-zinc-700 text-white">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-zinc-800 border-zinc-700">
-                        <SelectItem value="reel" className="text-white text-xs">Reel</SelectItem>
-                        <SelectItem value="post" className="text-white text-xs">Post</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Select value={newPerf} onValueChange={setNewPerf}>
-                      <SelectTrigger className="h-8 flex-1 text-xs bg-zinc-800 border-zinc-700 text-white">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-zinc-800 border-zinc-700">
-                        <SelectItem value="below_baseline" className="text-white text-xs">Below Baseline</SelectItem>
-                        <SelectItem value="baseline" className="text-white text-xs">Baseline</SelectItem>
-                        <SelectItem value="above_baseline" className="text-white text-xs">Above Baseline</SelectItem>
-                        <SelectItem value="topline" className="text-white text-xs">Topline</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => { setAddMode(false); setNewLink(""); setNewViews(""); setNewPerf("baseline"); }}
-                      className="h-7 text-xs text-zinc-400"
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={handleAdd}
-                      disabled={!newLink || createMut.isPending}
-                      className="h-7 text-xs bg-violet-600 hover:bg-violet-700"
-                    >
-                      {createMut.isPending ? "Adding..." : "Add"}
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setAddMode(true)}
-                  className="flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 transition-colors px-1"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Add reel / post
-                </button>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
 
-
-const PERF_TAGS = [
-  { value: "below_baseline", label: "Below Baseline", color: "border-red-500/30 text-red-400", bg: "bg-red-500/10" },
-  { value: "baseline", label: "Baseline", color: "border-zinc-500/30 text-zinc-400", bg: "bg-zinc-500/10" },
-  { value: "above_baseline", label: "Above Baseline", color: "border-emerald-500/30 text-emerald-400", bg: "bg-emerald-500/10" },
-  { value: "topline", label: "Topline", color: "border-amber-500/30 text-amber-400", bg: "bg-amber-500/10" },
-] as const;
-
-function perfBadge(tag: string | null | undefined) {
-  const t = PERF_TAGS.find((p) => p.value === tag) || PERF_TAGS[1];
-  return (
-    <Badge variant="outline" className={`text-[9px] shrink-0 ${t.color}`}>
-      {t.label}
-    </Badge>
-  );
-}
 
 /* ──────── Content Item Row ──────── */
 function ContentItemRow({ item, onUpdate, onDelete }: {
@@ -649,10 +685,15 @@ function ContentItemRow({ item, onUpdate, onDelete }: {
   const [link, setLink] = useState(item.link || "");
   const [views, setViews] = useState(String(item.views || 0));
   const [type, setType] = useState(item.content_type || "reel");
-  const [perf, setPerf] = useState(item.perf_tag || "baseline");
+
+  useEffect(() => {
+    setLink(item.link || "");
+    setViews(String(item.views || 0));
+    setType(item.content_type || "reel");
+  }, [item.id, item.link, item.views, item.content_type]);
 
   function save() {
-    onUpdate({ link, views: Number(views), content_type: type, perf_tag: perf });
+    onUpdate({ link, views: Number(views), content_type: type });
     setEditing(false);
   }
 
@@ -674,22 +715,12 @@ function ContentItemRow({ item, onUpdate, onDelete }: {
         </div>
         <div className="flex items-center gap-2">
           <Select value={type} onValueChange={setType}>
-            <SelectTrigger className="h-7 w-20 text-xs bg-zinc-800 border-zinc-700 text-white">
+            <SelectTrigger className="h-7 w-24 text-xs bg-zinc-800 border-zinc-700 text-white">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-zinc-800 border-zinc-700">
               <SelectItem value="reel" className="text-white text-xs">Reel</SelectItem>
               <SelectItem value="post" className="text-white text-xs">Post</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={perf} onValueChange={setPerf}>
-            <SelectTrigger className="h-7 flex-1 text-xs bg-zinc-800 border-zinc-700 text-white">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-zinc-800 border-zinc-700">
-              {PERF_TAGS.map((p) => (
-                <SelectItem key={p.value} value={p.value} className="text-white text-xs">{p.label}</SelectItem>
-              ))}
             </SelectContent>
           </Select>
           <Button size="sm" onClick={save} className="h-7 text-xs bg-violet-600 hover:bg-violet-700 px-2">
@@ -708,7 +739,6 @@ function ContentItemRow({ item, onUpdate, onDelete }: {
       }`}>
         {item.content_type === "reel" ? "Reel" : "Post"}
       </Badge>
-      {perfBadge(item.perf_tag)}
       <a
         href={item.link}
         target="_blank"

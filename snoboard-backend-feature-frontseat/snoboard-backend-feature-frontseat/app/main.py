@@ -1871,10 +1871,15 @@ async def six_day_month_data(month_str: str):
     for c in cycles:
         c["status"] = "upcoming" if today < c["start"] else ("active" if today <= c["end"] else "done")
         c_entries = [e for e in entries if e["cycle_number"] == c["cycle"]]
-        c["entries"] = c_entries
-        c["filled_count"] = len(c_entries)
-        c["total_pages"] = len(pages)
         c_top = [t for t in top_content if t["cycle_number"] == c["cycle"]]
+        filled_pids = {e["page_id"] for e in c_entries}
+        for t in c_top:
+            pid = t.get("page_id")
+            if pid:
+                filled_pids.add(pid)
+        c["entries"] = c_entries
+        c["filled_count"] = len(filled_pids)
+        c["total_pages"] = len(pages)
         c["top_content"] = c_top
         page_content: dict[str, list] = {}
         for t in c_top:
@@ -1942,6 +1947,24 @@ async def six_day_entries_upsert(request: Request):
         row["reel_perf_tag"] = body.get("reel_perf_tag") or None
     if "post_perf_tag" in body:
         row["post_perf_tag"] = body.get("post_perf_tag") or None
+    if "reel_pct" in body:
+        rp = body.get("reel_pct")
+        if rp is None or rp == "":
+            row["reel_pct"] = None
+        else:
+            try:
+                row["reel_pct"] = max(0, min(100, int(rp)))
+            except (TypeError, ValueError):
+                row["reel_pct"] = None
+    if "post_pct" in body:
+        pp = body.get("post_pct")
+        if pp is None or pp == "":
+            row["post_pct"] = None
+        else:
+            try:
+                row["post_pct"] = max(0, min(100, int(pp)))
+            except (TypeError, ValueError):
+                row["post_pct"] = None
 
     existing = (
         client.table("six_day_entries")
@@ -2026,7 +2049,6 @@ async def six_day_top_content_create(request: Request):
         "perf_tag": body.get("perf_tag"),
     }
     result = client.table("six_day_top_content").insert(row).execute().data[0]
-    _sync_six_day_entry(client, body["month"], int(body["cycle_number"]), page_id)
     return {"success": True, "data": result}
 
 
@@ -2039,9 +2061,6 @@ async def six_day_top_content_update(item_id: str, request: Request):
     if "views" in allowed:
         allowed["views"] = int(allowed["views"])
     client.table("six_day_top_content").update(allowed).eq("id", item_id).execute()
-    item = client.table("six_day_top_content").select("month,cycle_number,page_id").eq("id", item_id).execute().data
-    if item:
-        _sync_six_day_entry(client, item[0]["month"], item[0]["cycle_number"], item[0].get("page_id"))
     return {"success": True}
 
 
@@ -2049,43 +2068,8 @@ async def six_day_top_content_update(item_id: str, request: Request):
 async def six_day_top_content_delete(item_id: str):
     from app.database.client import get_supabase_client
     client = get_supabase_client()
-    item = client.table("six_day_top_content").select("month,cycle_number,page_id").eq("id", item_id).execute().data
     client.table("six_day_top_content").delete().eq("id", item_id).execute()
-    if item:
-        _sync_six_day_entry(client, item[0]["month"], item[0]["cycle_number"], item[0].get("page_id"))
     return {"success": True}
-
-
-def _sync_six_day_entry(client, month: str, cycle_number: int, page_id: str | None):
-    """Re-compute six_day_entries.views as the sum of top_content views for this IP+cycle."""
-    if not page_id:
-        return
-    items = (
-        client.table("six_day_top_content")
-        .select("views")
-        .eq("month", month)
-        .eq("cycle_number", cycle_number)
-        .eq("page_id", page_id)
-        .execute().data or []
-    )
-    total = sum(i.get("views", 0) or 0 for i in items)
-    existing = (
-        client.table("six_day_entries")
-        .select("id").eq("month", month)
-        .eq("cycle_number", cycle_number).eq("page_id", page_id)
-        .execute().data
-    )
-    # Only update the computed `views` and timestamp — preserve perf tags
-    if existing:
-        client.table("six_day_entries").update({
-            "views": total,
-            "filled_at": datetime.now(timezone.utc).isoformat(),
-        }).eq("id", existing[0]["id"]).execute()
-    else:
-        client.table("six_day_entries").insert({
-            "month": month, "cycle_number": cycle_number, "page_id": page_id,
-            "views": total, "filled_at": datetime.now(timezone.utc).isoformat(),
-        }).execute()
 
 
 # --- Monthly Actuals (reconciliation) ---
@@ -2166,7 +2150,18 @@ async def six_day_deadlines():
         .execute()
         .data or []
     )
+    top_rows = (
+        client.table("six_day_top_content")
+        .select("page_id,cycle_number")
+        .eq("month", month_date)
+        .execute()
+        .data or []
+    )
     filled_set = {(e["page_id"], e["cycle_number"]) for e in entries}
+    for t in top_rows:
+        pid = t.get("page_id")
+        if pid:
+            filled_set.add((pid, t["cycle_number"]))
 
     overdue = []
     for c in cycles:
