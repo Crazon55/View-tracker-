@@ -465,7 +465,7 @@ export default function ContentTracker(){
   const [dateFrom,setDateFrom]=useState(monthStart());
   const [dateTo,setDateTo]=useState(today());
   const [compResearchFilter,setCompResearchFilter]=useState(false);
-  const [sourceFilter,setSourceFilter]=useState("all");
+  const [sourceFilter,setSourceFilter]=useState<"all"|"original"|"competitor">("all");
   const [filterDateFrom,setFilterDateFrom]=useState("");
   const [filterDateTo,setFilterDateTo]=useState("");
   const [collapsedStages,setCollapsedStages]=useState<Record<string,boolean>>({});

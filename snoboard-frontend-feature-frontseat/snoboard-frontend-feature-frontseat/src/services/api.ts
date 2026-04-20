@@ -149,6 +149,8 @@ export const getSixDayMonth = (month: string) =>
 export const upsertSixDayEntry = (data: {
   month: string; cycle_number: number; page_id: string;
   views?: number; filled_by?: string;
+  reel_pct?: number | null; post_pct?: number | null;
+  reel_perf_tag?: string | null; post_perf_tag?: string | null;
 }) => fetchApi<any>("/api/v1/six-day/entries", { method: "POST", body: JSON.stringify(data) });
 
 export const bulkSaveSixDayEntries = (data: {
