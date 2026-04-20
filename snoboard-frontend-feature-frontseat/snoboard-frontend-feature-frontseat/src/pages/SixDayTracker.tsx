@@ -356,6 +356,13 @@ function CycleCard({
 }
 
 
+const PERF_TAGS_CONST = [
+  { value: "below_baseline", label: "Below Baseline" },
+  { value: "baseline", label: "Baseline" },
+  { value: "above_baseline", label: "Above Baseline" },
+  { value: "topline", label: "Topline" },
+] as const;
+
 /* ──────── IP Dropdown (one per page inside a cycle) ──────── */
 function IPDropdown({
   page, cycle, monthDate, qc, userEmail, onDataChange,
@@ -377,6 +384,34 @@ function IPDropdown({
   const allContent: any[] = cycle.top_content || [];
   const items = allContent.filter((t: any) => t.page_id === page.id);
   const totalViews = items.reduce((s: number, t: any) => s + (t.views || 0), 0);
+  const reelViews = items.filter((t: any) => t.content_type === "reel").reduce((s: number, t: any) => s + (t.views || 0), 0);
+  const postViews = items.filter((t: any) => t.content_type === "post").reduce((s: number, t: any) => s + (t.views || 0), 0);
+  const reelPct = totalViews > 0 ? Math.round((reelViews / totalViews) * 100) : 0;
+  const postPct = totalViews > 0 ? Math.round((postViews / totalViews) * 100) : 0;
+
+  // Entry-level perf tags for this IP+cycle
+  const entry = (cycle.entries || []).find((e: any) => e.page_id === page.id);
+  const reelPerf = entry?.reel_perf_tag || "";
+  const postPerf = entry?.post_perf_tag || "";
+
+  const upsertEntryMut = useMutation({
+    mutationFn: (data: Record<string, any>) => upsertSixDayEntry(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["six-day-month"] });
+      onDataChange();
+    },
+  });
+
+  function setEntryPerf(field: "reel_perf_tag" | "post_perf_tag", val: string) {
+    upsertEntryMut.mutate({
+      month: monthDate,
+      cycle_number: cycle.cycle,
+      page_id: page.id,
+      views: totalViews,
+      filled_by: userEmail,
+      [field]: val || null,
+    });
+  }
 
   const createMut = useMutation({
     mutationFn: createSixDayTopContent,
@@ -424,23 +459,62 @@ function IPDropdown({
 
   return (
     <div className="border border-zinc-800 rounded-xl overflow-hidden">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/30 transition-colors"
-      >
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-zinc-800/30 transition-colors">
+        {/* IP name (click to expand) */}
+        <button onClick={() => setOpen(!open)} className="flex items-center gap-2 min-w-0 flex-1 text-left">
           <div className={`w-2 h-2 rounded-full shrink-0 ${items.length > 0 ? "bg-emerald-400" : "bg-zinc-700"}`} />
-          <span className="text-white font-semibold text-sm truncate">{page.name || page.handle}</span>
-          <span className="text-zinc-600 text-xs">@{page.handle}</span>
-        </div>
-        <div className="flex items-center gap-4 shrink-0">
-          <div className="text-right">
-            <span className="text-white font-bold text-sm tabular-nums">{fmt(totalViews)}</span>
-            <span className="text-zinc-600 text-xs ml-1.5">{items.length} item{items.length !== 1 ? "s" : ""}</span>
+          {open ? <ChevronUp className="w-3.5 h-3.5 text-zinc-500 shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 text-zinc-500 shrink-0" />}
+          <div className="min-w-0">
+            <span className="text-white font-semibold text-sm truncate block">{page.name || page.handle}</span>
+            <span className="text-zinc-600 text-[10px]">@{page.handle}</span>
           </div>
-          {open ? <ChevronUp className="w-4 h-4 text-zinc-500" /> : <ChevronDown className="w-4 h-4 text-zinc-500" />}
+        </button>
+        {/* Total views */}
+        <div className="w-20 text-right shrink-0">
+          <p className="text-[9px] uppercase tracking-wider text-zinc-600">Total</p>
+          <p className="text-white font-bold text-sm tabular-nums">{fmt(totalViews)}</p>
         </div>
-      </button>
+        {/* Reel % */}
+        <div className="w-16 text-right shrink-0">
+          <p className="text-[9px] uppercase tracking-wider text-zinc-600">Reel</p>
+          <p className="text-purple-400 font-bold text-sm tabular-nums">{reelPct}%</p>
+        </div>
+        {/* Post % */}
+        <div className="w-16 text-right shrink-0">
+          <p className="text-[9px] uppercase tracking-wider text-zinc-600">Post</p>
+          <p className="text-emerald-400 font-bold text-sm tabular-nums">{postPct}%</p>
+        </div>
+        {/* Reel perf tag */}
+        <div className="w-32 shrink-0">
+          <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Reel perf</p>
+          <Select value={reelPerf || "none"} onValueChange={(v) => setEntryPerf("reel_perf_tag", v === "none" ? "" : v)}>
+            <SelectTrigger className="h-7 text-[10px] bg-zinc-800 border-zinc-700 text-white">
+              <SelectValue placeholder="—" />
+            </SelectTrigger>
+            <SelectContent className="bg-zinc-800 border-zinc-700">
+              <SelectItem value="none" className="text-zinc-400 text-[10px]">—</SelectItem>
+              {PERF_TAGS_CONST.map((p) => (
+                <SelectItem key={p.value} value={p.value} className="text-white text-[10px]">{p.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {/* Post perf tag */}
+        <div className="w-32 shrink-0">
+          <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Post perf</p>
+          <Select value={postPerf || "none"} onValueChange={(v) => setEntryPerf("post_perf_tag", v === "none" ? "" : v)}>
+            <SelectTrigger className="h-7 text-[10px] bg-zinc-800 border-zinc-700 text-white">
+              <SelectValue placeholder="—" />
+            </SelectTrigger>
+            <SelectContent className="bg-zinc-800 border-zinc-700">
+              <SelectItem value="none" className="text-zinc-400 text-[10px]">—</SelectItem>
+              {PERF_TAGS_CONST.map((p) => (
+                <SelectItem key={p.value} value={p.value} className="text-white text-[10px]">{p.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
 
       <AnimatePresence>
         {open && (
