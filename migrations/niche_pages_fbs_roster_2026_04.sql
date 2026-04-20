@@ -31,7 +31,7 @@ VALUES
   ('indianbusinesscom',    'Indian Business Com',    'https://www.instagram.com/indianbusinesscom/',    false, 1),
   ('ceohustleadvice',      'CEO Hustle Advice',      'https://www.instagram.com/ceohustleadvice/',      false, 1),
   ('therealfoundr',        'The Real Foundr',        'https://www.instagram.com/therealfoundr/',        false, 1),
-  -- Goofies (13)
+  -- Goofies (14)
   ('101xfounders',         '101xfounders',           'https://www.instagram.com/101xfounders/',         false, 1),
   ('foundersinindia',      'Founders In India',      'https://www.instagram.com/foundersinindia/',      false, 1),
   ('startupcoded',         'Startup Coded',          'https://www.instagram.com/startupcoded/',         false, 1),
@@ -44,7 +44,8 @@ VALUES
   ('entrepreneurial.india','Entrepreneurial.India',  'https://www.instagram.com/entrepreneurial.india/',false, 1),
   ('theprimefounder',      'The Prime Founder',      'https://www.instagram.com/theprimefounder/',      false, 1),
   ('indiasbestfounders',   'India''s Best Founders', 'https://www.instagram.com/indiasbestfounders/',   false, 1),
-  ('businesscracked',      'Business Cracked',       'https://www.instagram.com/businesscracked/',      false, 1)
+  ('businesscracked',      'Business Cracked',       'https://www.instagram.com/businesscracked/',      false, 1),
+  ('bestindianpodcast',    'Best Indian Podcast',    'https://www.instagram.com/bestindianpodcast/',    false, 1)
 ON CONFLICT (handle) DO NOTHING;
 
 -- ------------------------------------------------------------------
@@ -91,7 +92,8 @@ SET pages = ARRAY[
   'entrepreneurial.india',
   'theprimefounder',
   'indiasbestfounders',
-  'businesscracked'
+  'businesscracked',
+  'bestindianpodcast'
 ]::text[]
 WHERE name = 'FBS - Goofies';
 
