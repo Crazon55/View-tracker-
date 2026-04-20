@@ -4,7 +4,7 @@ import {
   getSixDayMonth, upsertSixDayEntry,
   createSixDayTopContent, updateSixDayTopContent, deleteSixDayTopContent,
   upsertSixDayActual, getSixDayDeadlines, getPages,
-  getSixDayConfig, setSixDayConfig,
+  getSixDayConfig, setSixDayConfig, getTrackerNiches,
 } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
@@ -65,13 +65,68 @@ export default function SixDayTracker() {
     refetchOnWindowFocus: false,
   });
 
+  const { data: nichesRaw } = useQuery<any[]>({
+    queryKey: ["tracker-niches"],
+    queryFn: async () => {
+      const res = await getTrackerNiches();
+      return Array.isArray(res) ? res : ((res as any)?.data ?? []);
+    },
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+
   const overdueCycles = deadlineData?.overdue_cycles || [];
   const serverPages = monthData?.pages || [];
-  const pages = serverPages.length > 0
+  const allPages = serverPages.length > 0
     ? serverPages
     : (allPagesRaw || []).map((p: any) => ({ id: p.id, handle: p.handle, name: p.name, stage: p.stage ?? 1 }));
   const pageSummaries = monthData?.page_summaries || [];
   const monthDate = monthData?.month_date || `${selectedMonth}-01`;
+
+  /* Niche filter: map each page handle to a niche bucket (garfields / goofies / tech).
+     Niches come from tracker_niches; we match by substring on the niche name. */
+  const [nicheFilter, setNicheFilter] = useState<"all" | "garfields" | "goofies" | "tech">("all");
+
+  const handleToNiche = useMemo(() => {
+    const m = new Map<string, "garfields" | "goofies" | "tech">();
+    for (const n of nichesRaw || []) {
+      const nm = String(n?.name || "").toLowerCase();
+      let bucket: "garfields" | "goofies" | "tech" | null = null;
+      if (nm.includes("garfields")) bucket = "garfields";
+      else if (nm.includes("goofies")) bucket = "goofies";
+      else if (nm.includes("tech")) bucket = "tech";
+      if (!bucket) continue;
+      for (const h of n?.pages || []) {
+        if (h) m.set(String(h).replace(/^@/, "").trim().toLowerCase(), bucket);
+      }
+    }
+    return m;
+  }, [nichesRaw]);
+
+  const nicheCounts = useMemo(() => {
+    const c = { all: allPages.length, garfields: 0, goofies: 0, tech: 0, none: 0 };
+    for (const p of allPages) {
+      const key = handleToNiche.get(String(p.handle || "").replace(/^@/, "").trim().toLowerCase());
+      if (key === "garfields") c.garfields += 1;
+      else if (key === "goofies") c.goofies += 1;
+      else if (key === "tech") c.tech += 1;
+      else c.none += 1;
+    }
+    return c;
+  }, [allPages, handleToNiche]);
+
+  const pages = useMemo(() => {
+    if (nicheFilter === "all") return allPages;
+    return allPages.filter((p: any) => {
+      const key = handleToNiche.get(String(p.handle || "").replace(/^@/, "").trim().toLowerCase());
+      return key === nicheFilter;
+    });
+  }, [allPages, handleToNiche, nicheFilter]);
+
+  const allowedPageIds = useMemo(
+    () => (nicheFilter === "all" ? null : new Set(pages.map((p: any) => p.id))),
+    [pages, nicheFilter],
+  );
 
   const cycles = useMemo(() => {
     const serverCycles = monthData?.cycles || [];
@@ -112,18 +167,26 @@ export default function SixDayTracker() {
     setExpandedCycle(null);
   }
 
-  const totalCycleViews = pageSummaries.reduce((s: number, p: any) => s + (p.cycle_views_sum || 0), 0);
+  const totalCycleViews = useMemo(() => {
+    const rows = allowedPageIds
+      ? pageSummaries.filter((p: any) => allowedPageIds.has(p.page_id))
+      : pageSummaries;
+    return rows.reduce((s: number, p: any) => s + (p.cycle_views_sum || 0), 0);
+  }, [pageSummaries, allowedPageIds]);
 
   const reconcileRows = useMemo(() => {
-    if (pageSummaries.length > 0) return pageSummaries;
-    return (pages || []).map((p: any) => ({
-      page_id: p.id,
-      handle: p.handle,
-      name: p.name,
-      cycle_views_sum: 0,
-      actual_views: null as number | null,
-    }));
-  }, [pageSummaries, pages]);
+    const base = pageSummaries.length > 0
+      ? pageSummaries
+      : (pages || []).map((p: any) => ({
+        page_id: p.id,
+        handle: p.handle,
+        name: p.name,
+        cycle_views_sum: 0,
+        actual_views: null as number | null,
+      }));
+    if (!allowedPageIds) return base;
+    return base.filter((r: any) => allowedPageIds.has(r.page_id));
+  }, [pageSummaries, pages, allowedPageIds]);
 
   function invalidateSixDayAndGrowth() {
     qc.invalidateQueries({ queryKey: ["six-day-month"] });
@@ -242,6 +305,48 @@ export default function SixDayTracker() {
           )}
         </div>
 
+        {/* Niche filter */}
+        <div className="mb-5 flex flex-wrap items-center gap-2">
+          <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold mr-1">
+            Filter by niche
+          </span>
+          {([
+            { key: "all", label: "All", emoji: "", count: nicheCounts.all, active: "bg-violet-600 text-white border-violet-500 shadow-lg shadow-violet-600/20" },
+            { key: "garfields", label: "Garfields", emoji: "🐱", count: nicheCounts.garfields, active: "bg-gradient-to-r from-orange-500 to-amber-500 text-zinc-900 border-orange-400 shadow-lg shadow-orange-500/25" },
+            { key: "goofies", label: "Goofies", emoji: "🐶", count: nicheCounts.goofies, active: "bg-gradient-to-r from-sky-500 to-indigo-500 text-white border-indigo-400 shadow-lg shadow-indigo-500/25" },
+            { key: "tech", label: "Tech", emoji: "💻", count: nicheCounts.tech, active: "bg-gradient-to-r from-emerald-500 to-teal-500 text-zinc-900 border-emerald-400 shadow-lg shadow-emerald-500/25" },
+          ] as const).map((opt) => {
+            const isActive = nicheFilter === opt.key;
+            return (
+              <button
+                key={opt.key}
+                onClick={() => setNicheFilter(opt.key)}
+                className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-full border text-xs font-bold transition-all ${
+                  isActive
+                    ? opt.active
+                    : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700"
+                }`}
+              >
+                {opt.emoji && <span aria-hidden>{opt.emoji}</span>}
+                <span>{opt.label}</span>
+                <span className={`text-[10px] tabular-nums ${isActive ? "opacity-80" : "text-zinc-500"}`}>
+                  {opt.count}
+                </span>
+              </button>
+            );
+          })}
+          {nicheFilter !== "all" && (
+            <span className="text-[11px] text-zinc-500 ml-1">
+              Showing <span className="text-white font-semibold">{pages.length}</span> account{pages.length === 1 ? "" : "s"}
+            </span>
+          )}
+          {nicheCounts.none > 0 && nicheFilter === "all" && (
+            <span className="text-[10px] text-zinc-600 ml-auto italic">
+              {nicheCounts.none} account{nicheCounts.none === 1 ? "" : "s"} not in a niche yet
+            </span>
+          )}
+        </div>
+
         <div className="mb-5 rounded-xl border border-zinc-800 bg-zinc-900/80 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <p className="text-sm text-zinc-400">
             <span className="text-white font-medium">Month-end:</span> Enter Instagram dashboard totals to fix drift vs cycle sums. Same numbers feed the <span className="text-violet-400">Growth</span> chart after you save.
@@ -269,11 +374,17 @@ export default function SixDayTracker() {
             {monthPending && !monthData && (
               <p className="text-xs text-zinc-500 text-center py-1">Loading saved cycle data…</p>
             )}
-            {cycles.map((cycle: any) => (
+            {pages.length === 0 ? (
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-8 text-center text-sm text-zinc-500">
+                No accounts in this niche yet. Switch the filter above or add handles to the niche.
+              </div>
+            ) : null}
+            {pages.length > 0 && cycles.map((cycle: any) => (
               <CycleCard
                 key={cycle.cycle}
                 cycle={cycle}
                 pages={pages}
+                allowedPageIds={allowedPageIds}
                 monthDate={monthDate}
                 expanded={expandedCycle === cycle.cycle}
                 onToggle={() => setExpandedCycle(expandedCycle === cycle.cycle ? null : cycle.cycle)}
@@ -305,10 +416,11 @@ function fmtShort(d: string) {
 
 /* ──────── Cycle Card ──────── */
 function CycleCard({
-  cycle, pages, monthDate, expanded, onToggle, qc, userEmail, selectedMonth, onDataChange,
+  cycle, pages, allowedPageIds, monthDate, expanded, onToggle, qc, userEmail, selectedMonth, onDataChange,
 }: {
   cycle: any;
   pages: any[];
+  allowedPageIds: Set<string> | null;
   monthDate: string;
   expanded: boolean;
   onToggle: () => void;
@@ -317,9 +429,24 @@ function CycleCard({
   selectedMonth: string;
   onDataChange: () => void;
 }) {
-  const entries: any[] = cycle.entries || [];
+  const allEntries: any[] = cycle.entries || [];
+  const allTopContent: any[] = cycle.top_content || [];
+  const entries = allowedPageIds
+    ? allEntries.filter((e: any) => allowedPageIds.has(e.page_id))
+    : allEntries;
   const totalViews = entries.reduce((s: number, e: any) => s + (e.views || 0), 0);
-  const filledCount = typeof cycle.filled_count === "number" ? cycle.filled_count : entries.length;
+  const filledCount = (() => {
+    if (!allowedPageIds) {
+      return typeof cycle.filled_count === "number" ? cycle.filled_count : allEntries.length;
+    }
+    // Filtered view: an IP is "filled" if it has an entry OR any top-content row in this cycle
+    const filled = new Set<string>();
+    for (const e of entries) if (e.page_id) filled.add(e.page_id);
+    for (const t of allTopContent) {
+      if (t.page_id && allowedPageIds.has(t.page_id)) filled.add(t.page_id);
+    }
+    return filled.size;
+  })();
 
   const statusIcon = cycle.status === "done"
     ? <CheckCircle2 className="w-4 h-4 text-emerald-400" />
