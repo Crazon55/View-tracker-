@@ -1164,6 +1164,11 @@ async def get_growth_data():
 
     six_keys = set(cycle_sum.keys()) | set(actual_map.keys())
 
+    # Months that have ANY 6-day data become 6-day-only for Growth: any page in these months
+    # that doesn't have 6-day data contributes 0 views (NOT its content_entries fallback).
+    # This guarantees the Growth page total matches the 6-day tracker total exactly.
+    six_day_months: set[str] = {mp for (_pid, mp) in six_keys}
+
     def _derive_split(pid: str, mp: str, total: int) -> tuple[int, int]:
         """Given a final total views for (pid, mp), derive reel_views and post_views
         by scaling the reel_pct/post_pct split recorded in six_day_entries."""
@@ -1190,6 +1195,12 @@ async def get_growth_data():
             row["views"] = actual_map[k]
         elif cycle_sum.get(k, 0) > 0:
             row["views"] = cycle_sum[k]
+        elif mp in six_day_months:
+            # This month has 6-day data somewhere but not for this page → zero out
+            # so we don't double-count legacy content_entries on top of 6-day totals.
+            row["views"] = 0
+            row["reel_views"] = 0
+            row["post_views"] = 0
         # Derive reel/post split from 6-day if we have it
         r_views, p_views = _derive_split(pid, mp, int(row.get("views") or 0))
         if r_views or p_views:
