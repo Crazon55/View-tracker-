@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
-import { getDeadlines } from "@/services/api";
+import { getDeadlines, getSixDayConfig, getSixDayDeadlines } from "@/services/api";
 import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, BarChart3, Scissors, Telescope, ClipboardList, Trophy } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -84,17 +84,51 @@ function useAnimalAvatar(userId: string | undefined) {
 
 function AnimalPicker({ userId }: { userId: string | undefined }) {
   const { animal, pickAnimal, hasChosen } = useAnimalAvatar(userId);
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const [showPanel, setShowPanel] = useState(false);
   const [panelTab, setPanelTab] = useState<"deadlines" | "avatar">("deadlines");
   const ref = useRef<HTMLDivElement>(null);
 
-  const { data: deadlines = [] } = useQuery<any[]>({
+  const { data: taskDeadlines = [] } = useQuery<any[]>({
     queryKey: ["deadlines", role],
     queryFn: () => getDeadlines(role || undefined),
     enabled: !!role,
     refetchInterval: 60_000,
   });
+
+  const { data: sixDayConfig } = useQuery<any>({
+    queryKey: ["six-day-config"],
+    queryFn: getSixDayConfig,
+    enabled: !!user?.email,
+    refetchInterval: 5 * 60_000,
+  });
+
+  const assignedEmail: string = (sixDayConfig?.data?.assigned_email || "").toLowerCase();
+  const userEmail: string = (user?.email || "").toLowerCase();
+  const isSixDayAssignee = !!userEmail && userEmail === assignedEmail;
+
+  const { data: sixDayDeadlineData } = useQuery<any>({
+    queryKey: ["six-day-deadlines-panel"],
+    queryFn: getSixDayDeadlines,
+    enabled: isSixDayAssignee,
+    refetchInterval: 60_000,
+  });
+
+  const sixDayOverdue: any[] = isSixDayAssignee
+    ? (sixDayDeadlineData?.data?.overdue_cycles || sixDayDeadlineData?.overdue_cycles || [])
+    : [];
+
+  const sixDayItems = sixDayOverdue.map((c: any) => ({
+    id: `six-day-cycle-${c.cycle}`,
+    idea_name: `6-Day Cycle ${c.cycle} — ${c.missing_count} IP${c.missing_count === 1 ? "" : "s"} unfilled`,
+    content_type: "6-day",
+    ips: (c.missing_pages || []).map((p: any) => p.name || p.handle).slice(0, 3).join(", "),
+    idea_status: "overdue",
+    deadline: c.deadline,
+    _kind: "six-day",
+  }));
+
+  const deadlines: any[] = [...sixDayItems, ...taskDeadlines];
 
   useEffect(() => {
     if (!hasChosen) { setShowPanel(true); setPanelTab("avatar"); }
@@ -159,9 +193,14 @@ function AnimalPicker({ userId }: { userId: string | undefined }) {
                     const today = new Date().toISOString().slice(0, 10);
                     const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
                     const isUrgent = dl <= tomorrow;
-                    const isOverdue = dl < today;
+                    const isOverdue = dl < today || d._kind === "six-day";
+                    const isSixDay = d._kind === "six-day";
+                    const Wrapper: any = isSixDay ? NavLink : "div";
+                    const wrapperProps: any = isSixDay
+                      ? { to: "/six-day-tracker", onClick: () => setShowPanel(false), className: `block rounded-lg px-3 py-2 bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-colors` }
+                      : { className: `rounded-lg px-3 py-2 ${isOverdue ? "bg-red-500/10 border border-red-500/30" : isUrgent ? "bg-amber-500/10 border border-amber-500/30" : "bg-zinc-800/50"}` };
                     return (
-                      <div key={d.id} className={`rounded-lg px-3 py-2 ${isOverdue ? "bg-red-500/10 border border-red-500/30" : isUrgent ? "bg-amber-500/10 border border-amber-500/30" : "bg-zinc-800/50"}`}>
+                      <Wrapper key={d.id} {...wrapperProps}>
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-medium text-white truncate max-w-[180px]">{d.idea_name}</span>
                           <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${isOverdue ? "bg-red-500/20 text-red-400" : isUrgent ? "bg-amber-500/20 text-amber-400" : "bg-zinc-700 text-zinc-400"}`}>
@@ -170,10 +209,10 @@ function AnimalPicker({ userId }: { userId: string | undefined }) {
                         </div>
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-[9px] text-zinc-500 uppercase">{d.content_type}</span>
-                          <span className="text-[9px] text-zinc-600">{d.ips || ""}</span>
+                          <span className="text-[9px] text-zinc-600 truncate max-w-[180px]">{d.ips || ""}</span>
                           <span className="text-[9px] text-zinc-600 ml-auto">{d.idea_status}</span>
                         </div>
-                      </div>
+                      </Wrapper>
                     );
                   })}
                 </div>
