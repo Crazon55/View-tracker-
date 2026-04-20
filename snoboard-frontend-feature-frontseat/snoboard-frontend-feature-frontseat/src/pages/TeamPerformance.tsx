@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { getTeamsPerformance } from "@/services/api";
-import { Trophy, Users, AtSign, Lightbulb, CheckCircle2, Skull, Loader2 } from "lucide-react";
+import { Trophy, Users, AtSign, Lightbulb, CheckCircle2, Skull, Loader2, Film, Image as ImageIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 export default function TeamPerformance() {
@@ -41,8 +41,9 @@ export default function TeamPerformance() {
             Team performance
           </h1>
           <p className="text-sm text-zinc-500 mt-1 max-w-2xl">
-            Garfields vs Goofies — accounts from reel tracker niches. Leader by{" "}
-            <span className="text-violet-400 font-medium">ideas posted</span> (stage = Posted).
+            Garfields vs Goofies — <span className="text-zinc-400">reels and posts</span> from the content tracker (idea{" "}
+            <span className="text-violet-400 font-medium">type</span> reel vs post). Leader by total{" "}
+            <span className="text-violet-400 font-medium">posted</span> (both types combined).
           </p>
         </div>
 
@@ -115,7 +116,7 @@ export default function TeamPerformance() {
                       </div>
                     ) : (
                       <p className="text-xs text-zinc-600">
-                        No handles in tracker niche yet — run niche setup or add pages in Reel Tracker.
+                        No handles in tracker niche yet — run niche setup or add pages in Reel / Post tracker niches.
                       </p>
                     )}
                   </div>
@@ -148,6 +149,43 @@ export default function TeamPerformance() {
                       In progress (not posted / not killed):{" "}
                       <span className="text-zinc-400 font-medium">{team.ideas_in_progress ?? 0}</span>
                     </p>
+
+                    <div className="grid grid-cols-2 gap-2 mt-3">
+                      <div className="rounded-lg border border-purple-500/25 bg-purple-500/5 px-2 py-2">
+                        <p className="text-[10px] text-purple-300 uppercase font-medium flex items-center gap-1 mb-1.5">
+                          <Film className="w-3 h-3" /> Reels
+                        </p>
+                        <div className="flex justify-between text-[11px] text-zinc-400">
+                          <span>Total</span>
+                          <span className="text-white tabular-nums font-semibold">{team.reel_total ?? 0}</span>
+                        </div>
+                        <div className="flex justify-between text-[11px] text-zinc-400">
+                          <span className="text-emerald-400/90">Posted</span>
+                          <span className="text-emerald-400 tabular-nums font-semibold">{team.reel_posted ?? 0}</span>
+                        </div>
+                        <div className="flex justify-between text-[11px] text-zinc-500">
+                          <span>Killed</span>
+                          <span className="tabular-nums">{team.reel_killed ?? 0}</span>
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/5 px-2 py-2">
+                        <p className="text-[10px] text-emerald-300 uppercase font-medium flex items-center gap-1 mb-1.5">
+                          <ImageIcon className="w-3 h-3" /> Posts
+                        </p>
+                        <div className="flex justify-between text-[11px] text-zinc-400">
+                          <span>Total</span>
+                          <span className="text-white tabular-nums font-semibold">{team.post_total ?? 0}</span>
+                        </div>
+                        <div className="flex justify-between text-[11px] text-zinc-400">
+                          <span className="text-emerald-400/90">Posted</span>
+                          <span className="text-emerald-400 tabular-nums font-semibold">{team.post_posted ?? 0}</span>
+                        </div>
+                        <div className="flex justify-between text-[11px] text-zinc-500">
+                          <span>Killed</span>
+                          <span className="tabular-nums">{team.post_killed ?? 0}</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   <div>

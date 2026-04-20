@@ -1348,14 +1348,14 @@ TEAM_PERFORMANCE_CONFIG: dict[str, dict] = {
 
 @app.get("/api/v1/teams/performance")
 async def teams_performance():
-    """Leaderboard: Garfields vs Goofies — accounts from tracker niches, idea counts by stage."""
+    """Leaderboard: Garfields vs Goofies — accounts from tracker niches; reels + posts, counts by stage."""
     from app.database.client import get_supabase_client
     client = get_supabase_client()
 
     niches = client.table("tracker_niches").select("id,name,pages").execute().data or []
     ideas = (
         client.table("tracker_ideas")
-        .select("id,stage,niche_id,niche_ids")
+        .select("id,stage,niche_id,niche_ids,type")
         .execute()
         .data or []
     )
@@ -1390,19 +1390,32 @@ async def teams_performance():
                 return niche_id_to_team[x]
         return None
 
+    def _content_bucket(idea: dict) -> str:
+        t = (idea.get("type") or "reel").lower().strip()
+        return "post" if t == "post" else "reel"
+
     stats: dict[str, dict[str, int]] = {
-        k: {"ideas_total": 0, "ideas_posted": 0, "ideas_killed": 0} for k in TEAM_PERFORMANCE_CONFIG
+        k: {
+            "ideas_total": 0, "ideas_posted": 0, "ideas_killed": 0,
+            "reel_total": 0, "reel_posted": 0, "reel_killed": 0,
+            "post_total": 0, "post_posted": 0, "post_killed": 0,
+        }
+        for k in TEAM_PERFORMANCE_CONFIG
     }
     for idea in ideas:
         tk = _idea_team(idea)
         if not tk or tk not in stats:
             continue
-        stats[tk]["ideas_total"] += 1
+        bucket = _content_bucket(idea)
         st = (idea.get("stage") or "").lower()
+        stats[tk]["ideas_total"] += 1
+        stats[tk][f"{bucket}_total"] += 1
         if st == "posted":
             stats[tk]["ideas_posted"] += 1
+            stats[tk][f"{bucket}_posted"] += 1
         elif st == "kill":
             stats[tk]["ideas_killed"] += 1
+            stats[tk][f"{bucket}_killed"] += 1
 
     teams_out = []
     for team_key, cfg in TEAM_PERFORMANCE_CONFIG.items():
@@ -1420,6 +1433,12 @@ async def teams_performance():
             "ideas_posted": st["ideas_posted"],
             "ideas_killed": st["ideas_killed"],
             "ideas_in_progress": max(0, st["ideas_total"] - st["ideas_posted"] - st["ideas_killed"]),
+            "reel_total": st["reel_total"],
+            "reel_posted": st["reel_posted"],
+            "reel_killed": st["reel_killed"],
+            "post_total": st["post_total"],
+            "post_posted": st["post_posted"],
+            "post_killed": st["post_killed"],
         })
 
     teams_out.sort(key=lambda x: x["ideas_posted"], reverse=True)
