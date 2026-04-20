@@ -1364,6 +1364,7 @@ GOOFIES_HANDLES: list[str] = [
     "theprimefounder",
     "indiasbestfounders",
     "businesscracked",
+    "bestindianpodcast",
 ]
 
 
@@ -2098,6 +2099,7 @@ async def tracker_sync_team_niches():
         "theprimefounder": "The Prime Founder",
         "indiasbestfounders": "India's Best Founders",
         "businesscracked": "Business Cracked",
+        "bestindianpodcast": "Best Indian Podcast",
     }
 
     all_handles = sorted({
