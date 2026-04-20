@@ -248,10 +248,28 @@ async def dashboard_stats():
             "top_reels": [],
         })
 
-    # Totals — computed from per-page stats so they stay consistent after 6-day overrides
-    total_reel_views = sum(p.get("reel_views", 0) or 0 for p in page_stats)
-    total_post_views = sum(p.get("post_views", 0) or 0 for p in page_stats)
-    total_views = total_reel_views + total_post_views
+    # Totals — computed from per-page stats so they stay consistent after 6-day overrides.
+    # IMPORTANT: total_views must come from `total_views` (= month_views = 6-day cycle sum), NOT
+    # from reel+post, because pages that have cycle views but no reel_pct/post_pct entered
+    # would otherwise be dropped from the total. Any unattributed views are split proportionally
+    # so the Reels/Posts ring stays consistent with the 6-day tracker total.
+    total_views = sum(p.get("total_views", 0) or 0 for p in page_stats)
+    attributed_reel = sum(p.get("reel_views", 0) or 0 for p in page_stats)
+    attributed_post = sum(p.get("post_views", 0) or 0 for p in page_stats)
+    attributed = attributed_reel + attributed_post
+    unattributed = max(0, total_views - attributed)
+    if attributed > 0 and unattributed > 0:
+        reel_share = attributed_reel / attributed
+        extra_reel = int(round(unattributed * reel_share))
+        total_reel_views = attributed_reel + extra_reel
+        total_post_views = total_views - total_reel_views
+    elif attributed == 0 and total_views > 0:
+        # No reel_pct/post_pct entered anywhere — default to 50/50 rather than losing views
+        total_reel_views = total_views // 2
+        total_post_views = total_views - total_reel_views
+    else:
+        total_reel_views = attributed_reel
+        total_post_views = attributed_post
     total_all_time = sum(p["all_time_views"] for p in page_stats)
 
     return {
