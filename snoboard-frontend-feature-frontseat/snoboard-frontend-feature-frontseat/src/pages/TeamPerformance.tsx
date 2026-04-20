@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { getTeamsPerformance } from "@/services/api";
+import { getTeamsPerformance, getTrackerIdeas, getTrackerNiches } from "@/services/api";
+import { buildTeamPerformanceFromTracker } from "@/lib/teamPerformanceCompute";
 import { Trophy, Users, AtSign, Lightbulb, CheckCircle2, Skull, Loader2, Film, Image as ImageIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -7,10 +8,31 @@ function formatShipRate(rate: number | undefined): string {
   return `${((rate ?? 0) * 100).toFixed(1)}%`;
 }
 
+export type TeamPerformancePayload = {
+  teams: any[];
+  leader_key: string | null;
+  _source?: "api" | "client";
+};
+
+async function fetchTeamPerformance(): Promise<TeamPerformancePayload> {
+  try {
+    const data = await getTeamsPerformance();
+    return { teams: data.teams ?? [], leader_key: data.leader_key ?? null, _source: "api" };
+  } catch {
+    const [ideas, niches] = await Promise.all([getTrackerIdeas(), getTrackerNiches()]);
+    const ideaList = Array.isArray(ideas) ? ideas : [];
+    const nicheList = Array.isArray(niches) ? niches : [];
+    return {
+      ...buildTeamPerformanceFromTracker(ideaList, nicheList),
+      _source: "client",
+    };
+  }
+}
+
 export default function TeamPerformance() {
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["teams-performance"],
-    queryFn: getTeamsPerformance,
+    queryFn: fetchTeamPerformance,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
@@ -28,9 +50,15 @@ export default function TeamPerformance() {
   }
 
   if (isError || !data) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
     return (
-      <div className="min-h-screen bg-zinc-950 pt-24 pb-16 px-6 text-center text-red-400 text-sm">
-        Could not load team performance. Check that the API is running.
+      <div className="min-h-screen bg-zinc-950 pt-24 pb-16 px-6 text-center space-y-3 max-w-lg mx-auto">
+        <p className="text-red-400 text-sm">Could not load team performance.</p>
+        <p className="text-zinc-500 text-xs break-words">{msg}</p>
+        <p className="text-zinc-600 text-xs">
+          If you see 404, pull the latest backend on the server and restart uvicorn so{" "}
+          <code className="text-zinc-400">/api/v1/teams/performance</code> exists.
+        </p>
       </div>
     );
   }
@@ -49,6 +77,12 @@ export default function TeamPerformance() {
             <span className="text-amber-400/90 font-medium">Winning team</span> has the higher{" "}
             <span className="text-violet-400 font-medium">posted ÷ total</span> ideas (ship rate). Tie-break: more ideas posted, then more total ideas.
           </p>
+          {data._source === "client" && (
+            <p className="text-xs text-amber-400/90 mt-2 max-w-2xl border border-amber-500/25 rounded-lg px-3 py-2 bg-amber-500/5">
+              Stats are computed in the browser from Reel Tracker ideas + niches (the dedicated team API is unavailable — e.g. backend not restarted). Redeploy the API to use{" "}
+              <code className="text-zinc-400">/api/v1/teams/performance</code> directly.
+            </p>
+          )}
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
