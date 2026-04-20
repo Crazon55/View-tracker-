@@ -356,13 +356,6 @@ function CycleCard({
 }
 
 
-const PERF_TAGS_CONST = [
-  { value: "below_baseline", label: "Below Baseline" },
-  { value: "baseline", label: "Baseline" },
-  { value: "above_baseline", label: "Above Baseline" },
-  { value: "topline", label: "Topline" },
-] as const;
-
 /* ──────── IP row: weekly inputs + topline links (same card) ──────── */
 function IPDropdown({
   page, cycle, monthDate, qc, userEmail, onDataChange,
@@ -387,15 +380,15 @@ function IPDropdown({
   const [weekViews, setWeekViews] = useState("");
   const [reelPctStr, setReelPctStr] = useState("");
   const [postPctStr, setPostPctStr] = useState("");
-  const [reelPerfSel, setReelPerfSel] = useState("baseline");
-  const [postPerfSel, setPostPerfSel] = useState("baseline");
+  const [reelPerfStr, setReelPerfStr] = useState("");
+  const [postPerfStr, setPostPerfStr] = useState("");
 
   useEffect(() => {
     setWeekViews(String((entry?.views as number | undefined) ?? 0));
     setReelPctStr(entry?.reel_pct != null && entry.reel_pct !== "" ? String(entry.reel_pct) : "");
     setPostPctStr(entry?.post_pct != null && entry.post_pct !== "" ? String(entry.post_pct) : "");
-    setReelPerfSel(entry?.reel_perf_tag || "baseline");
-    setPostPerfSel(entry?.post_perf_tag || "baseline");
+    setReelPerfStr(entry?.reel_perf != null && entry.reel_perf !== "" ? String(entry.reel_perf) : "");
+    setPostPerfStr(entry?.post_perf != null && entry.post_perf !== "" ? String(entry.post_perf) : "");
   }, [
     page.id,
     cycle.cycle,
@@ -404,8 +397,8 @@ function IPDropdown({
     entry?.views,
     entry?.reel_pct,
     entry?.post_pct,
-    entry?.reel_perf_tag,
-    entry?.post_perf_tag,
+    entry?.reel_perf,
+    entry?.post_perf,
   ]);
 
   function parseOptionalPct(s: string): number | null {
@@ -414,6 +407,14 @@ function IPDropdown({
     const n = Number(t);
     if (Number.isNaN(n)) return null;
     return Math.max(0, Math.min(100, Math.round(n)));
+  }
+
+  function parseOptionalNumber(s: string): number | null {
+    const t = s.trim();
+    if (t === "") return null;
+    const n = Number(t);
+    if (Number.isNaN(n)) return null;
+    return n;
   }
 
   const upsertEntryMut = useMutation({
@@ -432,8 +433,8 @@ function IPDropdown({
       views: Math.max(0, Number(weekViews) || 0),
       reel_pct: parseOptionalPct(reelPctStr),
       post_pct: parseOptionalPct(postPctStr),
-      reel_perf_tag: reelPerfSel,
-      post_perf_tag: postPerfSel,
+      reel_perf: parseOptionalNumber(reelPerfStr),
+      post_perf: parseOptionalNumber(postPerfStr),
       filled_by: userEmail || "",
       ...overrides,
     };
@@ -538,45 +539,29 @@ function IPDropdown({
                 className="h-7 text-xs bg-zinc-800 border-zinc-700 text-emerald-300 tabular-nums px-2"
               />
             </div>
-            <div className="w-[8.5rem] shrink-0">
+            <div className="w-[5.5rem] shrink-0">
               <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Reel perf</p>
-              <Select
-                value={reelPerfSel}
-                onValueChange={(v) => {
-                  setReelPerfSel(v);
-                  upsertEntryMut.mutate(entryPayload({ reel_perf_tag: v }));
-                }}
+              <Input
+                type="number"
+                step="0.01"
+                value={reelPerfStr}
+                onChange={(e) => setReelPerfStr(e.target.value)}
+                onBlur={() => saveEntry()}
                 disabled={upsertEntryMut.isPending}
-              >
-                <SelectTrigger className="h-7 text-[10px] bg-zinc-800 border-zinc-700 text-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-zinc-800 border-zinc-700">
-                  {PERF_TAGS_CONST.map((p) => (
-                    <SelectItem key={p.value} value={p.value} className="text-white text-[10px]">{p.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                className="h-7 text-xs bg-zinc-800 border-zinc-700 text-white tabular-nums px-2"
+              />
             </div>
-            <div className="w-[8.5rem] shrink-0">
+            <div className="w-[5.5rem] shrink-0">
               <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Post perf</p>
-              <Select
-                value={postPerfSel}
-                onValueChange={(v) => {
-                  setPostPerfSel(v);
-                  upsertEntryMut.mutate(entryPayload({ post_perf_tag: v }));
-                }}
+              <Input
+                type="number"
+                step="0.01"
+                value={postPerfStr}
+                onChange={(e) => setPostPerfStr(e.target.value)}
+                onBlur={() => saveEntry()}
                 disabled={upsertEntryMut.isPending}
-              >
-                <SelectTrigger className="h-7 text-[10px] bg-zinc-800 border-zinc-700 text-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-zinc-800 border-zinc-700">
-                  {PERF_TAGS_CONST.map((p) => (
-                    <SelectItem key={p.value} value={p.value} className="text-white text-[10px]">{p.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                className="h-7 text-xs bg-zinc-800 border-zinc-700 text-white tabular-nums px-2"
+              />
             </div>
           </div>
         </div>

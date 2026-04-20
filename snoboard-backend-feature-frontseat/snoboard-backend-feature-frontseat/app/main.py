@@ -1942,11 +1942,18 @@ async def six_day_entries_upsert(request: Request):
         "filled_by": filled_by,
         "filled_at": datetime.now(timezone.utc).isoformat(),
     }
-    # Optional perf tags
-    if "reel_perf_tag" in body:
-        row["reel_perf_tag"] = body.get("reel_perf_tag") or None
-    if "post_perf_tag" in body:
-        row["post_perf_tag"] = body.get("post_perf_tag") or None
+    # Numeric perf values (decimals allowed)
+    def _opt_num(v):
+        if v is None or v == "":
+            return None
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+    if "reel_perf" in body:
+        row["reel_perf"] = _opt_num(body.get("reel_perf"))
+    if "post_perf" in body:
+        row["post_perf"] = _opt_num(body.get("post_perf"))
     if "reel_pct" in body:
         rp = body.get("reel_pct")
         if rp is None or rp == "":
