@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -65,6 +65,48 @@ function mapIdea(raw: any): any {
 }
 
 function PB({tag}: {tag: string|null}){ if(!tag||!PT[tag]) return null; const t=PT[tag]; return <span style={{display:"inline-block",fontSize:10,fontWeight:600,padding:"1px 7px",borderRadius:99,background:t.bg,color:t.color}}>{t.label}</span>; }
+
+// Controlled input that syncs from props but ONLY saves when the value actually
+// changes. Stops stale re-renders from wiping saved link fields on blur.
+function SafeTextInput({value, onSave, style, placeholder, type}: {value: string|null; onSave: (v: string|null) => void; style?: React.CSSProperties; placeholder?: string; type?: string}){
+  const [local, setLocal] = useState(value || "");
+  const dirty = useRef(false);
+  useEffect(() => { if (!dirty.current) setLocal(value || ""); }, [value]);
+  return (
+    <input
+      type={type || "text"}
+      value={local}
+      onChange={e => { dirty.current = true; setLocal(e.target.value); }}
+      onBlur={() => {
+        const next = local.trim() || null;
+        const current = (value || "").trim() || null;
+        dirty.current = false;
+        if (next !== current) onSave(next);
+      }}
+      placeholder={placeholder}
+      style={style}
+    />
+  );
+}
+
+function SafeTextArea({value, onSave, style, placeholder, rows}: {value: string; onSave: (v: string) => void; style?: React.CSSProperties; placeholder?: string; rows?: number}){
+  const [local, setLocal] = useState(value || "");
+  const dirty = useRef(false);
+  useEffect(() => { if (!dirty.current) setLocal(value || ""); }, [value]);
+  return (
+    <textarea
+      value={local}
+      onChange={e => { dirty.current = true; setLocal(e.target.value); }}
+      onBlur={() => {
+        dirty.current = false;
+        if ((local || "") !== (value || "")) onSave(local);
+      }}
+      placeholder={placeholder}
+      rows={rows}
+      style={style}
+    />
+  );
+}
 
 function Modal({open,onClose,title,children,wide}: {open:boolean;onClose:()=>void;title:string;children:React.ReactNode;wide?:boolean}){
   if(!open) return null;
@@ -743,8 +785,8 @@ export default function PostTracker(){
 
             {/* Editable fields */}
             <div><label style={ls}>Niches</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{niches.map((n: any)=>{const sel=detailNicheIds.includes(n.id);return <button key={n.id} onClick={()=>{const next=sel?detailNicheIds.filter((x: string)=>x!==n.id):[...detailNicheIds,n.id];setDetailNicheIds(next);saveNiches(cd.id,next);}} style={{padding:"6px 12px",borderRadius:8,border:sel?"2px solid #7c3aed":"1.5px solid #3f3f46",background:sel?"#27272a":"#18181b",fontSize:12,fontWeight:600,cursor:"pointer",color:sel?"#fff":"#71717a"}}>{n.name}</button>;})}</div></div>
-            <div><label style={ls}>Main page hook</label><input defaultValue={cd.main_page_hook||""} key={cd.id+"_hook"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{main_page_hook:e.target.value.trim()||null}})} placeholder="The main hook for the lead page" style={is}/></div>
-            <div><label style={ls}>Hook variations</label><textarea defaultValue={(cd.hook_variations||[]).join("\n")} key={cd.id+"_hooks"} onBlur={e=>{const lines=e.target.value.split("\n").map((l: string)=>l.trim()).filter(Boolean);updateIdeaMut.mutate({id:cd.id,data:{hook_variations:lines.length>0?lines:null}});}} rows={3} placeholder="One hook per line" style={{...is,resize:"vertical",minHeight:60}}/></div>
+            <div><label style={ls}>Main page hook</label><SafeTextInput value={cd.main_page_hook} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{main_page_hook:v}})} placeholder="The main hook for the lead page" style={is}/></div>
+            <div><label style={ls}>Hook variations</label><SafeTextArea value={(cd.hook_variations||[]).join("\n")} onSave={v=>{const lines=v.split("\n").map((l: string)=>l.trim()).filter(Boolean);updateIdeaMut.mutate({id:cd.id,data:{hook_variations:lines.length>0?lines:null}});}} rows={3} placeholder="One hook per line" style={{...is,resize:"vertical",minHeight:60}}/></div>
             <div style={{display:"flex",gap:10}}>
               <div style={{flex:1}}>
                 <label style={ls}>Content pillar</label>
@@ -761,12 +803,7 @@ export default function PostTracker(){
                 </select>
               </div>
             </div>
-            {cd.source==="original"&&(
-              <div><label style={ls}>Original source / references</label><input defaultValue={cd.comp_link||""} key={cd.id+"_source"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{comp_link:e.target.value.trim()||null}})} placeholder="Reference links, articles, sources..." style={is}/></div>
-            )}
-            {cd.source==="competitor"&&(
-              <div><label style={ls}>Comp link</label><input defaultValue={cd.comp_link||""} key={cd.id+"_comp"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{comp_link:e.target.value.trim()||null}})} placeholder="Competitor post URL" style={is}/></div>
-            )}
+            <div><label style={ls}>{cd.source==="competitor" ? "Comp link" : "Original source / references"}</label><SafeTextInput value={cd.comp_link} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{comp_link:v}})} placeholder={cd.source==="competitor" ? "Competitor post URL" : "Reference links, articles, sources..."} style={is}/></div>
             {cd.comp_link&&<a href={cd.comp_link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.comp_link}</a>}
 
             {/* Page checklist — from testing stage onwards */}

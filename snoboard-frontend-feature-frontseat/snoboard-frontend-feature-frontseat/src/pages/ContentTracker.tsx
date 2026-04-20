@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -64,6 +64,49 @@ function mapIdea(raw: any): any {
 }
 
 function PB({tag}: {tag: string|null}){ if(!tag||!PT[tag]) return null; const t=PT[tag]; return <span style={{display:"inline-block",fontSize:10,fontWeight:600,padding:"1px 7px",borderRadius:99,background:t.bg,color:t.color}}>{t.label}</span>; }
+
+// Controlled text field that syncs from props but ONLY saves when the user actually
+// changes the value. Prevents the "stale defaultValue on re-render -> blur wipes link"
+// bug that was nuking yt_url / comp_link / frame_link in the idea modal.
+function SafeTextInput({value, onSave, style, placeholder, type}: {value: string|null; onSave: (v: string|null) => void; style?: React.CSSProperties; placeholder?: string; type?: string}){
+  const [local, setLocal] = useState(value || "");
+  const dirty = useRef(false);
+  useEffect(() => { if (!dirty.current) setLocal(value || ""); }, [value]);
+  return (
+    <input
+      type={type || "text"}
+      value={local}
+      onChange={e => { dirty.current = true; setLocal(e.target.value); }}
+      onBlur={() => {
+        const next = local.trim() || null;
+        const current = (value || "").trim() || null;
+        dirty.current = false;
+        if (next !== current) onSave(next);
+      }}
+      placeholder={placeholder}
+      style={style}
+    />
+  );
+}
+
+function SafeTextArea({value, onSave, style, placeholder, rows}: {value: string; onSave: (v: string) => void; style?: React.CSSProperties; placeholder?: string; rows?: number}){
+  const [local, setLocal] = useState(value || "");
+  const dirty = useRef(false);
+  useEffect(() => { if (!dirty.current) setLocal(value || ""); }, [value]);
+  return (
+    <textarea
+      value={local}
+      onChange={e => { dirty.current = true; setLocal(e.target.value); }}
+      onBlur={() => {
+        dirty.current = false;
+        if ((local || "") !== (value || "")) onSave(local);
+      }}
+      placeholder={placeholder}
+      rows={rows}
+      style={style}
+    />
+  );
+}
 
 function Modal({open,onClose,title,children,wide}: {open:boolean;onClose:()=>void;title:string;children:React.ReactNode;wide?:boolean}){
   if(!open) return null;
@@ -729,23 +772,19 @@ export default function ContentTracker(){
 
             {/* Editable fields */}
             <div><label style={ls}>Niches</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{niches.map((n: any)=>{const sel=detailNicheIds.includes(n.id);return <button key={n.id} onClick={()=>{const next=sel?detailNicheIds.filter((x: string)=>x!==n.id):[...detailNicheIds,n.id];setDetailNicheIds(next);saveNiches(cd.id,next);}} style={{padding:"6px 12px",borderRadius:8,border:sel?"2px solid #7c3aed":"1.5px solid #3f3f46",background:sel?"#27272a":"#18181b",fontSize:12,fontWeight:600,cursor:"pointer",color:sel?"#fff":"#71717a"}}>{n.name}</button>;})}</div></div>
-            <div><label style={ls}>Hook variations</label><textarea defaultValue={(cd.hook_variations||[]).join("\n")} key={cd.id+"_hooks"} onBlur={e=>{const lines=e.target.value.split("\n").map((l: string)=>l.trim()).filter(Boolean);updateIdeaMut.mutate({id:cd.id,data:{hook_variations:lines.length>0?lines:null}});}} rows={3} placeholder="One hook per line" style={{...is,resize:"vertical",minHeight:60}}/></div>
+            <div><label style={ls}>Hook variations</label><SafeTextArea value={(cd.hook_variations||[]).join("\n")} onSave={v=>{const lines=v.split("\n").map((l: string)=>l.trim()).filter(Boolean);updateIdeaMut.mutate({id:cd.id,data:{hook_variations:lines.length>0?lines:null}});}} rows={3} placeholder="One hook per line" style={{...is,resize:"vertical",minHeight:60}}/></div>
             <div style={{display:"flex",gap:10}}>
-              <div style={{flex:1}}><label style={ls}>Music reference / suggestions</label><input defaultValue={cd.music_ref||""} key={cd.id+"_music"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{music_ref:e.target.value.trim()||null}})} placeholder="e.g. Dark cinematic, trending audio" style={is}/></div>
+              <div style={{flex:1}}><label style={ls}>Music reference / suggestions</label><SafeTextInput value={cd.music_ref} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{music_ref:v}})} placeholder="e.g. Dark cinematic, trending audio" style={is}/></div>
             </div>
-            <div><label style={ls}>Frame link</label><input defaultValue={cd.frame_link||""} key={cd.id+"_frame"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{frame_link:e.target.value.trim()||null}})} placeholder="Google Drive / reference frames link" style={is}/></div>
+            <div><label style={ls}>Frame link</label><SafeTextInput value={cd.frame_link} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{frame_link:v}})} placeholder="Google Drive / reference frames link" style={is}/></div>
             {cd.frame_link&&<a href={cd.frame_link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.frame_link}</a>}
-            {cd.source==="original"&&(
-              <div style={{display:"flex",gap:10}}>
-                <div style={{flex:1}}><label style={ls}>YT link (original source)</label><input defaultValue={cd.yt_url||""} key={cd.id+"_yturl"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{yt_url:e.target.value.trim()||null}})} placeholder="https://youtube.com/watch?v=..." style={is}/></div>
-                <div style={{flex:"0 0 140px"}}><label style={ls}>YT timestamps</label><input defaultValue={cd.yt_timestamps||""} key={cd.id+"_ytts"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{yt_timestamps:e.target.value.trim()||null}})} placeholder="0:30-1:45" style={is}/></div>
-              </div>
-            )}
-            {cd.source==="original"&&cd.yt_url&&<a href={cd.yt_url} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.yt_url}</a>}
-            {cd.source==="competitor"&&(
-              <div><label style={ls}>Comp link</label><input defaultValue={cd.comp_link||""} key={cd.id+"_comp"} onBlur={e=>updateIdeaMut.mutate({id:cd.id,data:{comp_link:e.target.value.trim()||null}})} placeholder="Competitor reel / post URL" style={is}/></div>
-            )}
-            {cd.source==="competitor"&&cd.comp_link&&<a href={cd.comp_link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.comp_link}</a>}
+            <div style={{display:"flex",gap:10}}>
+              <div style={{flex:1}}><label style={ls}>YT link (original source)</label><SafeTextInput value={cd.yt_url} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{yt_url:v}})} placeholder="https://youtube.com/watch?v=..." style={is}/></div>
+              <div style={{flex:"0 0 140px"}}><label style={ls}>YT timestamps</label><SafeTextInput value={cd.yt_timestamps} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{yt_timestamps:v}})} placeholder="0:30-1:45" style={is}/></div>
+            </div>
+            {cd.yt_url&&<a href={cd.yt_url} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.yt_url}</a>}
+            <div><label style={ls}>Comp link</label><SafeTextInput value={cd.comp_link} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{comp_link:v}})} placeholder="Competitor reel / post URL" style={is}/></div>
+            {cd.comp_link&&<a href={cd.comp_link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.comp_link}</a>}
 
             {/* Page checklist — from testing stage onwards */}
             {cdPages.length>0&&!["new","approved","base_edit"].includes(cd.stage)&&(
