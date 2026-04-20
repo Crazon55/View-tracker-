@@ -268,7 +268,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Monthly Growth — total views line chart */}
+          {/* Monthly Growth — total / reels / posts line chart */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8 overflow-hidden flex flex-col">
             {(() => {
               const allGrowth = growthData.filter((v: any) => v.handle !== "total");
@@ -276,9 +276,13 @@ export default function Dashboard() {
               const chartData = months.map((month: string) => {
                 const monthEntries = allGrowth.filter((v: any) => v.month?.slice(0, 7) === month);
                 const totalViews = monthEntries.reduce((s: number, v: any) => s + (v.views ?? 0), 0);
+                const reelViews = monthEntries.reduce((s: number, v: any) => s + (v.reel_views ?? 0), 0);
+                const postViews = monthEntries.reduce((s: number, v: any) => s + (v.post_views ?? 0), 0);
                 return {
                   name: new Date(month + "-01").toLocaleDateString("en-GB", { month: "short", year: "2-digit" }),
                   views: totalViews,
+                  reels: reelViews,
+                  posts: postViews,
                 };
               });
               const allTimeTotal = chartData.reduce((s, d) => s + d.views, 0);
@@ -296,7 +300,7 @@ export default function Dashboard() {
                   </div>
                   {chartData.length > 0 ? (
                     <div className="flex-1 min-h-0">
-                      <ResponsiveContainer width="100%" height="100%" minHeight={220}>
+                      <ResponsiveContainer width="100%" height="100%" minHeight={240}>
                         <LineChart data={chartData} margin={{ top: 5, right: 10, bottom: 5, left: 10 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                           <XAxis dataKey="name" tick={{ fill: "#71717a", fontSize: 10 }} />
@@ -304,13 +308,20 @@ export default function Dashboard() {
                           <Tooltip
                             contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 8 }}
                             labelStyle={{ color: "#d4d4d8", fontSize: 12 }}
-                            formatter={(value: number) => [formatCompact(value) + " views", "Total"]}
+                            formatter={(value: number, name: string) => [formatCompact(value) + " views", name]}
                           />
-                          <Line type="monotone" dataKey="views" stroke="#a855f7" strokeWidth={3} dot={{ r: 4, fill: "#a855f7", stroke: "#18181b", strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                          <Line name="Total" type="monotone" dataKey="views" stroke="#a855f7" strokeWidth={3} dot={{ r: 4, fill: "#a855f7", stroke: "#18181b", strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                          <Line name="Reels" type="monotone" dataKey="reels" stroke="#d946ef" strokeWidth={2} strokeDasharray="5 3" dot={{ r: 3, fill: "#d946ef", stroke: "#18181b", strokeWidth: 2 }} />
+                          <Line name="Posts" type="monotone" dataKey="posts" stroke="#10b981" strokeWidth={2} strokeDasharray="5 3" dot={{ r: 3, fill: "#10b981", stroke: "#18181b", strokeWidth: 2 }} />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
                   ) : <p className="text-center text-zinc-600 py-8 text-sm">No growth data yet</p>}
+                  <div className="flex items-center justify-center gap-4 mt-2">
+                    <div className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-violet-500" /><span className="text-[10px] uppercase tracking-wider text-zinc-500">Total</span></div>
+                    <div className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-fuchsia-500" /><span className="text-[10px] uppercase tracking-wider text-zinc-500">Reels</span></div>
+                    <div className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-emerald-500" /><span className="text-[10px] uppercase tracking-wider text-zinc-500">Posts</span></div>
+                  </div>
                 </>
               );
             })()}
