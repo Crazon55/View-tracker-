@@ -1328,6 +1328,45 @@ async def tracker_niches_delete(niche_id: str):
 
 
 # --- Team performance (Garfields vs Goofies) ---
+
+# Canonical handle lists for the two FBS teams. Keep in sync with the product
+# team's master list. These drive:
+#   - `tracker_niches.pages` for "FBS - Garfields" and "FBS - Goofies"
+#   - The 6-Day Tracker niche filter
+#   - The Reel/Post Tracker niche & page filters
+#   - The leaderboard team aggregates (/api/v1/teams/performance)
+# Handles are stored lowercase, without the leading "@".
+GARFIELDS_HANDLES: list[str] = [
+    "bizzindia",
+    "indianfoundersco",
+    "startupbydog",
+    "founderswtf",
+    "entrepreneursindia.co",
+    "richindianceo",
+    "therisingfounder",
+    "millionaire.founders",
+    "indianbusinesscom",
+    "ceohustleadvice",
+    "therealfoundr",
+]
+
+GOOFIES_HANDLES: list[str] = [
+    "101xfounders",
+    "foundersinindia",
+    "startupcoded",
+    "indiastartupstory",
+    "elitefoundrs",
+    "indianfoundrs",
+    "startupsinthelast24hrs",
+    "realindianbusiness",
+    "foundersoncrack",
+    "entrepreneurial.india",
+    "theprimefounder",
+    "indiasbestfounders",
+    "businesscracked",
+]
+
+
 TEAM_PERFORMANCE_CONFIG: dict[str, dict] = {
     "garfields": {
         "key": "garfields",
@@ -2017,6 +2056,35 @@ async def tracker_migrate():
     return {"success": True, "migrated": migrated, "skipped": skipped}
 
 
+@app.post("/api/v1/tracker/sync-team-niches")
+async def tracker_sync_team_niches():
+    """Idempotent sync of the Garfields/Goofies niche membership to the
+    canonical handle lists declared above. Creates the niches if missing;
+    does not delete anything else. Safe to re-run any time the master list
+    changes."""
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+
+    existing = client.table("tracker_niches").select("id,name").execute().data or []
+    niche_map = {n["name"]: n["id"] for n in existing}
+
+    desired = {
+        "FBS - Garfields": GARFIELDS_HANDLES,
+        "FBS - Goofies": GOOFIES_HANDLES,
+    }
+
+    out = {}
+    for name, pages in desired.items():
+        clean = sorted({str(h).lstrip("@").strip().lower() for h in pages if h})
+        if name in niche_map:
+            client.table("tracker_niches").update({"pages": clean}).eq("id", niche_map[name]).execute()
+        else:
+            client.table("tracker_niches").insert({"name": name, "pages": clean}).execute()
+        out[name] = {"count": len(clean), "pages": clean}
+
+    return {"success": True, "synced": out}
+
+
 @app.post("/api/v1/tracker/populate-niche-pages")
 async def tracker_populate_niche_pages():
     """Populate niche pages from the existing pages table + hardcoded Marketing niche."""
@@ -2042,18 +2110,8 @@ async def tracker_populate_niche_pages():
         "therisingbrands", "mktg.wtf", "101xMarketing",
     ]
 
-    garfields_handles = [
-        "bizzindia", "startupbydog", "ceohustleadvice",
-        "millionaire.founders", "richindianceo", "indianbusinesscom",
-        "founderswtf", "therisingfounder", "entrepreneursindia.co", "therealfoundr",
-    ]
-
-    goofies_handles = [
-        "lolxfounders", "fii", "ifc", "bip", "indiastartupstory",
-        "elitefounders", "foundersoncrack", "entrepreneurial.india",
-        "indiasbestfounder", "businesscracked", "indianfoundrs",
-        "realindianbusiness", "theprimefounder", "startupcoded",
-    ]
+    garfields_handles = GARFIELDS_HANDLES
+    goofies_handles = GOOFIES_HANDLES
 
     # Ensure niches exist and update their pages
     existing = client.table("tracker_niches").select("id,name").execute().data or []
