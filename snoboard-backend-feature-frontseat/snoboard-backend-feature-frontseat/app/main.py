@@ -1937,6 +1937,11 @@ async def six_day_entries_upsert(request: Request):
         "filled_by": filled_by,
         "filled_at": datetime.now(timezone.utc).isoformat(),
     }
+    # Optional perf tags
+    if "reel_perf_tag" in body:
+        row["reel_perf_tag"] = body.get("reel_perf_tag") or None
+    if "post_perf_tag" in body:
+        row["post_perf_tag"] = body.get("post_perf_tag") or None
 
     existing = (
         client.table("six_day_entries")
@@ -2070,12 +2075,17 @@ def _sync_six_day_entry(client, month: str, cycle_number: int, page_id: str | No
         .eq("cycle_number", cycle_number).eq("page_id", page_id)
         .execute().data
     )
-    row = {"month": month, "cycle_number": cycle_number, "page_id": page_id, "views": total,
-           "filled_at": datetime.now(timezone.utc).isoformat()}
+    # Only update the computed `views` and timestamp — preserve perf tags
     if existing:
-        client.table("six_day_entries").update(row).eq("id", existing[0]["id"]).execute()
+        client.table("six_day_entries").update({
+            "views": total,
+            "filled_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("id", existing[0]["id"]).execute()
     else:
-        client.table("six_day_entries").insert(row).execute()
+        client.table("six_day_entries").insert({
+            "month": month, "cycle_number": cycle_number, "page_id": page_id,
+            "views": total, "filled_at": datetime.now(timezone.utc).isoformat(),
+        }).execute()
 
 
 # --- Monthly Actuals (reconciliation) ---
