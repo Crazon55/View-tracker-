@@ -53,6 +53,8 @@ function mapIdea(raw: any): any {
     main_page_hook: raw.main_page_hook || null,
     content_pillar: raw.content_pillar || null,
     content_bucket: raw.content_bucket || null,
+    caption: raw.caption || null,
+    canva_link: raw.canva_link || null,
     postings: (raw.tracker_postings || []).map((p: any) => ({
       id: p.id,
       page: p.page,
@@ -494,7 +496,7 @@ export default function PostTracker(){
   const [addNicheOpen,setAddNicheOpen]=useState(false);
   const [editNiche,setEditNiche]=useState<any>(null);
   const [newNiche,setNewNiche]=useState({name:"",pages:""});
-  const [newIdea,setNewIdea]=useState({title:"",source:"original",nicheIds:[] as string[],format:"static",main_page_hook:"",content_pillar:"",content_bucket:"",hook_variations:"",comp_link:""});
+  const [newIdea,setNewIdea]=useState({title:"",source:"original",nicheIds:[] as string[],format:"static",caption:"",canva_link:"",content_pillar:"",content_bucket:"",comp_link:""});
   const [viewMode,setViewMode]=useState("board");
   const [nicheFilter,setNicheFilter]=useState("all");
   const [pageFilter,setPageFilter]=useState("all");
@@ -523,22 +525,21 @@ export default function PostTracker(){
   // ---- Actions wired to mutations ----
   function addIdeaFn(){
     if(!newIdea.title.trim()||newIdea.nicheIds.length===0)return;
-    const hookLines = newIdea.hook_variations.split("\n").map(l=>l.trim()).filter(Boolean);
     createIdeaMut.mutate({
       title: newIdea.title.trim(),
       source: newIdea.source,
       niche_ids: newIdea.nicheIds,
       format: newIdea.format,
-      main_page_hook: newIdea.main_page_hook.trim() || null,
+      caption: newIdea.caption.trim() || null,
+      canva_link: newIdea.canva_link.trim() || null,
       content_pillar: newIdea.content_pillar || null,
       content_bucket: newIdea.content_bucket || null,
-      hook_variations: hookLines.length > 0 ? hookLines : null,
       comp_link: newIdea.source === "competitor" ? (newIdea.comp_link.trim() || null) : null,
       stage: "new",
       type: "post",
       created_by: user?.user_metadata?.full_name || user?.email?.split("@")[0] || user?.email || null,
     });
-    setNewIdea({title:"",source:"original",nicheIds:[],format:"static",main_page_hook:"",content_pillar:"",content_bucket:"",hook_variations:"",comp_link:""});
+    setNewIdea({title:"",source:"original",nicheIds:[],format:"static",caption:"",canva_link:"",content_pillar:"",content_bucket:"",comp_link:""});
     setAddOpen(false);
   }
   function moveIdea(id: string, ns: string){
@@ -741,8 +742,8 @@ export default function PostTracker(){
             <div style={{flex:1}}><label style={ls}>Niches *</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{niches.map((n: any)=>{const sel=newIdea.nicheIds.includes(n.id);return <button key={n.id} type="button" onClick={()=>setNewIdea(p=>({...p,nicheIds:sel?p.nicheIds.filter(x=>x!==n.id):[...p.nicheIds,n.id]}))} style={{padding:"6px 12px",borderRadius:8,border:sel?"2px solid #7c3aed":"1.5px solid #3f3f46",background:sel?"#27272a":"#18181b",fontSize:12,fontWeight:600,cursor:"pointer",color:sel?"#fff":"#71717a"}}>{n.name}</button>;})}</div></div>
             <div style={{flex:1}}><label style={ls}>Created by</label><div style={{...is,background:"#27272a",color:"#a1a1aa"}}>{user?.user_metadata?.full_name || user?.email?.split("@")[0] || "—"}</div></div>
           </div>
-          <div><label style={ls}>Main page hook</label><input value={newIdea.main_page_hook} onChange={e=>setNewIdea(p=>({...p,main_page_hook:e.target.value}))} placeholder="The main hook for the lead page" style={is}/></div>
-          <div><label style={ls}>Hook variations (one per line)</label><textarea value={newIdea.hook_variations} onChange={e=>setNewIdea(p=>({...p,hook_variations:e.target.value}))} rows={3} placeholder={"Hook variation 1\nHook variation 2\nHook variation 3"} style={{...is,resize:"vertical",minHeight:60}}/></div>
+          <div><label style={ls}>Caption</label><textarea value={newIdea.caption} onChange={e=>setNewIdea(p=>({...p,caption:e.target.value}))} rows={4} placeholder="Paste the full Instagram caption here…" style={{...is,resize:"vertical",minHeight:90}}/></div>
+          <div><label style={ls}>Canva link</label><input value={newIdea.canva_link} onChange={e=>setNewIdea(p=>({...p,canva_link:e.target.value}))} placeholder="https://canva.com/design/…" style={is}/></div>
           <div style={{display:"flex",gap:10}}>
             <div style={{flex:1}}>
               <label style={ls}>Content pillar</label>
@@ -785,8 +786,12 @@ export default function PostTracker(){
 
             {/* Editable fields */}
             <div><label style={ls}>Niches</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{niches.map((n: any)=>{const sel=detailNicheIds.includes(n.id);return <button key={n.id} onClick={()=>{const next=sel?detailNicheIds.filter((x: string)=>x!==n.id):[...detailNicheIds,n.id];setDetailNicheIds(next);saveNiches(cd.id,next);}} style={{padding:"6px 12px",borderRadius:8,border:sel?"2px solid #7c3aed":"1.5px solid #3f3f46",background:sel?"#27272a":"#18181b",fontSize:12,fontWeight:600,cursor:"pointer",color:sel?"#fff":"#71717a"}}>{n.name}</button>;})}</div></div>
-            <div><label style={ls}>Main page hook</label><SafeTextInput value={cd.main_page_hook} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{main_page_hook:v}})} placeholder="The main hook for the lead page" style={is}/></div>
-            <div><label style={ls}>Hook variations</label><SafeTextArea value={(cd.hook_variations||[]).join("\n")} onSave={v=>{const lines=v.split("\n").map((l: string)=>l.trim()).filter(Boolean);updateIdeaMut.mutate({id:cd.id,data:{hook_variations:lines.length>0?lines:null}});}} rows={3} placeholder="One hook per line" style={{...is,resize:"vertical",minHeight:60}}/></div>
+            <div><label style={ls}>Caption</label><SafeTextArea value={cd.caption} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{caption:v}})} rows={4} placeholder="Paste the full Instagram caption here…" style={{...is,resize:"vertical",minHeight:90}}/></div>
+            <div>
+              <label style={ls}>Canva link</label>
+              <SafeTextInput value={cd.canva_link} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{canva_link:v}})} placeholder="https://canva.com/design/…" style={is}/>
+              {cd.canva_link&&<a href={cd.canva_link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all",display:"inline-block",marginTop:4}}>{cd.canva_link}</a>}
+            </div>
             <div style={{display:"flex",gap:10}}>
               <div style={{flex:1}}>
                 <label style={ls}>Content pillar</label>

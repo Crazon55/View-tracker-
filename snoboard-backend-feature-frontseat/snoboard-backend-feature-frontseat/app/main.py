@@ -1780,6 +1780,8 @@ async def tracker_ideas_create(request: Request):
         "main_page_hook": body.get("main_page_hook"),
         "content_pillar": body.get("content_pillar"),
         "content_bucket": body.get("content_bucket"),
+        "caption": body.get("caption"),
+        "canva_link": body.get("canva_link"),
     }
     # Remove None values so Supabase doesn't store explicit nulls for optional fields
     row = {k: v for k, v in row.items() if v is not None}
@@ -1793,7 +1795,7 @@ async def tracker_ideas_update(idea_id: str, request: Request):
     from app.database.client import get_supabase_client
     client = get_supabase_client()
     body = await request.json()
-    allowed_keys = {"title", "source", "niche_id", "niche_ids", "stage", "link", "notes", "hook_variations", "music_ref", "yt_url", "yt_timestamps", "comp_link", "type", "tags", "frame_link", "format", "main_page_hook", "content_pillar", "content_bucket"}
+    allowed_keys = {"title", "source", "niche_id", "niche_ids", "stage", "link", "notes", "hook_variations", "music_ref", "yt_url", "yt_timestamps", "comp_link", "type", "tags", "frame_link", "format", "main_page_hook", "content_pillar", "content_bucket", "caption", "canva_link"}
     allowed = {k: v for k, v in body.items() if k in allowed_keys}
     if "niche_ids" in allowed:
         allowed["niche_id"] = allowed["niche_ids"][0] if allowed["niche_ids"] else None
