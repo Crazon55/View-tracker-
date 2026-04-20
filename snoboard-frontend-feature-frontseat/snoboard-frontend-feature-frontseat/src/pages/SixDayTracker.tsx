@@ -540,7 +540,7 @@ function IPDropdown({
               />
             </div>
             <div className="w-[5.5rem] shrink-0">
-              <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Reel perf</p>
+              <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Reel baseline</p>
               <Input
                 type="number"
                 step="0.01"
@@ -552,7 +552,7 @@ function IPDropdown({
               />
             </div>
             <div className="w-[5.5rem] shrink-0">
-              <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Post perf</p>
+              <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Post baseline</p>
               <Input
                 type="number"
                 step="0.01"
