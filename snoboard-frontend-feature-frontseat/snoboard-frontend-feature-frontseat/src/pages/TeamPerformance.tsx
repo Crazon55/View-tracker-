@@ -75,147 +75,32 @@ function teamSkin(key: string) {
 }
 
 /* ============================== easter-egg sounds ============================== */
-// Lazily-created AudioContext — browsers require a user gesture before
-// audio can play, and a double-click qualifies.
-let _audioCtx: AudioContext | null = null;
-function getAudioCtx(): AudioContext | null {
+// Real CC0 audio from BigSoundBank (no attribution required):
+//   meow.mp3 -> "Little Meow of a Cat #1" (1 s kitten meow)
+//   bark.mp3 -> "Barking of a Spitz"      (1 s small dog yip)
+// Kept quiet on purpose — cute, not startling.
+const MEOW_SRC = "/sounds/meow.mp3";
+const BARK_SRC = "/sounds/bark.mp3";
+const EASTER_EGG_VOLUME = 0.35;
+
+function playClip(src: string) {
   try {
-    if (!_audioCtx) {
-      const Ctor = window.AudioContext || (window as any).webkitAudioContext;
-      if (!Ctor) return null;
-      _audioCtx = new Ctor();
-    }
-    if (_audioCtx.state === "suspended") _audioCtx.resume();
-    return _audioCtx;
+    const a = new Audio(src);
+    a.volume = EASTER_EGG_VOLUME;
+    // Small preload hint; ignored if already cached.
+    a.preload = "auto";
+    // play() returns a Promise that can reject if the browser blocks
+    // autoplay — a double-click is a valid user gesture so it normally
+    // works, but swallow the error just in case.
+    void a.play().catch(() => {});
   } catch {
-    return null;
+    /* no-op */
   }
 }
 
-// Master volume for the easter-egg sounds — kept quiet on purpose
-// (cute, not startling).
-const EASTER_EGG_VOLUME = 0.12;
-
-// Kitten-style meow: two detuned oscillators an octave apart (fundamental
-// + softer harmonic), pitched in the cute range (~900-1300 Hz), shaped by
-// a gentle low-pass filter and a soft bell envelope. Short + sweet.
-function playMeow() {
-  const ctx = getAudioCtx();
-  if (!ctx) return;
-  const t = ctx.currentTime;
-  const dur = 0.42;
-
-  const out = ctx.createGain();
-  out.gain.value = EASTER_EGG_VOLUME;
-  out.connect(ctx.destination);
-
-  const filter = ctx.createBiquadFilter();
-  filter.type = "lowpass";
-  filter.frequency.setValueAtTime(2600, t);
-  filter.frequency.linearRampToValueAtTime(1600, t + dur);
-  filter.Q.value = 1;
-  filter.connect(out);
-
-  const envelope = ctx.createGain();
-  envelope.gain.setValueAtTime(0.0001, t);
-  envelope.gain.exponentialRampToValueAtTime(1, t + 0.04);
-  envelope.gain.setValueAtTime(1, t + 0.22);
-  envelope.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  envelope.connect(filter);
-
-  // Fundamental: triangle for smoothness; arcs "me"→"ow"
-  const fund = ctx.createOscillator();
-  fund.type = "triangle";
-  fund.frequency.setValueAtTime(880, t);
-  fund.frequency.linearRampToValueAtTime(1260, t + 0.12);
-  fund.frequency.linearRampToValueAtTime(740, t + dur);
-  const fundGain = ctx.createGain();
-  fundGain.gain.value = 0.6;
-  fund.connect(fundGain).connect(envelope);
-
-  // Soft harmonic (octave up, sine) — adds a sparkly kitten shimmer
-  const harm = ctx.createOscillator();
-  harm.type = "sine";
-  harm.frequency.setValueAtTime(1760, t);
-  harm.frequency.linearRampToValueAtTime(2520, t + 0.12);
-  harm.frequency.linearRampToValueAtTime(1480, t + dur);
-  const harmGain = ctx.createGain();
-  harmGain.gain.value = 0.25;
-  harm.connect(harmGain).connect(envelope);
-
-  // Gentle vibrato on the fundamental
-  const lfo = ctx.createOscillator();
-  lfo.frequency.value = 7;
-  const lfoGain = ctx.createGain();
-  lfoGain.gain.value = 15;
-  lfo.connect(lfoGain).connect(fund.frequency);
-
-  lfo.start(t);
-  fund.start(t);
-  harm.start(t);
-  fund.stop(t + dur + 0.02);
-  harm.stop(t + dur + 0.02);
-  lfo.stop(t + dur + 0.02);
-}
-
-// Puppy yip: two quick high-pitched "yip yip" bursts instead of a deep
-// bark. Triangle waves + low-pass filter = soft cartoony vibe.
-function playBark() {
-  const ctx = getAudioCtx();
-  if (!ctx) return;
-
-  const out = ctx.createGain();
-  out.gain.value = EASTER_EGG_VOLUME;
-  out.connect(ctx.destination);
-
-  const yip = (delay: number) => {
-    const t0 = ctx.currentTime + delay;
-    const len = 0.1;
-
-    const filter = ctx.createBiquadFilter();
-    filter.type = "lowpass";
-    filter.frequency.setValueAtTime(2400, t0);
-    filter.frequency.linearRampToValueAtTime(1200, t0 + len);
-    filter.Q.value = 1;
-    filter.connect(out);
-
-    const env = ctx.createGain();
-    env.gain.setValueAtTime(0.0001, t0);
-    env.gain.exponentialRampToValueAtTime(1, t0 + 0.015);
-    env.gain.exponentialRampToValueAtTime(0.0001, t0 + len);
-    env.connect(filter);
-
-    // Fundamental — triangle, drops from ~520 Hz to ~260 Hz for a yip
-    const fund = ctx.createOscillator();
-    fund.type = "triangle";
-    fund.frequency.setValueAtTime(520, t0);
-    fund.frequency.exponentialRampToValueAtTime(260, t0 + len);
-    const fundGain = ctx.createGain();
-    fundGain.gain.value = 0.7;
-    fund.connect(fundGain).connect(env);
-
-    // Sine harmonic for a cuter cartoony sparkle
-    const harm = ctx.createOscillator();
-    harm.type = "sine";
-    harm.frequency.setValueAtTime(1040, t0);
-    harm.frequency.exponentialRampToValueAtTime(520, t0 + len);
-    const harmGain = ctx.createGain();
-    harmGain.gain.value = 0.3;
-    harm.connect(harmGain).connect(env);
-
-    fund.start(t0);
-    harm.start(t0);
-    fund.stop(t0 + len + 0.02);
-    harm.stop(t0 + len + 0.02);
-  };
-
-  yip(0);
-  yip(0.16);
-}
-
 function playTeamSound(teamKey: string) {
-  if (teamKey === "goofies") playBark();
-  else if (teamKey === "garfields") playMeow();
+  if (teamKey === "goofies") playClip(BARK_SRC);
+  else if (teamKey === "garfields") playClip(MEOW_SRC);
 }
 
 /* ============================== odometer ============================== */
