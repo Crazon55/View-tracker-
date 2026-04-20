@@ -1,264 +1,965 @@
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { motion, AnimatePresence, useMotionValue, useTransform, animate } from "framer-motion";
 import { getTeamsPerformance, getTrackerIdeas, getTrackerNiches } from "@/services/api";
 import { buildTeamPerformanceFromTracker } from "@/lib/teamPerformanceCompute";
-import { Trophy, Users, AtSign, Lightbulb, CheckCircle2, Skull, Loader2, Film, Image as ImageIcon } from "lucide-react";
+import {
+  Trophy,
+  Flame,
+  Sparkles,
+  Crown,
+  Film,
+  Image as ImageIcon,
+  Rocket,
+  Target,
+  Swords,
+  Users,
+  AtSign,
+  Medal,
+  TrendingUp,
+  Star,
+  Loader2,
+  Zap,
+  CheckCircle2,
+  Skull,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
-function formatShipRate(rate: number | undefined): string {
+/* ============================== helpers ============================== */
+
+function formatViews(n: number | undefined | null): string {
+  const v = Number(n || 0);
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(v >= 10_000_000 ? 1 : 2)}M`;
+  if (v >= 1_000) return `${(v / 1_000).toFixed(v >= 10_000 ? 0 : 1)}K`;
+  return `${v}`;
+}
+
+function formatPct(rate: number | undefined | null): string {
   return `${((rate ?? 0) * 100).toFixed(1)}%`;
 }
 
-export type TeamPerformancePayload = {
+const TEAM_SKIN: Record<
+  string,
+  {
+    grad: string;
+    glow: string;
+    ring: string;
+    text: string;
+    bg: string;
+    accent: string;
+    tagline: string;
+  }
+> = {
+  garfields: {
+    grad: "from-orange-500 via-amber-500 to-yellow-400",
+    glow: "shadow-orange-500/30",
+    ring: "ring-orange-500/40",
+    text: "text-orange-300",
+    bg: "bg-orange-500/10",
+    accent: "bg-orange-500",
+    tagline: "lasagna-powered",
+  },
+  goofies: {
+    grad: "from-sky-400 via-indigo-500 to-fuchsia-500",
+    glow: "shadow-indigo-500/30",
+    ring: "ring-indigo-500/40",
+    text: "text-sky-300",
+    bg: "bg-indigo-500/10",
+    accent: "bg-indigo-500",
+    tagline: "hyuck hyuck gang",
+  },
+};
+
+function teamSkin(key: string) {
+  return TEAM_SKIN[key] ?? TEAM_SKIN.garfields;
+}
+
+/* ============================== odometer ============================== */
+
+function Odometer({
+  value,
+  format = (v: number) => v.toLocaleString(),
+  className,
+}: {
+  value: number;
+  format?: (v: number) => string;
+  className?: string;
+}) {
+  const mv = useMotionValue(0);
+  const display = useTransform(mv, (v) => format(Math.round(v)));
+  const [text, setText] = useState(format(0));
+  useEffect(() => {
+    const controls = animate(mv, value, {
+      duration: 1.2,
+      ease: [0.22, 1, 0.36, 1],
+    });
+    const unsub = display.on("change", (latest) => setText(latest));
+    return () => {
+      controls.stop();
+      unsub();
+    };
+  }, [value, mv, display]);
+  return <span className={className}>{text}</span>;
+}
+
+/* ============================== data fetch ============================== */
+
+type PerfData = {
   teams: any[];
   leader_key: string | null;
+  leader_margin_views_6d?: number;
+  leader_margin_views_total?: number;
+  top_idea_overall?: any | null;
+  top_idea_6d?: any | null;
+  top_creator_6d?: any | null;
+  people?: any[];
+  window_days?: number;
   _source?: "api" | "client";
 };
 
-async function fetchTeamPerformance(): Promise<TeamPerformancePayload> {
+async function fetchPerf(): Promise<PerfData> {
   try {
     const data = await getTeamsPerformance();
-    return { teams: data.teams ?? [], leader_key: data.leader_key ?? null, _source: "api" };
+    return { ...data, _source: "api" };
   } catch {
     const [ideas, niches] = await Promise.all([getTrackerIdeas(), getTrackerNiches()]);
     const ideaList = Array.isArray(ideas) ? ideas : [];
     const nicheList = Array.isArray(niches) ? niches : [];
-    return {
-      ...buildTeamPerformanceFromTracker(ideaList, nicheList),
-      _source: "client",
-    };
+    return { ...buildTeamPerformanceFromTracker(ideaList, nicheList), _source: "client" };
   }
 }
+
+/* ============================== page ============================== */
 
 export default function TeamPerformance() {
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["teams-performance"],
-    queryFn: fetchTeamPerformance,
+    queryFn: fetchPerf,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
-
-  const teams = data?.teams ?? [];
-  const leaderKey = data?.leader_key ?? null;
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-zinc-950 pt-24 pb-16 flex items-center justify-center text-zinc-500 gap-2">
         <Loader2 className="w-5 h-5 animate-spin text-violet-500" />
-        Loading team stats…
+        Warming up the arena…
       </div>
     );
   }
-
   if (isError || !data) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     return (
       <div className="min-h-screen bg-zinc-950 pt-24 pb-16 px-6 text-center space-y-3 max-w-lg mx-auto">
-        <p className="text-red-400 text-sm">Could not load team performance.</p>
+        <p className="text-red-400 text-sm">Could not load the leaderboard.</p>
         <p className="text-zinc-500 text-xs break-words">{msg}</p>
-        <p className="text-zinc-600 text-xs">
-          If you see 404, pull the latest backend on the server and restart uvicorn so{" "}
-          <code className="text-zinc-400">/api/v1/teams/performance</code> exists.
-        </p>
       </div>
     );
   }
 
-  const maxRate = Math.max(0, ...teams.map((t: any) => t.posted_rate ?? 0), 1e-9);
+  const teams = data.teams ?? [];
+  const leaderKey = data.leader_key ?? null;
+  const people = data.people ?? [];
+  const margin6d = data.leader_margin_views_6d ?? 0;
+  const marginTotal = data.leader_margin_views_total ?? 0;
+
+  // order teams in fixed slot order so the hero scoreboard is stable
+  const teamA = teams.find((t: any) => t.key === "garfields");
+  const teamB = teams.find((t: any) => t.key === "goofies");
+  const orderedTeams = [teamA, teamB].filter(Boolean);
+
+  const totalViews6d = teams.reduce((s: number, t: any) => s + (t.views_6d || 0), 0);
+  const totalViewsAll = teams.reduce((s: number, t: any) => s + (t.views_total || 0), 0);
 
   return (
-    <div className="min-h-screen bg-zinc-950 pt-20 pb-16 px-4 sm:px-6">
-      <div className="max-w-5xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-2xl sm:text-3xl font-black text-white uppercase tracking-wider">
-            Team performance
-          </h1>
-          <p className="text-sm text-zinc-500 mt-1 max-w-2xl">
-            Garfields vs Goofies — <span className="text-zinc-400">reels and posts</span> from the content tracker.{" "}
-            <span className="text-amber-400/90 font-medium">Winning team</span> has the higher{" "}
-            <span className="text-violet-400 font-medium">posted ÷ total</span> ideas (ship rate). Tie-break: more ideas posted, then more total ideas.
-          </p>
+    <div className="min-h-screen bg-zinc-950 pt-20 pb-20 px-4 sm:px-6 overflow-hidden relative">
+      {/* bg decor */}
+      <div className="pointer-events-none absolute inset-0 -z-0">
+        <div className="absolute -top-40 -left-40 w-[500px] h-[500px] rounded-full bg-orange-500/10 blur-3xl" />
+        <div className="absolute -top-40 -right-40 w-[500px] h-[500px] rounded-full bg-indigo-500/10 blur-3xl" />
+      </div>
+
+      <div className="relative max-w-6xl mx-auto">
+        {/* ============================== header ============================== */}
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Swords className="w-5 h-5 text-amber-400" />
+              <span className="text-[11px] uppercase tracking-[0.25em] text-amber-400 font-bold">
+                The arena · last {data.window_days ?? 6} days
+              </span>
+            </div>
+            <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight leading-none">
+              Leader<span className="text-amber-400">board</span>
+            </h1>
+            <p className="text-sm text-zinc-400 mt-2 max-w-2xl">
+              Garfields vs Goofies. Most views wins. Ideas that ship, views that pop, creators on a streak — it&apos;s all here.
+            </p>
+          </div>
           {data._source === "client" && (
-            <p className="text-xs text-amber-400/90 mt-2 max-w-2xl border border-amber-500/25 rounded-lg px-3 py-2 bg-amber-500/5">
-              Stats are computed in the browser from Reel Tracker ideas + niches (the dedicated team API is unavailable — e.g. backend not restarted). Redeploy the API to use{" "}
-              <code className="text-zinc-400">/api/v1/teams/performance</code> directly.
+            <p className="text-[11px] text-amber-400/90 border border-amber-500/25 rounded-lg px-3 py-2 bg-amber-500/5 max-w-xs">
+              Showing client-computed stats — redeploy the API for live aggregates.
             </p>
           )}
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2">
-          {teams.map((team: any) => {
-            const isLeader = leaderKey === team.key;
-            const posted = team.ideas_posted || 0;
-            const totalIdeas = team.ideas_total || 0;
-            const barPct = Math.round(((team.posted_rate ?? 0) / maxRate) * 100);
+        {/* ============================== HERO SCOREBOARD ============================== */}
+        {orderedTeams.length === 2 && (
+          <HeroScoreboard
+            teamA={orderedTeams[0]}
+            teamB={orderedTeams[1]}
+            leaderKey={leaderKey}
+            margin6d={margin6d}
+            marginTotal={marginTotal}
+            totalViews6d={totalViews6d}
+            totalViewsAll={totalViewsAll}
+          />
+        )}
 
-            return (
-              <div
-                key={team.key}
-                className={`rounded-2xl border bg-zinc-900/80 overflow-hidden ${
-                  isLeader
-                    ? "border-amber-500/40 shadow-lg shadow-amber-500/10"
-                    : "border-zinc-800"
-                }`}
-              >
-                <div className="px-5 py-4 border-b border-zinc-800 flex items-start justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-2xl" aria-hidden>{team.emoji}</span>
-                      <h2 className="text-lg font-bold text-white">{team.label}</h2>
-                      {isLeader && (
-                        <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/30 gap-1">
-                          <Trophy className="w-3 h-3" /> Winning
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-xs text-zinc-500 mt-1">
-                      {team.account_count} account{team.account_count !== 1 ? "s" : ""} ·{" "}
-                      {team.member_count} people
-                    </p>
-                    <p className="text-sm font-bold text-amber-400/95 mt-2 tabular-nums">
-                      Ship rate {formatShipRate(team.posted_rate)}
-                      <span className="text-zinc-500 font-normal text-xs ml-2">
-                        ({posted}/{totalIdeas} posted)
-                      </span>
-                    </p>
-                  </div>
-                </div>
+        {/* ============================== HALL OF FAME ============================== */}
+        <HallOfFame
+          topCreator={data.top_creator_6d}
+          topIdea6d={data.top_idea_6d}
+          topIdeaAll={data.top_idea_overall}
+        />
 
-                <div className="p-5 space-y-5">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-2 flex items-center gap-1.5">
-                      <Users className="w-3.5 h-3.5" /> People
-                    </p>
-                    <ul className="flex flex-wrap gap-2">
-                      {(team.members as string[]).map((name) => (
-                        <li
-                          key={name}
-                          className="text-xs font-medium text-zinc-200 bg-zinc-800/80 px-2.5 py-1 rounded-lg border border-zinc-700"
-                        >
-                          {name}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-2 flex items-center gap-1.5">
-                      <AtSign className="w-3.5 h-3.5" /> Accounts in niche
-                    </p>
-                    {team.accounts?.length ? (
-                      <div className="max-h-32 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950/50 p-2">
-                        <ul className="flex flex-wrap gap-1.5">
-                          {team.accounts.map((a: { handle: string }) => (
-                            <li
-                              key={a.handle}
-                              className="text-[11px] text-violet-300/90 font-mono"
-                            >
-                              @{a.handle}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-zinc-600">
-                        No handles in tracker niche yet — run niche setup or add pages in Reel / Post tracker niches.
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-3 flex items-center gap-1.5">
-                      <Lightbulb className="w-3.5 h-3.5" /> Ideas
-                    </p>
-                    <div className="grid grid-cols-3 gap-2 text-center">
-                      <div className="rounded-xl bg-zinc-800/50 border border-zinc-700/80 py-3">
-                        <p className="text-[10px] text-zinc-500 uppercase">Total</p>
-                        <p className="text-xl font-black text-white tabular-nums">{team.ideas_total}</p>
-                      </div>
-                      <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/25 py-3">
-                        <p className="text-[10px] text-emerald-400/80 uppercase flex items-center justify-center gap-0.5">
-                          <CheckCircle2 className="w-3 h-3" /> Posted
-                        </p>
-                        <p className="text-xl font-black text-emerald-400 tabular-nums">{posted}</p>
-                      </div>
-                      <div className="rounded-xl bg-zinc-800/50 border border-zinc-700/80 py-3">
-                        <p className="text-[10px] text-zinc-500 uppercase flex items-center justify-center gap-0.5">
-                          <Skull className="w-3 h-3" /> Killed
-                        </p>
-                        <p className="text-xl font-black text-zinc-400 tabular-nums">
-                          {team.ideas_killed ?? 0}
-                        </p>
-                      </div>
-                    </div>
-                    <p className="text-[11px] text-zinc-600 mt-2">
-                      In progress (not posted / not killed):{" "}
-                      <span className="text-zinc-400 font-medium">{team.ideas_in_progress ?? 0}</span>
-                    </p>
-
-                    <div className="grid grid-cols-2 gap-2 mt-3">
-                      <div className="rounded-lg border border-purple-500/25 bg-purple-500/5 px-2 py-2">
-                        <p className="text-[10px] text-purple-300 uppercase font-medium flex items-center gap-1 mb-1.5">
-                          <Film className="w-3 h-3" /> Reels
-                        </p>
-                        <div className="flex justify-between text-[11px] text-zinc-400">
-                          <span>Total</span>
-                          <span className="text-white tabular-nums font-semibold">{team.reel_total ?? 0}</span>
-                        </div>
-                        <div className="flex justify-between text-[11px] text-zinc-400">
-                          <span className="text-emerald-400/90">Posted</span>
-                          <span className="text-emerald-400 tabular-nums font-semibold">{team.reel_posted ?? 0}</span>
-                        </div>
-                        <div className="flex justify-between text-[11px] text-zinc-500">
-                          <span>Killed</span>
-                          <span className="tabular-nums">{team.reel_killed ?? 0}</span>
-                        </div>
-                      </div>
-                      <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/5 px-2 py-2">
-                        <p className="text-[10px] text-emerald-300 uppercase font-medium flex items-center gap-1 mb-1.5">
-                          <ImageIcon className="w-3 h-3" /> Posts
-                        </p>
-                        <div className="flex justify-between text-[11px] text-zinc-400">
-                          <span>Total</span>
-                          <span className="text-white tabular-nums font-semibold">{team.post_total ?? 0}</span>
-                        </div>
-                        <div className="flex justify-between text-[11px] text-zinc-400">
-                          <span className="text-emerald-400/90">Posted</span>
-                          <span className="text-emerald-400 tabular-nums font-semibold">{team.post_posted ?? 0}</span>
-                        </div>
-                        <div className="flex justify-between text-[11px] text-zinc-500">
-                          <span>Killed</span>
-                          <span className="tabular-nums">{team.post_killed ?? 0}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between text-[10px] text-zinc-500 mb-1">
-                      <span>Ship rate vs other team (bar scale)</span>
-                      <span className="text-white font-bold tabular-nums">{formatShipRate(team.posted_rate)}</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-zinc-800 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all ${
-                          isLeader ? "bg-amber-500" : "bg-violet-600"
-                        }`}
-                        style={{ width: `${barPct}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+        {/* ============================== TEAM CARDS ============================== */}
+        <div className="grid gap-5 md:grid-cols-2 mt-8">
+          {orderedTeams.map((team: any) => (
+            <TeamCard key={team.key} team={team} isLeader={leaderKey === team.key} />
+          ))}
         </div>
 
-        {!leaderKey && teams.length >= 2 && (
-          <p className="text-center text-sm text-zinc-500 mt-6">
-            Tie on ship rate (and tie-breakers) — even match for now.
+        {/* ============================== PEOPLE LEADERBOARD ============================== */}
+        <PeopleLeaderboard people={people} windowDays={data.window_days ?? 6} />
+      </div>
+    </div>
+  );
+}
+
+/* ============================== hero scoreboard ============================== */
+
+function HeroScoreboard({
+  teamA,
+  teamB,
+  leaderKey,
+  margin6d,
+  totalViews6d,
+  totalViewsAll,
+}: {
+  teamA: any;
+  teamB: any;
+  leaderKey: string | null;
+  margin6d: number;
+  marginTotal: number;
+  totalViews6d: number;
+  totalViewsAll: number;
+}) {
+  const pctA =
+    totalViews6d > 0 ? Math.max(2, Math.round(((teamA.views_6d || 0) / totalViews6d) * 100)) : 50;
+  const pctB = Math.max(2, 100 - pctA);
+  const tie = leaderKey === null;
+
+  return (
+    <div className="relative rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900 via-zinc-950 to-zinc-900 p-5 sm:p-8 overflow-hidden">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white/[0.03] to-transparent pointer-events-none" />
+
+      {/* leader banner */}
+      <div className="flex items-center justify-center mb-6">
+        <AnimatePresence mode="wait">
+          {tie ? (
+            <motion.div
+              key="tie"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-300 text-sm font-bold"
+            >
+              <Sparkles className="w-4 h-4 text-zinc-400" /> Dead even. Go make some hits.
+            </motion.div>
+          ) : (
+            <motion.div
+              key={leaderKey ?? "none"}
+              initial={{ opacity: 0, y: -10, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0 }}
+              className={`inline-flex items-center gap-2 px-5 py-2 rounded-full bg-gradient-to-r ${
+                teamSkin(leaderKey ?? "").grad
+              } text-zinc-900 text-sm font-black uppercase tracking-wide shadow-lg`}
+            >
+              <motion.span
+                animate={{ rotate: [0, -15, 15, -10, 10, 0] }}
+                transition={{ duration: 1.5, repeat: Infinity, repeatDelay: 2 }}
+              >
+                <Crown className="w-4 h-4" />
+              </motion.span>
+              {leaderKey === teamA.key ? teamA.label : teamB.label} lead by {formatViews(margin6d)} views this week
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* score row */}
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 sm:gap-6">
+        <TeamScorePanel team={teamA} isLeader={leaderKey === teamA.key} align="right" />
+        <div className="flex flex-col items-center gap-1">
+          <div className="text-[10px] uppercase tracking-[0.3em] text-zinc-500 font-bold">VS</div>
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1, rotate: [0, 5, -5, 0] }}
+            transition={{ type: "spring", stiffness: 200, damping: 12 }}
+            className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/30"
+          >
+            <Swords className="w-5 h-5 sm:w-6 sm:h-6 text-zinc-900" />
+          </motion.div>
+        </div>
+        <TeamScorePanel team={teamB} isLeader={leaderKey === teamB.key} align="left" />
+      </div>
+
+      {/* 6-day views bar */}
+      <div className="mt-7">
+        <div className="flex justify-between text-[11px] text-zinc-500 mb-1.5 uppercase tracking-wider font-semibold">
+          <span className="flex items-center gap-1">
+            <Flame className="w-3.5 h-3.5 text-orange-400" /> 6-day view split
+          </span>
+          <span className="text-white tabular-nums">{formatViews(totalViews6d)} total</span>
+        </div>
+        <div className="h-4 rounded-full bg-zinc-900 overflow-hidden flex shadow-inner border border-zinc-800">
+          <motion.div
+            initial={{ width: "50%" }}
+            animate={{ width: `${pctA}%` }}
+            transition={{ type: "spring", stiffness: 100, damping: 20, delay: 0.3 }}
+            className={`h-full bg-gradient-to-r ${teamSkin(teamA.key).grad} flex items-center justify-end pr-2`}
+          >
+            <span className="text-[10px] font-black text-zinc-900">{pctA}%</span>
+          </motion.div>
+          <motion.div
+            initial={{ width: "50%" }}
+            animate={{ width: `${pctB}%` }}
+            transition={{ type: "spring", stiffness: 100, damping: 20, delay: 0.3 }}
+            className={`h-full bg-gradient-to-r ${teamSkin(teamB.key).grad} flex items-center justify-start pl-2`}
+          >
+            <span className="text-[10px] font-black text-zinc-900">{pctB}%</span>
+          </motion.div>
+        </div>
+        <p className="text-center text-[11px] text-zinc-500 mt-3">
+          All-time views: <span className="text-white font-semibold">{formatViews(totalViewsAll)}</span>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function TeamScorePanel({
+  team,
+  isLeader,
+  align,
+}: {
+  team: any;
+  isLeader: boolean;
+  align: "left" | "right";
+}) {
+  const skin = teamSkin(team.key);
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: align === "right" ? -20 : 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.5 }}
+      className={`flex flex-col ${align === "right" ? "items-end text-right" : "items-start text-left"}`}
+    >
+      <motion.div
+        animate={isLeader ? { y: [0, -4, 0] } : {}}
+        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+        className={`text-5xl sm:text-7xl drop-shadow-[0_4px_20px_rgba(255,180,0,0.3)] ${
+          isLeader ? "" : "opacity-70"
+        }`}
+        aria-hidden
+      >
+        {team.emoji}
+      </motion.div>
+      <div className={`mt-1 text-xs font-black tracking-[0.2em] uppercase ${skin.text}`}>{team.label}</div>
+      <div className={`text-[10px] text-zinc-500 ${align === "right" ? "mb-2" : "mb-2"} italic`}>
+        {skin.tagline}
+      </div>
+      <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold mt-1">
+        Views · last 6d
+      </div>
+      <div className={`text-3xl sm:text-5xl font-black tabular-nums ${isLeader ? "text-white" : "text-zinc-400"}`}>
+        <Odometer value={team.views_6d || 0} format={formatViews} />
+      </div>
+      <div className="text-[11px] text-zinc-500 mt-1 tabular-nums">
+        All time · <span className="text-zinc-300 font-semibold">{formatViews(team.views_total)}</span>
+      </div>
+    </motion.div>
+  );
+}
+
+/* ============================== hall of fame ============================== */
+
+function HallOfFame({
+  topCreator,
+  topIdea6d,
+  topIdeaAll,
+}: {
+  topCreator: any | null | undefined;
+  topIdea6d: any | null | undefined;
+  topIdeaAll: any | null | undefined;
+}) {
+  return (
+    <div className="mt-8">
+      <div className="flex items-center gap-2 mb-3">
+        <Trophy className="w-4 h-4 text-amber-400" />
+        <h2 className="text-sm font-black uppercase tracking-[0.2em] text-white">Hall of Fame</h2>
+      </div>
+      <div className="grid gap-4 md:grid-cols-3">
+        <MvpCard creator={topCreator} />
+        <IdeaTrophyCard
+          idea={topIdea6d}
+          label="Hottest idea · 6d"
+          icon={<Flame className="w-4 h-4 text-orange-400" />}
+          gradient="from-orange-500/20 via-red-500/10 to-transparent"
+          borderClass="border-orange-500/30"
+        />
+        <IdeaTrophyCard
+          idea={topIdeaAll}
+          label="Biggest hit · all time"
+          icon={<Star className="w-4 h-4 text-amber-400" />}
+          gradient="from-amber-500/20 via-yellow-500/10 to-transparent"
+          borderClass="border-amber-500/30"
+        />
+      </div>
+    </div>
+  );
+}
+
+function MvpCard({ creator }: { creator: any | null | undefined }) {
+  if (!creator) {
+    return (
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 text-center text-zinc-500 text-sm">
+        <Crown className="w-5 h-5 mx-auto mb-2 text-zinc-600" />
+        No MVP yet — first posting with views takes the crown.
+      </div>
+    );
+  }
+  const skin = teamSkin(creator.team);
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ scale: 1.02 }}
+      className={`relative rounded-2xl border ${skin.ring} border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-950 p-5 overflow-hidden`}
+    >
+      <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${skin.grad}`} />
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] font-bold text-amber-400 mb-3">
+        <Crown className="w-3.5 h-3.5" /> MVP of the week
+      </div>
+      <div className="flex items-center gap-3">
+        <motion.div
+          animate={{ rotate: [0, -10, 10, 0] }}
+          transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+          className={`w-14 h-14 rounded-2xl flex items-center justify-center text-3xl bg-gradient-to-br ${skin.grad} shadow-lg`}
+        >
+          {creator.team_emoji}
+        </motion.div>
+        <div className="min-w-0">
+          <p className="text-xl font-black text-white truncate">{creator.name}</p>
+          <p className="text-xs text-zinc-500">
+            <span className={`${skin.text} font-semibold`}>{creator.team_label}</span> ·{" "}
+            {creator.ideas} idea{creator.ideas === 1 ? "" : "s"}
+          </p>
+        </div>
+      </div>
+      <div className="mt-4 flex items-end justify-between">
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-zinc-500">Views · 6d</p>
+          <p className="text-3xl font-black text-white tabular-nums leading-none">
+            <Odometer value={creator.views} format={formatViews} />
+          </p>
+        </div>
+        <motion.div
+          animate={{ y: [0, -3, 0] }}
+          transition={{ duration: 2, repeat: Infinity }}
+          className="text-amber-400"
+        >
+          <Trophy className="w-8 h-8 drop-shadow-[0_0_12px_rgba(251,191,36,0.5)]" />
+        </motion.div>
+      </div>
+    </motion.div>
+  );
+}
+
+function IdeaTrophyCard({
+  idea,
+  label,
+  icon,
+  gradient,
+  borderClass,
+}: {
+  idea: any | null | undefined;
+  label: string;
+  icon: React.ReactNode;
+  gradient: string;
+  borderClass: string;
+}) {
+  if (!idea) {
+    return (
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 text-center text-zinc-500 text-sm">
+        <div className="flex justify-center mb-2 opacity-50">{icon}</div>
+        Nothing here yet — the first viral post wins.
+      </div>
+    );
+  }
+  const skin = teamSkin(idea.team);
+  const isReel = (idea.type || "").toLowerCase() === "reel";
+  const isCompetitor = (idea.source || "").toLowerCase() === "competitor";
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ scale: 1.02 }}
+      className={`relative rounded-2xl border ${borderClass} bg-gradient-to-br ${gradient} bg-zinc-900/80 p-5 overflow-hidden`}
+    >
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] font-bold text-white/90 mb-3">
+        {icon} <span>{label}</span>
+      </div>
+      <p className="text-base font-bold text-white line-clamp-2 leading-snug min-h-[2.5rem]">
+        {idea.title}
+      </p>
+      <div className="flex flex-wrap items-center gap-1.5 mt-3">
+        <Badge
+          className={`${skin.bg} ${skin.text} border border-white/10 text-[10px] font-bold`}
+        >
+          {idea.team_emoji} {idea.team_label}
+        </Badge>
+        <Badge
+          className={`text-[10px] font-bold border ${
+            isReel
+              ? "bg-purple-500/15 text-purple-300 border-purple-500/30"
+              : "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+          }`}
+        >
+          {isReel ? <Film className="w-3 h-3 mr-1" /> : <ImageIcon className="w-3 h-3 mr-1" />}
+          {isReel ? "Reel" : "Post"}
+        </Badge>
+        <Badge
+          className={`text-[10px] font-bold border ${
+            isCompetitor
+              ? "bg-rose-500/15 text-rose-300 border-rose-500/30"
+              : "bg-sky-500/15 text-sky-300 border-sky-500/30"
+          }`}
+        >
+          {isCompetitor ? (
+            <>
+              <Target className="w-3 h-3 mr-1" /> Competitor
+            </>
+          ) : (
+            <>
+              <Sparkles className="w-3 h-3 mr-1" /> Original
+            </>
+          )}
+        </Badge>
+      </div>
+      <div className="flex items-end justify-between mt-4">
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-zinc-400">Views</p>
+          <p className="text-3xl font-black text-white tabular-nums leading-none">
+            <Odometer value={idea.views || 0} format={formatViews} />
+          </p>
+        </div>
+        {idea.creator && (
+          <p className="text-[11px] text-zinc-400 italic text-right max-w-[45%] truncate">
+            by {idea.creator}
           </p>
         )}
       </div>
+    </motion.div>
+  );
+}
+
+/* ============================== team card ============================== */
+
+function TeamCard({ team, isLeader }: { team: any; isLeader: boolean }) {
+  const skin = teamSkin(team.key);
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className={`relative rounded-3xl border ${
+        isLeader ? `border-amber-500/40 shadow-lg ${skin.glow}` : "border-zinc-800"
+      } bg-zinc-900/80 overflow-hidden`}
+    >
+      <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${skin.grad}`} />
+
+      <div className="px-5 py-4 flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-3xl" aria-hidden>
+              {team.emoji}
+            </span>
+            <h2 className="text-xl font-black text-white">{team.label}</h2>
+            {isLeader && (
+              <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/30 gap-1">
+                <Trophy className="w-3 h-3" /> Leading
+              </Badge>
+            )}
+          </div>
+          <p className="text-[11px] text-zinc-500 mt-1">
+            {team.member_count} people · {team.account_count} account
+            {team.account_count !== 1 ? "s" : ""}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] uppercase tracking-wider text-zinc-500">Views · 6d</p>
+          <p className="text-2xl font-black text-white tabular-nums">
+            {formatViews(team.views_6d)}
+          </p>
+        </div>
+      </div>
+
+      <div className="p-5 pt-0 space-y-4">
+        {/* views row */}
+        <div className="grid grid-cols-3 gap-2">
+          <StatBlock
+            label="Views · 6d"
+            value={formatViews(team.views_6d)}
+            icon={<Flame className="w-3 h-3 text-orange-400" />}
+          />
+          <StatBlock
+            label="Views · all"
+            value={formatViews(team.views_total)}
+            icon={<TrendingUp className="w-3 h-3 text-emerald-400" />}
+          />
+          <StatBlock
+            label="Ship rate"
+            value={formatPct(team.posted_rate)}
+            icon={<Rocket className="w-3 h-3 text-violet-400" />}
+          />
+        </div>
+
+        {/* top creator / top idea mini */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <MiniHighlight
+            label="Top creator · 6d"
+            title={team.top_creator_6d?.name}
+            subtitle={
+              team.top_creator_6d
+                ? `${formatViews(team.top_creator_6d.views)} · ${team.top_creator_6d.ideas} idea${team.top_creator_6d.ideas === 1 ? "" : "s"}`
+                : "—"
+            }
+            icon={<Crown className="w-3.5 h-3.5 text-amber-400" />}
+          />
+          <MiniHighlight
+            label="Top idea · 6d"
+            title={team.top_idea_6d?.title}
+            subtitle={team.top_idea_6d ? `${formatViews(team.top_idea_6d.views)} views` : "—"}
+            icon={<Zap className="w-3.5 h-3.5 text-yellow-400" />}
+          />
+        </div>
+
+        {/* ideas counts */}
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-2 font-semibold">
+            Ideas pipeline
+          </p>
+          <div className="grid grid-cols-4 gap-2 text-center">
+            <PipelinePill label="Total" value={team.ideas_total} tone="white" />
+            <PipelinePill
+              label="Posted"
+              value={team.ideas_posted}
+              tone="emerald"
+              icon={<CheckCircle2 className="w-3 h-3" />}
+            />
+            <PipelinePill label="WIP" value={team.ideas_in_progress ?? 0} tone="violet" />
+            <PipelinePill
+              label="Killed"
+              value={team.ideas_killed ?? 0}
+              tone="zinc"
+              icon={<Skull className="w-3 h-3" />}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2 mt-2">
+            <TypePill
+              label="Reels"
+              icon={<Film className="w-3 h-3" />}
+              posted={team.reel_posted}
+              total={team.reel_total}
+              accent="purple"
+            />
+            <TypePill
+              label="Posts"
+              icon={<ImageIcon className="w-3 h-3" />}
+              posted={team.post_posted}
+              total={team.post_total}
+              accent="emerald"
+            />
+          </div>
+        </div>
+
+        {/* people chips */}
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-2 flex items-center gap-1.5 font-semibold">
+            <Users className="w-3.5 h-3.5" /> Squad
+          </p>
+          <ul className="flex flex-wrap gap-1.5">
+            {(team.members as string[]).map((name) => (
+              <li
+                key={name}
+                className={`text-xs font-semibold text-white ${skin.bg} px-2.5 py-1 rounded-lg border border-white/5`}
+              >
+                {name}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* handles */}
+        {team.accounts?.length > 0 && (
+          <details className="group">
+            <summary className="cursor-pointer text-[10px] uppercase tracking-wider text-zinc-500 hover:text-zinc-300 flex items-center gap-1.5 font-semibold">
+              <AtSign className="w-3.5 h-3.5" /> Accounts ({team.account_count})
+              <span className="ml-auto text-zinc-600 group-open:rotate-90 transition-transform">›</span>
+            </summary>
+            <div className="mt-2 rounded-lg border border-zinc-800 bg-zinc-950/50 p-2 max-h-28 overflow-y-auto">
+              <ul className="flex flex-wrap gap-1.5">
+                {team.accounts.map((a: { handle: string }) => (
+                  <li key={a.handle} className={`text-[11px] font-mono ${skin.text}`}>
+                    @{a.handle}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </details>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+function StatBlock({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: string;
+  icon?: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl bg-zinc-800/40 border border-zinc-700/60 px-3 py-2">
+      <p className="text-[10px] uppercase tracking-wider text-zinc-500 flex items-center gap-1 font-semibold">
+        {icon} {label}
+      </p>
+      <p className="text-lg font-black text-white tabular-nums leading-tight">{value}</p>
+    </div>
+  );
+}
+
+function MiniHighlight({
+  label,
+  title,
+  subtitle,
+  icon,
+}: {
+  label: string;
+  title?: string | null;
+  subtitle?: string;
+  icon?: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl bg-zinc-800/30 border border-zinc-700/60 px-3 py-2.5 min-w-0">
+      <p className="text-[10px] uppercase tracking-wider text-zinc-500 flex items-center gap-1 font-semibold">
+        {icon} {label}
+      </p>
+      <p className="text-sm font-bold text-white truncate">{title || "—"}</p>
+      <p className="text-[11px] text-zinc-400 truncate">{subtitle}</p>
+    </div>
+  );
+}
+
+function PipelinePill({
+  label,
+  value,
+  tone,
+  icon,
+}: {
+  label: string;
+  value: number;
+  tone: "white" | "emerald" | "violet" | "zinc";
+  icon?: React.ReactNode;
+}) {
+  const cls =
+    tone === "emerald"
+      ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400"
+      : tone === "violet"
+        ? "bg-violet-500/10 border-violet-500/25 text-violet-300"
+        : tone === "zinc"
+          ? "bg-zinc-800/50 border-zinc-700/80 text-zinc-400"
+          : "bg-zinc-800/50 border-zinc-700/80 text-white";
+  return (
+    <div className={`rounded-lg border py-2 ${cls}`}>
+      <p className="text-[9px] uppercase font-semibold flex items-center justify-center gap-0.5">
+        {icon} {label}
+      </p>
+      <p className="text-lg font-black tabular-nums">{value ?? 0}</p>
+    </div>
+  );
+}
+
+function TypePill({
+  label,
+  icon,
+  posted,
+  total,
+  accent,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  posted: number;
+  total: number;
+  accent: "purple" | "emerald";
+}) {
+  const colors =
+    accent === "purple"
+      ? "border-purple-500/25 bg-purple-500/5 text-purple-300"
+      : "border-emerald-500/25 bg-emerald-500/5 text-emerald-300";
+  return (
+    <div className={`rounded-lg border px-3 py-2 ${colors}`}>
+      <p className="text-[10px] uppercase font-bold flex items-center gap-1 mb-1">
+        {icon} {label}
+      </p>
+      <p className="text-xs text-zinc-300 tabular-nums">
+        <span className="text-white font-black text-base">{posted ?? 0}</span>
+        <span className="text-zinc-500"> / {total ?? 0} posted</span>
+      </p>
+    </div>
+  );
+}
+
+/* ============================== people leaderboard ============================== */
+
+function PeopleLeaderboard({ people, windowDays }: { people: any[]; windowDays: number }) {
+  const [mode, setMode] = useState<"6d" | "all">("6d");
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const sorted = useMemo(() => {
+    const arr = [...(people || [])];
+    if (mode === "6d") arr.sort((a, b) => (b.views_6d - a.views_6d) || (b.views_total - a.views_total));
+    else arr.sort((a, b) => (b.views_total - a.views_total) || (b.views_6d - a.views_6d));
+    return arr;
+  }, [people, mode]);
+
+  const top = sorted[0];
+  const max =
+    mode === "6d"
+      ? Math.max(1, ...sorted.map((p) => p.views_6d || 0))
+      : Math.max(1, ...sorted.map((p) => p.views_total || 0));
+
+  return (
+    <div className="mt-10">
+      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Medal className="w-4 h-4 text-amber-400" />
+          <h2 className="text-sm font-black uppercase tracking-[0.2em] text-white">
+            Creator leaderboard
+          </h2>
+        </div>
+        <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-900 p-0.5 text-[11px] font-bold">
+          <button
+            onClick={() => setMode("6d")}
+            className={`px-3 py-1.5 rounded-md transition-colors ${
+              mode === "6d" ? "bg-amber-500 text-zinc-900" : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            Last {windowDays}d
+          </button>
+          <button
+            onClick={() => setMode("all")}
+            className={`px-3 py-1.5 rounded-md transition-colors ${
+              mode === "all" ? "bg-amber-500 text-zinc-900" : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            All-time
+          </button>
+        </div>
+      </div>
+
+      {sorted.length === 0 ? (
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-8 text-center text-sm text-zinc-500">
+          No creators on the board yet — post something and tag yourself on the idea.
+        </div>
+      ) : (
+        <div ref={listRef} className="rounded-2xl border border-zinc-800 bg-zinc-900/50 divide-y divide-zinc-800 overflow-hidden">
+          {sorted.map((p, i) => {
+            const skin = teamSkin(p.team);
+            const score = mode === "6d" ? p.views_6d : p.views_total;
+            const pct = Math.max(2, Math.round(((score || 0) / max) * 100));
+            const rank = i + 1;
+            const rankDecor =
+              rank === 1
+                ? "from-amber-400 to-yellow-300 text-zinc-900"
+                : rank === 2
+                  ? "from-zinc-300 to-zinc-200 text-zinc-900"
+                  : rank === 3
+                    ? "from-orange-400 to-amber-600 text-zinc-900"
+                    : "bg-zinc-800 text-zinc-400";
+            return (
+              <motion.div
+                key={`${p.team}-${p.name}-${i}`}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.03 }}
+                className="relative flex items-center gap-3 px-4 py-3 hover:bg-zinc-900/60 transition-colors"
+              >
+                <div
+                  className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-xs font-black bg-gradient-to-br ${
+                    rank <= 3 ? rankDecor : "bg-zinc-800 text-zinc-400"
+                  }`}
+                >
+                  {rank === 1 ? <Crown className="w-4 h-4" /> : rank}
+                </div>
+                <div className="w-10 h-10 shrink-0 rounded-xl flex items-center justify-center text-xl bg-zinc-800/70 border border-zinc-700">
+                  {p.team_emoji}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-bold text-white truncate">{p.name}</p>
+                    <span className={`text-[10px] font-semibold uppercase ${skin.text}`}>
+                      {p.team_label}
+                    </span>
+                    <span className="text-[10px] text-zinc-500">
+                      · {p.ideas_count} idea{p.ideas_count === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${pct}%` }}
+                      transition={{ duration: 0.6, delay: i * 0.03 }}
+                      className={`h-full bg-gradient-to-r ${skin.grad}`}
+                    />
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-lg font-black text-white tabular-nums leading-none">
+                    {formatViews(score)}
+                  </p>
+                  <p className="text-[10px] text-zinc-500 uppercase tracking-wider">
+                    {mode === "6d" ? "6d views" : "all time"}
+                  </p>
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
+
+      {top && (
+        <p className="text-center text-[11px] text-zinc-500 mt-3">
+          Leading the pack: <span className="text-white font-semibold">{top.name}</span> ·{" "}
+          <span className="text-amber-400 font-semibold">{formatViews(mode === "6d" ? top.views_6d : top.views_total)} views</span>
+        </p>
+      )}
     </div>
   );
 }
