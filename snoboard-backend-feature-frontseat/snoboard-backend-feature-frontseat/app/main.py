@@ -199,38 +199,29 @@ async def dashboard_stats():
         page_month_reels = [r for r in month_reels if r["page_id"] == pid]
         page_month_posts = [p for p in month_posts if p["page_id"] == pid]
 
-        # Monthly views (content entries + legacy)
-        month_views = (
-            sum(e.get("views", 0) or 0 for e in page_month_entries) +
-            sum(r.get("views", 0) or 0 for r in page_month_reels) +
-            sum(p.get("actual_views", 0) or 0 for p in page_month_posts)
-        )
-        # All time views
+        # All-time views (still uses content_entries + legacy so historical IP pages stay intact)
         all_time_views = (
             sum(e.get("views", 0) or 0 for e in page_entries) +
             sum(r.get("views", 0) or 0 for r in page_reels) +
             sum(p.get("actual_views", 0) or 0 for p in page_posts)
         )
 
-        reel_views = sum(r.get("views", 0) or 0 for r in page_month_reels) + sum(e.get("views", 0) or 0 for e in page_month_entries if e.get("content_type") == "reel")
-        post_views = sum(p.get("actual_views", 0) or 0 for p in page_month_posts) + sum(e.get("views", 0) or 0 for e in page_month_entries if e.get("content_type") != "reel")
+        # Monthly views = 6-day tracker ONLY (cycle sum, or actual override if present).
+        # This makes the Dashboard "Total Ecosystem Reach" match the 6-day tracker total exactly.
+        base_total = cycle_total.get(pid, 0)
+        base_reel = float(cycle_reel.get(pid, 0.0))
+        base_post = float(cycle_post.get(pid, 0.0))
 
-        # Apply 6-day overrides if present for this page in the current month
-        if pid in actual_total or cycle_total.get(pid, 0) > 0:
-            base_total = cycle_total.get(pid, 0)
-            base_reel = float(cycle_reel.get(pid, 0.0))
-            base_post = float(cycle_post.get(pid, 0.0))
-
-            if pid in actual_total:
-                target_total = actual_total[pid]
-                ratio = (target_total / base_total) if base_total > 0 else 0.0
-                month_views = target_total
-                reel_views = int(round(base_reel * ratio))
-                post_views = int(round(base_post * ratio))
-            else:
-                month_views = base_total
-                reel_views = int(round(base_reel))
-                post_views = int(round(base_post))
+        if pid in actual_total:
+            target_total = actual_total[pid]
+            ratio = (target_total / base_total) if base_total > 0 else 0.0
+            month_views = target_total
+            reel_views = int(round(base_reel * ratio))
+            post_views = int(round(base_post * ratio))
+        else:
+            month_views = base_total
+            reel_views = int(round(base_reel))
+            post_views = int(round(base_post))
 
         entry_count = len(page_month_entries)
         reels_count = len(page_month_reels) + len([e for e in page_month_entries if e.get("content_type") == "reel"])
@@ -1114,19 +1105,36 @@ async def get_growth_data():
                 })
 
     # --- Merge 6-day tracker into growth: reconciled IG actuals override; else cycle sums ---
-    six_entries = client.table("six_day_entries").select("page_id,month,views").execute().data or []
+    # Also derive per-page/month reel_views + post_views from 6-day reel_pct/post_pct so
+    # the dashboard graph can plot Reels and Posts as separate lines.
+    six_entries = client.table("six_day_entries").select("page_id,month,views,reel_pct,post_pct").execute().data or []
     six_actuals = client.table("six_day_monthly_actuals").select("page_id,month,actual_views").execute().data or []
 
     handle_to_id = {p["handle"]: p["id"] for p in pages}
     id_to_page = {p["id"]: p for p in pages}
 
     cycle_sum: dict[tuple[str, str], int] = {}
+    cycle_reel_sum: dict[tuple[str, str], float] = {}
+    cycle_post_sum: dict[tuple[str, str], float] = {}
     for e in six_entries:
         pid, mon = e.get("page_id"), e.get("month")
         if not pid or not mon:
             continue
         mp = mon[:7] if isinstance(mon, str) else str(mon)[:7]
-        cycle_sum[(pid, mp)] = cycle_sum.get((pid, mp), 0) + int(e.get("views") or 0)
+        v = int(e.get("views") or 0)
+        cycle_sum[(pid, mp)] = cycle_sum.get((pid, mp), 0) + v
+        rpct = e.get("reel_pct")
+        ppct = e.get("post_pct")
+        try:
+            if rpct is not None:
+                cycle_reel_sum[(pid, mp)] = cycle_reel_sum.get((pid, mp), 0.0) + (v * (float(rpct) / 100.0))
+        except (TypeError, ValueError):
+            pass
+        try:
+            if ppct is not None:
+                cycle_post_sum[(pid, mp)] = cycle_post_sum.get((pid, mp), 0.0) + (v * (float(ppct) / 100.0))
+        except (TypeError, ValueError):
+            pass
 
     actual_map: dict[tuple[str, str], int] = {}
     for a in six_actuals:
@@ -1137,6 +1145,17 @@ async def get_growth_data():
         actual_map[(pid, mp)] = int(a.get("actual_views") or 0)
 
     six_keys = set(cycle_sum.keys()) | set(actual_map.keys())
+
+    def _derive_split(pid: str, mp: str, total: int) -> tuple[int, int]:
+        """Given a final total views for (pid, mp), derive reel_views and post_views
+        by scaling the reel_pct/post_pct split recorded in six_day_entries."""
+        base = cycle_sum.get((pid, mp), 0)
+        base_reel = float(cycle_reel_sum.get((pid, mp), 0.0))
+        base_post = float(cycle_post_sum.get((pid, mp), 0.0))
+        if base <= 0 or total <= 0:
+            return 0, 0
+        ratio = total / base
+        return int(round(base_reel * ratio)), int(round(base_post * ratio))
 
     for row in data:
         h = row.get("handle")
@@ -1153,6 +1172,11 @@ async def get_growth_data():
             row["views"] = actual_map[k]
         elif cycle_sum.get(k, 0) > 0:
             row["views"] = cycle_sum[k]
+        # Derive reel/post split from 6-day if we have it
+        r_views, p_views = _derive_split(pid, mp, int(row.get("views") or 0))
+        if r_views or p_views:
+            row["reel_views"] = r_views
+            row["post_views"] = p_views
 
     present = {
         (handle_to_id.get(r.get("handle")), (r.get("month") or "")[:7])
@@ -1171,12 +1195,15 @@ async def get_growth_data():
             total = cycle_sum.get((pid, mp), 0)
         if (pid, mp) not in actual_map and total <= 0:
             continue
+        r_views, p_views = _derive_split(pid, mp, total)
         data.append({
             "id": f"six-day-{pid}-{mp}",
             "handle": p["handle"],
             "stage": p.get("stage", 1),
             "month": f"{mp}-01",
             "views": total,
+            "reel_views": r_views,
+            "post_views": p_views,
             "followers_gained": 0,
             "category": p.get("category", ""),
         })
