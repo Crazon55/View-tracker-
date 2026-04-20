@@ -1327,6 +1327,111 @@ async def tracker_niches_delete(niche_id: str):
     return {"success": True}
 
 
+# --- Team performance (Garfields vs Goofies) ---
+TEAM_PERFORMANCE_CONFIG: dict[str, dict] = {
+    "garfields": {
+        "key": "garfields",
+        "label": "Garfields",
+        "emoji": "\U0001F431",  # cat
+        "members": ["Deepak", "Kaavya", "Swati"],
+        "niche_match": ("garfields",),  # substring in tracker_niches.name (lowercase)
+    },
+    "goofies": {
+        "key": "goofies",
+        "label": "Goofies",
+        "emoji": "\U0001F436",  # dog
+        "members": ["Arohi", "Harish", "Pulkit"],
+        "niche_match": ("goofies",),
+    },
+}
+
+
+@app.get("/api/v1/teams/performance")
+async def teams_performance():
+    """Leaderboard: Garfields vs Goofies — accounts from tracker niches, idea counts by stage."""
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+
+    niches = client.table("tracker_niches").select("id,name,pages").execute().data or []
+    ideas = (
+        client.table("tracker_ideas")
+        .select("id,stage,niche_id,niche_ids")
+        .execute()
+        .data or []
+    )
+
+    niche_id_to_team: dict[str, str] = {}
+    for n in niches:
+        nid = n.get("id")
+        nm = (n.get("name") or "").lower()
+        if not nid:
+            continue
+        for team_key, cfg in TEAM_PERFORMANCE_CONFIG.items():
+            for sub in cfg["niche_match"]:
+                if sub in nm:
+                    niche_id_to_team[nid] = team_key
+                    break
+
+    team_accounts: dict[str, set[str]] = {k: set() for k in TEAM_PERFORMANCE_CONFIG}
+    for n in niches:
+        tid = niche_id_to_team.get(n.get("id"))
+        if not tid:
+            continue
+        for h in n.get("pages") or []:
+            if h:
+                team_accounts[tid].add(str(h).lstrip("@").strip().lower())
+
+    def _idea_team(idea: dict) -> str | None:
+        nid = idea.get("niche_id")
+        if nid and nid in niche_id_to_team:
+            return niche_id_to_team[nid]
+        for x in idea.get("niche_ids") or []:
+            if x in niche_id_to_team:
+                return niche_id_to_team[x]
+        return None
+
+    stats: dict[str, dict[str, int]] = {
+        k: {"ideas_total": 0, "ideas_posted": 0, "ideas_killed": 0} for k in TEAM_PERFORMANCE_CONFIG
+    }
+    for idea in ideas:
+        tk = _idea_team(idea)
+        if not tk or tk not in stats:
+            continue
+        stats[tk]["ideas_total"] += 1
+        st = (idea.get("stage") or "").lower()
+        if st == "posted":
+            stats[tk]["ideas_posted"] += 1
+        elif st == "kill":
+            stats[tk]["ideas_killed"] += 1
+
+    teams_out = []
+    for team_key, cfg in TEAM_PERFORMANCE_CONFIG.items():
+        handles = sorted(team_accounts.get(team_key, set()))
+        st = stats[team_key]
+        teams_out.append({
+            "key": team_key,
+            "label": cfg["label"],
+            "emoji": cfg["emoji"],
+            "members": cfg["members"],
+            "member_count": len(cfg["members"]),
+            "accounts": [{"handle": h} for h in handles],
+            "account_count": len(handles),
+            "ideas_total": st["ideas_total"],
+            "ideas_posted": st["ideas_posted"],
+            "ideas_killed": st["ideas_killed"],
+            "ideas_in_progress": max(0, st["ideas_total"] - st["ideas_posted"] - st["ideas_killed"]),
+        })
+
+    teams_out.sort(key=lambda x: x["ideas_posted"], reverse=True)
+    leader = None
+    if len(teams_out) >= 2 and teams_out[0]["ideas_posted"] != teams_out[1]["ideas_posted"]:
+        leader = teams_out[0]["key"]
+    elif len(teams_out) == 1:
+        leader = teams_out[0]["key"]
+
+    return {"success": True, "data": {"teams": teams_out, "leader_key": leader}}
+
+
 # --- Ideas ---
 @app.get("/api/v1/tracker/ideas")
 async def tracker_ideas_list(type: str | None = None):
