@@ -1545,6 +1545,71 @@ async def tracker_ideas_delete(idea_id: str):
     return {"success": True}
 
 
+@app.post("/api/v1/tracker/ideas/recover-comp-links")
+async def tracker_recover_comp_links():
+    """One-shot recovery: restores comp_link on competitor ideas that were
+    auto-created from comp research but got wiped by the old frontend bug.
+
+    Matches on title == (account_name or account_handle) in the appropriate
+    competitor_* table. Only fills NULL comp_link and only when there's a
+    single unambiguous match, so it's safe to re-run.
+    """
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+
+    # Pull all candidate ideas (nulled comp_link, created from comp research)
+    ideas = (
+        client.table("tracker_ideas")
+        .select("id,title,type,tags,comp_link,source")
+        .eq("source", "competitor")
+        .is_("comp_link", "null")
+        .execute()
+        .data
+        or []
+    )
+    ideas = [i for i in ideas if "comp_research" in (i.get("tags") or [])]
+
+    tables_for = {
+        "reel": ["competitor_fbs_reels", "competitor_tech_reels"],
+        "post": ["competitor_fbs_posts"],
+    }
+
+    restored, ambiguous, missing = [], [], []
+    for idea in ideas:
+        title = idea.get("title") or ""
+        if not title:
+            missing.append(idea["id"])
+            continue
+        tables = tables_for.get(idea.get("type") or "reel", tables_for["reel"])
+
+        matches: list[str] = []
+        for tbl in tables:
+            # Match by account_name first
+            rows = client.table(tbl).select("url").eq("account_name", title).execute().data or []
+            if not rows:
+                rows = client.table(tbl).select("url").eq("account_handle", title).execute().data or []
+            for r in rows:
+                u = (r.get("url") or "").strip()
+                if u and u not in matches:
+                    matches.append(u)
+
+        if len(matches) == 1:
+            client.table("tracker_ideas").update({"comp_link": matches[0]}).eq("id", idea["id"]).execute()
+            restored.append({"id": idea["id"], "title": title, "url": matches[0]})
+        elif len(matches) > 1:
+            ambiguous.append({"id": idea["id"], "title": title, "candidates": matches})
+        else:
+            missing.append({"id": idea["id"], "title": title})
+
+    return {
+        "success": True,
+        "restored": len(restored),
+        "ambiguous": len(ambiguous),
+        "missing": len(missing),
+        "details": {"restored": restored, "ambiguous": ambiguous, "missing": missing},
+    }
+
+
 # --- Postings (with content_entries sync) ---
 
 def _sync_posting_to_content_entry(client, posting_id: str):
