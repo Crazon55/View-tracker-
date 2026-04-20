@@ -678,7 +678,7 @@ function IPDropdown({
           </div>
 
           <div className="flex flex-wrap items-end gap-x-2 gap-y-2 flex-1 xl:justify-end">
-            <div className="w-[4.75rem] shrink-0">
+            <div className="w-[7.5rem] shrink-0">
               <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Total</p>
               <Input
                 type="number"
@@ -790,7 +790,7 @@ function IPDropdown({
                   value={newViews}
                   onChange={(e) => setNewViews(e.target.value)}
                   placeholder="Views"
-                  className="h-8 w-24 text-xs bg-zinc-800 border-zinc-700 text-white tabular-nums"
+                  className="h-8 w-32 text-xs bg-zinc-800 border-zinc-700 text-white tabular-nums"
                 />
                 <Select value={newType} onValueChange={setNewType}>
                   <SelectTrigger className="h-8 w-[5.5rem] text-xs bg-zinc-800 border-zinc-700 text-white">
@@ -872,7 +872,7 @@ function ContentItemRow({ item, onUpdate, onDelete }: {
             type="number"
             value={views}
             onChange={(e) => setViews(e.target.value)}
-            className="h-7 w-24 text-xs bg-zinc-800 border-zinc-700 text-white text-right tabular-nums"
+            className="h-7 w-32 text-xs bg-zinc-800 border-zinc-700 text-white text-right tabular-nums"
           />
         </div>
         <div className="flex items-center gap-2">
