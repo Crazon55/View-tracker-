@@ -132,14 +132,59 @@ async def dashboard_stats():
     all_reels = get_reel_repository().get_all()
     all_posts = get_post_repository().get_all()
 
-    # Current month views from content entries
-    total_entry_views = sum(e.get("views", 0) or 0 for e in month_entries)
-    # Legacy current month
     month_reels = _filter_current_month(all_reels, "posted_at")
     month_posts = _filter_current_month(all_posts, "posted_at")
-    total_reel_views = sum(r.get("views", 0) or 0 for r in month_reels) + sum(e.get("views", 0) or 0 for e in month_entries if e.get("content_type") == "reel")
-    total_post_views = sum(p.get("actual_views", 0) or 0 for p in month_posts) + sum(e.get("views", 0) or 0 for e in month_entries if e.get("content_type") != "reel")
-    total_views = total_reel_views + total_post_views
+
+    # 6-day tracker overrides for the current month:
+    # - If `six_day_monthly_actuals.actual_views` exists for a page/month, use it as the source of truth
+    # - Else fall back to sum of `six_day_entries.views` for that month
+    # For reels/posts split, use `reel_pct`/`post_pct` from cycle entries, and if actual overrides exist,
+    # scale the cycle split to match the actual total.
+    six_entries = (
+        client.table("six_day_entries")
+        .select("page_id,views,reel_pct,post_pct,month")
+        .eq("month", current_month)
+        .execute()
+        .data
+        or []
+    )
+    six_actuals = (
+        client.table("six_day_monthly_actuals")
+        .select("page_id,actual_views,month")
+        .eq("month", current_month)
+        .execute()
+        .data
+        or []
+    )
+
+    cycle_total: dict[str, int] = {}
+    cycle_reel: dict[str, float] = {}
+    cycle_post: dict[str, float] = {}
+    for e in six_entries:
+        pid = e.get("page_id")
+        if not pid:
+            continue
+        v = int(e.get("views") or 0)
+        cycle_total[pid] = cycle_total.get(pid, 0) + v
+        rpct = e.get("reel_pct")
+        ppct = e.get("post_pct")
+        if rpct is not None:
+            try:
+                cycle_reel[pid] = cycle_reel.get(pid, 0.0) + (v * (float(rpct) / 100.0))
+            except (TypeError, ValueError):
+                pass
+        if ppct is not None:
+            try:
+                cycle_post[pid] = cycle_post.get(pid, 0.0) + (v * (float(ppct) / 100.0))
+            except (TypeError, ValueError):
+                pass
+
+    actual_total: dict[str, int] = {}
+    for a in six_actuals:
+        pid = a.get("page_id")
+        if not pid:
+            continue
+        actual_total[pid] = int(a.get("actual_views") or 0)
 
     # All-time per page
     page_stats = []
@@ -170,6 +215,23 @@ async def dashboard_stats():
         reel_views = sum(r.get("views", 0) or 0 for r in page_month_reels) + sum(e.get("views", 0) or 0 for e in page_month_entries if e.get("content_type") == "reel")
         post_views = sum(p.get("actual_views", 0) or 0 for p in page_month_posts) + sum(e.get("views", 0) or 0 for e in page_month_entries if e.get("content_type") != "reel")
 
+        # Apply 6-day overrides if present for this page in the current month
+        if pid in actual_total or cycle_total.get(pid, 0) > 0:
+            base_total = cycle_total.get(pid, 0)
+            base_reel = float(cycle_reel.get(pid, 0.0))
+            base_post = float(cycle_post.get(pid, 0.0))
+
+            if pid in actual_total:
+                target_total = actual_total[pid]
+                ratio = (target_total / base_total) if base_total > 0 else 0.0
+                month_views = target_total
+                reel_views = int(round(base_reel * ratio))
+                post_views = int(round(base_post * ratio))
+            else:
+                month_views = base_total
+                reel_views = int(round(base_reel))
+                post_views = int(round(base_post))
+
         entry_count = len(page_month_entries)
         reels_count = len(page_month_reels) + len([e for e in page_month_entries if e.get("content_type") == "reel"])
         posts_count = len(page_month_posts) + len([e for e in page_month_entries if e.get("content_type") != "reel"])
@@ -195,6 +257,10 @@ async def dashboard_stats():
             "top_reels": [],
         })
 
+    # Totals — computed from per-page stats so they stay consistent after 6-day overrides
+    total_reel_views = sum(p.get("reel_views", 0) or 0 for p in page_stats)
+    total_post_views = sum(p.get("post_views", 0) or 0 for p in page_stats)
+    total_views = total_reel_views + total_post_views
     total_all_time = sum(p["all_time_views"] for p in page_stats)
 
     return {

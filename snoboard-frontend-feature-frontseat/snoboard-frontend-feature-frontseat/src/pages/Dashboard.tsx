@@ -201,11 +201,27 @@ export default function Dashboard() {
                       <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-r from-purple-500 to-pink-500" />
                       <span className="text-xs text-zinc-500">Reels</span>
                       <span className="text-sm font-bold text-white tabular-nums">{formatCompact(stats?.total_reel_views ?? 0)}</span>
+                      <span className="text-[11px] text-zinc-500 tabular-nums">
+                        {(() => {
+                          const r = stats?.total_reel_views ?? 0;
+                          const p = stats?.total_post_views ?? 0;
+                          const t = r + p;
+                          return t > 0 ? `(${Math.round((r / t) * 100)}%)` : "";
+                        })()}
+                      </span>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
                       <span className="text-xs text-zinc-500">Posts</span>
                       <span className="text-sm font-bold text-white tabular-nums">{formatCompact(stats?.total_post_views ?? 0)}</span>
+                      <span className="text-[11px] text-zinc-500 tabular-nums">
+                        {(() => {
+                          const r = stats?.total_reel_views ?? 0;
+                          const p = stats?.total_post_views ?? 0;
+                          const t = r + p;
+                          return t > 0 ? `(${Math.round((p / t) * 100)}%)` : "";
+                        })()}
+                      </span>
                     </div>
                   </div>
                 </div>
