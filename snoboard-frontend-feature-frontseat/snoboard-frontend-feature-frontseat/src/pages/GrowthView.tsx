@@ -183,13 +183,15 @@ export default function GrowthView() {
     ? growthData.filter((v: any) => v.handle !== "total")
     : growthData.filter((v: any) => v.handle === (allPages.find((p) => p.id === selectedPage)?.handle || ""));
 
-  // Chart data — total views + followers per month
+  // Chart data — total views + reels + posts + followers per month
   const chartData = [...months].sort().map((month) => {
     const monthEntries = filteredViews.filter((v: any) => v.month?.slice(0, 7) === month);
     return {
       month,
       name: new Date(month + "-01").toLocaleDateString("en-GB", { month: "short", year: "2-digit" }),
       views: monthEntries.reduce((s: number, v: any) => s + (v.views ?? 0), 0),
+      reels: monthEntries.reduce((s: number, v: any) => s + (v.reel_views ?? 0), 0),
+      posts: monthEntries.reduce((s: number, v: any) => s + (v.post_views ?? 0), 0),
       followers: monthEntries.reduce((s: number, v: any) => s + (v.followers_gained ?? 0), 0),
     };
   });
@@ -237,11 +239,11 @@ export default function GrowthView() {
           </div>
         </div>
 
-        {/* Overview Chart — Total Views + Followers Line Graph */}
+        {/* Overview Chart — Total / Reels / Posts / Followers line graph */}
         {chartData.length > 0 && (
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8">
             <h2 className="text-sm uppercase tracking-[0.2em] text-zinc-400 font-semibold mb-6">
-              Total Monthly Views & Followers Gained
+              Total Monthly Views · Reels · Posts · Followers Gained
             </h2>
             <p className="text-xs text-zinc-600 mb-4">Click a data point to see page-wise breakdown</p>
             <ResponsiveContainer width="100%" height={450}>
@@ -259,10 +261,21 @@ export default function GrowthView() {
                 <Tooltip
                   contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 12, padding: "12px 16px" }}
                   labelStyle={{ color: "#d4d4d8", fontSize: 13, fontWeight: "bold" }}
-                  formatter={(value: number, name: string) => [value.toLocaleString(), name === "followers" ? "Followers Gained" : "Total Views"]}
+                  formatter={(value: number, name: string) => {
+                    const label = name === "followers" ? "Followers Gained"
+                      : name === "reels" ? "Reels"
+                      : name === "posts" ? "Posts"
+                      : "Total Views";
+                    return [value.toLocaleString(), label];
+                  }}
                 />
-                <Legend formatter={(value) => value === "followers" ? "Followers Gained" : "Total Views"} />
+                <Legend formatter={(value) => value === "followers" ? "Followers Gained"
+                  : value === "reels" ? "Reels"
+                  : value === "posts" ? "Posts"
+                  : "Total Views"} />
                 <Line yAxisId="views" type="monotone" dataKey="views" stroke="#a855f7" strokeWidth={3} dot={{ r: 5, fill: "#a855f7", stroke: "#18181b", strokeWidth: 2 }} activeDot={{ r: 7, cursor: "pointer" }} />
+                <Line yAxisId="views" type="monotone" dataKey="reels" stroke="#d946ef" strokeWidth={2} strokeDasharray="6 3" dot={{ r: 3, fill: "#d946ef", stroke: "#18181b", strokeWidth: 2 }} activeDot={{ r: 5, cursor: "pointer" }} />
+                <Line yAxisId="views" type="monotone" dataKey="posts" stroke="#22c55e" strokeWidth={2} strokeDasharray="6 3" dot={{ r: 3, fill: "#22c55e", stroke: "#18181b", strokeWidth: 2 }} activeDot={{ r: 5, cursor: "pointer" }} />
                 <Line yAxisId="followers" type="monotone" dataKey="followers" stroke="#10b981" strokeWidth={2.5} dot={{ r: 4, fill: "#10b981", stroke: "#18181b", strokeWidth: 2 }} activeDot={{ r: 6, cursor: "pointer" }} strokeDasharray="5 3" />
               </LineChart>
             </ResponsiveContainer>
