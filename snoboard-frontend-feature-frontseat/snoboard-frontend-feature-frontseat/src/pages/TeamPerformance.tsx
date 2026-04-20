@@ -3,6 +3,10 @@ import { getTeamsPerformance } from "@/services/api";
 import { Trophy, Users, AtSign, Lightbulb, CheckCircle2, Skull, Loader2, Film, Image as ImageIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
+function formatShipRate(rate: number | undefined): string {
+  return `${((rate ?? 0) * 100).toFixed(1)}%`;
+}
+
 export default function TeamPerformance() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["teams-performance"],
@@ -31,7 +35,7 @@ export default function TeamPerformance() {
     );
   }
 
-  const maxPosted = Math.max(0, ...teams.map((t: any) => t.ideas_posted || 0), 1);
+  const maxRate = Math.max(0, ...teams.map((t: any) => t.posted_rate ?? 0), 1e-9);
 
   return (
     <div className="min-h-screen bg-zinc-950 pt-20 pb-16 px-4 sm:px-6">
@@ -41,9 +45,9 @@ export default function TeamPerformance() {
             Team performance
           </h1>
           <p className="text-sm text-zinc-500 mt-1 max-w-2xl">
-            Garfields vs Goofies — <span className="text-zinc-400">reels and posts</span> from the content tracker (idea{" "}
-            <span className="text-violet-400 font-medium">type</span> reel vs post). Leader by total{" "}
-            <span className="text-violet-400 font-medium">posted</span> (both types combined).
+            Garfields vs Goofies — <span className="text-zinc-400">reels and posts</span> from the content tracker.{" "}
+            <span className="text-amber-400/90 font-medium">Winning team</span> has the higher{" "}
+            <span className="text-violet-400 font-medium">posted ÷ total</span> ideas (ship rate). Tie-break: more ideas posted, then more total ideas.
           </p>
         </div>
 
@@ -51,7 +55,8 @@ export default function TeamPerformance() {
           {teams.map((team: any) => {
             const isLeader = leaderKey === team.key;
             const posted = team.ideas_posted || 0;
-            const barPct = Math.round((posted / maxPosted) * 100);
+            const totalIdeas = team.ideas_total || 0;
+            const barPct = Math.round(((team.posted_rate ?? 0) / maxRate) * 100);
 
             return (
               <div
@@ -76,6 +81,12 @@ export default function TeamPerformance() {
                     <p className="text-xs text-zinc-500 mt-1">
                       {team.account_count} account{team.account_count !== 1 ? "s" : ""} ·{" "}
                       {team.member_count} people
+                    </p>
+                    <p className="text-sm font-bold text-amber-400/95 mt-2 tabular-nums">
+                      Ship rate {formatShipRate(team.posted_rate)}
+                      <span className="text-zinc-500 font-normal text-xs ml-2">
+                        ({posted}/{totalIdeas} posted)
+                      </span>
                     </p>
                   </div>
                 </div>
@@ -190,8 +201,8 @@ export default function TeamPerformance() {
 
                   <div>
                     <div className="flex justify-between text-[10px] text-zinc-500 mb-1">
-                      <span>Posted score (vs other team)</span>
-                      <span className="text-white font-bold tabular-nums">{posted}</span>
+                      <span>Ship rate vs other team (bar scale)</span>
+                      <span className="text-white font-bold tabular-nums">{formatShipRate(team.posted_rate)}</span>
                     </div>
                     <div className="h-2 rounded-full bg-zinc-800 overflow-hidden">
                       <div
@@ -208,9 +219,9 @@ export default function TeamPerformance() {
           })}
         </div>
 
-        {!leaderKey && teams.length === 2 && teams[0]?.ideas_posted === teams[1]?.ideas_posted && (
+        {!leaderKey && teams.length >= 2 && (
           <p className="text-center text-sm text-zinc-500 mt-6">
-            Tie on posted ideas — share the crown until someone ships more.
+            Tie on ship rate (and tie-breakers) — even match for now.
           </p>
         )}
       </div>

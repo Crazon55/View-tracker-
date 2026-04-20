@@ -1441,12 +1441,34 @@ async def teams_performance():
             "post_killed": st["post_killed"],
         })
 
-    teams_out.sort(key=lambda x: x["ideas_posted"], reverse=True)
+    for row in teams_out:
+        tot = row["ideas_total"]
+        row["posted_rate"] = (row["ideas_posted"] / tot) if tot > 0 else 0.0
+
+    # Win = higher posted / total; tie-break: more ideas_posted, then more ideas_total
+    teams_out.sort(
+        key=lambda x: (x["posted_rate"], x["ideas_posted"], x["ideas_total"]),
+        reverse=True,
+    )
+
     leader = None
-    if len(teams_out) >= 2 and teams_out[0]["ideas_posted"] != teams_out[1]["ideas_posted"]:
-        leader = teams_out[0]["key"]
-    elif len(teams_out) == 1:
-        leader = teams_out[0]["key"]
+    if teams_out:
+        if len(teams_out) == 1:
+            if teams_out[0]["ideas_total"] > 0:
+                leader = teams_out[0]["key"]
+        else:
+            t0 = (
+                teams_out[0]["posted_rate"],
+                teams_out[0]["ideas_posted"],
+                teams_out[0]["ideas_total"],
+            )
+            t1 = (
+                teams_out[1]["posted_rate"],
+                teams_out[1]["ideas_posted"],
+                teams_out[1]["ideas_total"],
+            )
+            if t0 > t1:
+                leader = teams_out[0]["key"]
 
     return {"success": True, "data": {"teams": teams_out, "leader_key": leader}}
 
