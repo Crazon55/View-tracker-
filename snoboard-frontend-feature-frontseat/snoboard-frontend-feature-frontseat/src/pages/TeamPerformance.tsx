@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { motion, AnimatePresence, useMotionValue, useTransform, animate } from "framer-motion";
+import { motion, AnimatePresence, useMotionValue, useTransform, animate, useAnimationControls } from "framer-motion";
 import { getTeamsPerformance, getTrackerIdeas, getTrackerNiches } from "@/services/api";
 import { buildTeamPerformanceFromTracker } from "@/lib/teamPerformanceCompute";
 import {
@@ -72,6 +72,108 @@ const TEAM_SKIN: Record<
 
 function teamSkin(key: string) {
   return TEAM_SKIN[key] ?? TEAM_SKIN.garfields;
+}
+
+/* ============================== easter-egg sounds ============================== */
+// Lazily-created AudioContext — browsers require a user gesture before
+// audio can play, and a double-click qualifies.
+let _audioCtx: AudioContext | null = null;
+function getAudioCtx(): AudioContext | null {
+  try {
+    if (!_audioCtx) {
+      const Ctor = window.AudioContext || (window as any).webkitAudioContext;
+      if (!Ctor) return null;
+      _audioCtx = new Ctor();
+    }
+    if (_audioCtx.state === "suspended") _audioCtx.resume();
+    return _audioCtx;
+  } catch {
+    return null;
+  }
+}
+
+// A meow: nasal sawtooth with a pitch arc (rising "me-" then falling "-ow")
+// plus gentle vibrato. Ends with a band-pass filter for a more organic tone.
+function playMeow() {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  const dur = 0.65;
+
+  const osc = ctx.createOscillator();
+  osc.type = "sawtooth";
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.frequency.setValueAtTime(1100, t);
+  filter.frequency.linearRampToValueAtTime(1600, t + 0.2);
+  filter.frequency.linearRampToValueAtTime(900, t + dur);
+  filter.Q.value = 4;
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(0.35, t + 0.05);
+  gain.gain.setValueAtTime(0.35, t + 0.45);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+
+  // Pitch: "me" rises, "ow" falls
+  osc.frequency.setValueAtTime(540, t);
+  osc.frequency.linearRampToValueAtTime(820, t + 0.18);
+  osc.frequency.linearRampToValueAtTime(430, t + dur);
+
+  // Vibrato — small LFO into the osc frequency
+  const lfo = ctx.createOscillator();
+  lfo.frequency.value = 8;
+  const lfoGain = ctx.createGain();
+  lfoGain.gain.value = 20;
+  lfo.connect(lfoGain).connect(osc.frequency);
+
+  osc.connect(filter).connect(gain).connect(ctx.destination);
+
+  lfo.start(t);
+  osc.start(t);
+  osc.stop(t + dur + 0.05);
+  lfo.stop(t + dur + 0.05);
+}
+
+// A bark: two quick low-frequency sawtooth bursts ("woof woof") with
+// band-pass filtering to suggest a mouth cavity.
+function playBark() {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+
+  const woof = (delay: number) => {
+    const t0 = ctx.currentTime + delay;
+    const len = 0.14;
+
+    const osc = ctx.createOscillator();
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(220, t0);
+    osc.frequency.exponentialRampToValueAtTime(90, t0 + len);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.setValueAtTime(900, t0);
+    filter.frequency.linearRampToValueAtTime(500, t0 + len);
+    filter.Q.value = 2.5;
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(0.45, t0 + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + len);
+
+    osc.connect(filter).connect(gain).connect(ctx.destination);
+    osc.start(t0);
+    osc.stop(t0 + len + 0.02);
+  };
+
+  woof(0);
+  woof(0.18);
+}
+
+function playTeamSound(teamKey: string) {
+  if (teamKey === "goofies") playBark();
+  else if (teamKey === "garfields") playMeow();
 }
 
 /* ============================== odometer ============================== */
@@ -360,6 +462,22 @@ function TeamScorePanel({
   align: "left" | "right";
 }) {
   const skin = teamSkin(team.key);
+  const emojiControls = useAnimationControls();
+  const [poof, setPoof] = useState<{ id: number; char: string } | null>(null);
+
+  const handleEasterEgg = () => {
+    playTeamSound(team.key);
+    const poofChar = team.key === "goofies" ? "🐾" : "🐟";
+    setPoof({ id: Date.now(), char: poofChar });
+    window.setTimeout(() => setPoof(null), 900);
+    emojiControls.start({
+      y: [0, -28, 0],
+      rotate: [0, -14, 14, -8, 8, 0],
+      scale: [1, 1.18, 1],
+      transition: { duration: 0.7, ease: "easeOut" },
+    });
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, x: align === "right" ? -20 : 20 }}
@@ -367,16 +485,50 @@ function TeamScorePanel({
       transition={{ duration: 0.5 }}
       className={`flex flex-col ${align === "right" ? "items-end text-right" : "items-start text-left"}`}
     >
-      <motion.div
-        animate={isLeader ? { y: [0, -4, 0] } : {}}
-        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-        className={`text-5xl sm:text-7xl drop-shadow-[0_4px_20px_rgba(255,180,0,0.3)] ${
-          isLeader ? "" : "opacity-70"
-        }`}
-        aria-hidden
+      <div
+        onDoubleClick={handleEasterEgg}
+        onTouchEnd={(e) => {
+          // Treat a double-tap on mobile the same as dblclick
+          const now = Date.now();
+          const lastTap = (e.currentTarget as any)._lastTap || 0;
+          (e.currentTarget as any)._lastTap = now;
+          if (now - lastTap < 350) handleEasterEgg();
+        }}
+        title={team.key === "goofies" ? "Double-click me (woof)" : "Double-click me (meow)"}
+        className="relative cursor-pointer select-none"
       >
-        {team.emoji}
-      </motion.div>
+        <motion.div
+          animate={emojiControls}
+          initial={{ y: 0, rotate: 0, scale: 1 }}
+          className={`text-5xl sm:text-7xl drop-shadow-[0_4px_20px_rgba(255,180,0,0.3)] ${
+            isLeader ? "" : "opacity-70"
+          }`}
+          aria-hidden
+        >
+          <motion.span
+            animate={isLeader ? { y: [0, -4, 0] } : {}}
+            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            className="inline-block"
+          >
+            {team.emoji}
+          </motion.span>
+        </motion.div>
+        <AnimatePresence>
+          {poof && (
+            <motion.span
+              key={poof.id}
+              initial={{ opacity: 0, y: 0, scale: 0.6 }}
+              animate={{ opacity: [0, 1, 0], y: -40, scale: 1.2 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeOut" }}
+              className="pointer-events-none absolute left-1/2 top-2 -translate-x-1/2 text-2xl"
+              aria-hidden
+            >
+              {poof.char}
+            </motion.span>
+          )}
+        </AnimatePresence>
+      </div>
       <div className={`mt-1 text-xs font-black tracking-[0.2em] uppercase ${skin.text}`}>{team.label}</div>
       <div className={`text-[10px] text-zinc-500 ${align === "right" ? "mb-2" : "mb-2"} italic`}>
         {skin.tagline}
