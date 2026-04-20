@@ -113,6 +113,10 @@ export const deleteTrackerNiche = (id: string) =>
   fetchApi<any>(`/api/v1/tracker/niches/${id}`, { method: "DELETE" });
 
 export const getTrackerIdeas = (type?: string) => fetchApi<any[]>(`/api/v1/tracker/ideas${type ? `?type=${type}` : ""}`);
+
+export const getTeamsPerformance = () =>
+  fetchApi<{ teams: any[]; leader_key: string | null }>("/api/v1/teams/performance");
+
 export const createTrackerIdea = (data: any) =>
   fetchApi<any>("/api/v1/tracker/ideas", { method: "POST", body: JSON.stringify(data) });
 export const updateTrackerIdea = (id: string, data: any) =>

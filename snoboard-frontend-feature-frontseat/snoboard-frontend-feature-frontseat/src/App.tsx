@@ -5,7 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { getDeadlines } from "@/services/api";
 import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, BarChart3, Scissors, Telescope, ClipboardList } from "lucide-react";
+import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, BarChart3, Scissors, Telescope, ClipboardList, Trophy } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -28,6 +28,7 @@ import CompetitorResearch from "./pages/CompetitorResearch";
 import ContentTracker from "./pages/ContentTracker";
 import PostTracker from "./pages/PostTracker";
 import SixDayTracker from "./pages/SixDayTracker";
+import TeamPerformance from "./pages/TeamPerformance";
 import RoleSelect from "./pages/RoleSelect";
 import NotFound from "./pages/NotFound";
 
@@ -216,6 +217,7 @@ const navItems: NavItem[] = [
   { to: "/post-ips", label: "Post IPs", icon: Image },
   { to: "/stage1-tracker", label: "Stage 1 Tracker", icon: BarChart3 },
   { to: "/six-day-tracker", label: "6-Day Tracker", icon: Radio },
+  { to: "/team-performance", label: "Teams", icon: Trophy },
   { to: "/competitor-research", label: "Competitor Research", icon: Telescope },
   { to: "/growth", label: "Growth", icon: TrendingUp },
   { to: "/pages", label: "IP's", icon: Users },
@@ -292,6 +294,7 @@ function AppLayout() {
     location.pathname === "/stage1-tracker" ||
     location.pathname === "/competitor-research" ||
     location.pathname === "/six-day-tracker" ||
+    location.pathname === "/team-performance" ||
     location.pathname.startsWith("/post-ips/") ||
     location.pathname.startsWith("/page/");
 
@@ -325,6 +328,7 @@ function AppLayout() {
           <Route path="/stage1-tracker" element={<Stage1Tracker />} />
           <Route path="/competitor-research" element={<CompetitorResearch />} />
           <Route path="/six-day-tracker" element={<SixDayTracker />} />
+          <Route path="/team-performance" element={<TeamPerformance />} />
         </Routes>
       </div>
     );
