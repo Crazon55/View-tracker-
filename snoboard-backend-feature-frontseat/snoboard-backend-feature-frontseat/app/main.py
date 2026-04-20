@@ -2058,13 +2058,71 @@ async def tracker_migrate():
 
 @app.post("/api/v1/tracker/sync-team-niches")
 async def tracker_sync_team_niches():
-    """Idempotent sync of the Garfields/Goofies niche membership to the
-    canonical handle lists declared above. Creates the niches if missing;
-    does not delete anything else. Safe to re-run any time the master list
-    changes."""
+    """Idempotent sync of the Garfields/Goofies niche roster:
+
+    1. Upserts every canonical handle into `pages` so the 6-day tracker
+       filter and leaderboard page aggregates can see them.
+    2. Replaces `tracker_niches.pages` for each FBS niche with the
+       canonical list (overwrites stale aliases).
+
+    Safe to re-run. Does not delete or modify tracker_ideas.
+    """
     from app.database.client import get_supabase_client
     client = get_supabase_client()
 
+    # Display names keyed by handle — used when we need to create a page row.
+    DISPLAY_NAMES = {
+        # Garfields
+        "bizzindia": "Bizz India",
+        "indianfoundersco": "Indian Founders Co",
+        "startupbydog": "Startupbydog",
+        "founderswtf": "Founders WTF",
+        "entrepreneursindia.co": "Entrepreneursindia.co",
+        "richindianceo": "Rich Indian CEO",
+        "therisingfounder": "The Rising Founder",
+        "millionaire.founders": "Millionaire.founders",
+        "indianbusinesscom": "Indian Business Com",
+        "ceohustleadvice": "CEO Hustle Advice",
+        "therealfoundr": "The Real Foundr",
+        # Goofies
+        "101xfounders": "101xfounders",
+        "foundersinindia": "Founders In India",
+        "startupcoded": "Startup Coded",
+        "indiastartupstory": "India Startup Story",
+        "elitefoundrs": "Elite Founders",
+        "indianfoundrs": "Indian Foundrs",
+        "startupsinthelast24hrs": "Startupsinthelast24hrs",
+        "realindianbusiness": "Real Indian Business",
+        "foundersoncrack": "Foundersoncrack",
+        "entrepreneurial.india": "Entrepreneurial.India",
+        "theprimefounder": "The Prime Founder",
+        "indiasbestfounders": "India's Best Founders",
+        "businesscracked": "Business Cracked",
+    }
+
+    all_handles = sorted({
+        *[h.lstrip("@").strip().lower() for h in GARFIELDS_HANDLES],
+        *[h.lstrip("@").strip().lower() for h in GOOFIES_HANDLES],
+    })
+
+    # 1) Ensure each handle has a row in `pages`
+    existing_pages = client.table("pages").select("id,handle").execute().data or []
+    existing_handles = {str(p.get("handle") or "").lower() for p in existing_pages}
+
+    inserted_pages: list[str] = []
+    for h in all_handles:
+        if h in existing_handles:
+            continue
+        client.table("pages").insert({
+            "handle": h,
+            "name": DISPLAY_NAMES.get(h, h),
+            "profile_url": f"https://www.instagram.com/{h}/",
+            "auto_scrape": False,
+            "stage": 1,
+        }).execute()
+        inserted_pages.append(h)
+
+    # 2) Sync niche memberships
     existing = client.table("tracker_niches").select("id,name").execute().data or []
     niche_map = {n["name"]: n["id"] for n in existing}
 
@@ -2073,16 +2131,21 @@ async def tracker_sync_team_niches():
         "FBS - Goofies": GOOFIES_HANDLES,
     }
 
-    out = {}
+    synced = {}
     for name, pages in desired.items():
-        clean = sorted({str(h).lstrip("@").strip().lower() for h in pages if h})
+        clean = [str(h).lstrip("@").strip().lower() for h in pages if h]
         if name in niche_map:
             client.table("tracker_niches").update({"pages": clean}).eq("id", niche_map[name]).execute()
         else:
             client.table("tracker_niches").insert({"name": name, "pages": clean}).execute()
-        out[name] = {"count": len(clean), "pages": clean}
+        synced[name] = {"count": len(clean), "pages": clean}
 
-    return {"success": True, "synced": out}
+    return {
+        "success": True,
+        "pages_inserted": inserted_pages,
+        "pages_inserted_count": len(inserted_pages),
+        "synced": synced,
+    }
 
 
 @app.post("/api/v1/tracker/populate-niche-pages")
