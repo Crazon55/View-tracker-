@@ -115,7 +115,17 @@ export const deleteTrackerNiche = (id: string) =>
 export const getTrackerIdeas = (type?: string) => fetchApi<any[]>(`/api/v1/tracker/ideas${type ? `?type=${type}` : ""}`);
 
 export const getTeamsPerformance = () =>
-  fetchApi<{ teams: any[]; leader_key: string | null }>("/api/v1/teams/performance");
+  fetchApi<{
+    teams: any[];
+    leader_key: string | null;
+    leader_margin_views_6d?: number;
+    leader_margin_views_total?: number;
+    top_idea_overall?: any;
+    top_idea_6d?: any;
+    top_creator_6d?: any;
+    people?: any[];
+    window_days?: number;
+  }>("/api/v1/teams/performance");
 
 export const createTrackerIdea = (data: any) =>
   fetchApi<any>("/api/v1/tracker/ideas", { method: "POST", body: JSON.stringify(data) });

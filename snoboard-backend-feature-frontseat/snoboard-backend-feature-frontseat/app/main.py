@@ -1348,18 +1348,31 @@ TEAM_PERFORMANCE_CONFIG: dict[str, dict] = {
 
 @app.get("/api/v1/teams/performance")
 async def teams_performance():
-    """Leaderboard: Garfields vs Goofies — accounts from tracker niches; reels + posts, counts by stage."""
+    """Gamified leaderboard: Garfields vs Goofies.
+
+    Aggregates tracker_postings views (per team, per-creator, per-idea, per-6-day
+    window) plus idea counts by stage, so the UI can render a scoreboard
+    with hall-of-fame awards and a people leaderboard.
+    """
     from app.database.client import get_supabase_client
+    from datetime import datetime, timedelta
     client = get_supabase_client()
 
     niches = client.table("tracker_niches").select("id,name,pages").execute().data or []
     ideas = (
         client.table("tracker_ideas")
-        .select("id,stage,niche_id,niche_ids,type")
+        .select("id,title,stage,niche_id,niche_ids,type,source,created_by")
+        .execute()
+        .data or []
+    )
+    postings = (
+        client.table("tracker_postings")
+        .select("id,idea_id,page,date,views")
         .execute()
         .data or []
     )
 
+    # ---- Niche → team mapping ---------------------------------------------
     niche_id_to_team: dict[str, str] = {}
     for n in niches:
         nid = n.get("id")
@@ -1394,6 +1407,87 @@ async def teams_performance():
         t = (idea.get("type") or "reel").lower().strip()
         return "post" if t == "post" else "reel"
 
+    def _norm_creator(raw: str | None) -> str:
+        if not raw:
+            return ""
+        s = str(raw).strip()
+        # If it looks like an email, take the local-part. If it has dots, prettify.
+        if "@" in s:
+            s = s.split("@", 1)[0]
+        # Replace separators and title-case short names
+        s = s.replace(".", " ").replace("_", " ").replace("-", " ").strip()
+        return " ".join(w.capitalize() for w in s.split() if w)
+
+    # ---- Build idea index -------------------------------------------------
+    idea_by_id: dict[str, dict] = {}
+    for idea in ideas:
+        iid = idea.get("id")
+        if iid:
+            idea_by_id[iid] = idea
+
+    # ---- Aggregate views --------------------------------------------------
+    today = datetime.utcnow().date()
+    cutoff_6d = today - timedelta(days=6)
+
+    # Per team: total + 6d views; per creator inside team: views + idea count
+    team_stats: dict[str, dict] = {
+        k: {
+            "views_total": 0,
+            "views_6d": 0,
+            "views_by_idea": {},     # idea_id -> total views
+            "views_by_idea_6d": {},
+            "views_by_creator": {},  # creator display name -> {"views_total","views_6d","ideas": set(idea_id)}
+        }
+        for k in TEAM_PERFORMANCE_CONFIG
+    }
+
+    # Per-idea overall views (both teams, for global hall-of-fame)
+    idea_views_total: dict[str, int] = {}
+    idea_views_6d: dict[str, int] = {}
+
+    for p in postings:
+        v = int(p.get("views") or 0)
+        if v <= 0:
+            continue
+        iid = p.get("idea_id")
+        idea = idea_by_id.get(iid) if iid else None
+        if not idea:
+            continue
+        tk = _idea_team(idea)
+        if not tk or tk not in team_stats:
+            continue
+
+        # Parse posting date (accept yyyy-mm-dd)
+        dstr = (p.get("date") or "")[:10]
+        in_6d = False
+        if dstr:
+            try:
+                d = datetime.strptime(dstr, "%Y-%m-%d").date()
+                in_6d = d >= cutoff_6d and d <= today
+            except ValueError:
+                in_6d = False
+
+        ts = team_stats[tk]
+        ts["views_total"] += v
+        ts["views_by_idea"][iid] = ts["views_by_idea"].get(iid, 0) + v
+        idea_views_total[iid] = idea_views_total.get(iid, 0) + v
+
+        if in_6d:
+            ts["views_6d"] += v
+            ts["views_by_idea_6d"][iid] = ts["views_by_idea_6d"].get(iid, 0) + v
+            idea_views_6d[iid] = idea_views_6d.get(iid, 0) + v
+
+        creator = _norm_creator(idea.get("created_by"))
+        if creator:
+            cmap = ts["views_by_creator"].setdefault(
+                creator, {"views_total": 0, "views_6d": 0, "ideas": set()}
+            )
+            cmap["views_total"] += v
+            cmap["ideas"].add(iid)
+            if in_6d:
+                cmap["views_6d"] += v
+
+    # ---- Idea counts by stage --------------------------------------------
     stats: dict[str, dict[str, int]] = {
         k: {
             "ideas_total": 0, "ideas_posted": 0, "ideas_killed": 0,
@@ -1417,10 +1511,67 @@ async def teams_performance():
             stats[tk]["ideas_killed"] += 1
             stats[tk][f"{bucket}_killed"] += 1
 
+    def _idea_card(iid: str, team_key: str) -> dict | None:
+        idea = idea_by_id.get(iid)
+        if not idea:
+            return None
+        return {
+            "id": iid,
+            "title": idea.get("title") or "Untitled",
+            "type": _content_bucket(idea),
+            "source": (idea.get("source") or "original"),
+            "creator": _norm_creator(idea.get("created_by")),
+            "team": team_key,
+        }
+
+    # ---- Assemble team rows ----------------------------------------------
     teams_out = []
     for team_key, cfg in TEAM_PERFORMANCE_CONFIG.items():
         handles = sorted(team_accounts.get(team_key, set()))
         st = stats[team_key]
+        ts = team_stats[team_key]
+
+        # Top creator for this team (6d primary, all-time tie-break)
+        top_creator_6d = None
+        top_creator_all = None
+        if ts["views_by_creator"]:
+            # 6d ranking
+            ranked_6d = sorted(
+                ts["views_by_creator"].items(),
+                key=lambda kv: (kv[1]["views_6d"], kv[1]["views_total"]),
+                reverse=True,
+            )
+            c_name, c_stats = ranked_6d[0]
+            if c_stats["views_6d"] > 0:
+                top_creator_6d = {
+                    "name": c_name, "views": c_stats["views_6d"], "ideas": len(c_stats["ideas"])
+                }
+            # All-time ranking
+            ranked_all = sorted(
+                ts["views_by_creator"].items(),
+                key=lambda kv: (kv[1]["views_total"], kv[1]["views_6d"]),
+                reverse=True,
+            )
+            c_name, c_stats = ranked_all[0]
+            if c_stats["views_total"] > 0:
+                top_creator_all = {
+                    "name": c_name, "views": c_stats["views_total"], "ideas": len(c_stats["ideas"])
+                }
+
+        # Top idea for this team
+        top_idea_6d = None
+        if ts["views_by_idea_6d"]:
+            iid, v = max(ts["views_by_idea_6d"].items(), key=lambda kv: kv[1])
+            card = _idea_card(iid, team_key)
+            if card:
+                top_idea_6d = {**card, "views": v}
+        top_idea_all = None
+        if ts["views_by_idea"]:
+            iid, v = max(ts["views_by_idea"].items(), key=lambda kv: kv[1])
+            card = _idea_card(iid, team_key)
+            if card:
+                top_idea_all = {**card, "views": v}
+
         teams_out.append({
             "key": team_key,
             "label": cfg["label"],
@@ -1439,38 +1590,111 @@ async def teams_performance():
             "post_total": st["post_total"],
             "post_posted": st["post_posted"],
             "post_killed": st["post_killed"],
+            "views_total": ts["views_total"],
+            "views_6d": ts["views_6d"],
+            "top_creator_6d": top_creator_6d,
+            "top_creator_all": top_creator_all,
+            "top_idea_6d": top_idea_6d,
+            "top_idea_all": top_idea_all,
         })
 
     for row in teams_out:
         tot = row["ideas_total"]
         row["posted_rate"] = (row["ideas_posted"] / tot) if tot > 0 else 0.0
 
-    # Win = higher posted / total; tie-break: more ideas_posted, then more ideas_total
+    # ---- Leader: primary metric is 6-day views, fallback to total views,
+    #      fallback to ship rate ------------------------------------------
     teams_out.sort(
-        key=lambda x: (x["posted_rate"], x["ideas_posted"], x["ideas_total"]),
+        key=lambda x: (x["views_6d"], x["views_total"], x["posted_rate"], x["ideas_posted"]),
         reverse=True,
     )
 
     leader = None
+    leader_margin_views_6d = 0
+    leader_margin_views_total = 0
     if teams_out:
         if len(teams_out) == 1:
-            if teams_out[0]["ideas_total"] > 0:
+            if teams_out[0]["views_6d"] > 0 or teams_out[0]["ideas_total"] > 0:
                 leader = teams_out[0]["key"]
         else:
-            t0 = (
-                teams_out[0]["posted_rate"],
-                teams_out[0]["ideas_posted"],
-                teams_out[0]["ideas_total"],
-            )
-            t1 = (
-                teams_out[1]["posted_rate"],
-                teams_out[1]["ideas_posted"],
-                teams_out[1]["ideas_total"],
-            )
-            if t0 > t1:
-                leader = teams_out[0]["key"]
+            t0, t1 = teams_out[0], teams_out[1]
+            k0 = (t0["views_6d"], t0["views_total"], t0["posted_rate"], t0["ideas_posted"])
+            k1 = (t1["views_6d"], t1["views_total"], t1["posted_rate"], t1["ideas_posted"])
+            if k0 > k1:
+                leader = t0["key"]
+            leader_margin_views_6d = t0["views_6d"] - t1["views_6d"]
+            leader_margin_views_total = t0["views_total"] - t1["views_total"]
 
-    return {"success": True, "data": {"teams": teams_out, "leader_key": leader}}
+    # ---- Global awards (hall of fame, across both teams) -----------------
+    def _pick_top_idea(pool: dict[str, int]) -> dict | None:
+        if not pool:
+            return None
+        iid, v = max(pool.items(), key=lambda kv: kv[1])
+        idea = idea_by_id.get(iid)
+        if not idea:
+            return None
+        tk = _idea_team(idea)
+        if not tk:
+            return None
+        card = _idea_card(iid, tk)
+        if not card:
+            return None
+        return {**card, "views": v, "team_label": TEAM_PERFORMANCE_CONFIG[tk]["label"], "team_emoji": TEAM_PERFORMANCE_CONFIG[tk]["emoji"]}
+
+    top_idea_overall = _pick_top_idea(idea_views_total)
+    top_idea_6d_overall = _pick_top_idea(idea_views_6d)
+
+    # Top creator across both teams in last 6d
+    flat_creator_6d: dict[tuple[str, str], dict] = {}
+    for tk, ts in team_stats.items():
+        for cname, cstats in ts["views_by_creator"].items():
+            key = (tk, cname)
+            if cstats["views_6d"] > 0:
+                flat_creator_6d[key] = cstats
+    top_creator_6d_overall = None
+    if flat_creator_6d:
+        (tk, cname), cstats = max(
+            flat_creator_6d.items(),
+            key=lambda kv: (kv[1]["views_6d"], kv[1]["views_total"]),
+        )
+        top_creator_6d_overall = {
+            "name": cname,
+            "team": tk,
+            "team_label": TEAM_PERFORMANCE_CONFIG[tk]["label"],
+            "team_emoji": TEAM_PERFORMANCE_CONFIG[tk]["emoji"],
+            "views": cstats["views_6d"],
+            "ideas": len(cstats["ideas"]),
+        }
+
+    # People leaderboard (every creator, sorted by 6d views desc)
+    people = []
+    for tk, ts in team_stats.items():
+        for cname, cstats in ts["views_by_creator"].items():
+            people.append({
+                "name": cname,
+                "team": tk,
+                "team_label": TEAM_PERFORMANCE_CONFIG[tk]["label"],
+                "team_emoji": TEAM_PERFORMANCE_CONFIG[tk]["emoji"],
+                "views_total": cstats["views_total"],
+                "views_6d": cstats["views_6d"],
+                "ideas_count": len(cstats["ideas"]),
+            })
+    people.sort(key=lambda p: (p["views_6d"], p["views_total"]), reverse=True)
+
+    return {
+        "success": True,
+        "data": {
+            "teams": teams_out,
+            "leader_key": leader,
+            "leader_margin_views_6d": leader_margin_views_6d,
+            "leader_margin_views_total": leader_margin_views_total,
+            "top_idea_overall": top_idea_overall,
+            "top_idea_6d": top_idea_6d_overall,
+            "top_creator_6d": top_creator_6d_overall,
+            "people": people,
+            "window_days": 6,
+        },
+    }
 
 
 # --- Ideas ---
