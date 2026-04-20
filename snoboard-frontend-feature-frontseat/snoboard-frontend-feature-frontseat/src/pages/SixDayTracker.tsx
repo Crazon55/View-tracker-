@@ -4,6 +4,7 @@ import {
   getSixDayMonth, upsertSixDayEntry,
   createSixDayTopContent, updateSixDayTopContent, deleteSixDayTopContent,
   upsertSixDayActual, getSixDayDeadlines, getPages,
+  getSixDayConfig, setSixDayConfig,
 } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
@@ -129,6 +130,29 @@ export default function SixDayTracker() {
     qc.invalidateQueries({ queryKey: ["growth-data"] });
   }
 
+  const { data: configData } = useQuery<any>({
+    queryKey: ["six-day-config"],
+    queryFn: getSixDayConfig,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+  const assignedEmailSaved: string = configData?.data?.assigned_email || "";
+  const [assignedEmailInput, setAssignedEmailInput] = useState("");
+  useEffect(() => {
+    setAssignedEmailInput(assignedEmailSaved || "");
+  }, [assignedEmailSaved]);
+  const configMut = useMutation({
+    mutationFn: setSixDayConfig,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["six-day-config"] });
+    },
+  });
+  function saveAssignee() {
+    const email = assignedEmailInput.trim().toLowerCase();
+    if (email === (assignedEmailSaved || "").toLowerCase()) return;
+    configMut.mutate({ assigned_email: email, assigned_role: configData?.data?.assigned_role || "" });
+  }
+
   return (
     <div className="min-h-screen bg-zinc-950 pt-20 pb-12 px-4 sm:px-6">
       <div className="max-w-6xl mx-auto">
@@ -163,9 +187,14 @@ export default function SixDayTracker() {
         {overdueCycles.length > 0 && (
           <div className="mb-5 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-            <div>
+            <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-amber-300">
                 {overdueCycles.length} cycle{overdueCycles.length > 1 ? "s" : ""} overdue
+                {assignedEmailSaved && (
+                  <span className="ml-2 text-[10px] font-medium text-amber-400/80 uppercase tracking-wider">
+                    · pinging {assignedEmailSaved}
+                  </span>
+                )}
               </p>
               <p className="text-xs text-amber-400/70 mt-0.5">
                 {overdueCycles.map((c: any) =>
@@ -175,6 +204,27 @@ export default function SixDayTracker() {
             </div>
           </div>
         )}
+
+        <div className="mb-5 rounded-xl border border-zinc-800 bg-zinc-900/60 px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+          <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold shrink-0">
+            Overdue pings to
+          </span>
+          <Input
+            type="email"
+            placeholder="e.g. aditi@owledmedia.com"
+            value={assignedEmailInput}
+            onChange={(e) => setAssignedEmailInput(e.target.value)}
+            onBlur={saveAssignee}
+            onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+            className="h-8 text-xs bg-zinc-800 border-zinc-700 text-white max-w-xs"
+          />
+          {assignedEmailSaved && (
+            <span className="text-[10px] text-zinc-500">
+              Saved — her notifications panel will show overdue cycles.
+            </span>
+          )}
+          {configMut.isPending && <span className="text-[10px] text-zinc-500">Saving…</span>}
+        </div>
 
         <div className="flex items-center gap-3 mb-6">
           <button onClick={() => shiftMonth(-1)} className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors">
