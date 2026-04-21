@@ -1920,10 +1920,51 @@ async def tracker_ideas_update(idea_id: str, request: Request):
     from app.database.client import get_supabase_client
     client = get_supabase_client()
     body = await request.json()
-    allowed_keys = {"title", "source", "niche_id", "niche_ids", "stage", "link", "notes", "hook_variations", "music_ref", "yt_url", "yt_timestamps", "comp_link", "type", "tags", "frame_link", "format", "main_page_hook", "content_pillar", "content_bucket", "caption", "canva_link"}
+    allowed_keys = {
+        "title", "source", "niche_id", "niche_ids", "stage", "link", "notes",
+        "hook_variations", "music_ref", "yt_url", "yt_timestamps", "comp_link",
+        "type", "tags", "frame_link", "format", "main_page_hook",
+        "content_pillar", "content_bucket", "caption", "canva_link",
+        # Bandwidth attribution fields (allow direct admin edits)
+        "base_edit_by", "base_edit_at", "pintu_set_by", "pintu_set_at",
+        "posted_by", "posted_at",
+    }
     allowed = {k: v for k, v in body.items() if k in allowed_keys}
     if "niche_ids" in allowed:
         allowed["niche_id"] = allowed["niche_ids"][0] if allowed["niche_ids"] else None
+
+    # ---- Bandwidth stage-stamping --------------------------------------
+    # When an idea transitions into one of the attributed stages, credit the
+    # acting user (`actor` in body, set by the frontend to the logged-in
+    # user's display name). Only stamps if the field isn't already set, so
+    # re-entering a stage doesn't overwrite the original owner.
+    new_stage = allowed.get("stage")
+    actor = (body.get("actor") or "").strip() or None
+    if new_stage and actor:
+        try:
+            existing = (
+                client.table("tracker_ideas")
+                .select("base_edit_by, pintu_set_by, posted_by")
+                .eq("id", idea_id)
+                .execute()
+                .data
+                or []
+            )
+            current = existing[0] if existing else {}
+        except Exception:
+            current = {}
+        from datetime import datetime as _dt
+        now_iso = _dt.utcnow().isoformat()
+        if new_stage == "base_edit" and not current.get("base_edit_by"):
+            allowed.setdefault("base_edit_by", actor)
+            allowed.setdefault("base_edit_at", now_iso)
+        elif new_stage == "proven_ideas" and not current.get("pintu_set_by"):
+            allowed.setdefault("pintu_set_by", actor)
+            allowed.setdefault("pintu_set_at", now_iso)
+        elif new_stage in ("posted", "uploaded") and not current.get("posted_by"):
+            allowed.setdefault("posted_by", actor)
+            allowed.setdefault("posted_at", now_iso)
+
     client.table("tracker_ideas").update(allowed).eq("id", idea_id).execute()
     return {"success": True}
 
@@ -2106,6 +2147,203 @@ async def tracker_postings_delete(posting_id: str):
         pass
     client.table("tracker_postings").delete().eq("id", posting_id).execute()
     return {"success": True}
+
+
+# --- Bandwidth tracker ----------------------------------------------------
+@app.get("/api/v1/bandwidth")
+async def bandwidth_tracker(days: int = 14, type: str | None = "reel"):
+    """Per-person daily bandwidth: competitor ideas found, OG ideas created,
+    base edits done, Pintu batch sets, posts posted.
+
+    Source of truth: `tracker_ideas` (reel tracker by default). Attribution
+    comes from created_by / base_edit_by / pintu_set_by / posted_by columns;
+    the *_by columns are stamped on stage transitions by the UI.
+
+    Responds with per-person daily breakdown over the last `days` days (the
+    window ends today, inclusive), plus per-niche team totals. Role/niche
+    for each person is looked up by the caller against a seed table; the
+    backend just aggregates by name.
+    """
+    from app.database.client import get_supabase_client
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    client = get_supabase_client()
+
+    # Window: last N days ending today (UTC), inclusive. E.g. days=14 -> 14
+    # date buckets.
+    days = max(1, min(int(days or 14), 90))
+    today = _dt.now(_tz.utc).date()
+    window_start = today - _td(days=days - 1)
+
+    query = client.table("tracker_ideas").select(
+        "id, title, source, type, stage, niche_id, niche_ids, created_at, "
+        "created_by, base_edit_by, base_edit_at, pintu_set_by, pintu_set_at, "
+        "posted_by, posted_at"
+    )
+    if type:
+        query = query.eq("type", type)
+    ideas = query.execute().data or []
+
+    niches = client.table("tracker_niches").select("id,name,pages").execute().data or []
+
+    # ---- niche -> team key (garfields / goofies) -------------------------
+    # Mirrors teamPerformanceCompute.ts substring match.
+    NICHE_TEAM_SUBSTRINGS = {"garfields": "garfields", "goofies": "goofies"}
+    niche_id_to_team: dict[str, str] = {}
+    for n in niches:
+        nm = str(n.get("name") or "").lower()
+        for team_key, sub in NICHE_TEAM_SUBSTRINGS.items():
+            if sub in nm:
+                niche_id_to_team[n["id"]] = team_key
+                break
+
+    def _idea_team(idea: dict) -> str | None:
+        nid = idea.get("niche_id")
+        if nid and nid in niche_id_to_team:
+            return niche_id_to_team[nid]
+        for x in idea.get("niche_ids") or []:
+            if x in niche_id_to_team:
+                return niche_id_to_team[x]
+        return None
+
+    def _norm_name(raw) -> str:
+        if not raw:
+            return ""
+        s = str(raw).strip()
+        if "@" in s:
+            s = s.split("@")[0]
+        s = s.replace(".", " ").replace("_", " ").replace("-", " ").strip()
+        if not s:
+            return ""
+        return " ".join(w.capitalize() for w in s.split() if w)
+
+    def _date_key(ts: str | None) -> str | None:
+        if not ts:
+            return None
+        # Handles "2025-12-08T10:30:00Z" and "2025-12-08 10:30:00+00" etc.
+        try:
+            d = _dt.fromisoformat(str(ts).replace("Z", "+00:00")).astimezone(_tz.utc).date()
+        except Exception:
+            try:
+                d = _dt.fromisoformat(str(ts)[:10]).date()
+            except Exception:
+                return None
+        return d.isoformat()
+
+    def _in_window(d_iso: str | None) -> bool:
+        if not d_iso:
+            return False
+        try:
+            d = _dt.fromisoformat(d_iso).date()
+        except Exception:
+            return False
+        return window_start <= d <= today
+
+    METRIC_KEYS = ("comp_found", "og_created", "base_edits", "pintu_sets", "posted")
+
+    def _empty_day_row(date_iso: str) -> dict:
+        return {"date": date_iso, **{k: 0 for k in METRIC_KEYS}}
+
+    # person_name -> { niches: Counter, daily: { date: {...} }, totals: {...} }
+    people: dict[str, dict] = {}
+    team_totals: dict[str, dict[str, int]] = {
+        "garfields": {k: 0 for k in METRIC_KEYS},
+        "goofies": {k: 0 for k in METRIC_KEYS},
+        "unassigned": {k: 0 for k in METRIC_KEYS},
+    }
+
+    def _bump(name: str, niche_team: str | None, date_iso: str, metric: str):
+        if not name:
+            return
+        rec = people.setdefault(name, {
+            "name": name,
+            "niche_counts": {"garfields": 0, "goofies": 0, "unassigned": 0},
+            "daily": {},
+            "totals": {k: 0 for k in METRIC_KEYS},
+        })
+        nk = niche_team if niche_team in ("garfields", "goofies") else "unassigned"
+        rec["niche_counts"][nk] += 1
+        day = rec["daily"].setdefault(date_iso, _empty_day_row(date_iso))
+        day[metric] += 1
+        rec["totals"][metric] += 1
+        team_totals[nk][metric] += 1
+
+    for idea in ideas:
+        niche_team = _idea_team(idea)
+
+        # Competitor found / OG created -> credited to created_by on the
+        # day the idea row was created.
+        created_day = _date_key(idea.get("created_at"))
+        if created_day and _in_window(created_day):
+            name = _norm_name(idea.get("created_by"))
+            if name:
+                src = str(idea.get("source") or "original").lower()
+                metric = "comp_found" if src == "competitor" else "og_created"
+                _bump(name, niche_team, created_day, metric)
+
+        # Base edit -> base_edit_by on base_edit_at day.
+        be_day = _date_key(idea.get("base_edit_at"))
+        if be_day and _in_window(be_day):
+            name = _norm_name(idea.get("base_edit_by"))
+            if name:
+                _bump(name, niche_team, be_day, "base_edits")
+
+        # Pintu / batch set -> pintu_set_by on pintu_set_at day.
+        ps_day = _date_key(idea.get("pintu_set_at"))
+        if ps_day and _in_window(ps_day):
+            name = _norm_name(idea.get("pintu_set_by"))
+            if name:
+                _bump(name, niche_team, ps_day, "pintu_sets")
+
+        # Posted -> posted_by on posted_at day.
+        po_day = _date_key(idea.get("posted_at"))
+        if po_day and _in_window(po_day):
+            name = _norm_name(idea.get("posted_by"))
+            if name:
+                _bump(name, niche_team, po_day, "posted")
+
+    # Fill in missing days with zero rows so the frontend can draw a clean
+    # sparkline without holes.
+    all_days: list[str] = []
+    d = window_start
+    while d <= today:
+        all_days.append(d.isoformat())
+        d += _td(days=1)
+
+    people_out = []
+    for rec in people.values():
+        # Pick primary niche for the person = whichever they show up in most.
+        nc = rec["niche_counts"]
+        primary_niche = max(nc, key=lambda k: nc[k])
+        if nc[primary_niche] == 0:
+            primary_niche = "unassigned"
+        daily_filled = [rec["daily"].get(d_iso, _empty_day_row(d_iso)) for d_iso in all_days]
+        people_out.append({
+            "name": rec["name"],
+            "niche_guess": primary_niche,
+            "niche_counts": rec["niche_counts"],
+            "totals": rec["totals"],
+            "daily": daily_filled,
+        })
+
+    # Sort by total activity in window, descending.
+    people_out.sort(
+        key=lambda p: sum(p["totals"].values()),
+        reverse=True,
+    )
+
+    return {
+        "success": True,
+        "data": {
+            "window_start": window_start.isoformat(),
+            "window_end": today.isoformat(),
+            "days": days,
+            "type": type,
+            "all_days": all_days,
+            "metric_keys": list(METRIC_KEYS),
+            "people": people_out,
+            "team_totals": team_totals,
+        },
+    }
 
 
 # --- Migrate old ideas to tracker ---

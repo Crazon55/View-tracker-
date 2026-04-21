@@ -547,7 +547,10 @@ export default function ContentTracker(){
     setAddOpen(false);
   }
   function moveIdea(id: string, ns: string){
-    updateIdeaMut.mutate({ id, data: { stage: ns } });
+    // Attach actor so the backend can stamp base_edit_by / pintu_set_by /
+    // posted_by on stage transitions for the Bandwidth tracker.
+    const actor = user?.user_metadata?.full_name || user?.email?.split("@")[0] || user?.email || null;
+    updateIdeaMut.mutate({ id, data: { stage: ns, actor } });
   }
   function deleteIdea(id: string){
     deleteIdeaMut.mutate(id);

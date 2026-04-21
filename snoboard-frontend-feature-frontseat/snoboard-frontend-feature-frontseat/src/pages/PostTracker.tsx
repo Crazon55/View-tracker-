@@ -543,7 +543,10 @@ export default function PostTracker(){
     setAddOpen(false);
   }
   function moveIdea(id: string, ns: string){
-    updateIdeaMut.mutate({ id, data: { stage: ns } });
+    // Attach actor so the backend can stamp posted_by on the uploaded
+    // transition for the Bandwidth tracker.
+    const actor = user?.user_metadata?.full_name || user?.email?.split("@")[0] || user?.email || null;
+    updateIdeaMut.mutate({ id, data: { stage: ns, actor } });
   }
   function deleteIdea(id: string){
     deleteIdeaMut.mutate(id);
