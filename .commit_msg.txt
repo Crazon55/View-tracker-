@@ -1,0 +1,18 @@
+posted_at editor: verified round-trip + no more snap-back
+
+- Backend probes tracker_ideas for posted_at at first call and raises a
+  clear 400 immediately (before attempting the update) if the bandwidth
+  columns are missing. Previous code relied on exception-string sniffing
+  after the fact, which supabase-py doesn't always trigger.
+- After a successful update the endpoint re-SELECTs the row and returns
+  it, so the frontend can verify what was actually persisted. If the
+  stored posted_at differs from what the client sent, we raise 500 with
+  a specific message instead of silently pretending it worked.
+- Rewrote PostedDateEditor to key its reset on ideaId (not on the value
+  prop), eliminating the snap-back race where a React-Query refetch
+  mid-save would blow away the user's pick. Local date now stays pinned
+  to the user's last action and is only overwritten by the fresh row
+  returned from the PUT response.
+- Uses UTC date accessors everywhere (getUTCFullYear/Month/Date and
+  toLocaleDateString with timeZone: UTC) so the picker shows the same
+  day regardless of the viewer's timezone.

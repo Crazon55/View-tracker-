@@ -1967,10 +1967,36 @@ async def tracker_ideas_update(idea_id: str, request: Request):
 
     bw_keys = {"base_edit_by", "base_edit_at", "pintu_set_by", "pintu_set_at", "posted_by", "posted_at"}
     # Did the client explicitly send a bandwidth field (e.g. user editing the
-    # posted_at date picker), or did they only show up from our auto-stamp
-    # logic above? If user-explicit, we want a loud failure when the column
-    # is missing so the frontend can surface it; otherwise we silently strip.
+    # posted_at date picker)? If so we want a loud failure when the column is
+    # missing; otherwise we silently strip to keep stage transitions working.
     user_explicit_bw = {k for k in bw_keys if k in body}
+
+    # Probe once (cached on the function) whether the DB actually has the
+    # bandwidth columns. This lets us raise a clear 400 BEFORE attempting the
+    # update, instead of relying on exception-string sniffing after the fact
+    # (supabase-py doesn't always raise on missing columns).
+    if not hasattr(tracker_ideas_update, "_bw_cols_cache"):
+        try:
+            client.table("tracker_ideas").select("posted_at").limit(1).execute()
+            tracker_ideas_update._bw_cols_cache = True
+        except Exception:
+            tracker_ideas_update._bw_cols_cache = False
+    bw_cols_exist = tracker_ideas_update._bw_cols_cache
+
+    if not bw_cols_exist:
+        if user_explicit_bw:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Cannot save date: the posted_at/base_edit_at/pintu_set_at "
+                    "columns don't exist on tracker_ideas in your Supabase DB. "
+                    "Run the SQL in migrations/migration_bandwidth_fields.sql "
+                    "(Supabase → SQL Editor) and try again."
+                ),
+            )
+        # Auto-stamp path: silently drop so stage transitions still work.
+        for k in bw_keys:
+            allowed.pop(k, None)
 
     try:
         client.table("tracker_ideas").update(allowed).eq("id", idea_id).execute()
@@ -1978,22 +2004,63 @@ async def tracker_ideas_update(idea_id: str, request: Request):
         msg = str(e).lower()
         is_bw_err = any(k in msg for k in bw_keys) or "column" in msg or "schema cache" in msg
         if is_bw_err and user_explicit_bw:
+            # Cache was wrong — bust it and raise so user sees the real issue.
+            tracker_ideas_update._bw_cols_cache = False
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    "Bandwidth columns not in DB. "
-                    "Run migrations/migration_bandwidth_fields.sql in Supabase "
-                    "to enable editable posted_at / base_edit_at / pintu_set_at."
+                    "Cannot save date: posted_at column is missing. "
+                    "Run migrations/migration_bandwidth_fields.sql in Supabase."
                 ),
             )
         if is_bw_err:
-            # Auto-stamp path: keep trackers working by dropping bw keys.
+            tracker_ideas_update._bw_cols_cache = False
             lean = {k: v for k, v in allowed.items() if k not in bw_keys}
             if lean:
                 client.table("tracker_ideas").update(lean).eq("id", idea_id).execute()
         else:
             raise
-    return {"success": True}
+
+    # Re-fetch the row so the frontend can verify what was actually stored
+    # (eliminates the "I picked 27 but it shows 25" class of bug).
+    try:
+        fresh = (
+            client.table("tracker_ideas")
+            .select("id, stage, posted_at, base_edit_at, pintu_set_at, posted_by, base_edit_by, pintu_set_by")
+            .eq("id", idea_id)
+            .single()
+            .execute()
+            .data
+        )
+    except Exception:
+        fresh = None
+
+    # If the user explicitly tried to set posted_at (or similar) and the
+    # stored value doesn't match, surface that loudly. Compare by date-string
+    # (YYYY-MM-DD) since we save as UTC noon.
+    if fresh and user_explicit_bw:
+        for k in user_explicit_bw:
+            sent = body.get(k)
+            got = fresh.get(k)
+            if sent and got and str(sent)[:10] != str(got)[:10]:
+                raise HTTPException(
+                    status_code=500,
+                    detail=(
+                        f"Save mismatch on {k}: sent {str(sent)[:10]} but "
+                        f"stored as {str(got)[:10]}. Contact the developer."
+                    ),
+                )
+            if sent and not got:
+                raise HTTPException(
+                    status_code=500,
+                    detail=(
+                        f"Save failed: sent {k}={str(sent)[:10]} but the DB "
+                        f"did not store it. The column may be missing or "
+                        f"blocked by RLS."
+                    ),
+                )
+
+    return {"success": True, "data": fresh}
 
 
 @app.delete("/api/v1/tracker/ideas/{idea_id}")

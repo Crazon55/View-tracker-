@@ -776,6 +776,7 @@ export default function ContentTracker(){
 
             {cd.stage==="posted"&&(
               <PostedDateEditor
+                ideaId={cd.id}
                 label="Posted date"
                 value={cd.posted_at}
                 onSave={(iso)=>updateIdeaMut.mutateAsync({id:cd.id,data:{posted_at:iso}})}
