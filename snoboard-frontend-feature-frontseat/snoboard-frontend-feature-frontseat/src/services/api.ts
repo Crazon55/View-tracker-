@@ -141,8 +141,21 @@ export type BandwidthData = {
   team_totals: Record<"garfields" | "goofies" | "unassigned", BandwidthTotals>;
 };
 
-export const getBandwidth = (days: number = 14, type?: string) =>
-  fetchApi<BandwidthData>(`/api/v1/bandwidth?days=${days}${type ? `&type=${encodeURIComponent(type)}` : ""}`);
+export const getBandwidth = (
+  days: number = 14,
+  type?: string,
+  start?: string,
+  end?: string,
+) => {
+  const qs = new URLSearchParams();
+  // When a custom range is provided, the backend ignores `days` — but we
+  // still send it so the URL doubles as a readable cache key.
+  qs.set("days", String(days));
+  if (type) qs.set("type", type);
+  if (start) qs.set("start", start);
+  if (end) qs.set("end", end);
+  return fetchApi<BandwidthData>(`/api/v1/bandwidth?${qs.toString()}`);
+};
 
 export const getTeamsPerformance = () =>
   fetchApi<{
