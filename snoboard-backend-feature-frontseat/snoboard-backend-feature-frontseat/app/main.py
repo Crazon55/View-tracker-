@@ -2284,7 +2284,12 @@ async def tracker_postings_delete(posting_id: str):
 
 # --- Bandwidth tracker ----------------------------------------------------
 @app.get("/api/v1/bandwidth")
-async def bandwidth_tracker(days: int = 14, type: str | None = None):
+async def bandwidth_tracker(
+    days: int = 14,
+    type: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
+):
     """Per-person daily bandwidth across BOTH the reel pipeline (CS + CDI)
     and the post pipeline (CW).
 
@@ -2313,11 +2318,40 @@ async def bandwidth_tracker(days: int = 14, type: str | None = None):
     from datetime import datetime as _dt, timezone as _tz, timedelta as _td
     client = get_supabase_client()
 
-    # Window: last N days ending today (UTC), inclusive. E.g. days=14 -> 14
-    # date buckets.
-    days = max(1, min(int(days or 14), 90))
+    # Window resolution: a custom [start, end] pair (YYYY-MM-DD) takes
+    # precedence over `days`. If only one of start/end is provided, anchor
+    # the other to today. Falls back to the "last N days ending today"
+    # behavior when neither is given.
     today = _dt.now(_tz.utc).date()
-    window_start = today - _td(days=days - 1)
+
+    def _parse_iso(s: str | None):
+        if not s:
+            return None
+        try:
+            return _dt.strptime(str(s)[:10], "%Y-%m-%d").date()
+        except Exception:
+            return None
+
+    start_date = _parse_iso(start)
+    end_date = _parse_iso(end)
+
+    if start_date or end_date:
+        # Custom range mode.
+        if start_date and not end_date:
+            end_date = today
+        if end_date and not start_date:
+            start_date = end_date - _td(days=13)  # 14-day default span
+        if start_date > end_date:  # type: ignore[operator]
+            start_date, end_date = end_date, start_date
+        # Clamp to a sane upper bound so someone doesn't request 5 years.
+        if (end_date - start_date).days > 365:  # type: ignore[operator]
+            start_date = end_date - _td(days=365)  # type: ignore[operator]
+        window_start = start_date
+        window_end = end_date
+    else:
+        days = max(1, min(int(days or 14), 365))
+        window_end = today
+        window_start = today - _td(days=days - 1)
 
     # Try to select the Bandwidth attribution columns; if they don't exist
     # yet (migration not run), fall back to a lean select. Everything still
@@ -2414,7 +2448,7 @@ async def bandwidth_tracker(days: int = 14, type: str | None = None):
             d = _dt.fromisoformat(d_iso).date()
         except Exception:
             return False
-        return window_start <= d <= today
+        return window_start <= d <= window_end
 
     METRIC_KEYS = (
         # Reel pipeline (CS creates, CDI edits + posts)
@@ -2539,7 +2573,7 @@ async def bandwidth_tracker(days: int = 14, type: str | None = None):
     # sparkline without holes.
     all_days: list[str] = []
     d = window_start
-    while d <= today:
+    while d <= window_end:
         all_days.append(d.isoformat())
         d += _td(days=1)
 
@@ -2569,8 +2603,8 @@ async def bandwidth_tracker(days: int = 14, type: str | None = None):
         "success": True,
         "data": {
             "window_start": window_start.isoformat(),
-            "window_end": today.isoformat(),
-            "days": days,
+            "window_end": window_end.isoformat(),
+            "days": (window_end - window_start).days + 1,
             "type": type,
             "all_days": all_days,
             "metric_keys": list(METRIC_KEYS),

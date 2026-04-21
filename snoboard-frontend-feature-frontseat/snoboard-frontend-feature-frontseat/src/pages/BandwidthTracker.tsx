@@ -90,7 +90,7 @@ function weekdayLabel(iso: string): string {
 
 /* ============================== page ============================== */
 
-type WindowKey = "today" | "7d" | "14d" | "month";
+type WindowKey = "today" | "7d" | "14d" | "month" | "custom";
 
 function daysForWindow(w: WindowKey): number {
   switch (w) {
@@ -102,28 +102,61 @@ function daysForWindow(w: WindowKey): number {
       const now = new Date();
       return now.getDate();
     }
+    case "custom":
+      // `days` isn't used for custom ranges — the backend receives
+      // explicit start/end params — but we still need a numeric value
+      // for the cache key.
+      return 0;
   }
 }
 
 const WINDOW_OPTS: { key: WindowKey; label: string }[] = [
-  { key: "today", label: "Today" },
-  { key: "7d",    label: "7d" },
-  { key: "14d",   label: "14d" },
-  { key: "month", label: "Month" },
+  { key: "today",  label: "Today" },
+  { key: "7d",     label: "7d" },
+  { key: "14d",    label: "14d" },
+  { key: "month",  label: "Month" },
+  { key: "custom", label: "Custom" },
 ];
+
+function todayISO(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+function isoMinusDays(iso: string, n: number): string {
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() - n);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
 
 export default function BandwidthTracker() {
   const [windowKey, setWindowKey] = useState<WindowKey>("14d");
-  const days = daysForWindow(windowKey);
   const [roleFilter, setRoleFilter] = useState<"all" | PersonRole>("all");
   const [nicheFilter, setNicheFilter] = useState<"all" | PersonNiche>("all");
 
+  // Custom range state — initialised to the last 14 days so "Custom" feels
+  // sensible the moment you click it.
+  const [customEnd, setCustomEnd] = useState<string>(todayISO());
+  const [customStart, setCustomStart] = useState<string>(isoMinusDays(todayISO(), 13));
+
+  const days = daysForWindow(windowKey);
+  const isCustom = windowKey === "custom";
+  const effectiveStart = isCustom ? customStart : undefined;
+  const effectiveEnd   = isCustom ? customEnd   : undefined;
+
   const { data, isLoading, isError, error } = useQuery({
     // `undefined` type -> backend returns both pipelines.
-    queryKey: ["bandwidth", days],
-    queryFn: () => getBandwidth(days, undefined),
+    queryKey: ["bandwidth", days, effectiveStart ?? "", effectiveEnd ?? ""],
+    queryFn: () => getBandwidth(days, undefined, effectiveStart, effectiveEnd),
     staleTime: 30_000,
     refetchOnWindowFocus: false,
+    // Guard: if custom is picked with start > end, skip the fetch.
+    enabled: !isCustom || (!!customStart && !!customEnd && customStart <= customEnd),
   });
 
   /* Merge backend aggregates with the PeopleSeed so every seeded person
@@ -214,11 +247,32 @@ export default function BandwidthTracker() {
     unassigned: zeroTotals(),
   };
 
+  // Custom range with start > end: show a friendly prompt instead of
+  // falling through to the generic error state (the query is disabled).
+  const customRangeInvalid =
+    isCustom && (!customStart || !customEnd || customStart > customEnd);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-zinc-950 pt-24 pb-16 flex items-center justify-center text-zinc-500 gap-2">
         <Loader2 className="w-5 h-5 animate-spin text-violet-500" />
         Computing bandwidth…
+      </div>
+    );
+  }
+  if (customRangeInvalid) {
+    return (
+      <div className="min-h-screen bg-zinc-950 pt-24 pb-16 px-6 text-center space-y-3 max-w-lg mx-auto">
+        <p className="text-amber-400 text-sm">Pick a valid custom date range.</p>
+        <p className="text-zinc-500 text-xs">
+          The start date must be on or before the end date.
+        </p>
+        <button
+          onClick={() => setWindowKey("14d")}
+          className="mt-2 px-3 py-1.5 rounded-md bg-zinc-800 text-zinc-300 text-xs hover:bg-zinc-700"
+        >
+          Back to 14d
+        </button>
       </div>
     );
   }
@@ -265,6 +319,27 @@ export default function BandwidthTracker() {
                 </button>
               ))}
             </div>
+            {/* custom range pickers — only visible when Custom is active */}
+            {isCustom && (
+              <div className="inline-flex items-center gap-1.5 rounded-lg border border-violet-500/40 bg-zinc-900 px-2 py-1 text-[11px] font-semibold">
+                <input
+                  type="date"
+                  value={customStart}
+                  max={customEnd}
+                  onChange={(e) => setCustomStart(e.target.value)}
+                  className="bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-zinc-200 text-[11px] focus:outline-none focus:border-violet-500"
+                />
+                <span className="text-zinc-500">→</span>
+                <input
+                  type="date"
+                  value={customEnd}
+                  min={customStart}
+                  max={todayISO()}
+                  onChange={(e) => setCustomEnd(e.target.value)}
+                  className="bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-zinc-200 text-[11px] focus:outline-none focus:border-violet-500"
+                />
+              </div>
+            )}
             {/* role */}
             <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-900 p-0.5 text-[11px] font-bold">
               {(["all", "cs", "cdi", "cw"] as const).map((r) => (
