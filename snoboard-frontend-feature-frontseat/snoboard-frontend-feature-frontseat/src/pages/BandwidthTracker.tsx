@@ -1,6 +1,12 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getBandwidth, type BandwidthPerson } from "@/services/api";
+import {
+  getBandwidth,
+  type BandwidthPerson,
+  type BandwidthMetricKey,
+  type BandwidthTotals,
+  type BandwidthDailyRow,
+} from "@/services/api";
 import {
   PEOPLE_SEED,
   ROLE_LABEL,
@@ -11,27 +17,72 @@ import {
   type PersonRole,
   type PersonNiche,
 } from "@/lib/peopleSeed";
-import { Gauge, Users, Sparkles, Film, Scissors, Rocket, Search, Lightbulb, Loader2 } from "lucide-react";
+import {
+  Gauge,
+  Users,
+  Sparkles,
+  Film,
+  Scissors,
+  Rocket,
+  Search,
+  Lightbulb,
+  Loader2,
+  Megaphone,
+  FileText,
+} from "lucide-react";
 
-/* ============================== helpers ============================== */
+/* ============================== metric meta ============================== */
 
-type MetricKey = "comp_found" | "og_created" | "base_edits" | "pintu_sets" | "posted";
-
-const METRIC_META: Record<MetricKey, { label: string; short: string; icon: any; color: string; accent: string }> = {
-  comp_found: { label: "Competitor ideas found",   short: "Comp",       icon: Search,    color: "#7BB0FF", accent: "rgba(74,127,212,0.18)" },
-  og_created: { label: "Original ideas created",   short: "OG",         icon: Lightbulb, color: "#F0C060", accent: "rgba(212,149,42,0.18)" },
-  base_edits: { label: "Base edits done",          short: "Base edit",  icon: Scissors,  color: "#B49EFF", accent: "rgba(123,97,196,0.18)" },
-  pintu_sets: { label: "Sets on Pintu (batch)",    short: "Pintu",      icon: Film,      color: "#9B8FFF", accent: "rgba(83,74,183,0.18)" },
-  posted:     { label: "Posted",                   short: "Posted",     icon: Rocket,    color: "#5AE0A0", accent: "rgba(45,158,95,0.18)" },
+type MetricCell = {
+  key: BandwidthMetricKey;
+  label: string;
+  icon: any;
+  color: string;
 };
 
-const METRIC_KEYS: MetricKey[] = ["comp_found", "og_created", "base_edits", "pintu_sets", "posted"];
+const METRIC_META: Record<BandwidthMetricKey, MetricCell> = {
+  // Reel pipeline
+  reel_comp:       { key: "reel_comp",       label: "Comp",      icon: Search,    color: "#7BB0FF" },
+  reel_og:         { key: "reel_og",         label: "OG",        icon: Lightbulb, color: "#F0C060" },
+  reel_base_edits: { key: "reel_base_edits", label: "Base edit", icon: Scissors,  color: "#B49EFF" },
+  reel_pintu:      { key: "reel_pintu",      label: "Pintu",     icon: Film,      color: "#9B8FFF" },
+  reel_posted:     { key: "reel_posted",     label: "Posted",    icon: Rocket,    color: "#5AE0A0" },
+  // Post pipeline
+  post_comp:       { key: "post_comp",       label: "Comp",      icon: Search,    color: "#7BB0FF" },
+  post_og:         { key: "post_og",         label: "OG",        icon: Lightbulb, color: "#F0C060" },
+  post_mm:         { key: "post_mm",         label: "MM",        icon: Megaphone, color: "#FF9E7A" },
+  post_edits:      { key: "post_edits",      label: "Edits",     icon: FileText,  color: "#B49EFF" },
+  post_posted:     { key: "post_posted",     label: "Posted",    icon: Rocket,    color: "#5AE0A0" },
+};
+
+// Which 5 cells a given role sees on their card.
+const REEL_METRICS: BandwidthMetricKey[] = [
+  "reel_comp", "reel_og", "reel_base_edits", "reel_pintu", "reel_posted",
+];
+const POST_METRICS: BandwidthMetricKey[] = [
+  "post_comp", "post_og", "post_mm", "post_edits", "post_posted",
+];
+
+function metricsForRole(role: PersonRole | null | undefined): BandwidthMetricKey[] {
+  if (role === "cw") return POST_METRICS;
+  // CS / CDI / unassigned / everyone else -> reel pipeline.
+  return REEL_METRICS;
+}
+
+function zeroTotals(): BandwidthTotals {
+  return {
+    reel_comp: 0, reel_og: 0, reel_base_edits: 0, reel_pintu: 0, reel_posted: 0,
+    post_comp: 0, post_og: 0, post_mm: 0, post_edits: 0, post_posted: 0,
+  };
+}
+function zeroDaily(date: string): BandwidthDailyRow {
+  return { date, ...zeroTotals() };
+}
 
 function shortDate(iso: string): string {
   const d = new Date(iso + "T00:00:00");
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
-
 function weekdayLabel(iso: string): string {
   const d = new Date(iso + "T00:00:00");
   return d.toLocaleDateString("en-US", { weekday: "narrow" });
@@ -45,46 +96,67 @@ export default function BandwidthTracker() {
   const [nicheFilter, setNicheFilter] = useState<"all" | PersonNiche>("all");
 
   const { data, isLoading, isError, error } = useQuery({
+    // `undefined` type -> backend returns both pipelines.
     queryKey: ["bandwidth", days],
-    queryFn: () => getBandwidth(days, "reel"),
+    queryFn: () => getBandwidth(days, undefined),
     staleTime: 30_000,
     refetchOnWindowFocus: false,
   });
 
   /* Merge backend aggregates with the PeopleSeed so every seeded person
-     shows up even if they have zero activity in the window — lets the user
-     spot who's idle at a glance. */
+     shows up even if they have zero activity in the window. */
   const joinedPeople = useMemo(() => {
-    const byNorm = new Map<string, BandwidthPerson & { role: PersonRole | null; niche: PersonNiche | "unassigned"; seeded: boolean }>();
+    const byKey = new Map<
+      string,
+      BandwidthPerson & {
+        role: PersonRole | null;
+        niche: PersonNiche | "unassigned";
+        seeded: boolean;
+      }
+    >();
     const all_days = data?.all_days || [];
-
-    const mk = (name: string): BandwidthPerson => ({
-      name,
-      niche_guess: "unassigned",
-      niche_counts: { garfields: 0, goofies: 0, unassigned: 0 },
-      totals: { comp_found: 0, og_created: 0, base_edits: 0, pintu_sets: 0, posted: 0 },
-      daily: all_days.map((d) => ({ date: d, comp_found: 0, og_created: 0, base_edits: 0, pintu_sets: 0, posted: 0 })),
-    });
+    const emptyDaily = all_days.map((d) => zeroDaily(d));
 
     for (const p of PEOPLE_SEED) {
-      byNorm.set(p.name, { ...mk(p.name), role: p.role, niche: p.niche, seeded: true });
+      byKey.set(p.name, {
+        name: p.name,
+        niche_guess: "unassigned",
+        niche_counts: { garfields: 0, goofies: 0, unassigned: 0 },
+        totals: zeroTotals(),
+        daily: emptyDaily,
+        role: p.role,
+        niche: p.niche,
+        seeded: true,
+      });
     }
 
     for (const p of data?.people || []) {
       const seed = lookupPerson(p.name);
       const key = seed?.name ?? p.name;
-      const existing = byNorm.get(key);
+      const existing = byKey.get(key);
       if (existing) {
-        byNorm.set(key, { ...existing, ...p, name: seed?.name ?? p.name, role: seed?.role ?? existing.role, niche: seed?.niche ?? existing.niche });
+        byKey.set(key, {
+          ...existing,
+          ...p,
+          name: seed?.name ?? p.name,
+          role: seed?.role ?? existing.role,
+          niche: seed?.niche ?? existing.niche,
+        });
       } else {
-        byNorm.set(key, { ...p, role: null, niche: (p.niche_guess as PersonNiche | "unassigned"), seeded: false });
+        byKey.set(key, {
+          ...p,
+          role: null,
+          niche: p.niche_guess as PersonNiche | "unassigned",
+          seeded: false,
+        });
       }
     }
 
-    return Array.from(byNorm.values()).sort((a, b) => {
-      const sumA = METRIC_KEYS.reduce((s, k) => s + (a.totals[k] || 0), 0);
-      const sumB = METRIC_KEYS.reduce((s, k) => s + (b.totals[k] || 0), 0);
-      return sumB - sumA;
+    // Sort by total activity across whichever 5 metrics their role tracks.
+    return Array.from(byKey.values()).sort((a, b) => {
+      const ma = metricsForRole(a.role).reduce((s, k) => s + (a.totals[k] || 0), 0);
+      const mb = metricsForRole(b.role).reduce((s, k) => s + (b.totals[k] || 0), 0);
+      return mb - ma;
     });
   }, [data]);
 
@@ -96,7 +168,7 @@ export default function BandwidthTracker() {
     });
   }, [joinedPeople, roleFilter, nicheFilter]);
 
-  /* Group filtered people by role (CS, CDI, …) for the page sections. */
+  /* Group filtered people by role for the page sections. */
   const groupedByRole = useMemo(() => {
     const groups: Record<string, typeof filteredPeople> = {};
     for (const p of filteredPeople) {
@@ -104,11 +176,20 @@ export default function BandwidthTracker() {
       if (!groups[k]) groups[k] = [];
       groups[k].push(p);
     }
-    const roleOrder: string[] = ["cs", "cdi", "cw", "design", "ai_automations", "ops_manager", "editors", "content_creators", "unassigned"];
-    return roleOrder.filter((r) => groups[r]?.length).map((r) => ({ role: r as PersonRole | "unassigned", people: groups[r] }));
+    const roleOrder: string[] = [
+      "cs", "cdi", "cw", "design", "ai_automations",
+      "ops_manager", "editors", "content_creators", "unassigned",
+    ];
+    return roleOrder
+      .filter((r) => groups[r]?.length)
+      .map((r) => ({ role: r as PersonRole | "unassigned", people: groups[r] }));
   }, [filteredPeople]);
 
-  const teamTotals = data?.team_totals || { garfields: {}, goofies: {}, unassigned: {} } as any;
+  const teamTotals = data?.team_totals || {
+    garfields: zeroTotals(),
+    goofies: zeroTotals(),
+    unassigned: zeroTotals(),
+  };
 
   if (isLoading) {
     return (
@@ -122,7 +203,9 @@ export default function BandwidthTracker() {
     return (
       <div className="min-h-screen bg-zinc-950 pt-24 pb-16 px-6 text-center space-y-3 max-w-lg mx-auto">
         <p className="text-red-400 text-sm">Could not load bandwidth data.</p>
-        <p className="text-zinc-500 text-xs break-words">{error instanceof Error ? error.message : "Unknown error"}</p>
+        <p className="text-zinc-500 text-xs break-words">
+          {error instanceof Error ? error.message : "Unknown error"}
+        </p>
       </div>
     );
   }
@@ -136,14 +219,14 @@ export default function BandwidthTracker() {
             <div className="flex items-center gap-2 mb-2">
               <Gauge className="w-5 h-5 text-violet-400" />
               <span className="text-[11px] uppercase tracking-[0.25em] text-violet-400 font-bold">
-                Bandwidth tracker · reel pipeline
+                Bandwidth tracker
               </span>
             </div>
             <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight leading-none">
               Who's <span className="text-violet-400">shipping</span> what.
             </h1>
             <p className="text-sm text-zinc-400 mt-2 max-w-2xl">
-              Per-person output on the reel pipeline: competitor ideas found, OG ideas created, base edits, Pintu batch sets, and posts shipped. Window: {shortDate(data.window_start)} – {shortDate(data.window_end)}.
+              Per-person output across the reel pipeline (CS, CDI) and the post pipeline (CW). Each role sees the metrics that matter to their own work. Window: {shortDate(data.window_start)} – {shortDate(data.window_end)}.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -161,7 +244,7 @@ export default function BandwidthTracker() {
             </div>
             {/* role */}
             <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-900 p-0.5 text-[11px] font-bold">
-              {(["all", "cs", "cdi"] as const).map((r) => (
+              {(["all", "cs", "cdi", "cw"] as const).map((r) => (
                 <button
                   key={r}
                   onClick={() => setRoleFilter(r)}
@@ -231,7 +314,10 @@ export default function BandwidthTracker() {
 
         {/* footnote */}
         <p className="text-center text-[11px] text-zinc-600 mt-10 max-w-2xl mx-auto">
-          Base edits / Pintu sets / Posted are counted from each idea's stage in the Reel Tracker. Historical ideas are credited to their <code className="text-zinc-500">created_by</code> person; once someone clicks a stage button (Start base edit / Proven &middot; Batch edit / Mark posted) the real actor is stamped and overrides the creator fallback. Posted dates use the actual post date from <code className="text-zinc-500">tracker_postings</code> when available. Edit <code className="text-zinc-500">src/lib/peopleSeed.ts</code> to fix roles or niches.
+          <strong className="text-zinc-500">CS / CDI</strong> see reel-pipeline metrics (Comp &middot; OG &middot; Base edit &middot; Pintu &middot; Posted).{" "}
+          <strong className="text-zinc-500">CW</strong> see post-pipeline metrics (Comp &middot; OG &middot; MM &middot; Edits &middot; Posted).
+          Each count is based on the idea's current stage / tag in the trackers. Historical ideas are credited to <code className="text-zinc-500">created_by</code>;
+          once someone clicks a stage button (Start base edit / Proven-Batch edit / Mark posted) the real actor overrides. Edit <code className="text-zinc-500">src/lib/peopleSeed.ts</code> to fix roles or niches.
         </p>
       </div>
     </div>
@@ -240,7 +326,7 @@ export default function BandwidthTracker() {
 
 /* ============================== team totals strip ============================== */
 
-function TeamTotalsStrip({ teamTotals }: { teamTotals: Record<string, Record<string, number>> }) {
+function TeamTotalsStrip({ teamTotals }: { teamTotals: Record<string, BandwidthTotals> }) {
   const rows: { key: "garfields" | "goofies"; label: string; emoji: string; grad: string }[] = [
     { key: "garfields", label: "Garfields", emoji: "🐱", grad: "from-orange-500 via-amber-500 to-yellow-400" },
     { key: "goofies",   label: "Goofies",   emoji: "🐶", grad: "from-sky-400 via-indigo-500 to-fuchsia-500" },
@@ -248,8 +334,10 @@ function TeamTotalsStrip({ teamTotals }: { teamTotals: Record<string, Record<str
   return (
     <div className="grid gap-3 md:grid-cols-2">
       {rows.map((r) => {
-        const t = teamTotals[r.key] || {};
-        const total = METRIC_KEYS.reduce((s, k) => s + (t[k] || 0), 0);
+        const t = teamTotals[r.key] || zeroTotals();
+        // Team output = sum of all pipeline metrics for that team.
+        const allMetrics: BandwidthMetricKey[] = [...REEL_METRICS, ...POST_METRICS];
+        const total = allMetrics.reduce((s, k) => s + (t[k] || 0), 0);
         return (
           <div key={r.key} className="rounded-2xl border border-zinc-800 bg-zinc-900/60 overflow-hidden">
             <div className={`h-1 bg-gradient-to-r ${r.grad}`} />
@@ -264,26 +352,44 @@ function TeamTotalsStrip({ teamTotals }: { teamTotals: Record<string, Record<str
                   <p className="text-2xl font-black text-white tabular-nums">{total}</p>
                 </div>
               </div>
-              <div className="grid grid-cols-5 gap-2 mt-3">
-                {METRIC_KEYS.map((k) => {
-                  const meta = METRIC_META[k];
-                  const Icon = meta.icon;
-                  const v = t[k] || 0;
-                  return (
-                    <div key={k} className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-2 py-2">
-                      <div className="flex items-center gap-1 text-[9px] uppercase tracking-wider font-bold" style={{ color: meta.color }}>
-                        <Icon className="w-3 h-3" />
-                        <span className="truncate">{meta.short}</span>
-                      </div>
-                      <p className="text-base font-black tabular-nums text-white mt-0.5">{v}</p>
-                    </div>
-                  );
-                })}
-              </div>
+              <PipelineBlock title="Reel pipeline · CS + CDI" metrics={REEL_METRICS} totals={t} />
+              <PipelineBlock title="Post pipeline · CW"       metrics={POST_METRICS} totals={t} />
             </div>
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function PipelineBlock({
+  title,
+  metrics,
+  totals,
+}: {
+  title: string;
+  metrics: BandwidthMetricKey[];
+  totals: BandwidthTotals;
+}) {
+  return (
+    <div className="mt-3">
+      <p className="text-[9px] uppercase tracking-[0.2em] text-zinc-500 font-bold mb-1.5">{title}</p>
+      <div className="grid grid-cols-5 gap-2">
+        {metrics.map((k) => {
+          const meta = METRIC_META[k];
+          const Icon = meta.icon;
+          const v = totals[k] || 0;
+          return (
+            <div key={k} className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-2 py-2">
+              <div className="flex items-center gap-1 text-[9px] uppercase tracking-wider font-bold" style={{ color: meta.color }}>
+                <Icon className="w-3 h-3" />
+                <span className="truncate">{meta.label}</span>
+              </div>
+              <p className="text-base font-black tabular-nums text-white mt-0.5">{v}</p>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -297,8 +403,11 @@ type JoinedPerson = BandwidthPerson & {
 };
 
 function PersonCard({ person, allDays }: { person: JoinedPerson; allDays: string[] }) {
-  const totalOutput = METRIC_KEYS.reduce((s, k) => s + (person.totals[k] || 0), 0);
-  const roleColor = person.role ? ROLE_COLOR[person.role] : { text: "#a1a1aa", bg: "rgba(63,63,70,0.2)", border: "rgba(63,63,70,0.4)" };
+  const metricKeys = metricsForRole(person.role);
+  const totalOutput = metricKeys.reduce((s, k) => s + (person.totals[k] || 0), 0);
+  const roleColor = person.role
+    ? ROLE_COLOR[person.role]
+    : { text: "#a1a1aa", bg: "rgba(63,63,70,0.2)", border: "rgba(63,63,70,0.4)" };
   const nicheEmoji = NICHE_EMOJI[person.niche];
   const nicheLabel = NICHE_LABEL[person.niche];
   const idle = totalOutput === 0;
@@ -330,14 +439,14 @@ function PersonCard({ person, allDays }: { person: JoinedPerson; allDays: string
 
       {/* metric cells */}
       <div className="p-3 grid grid-cols-5 gap-2">
-        {METRIC_KEYS.map((k) => {
+        {metricKeys.map((k) => {
           const meta = METRIC_META[k];
           const Icon = meta.icon;
           const v = person.totals[k] || 0;
           return (
             <div key={k} className="rounded-lg border border-zinc-800/80 bg-zinc-950/50 px-2 py-2 text-center">
               <Icon className="w-3.5 h-3.5 mx-auto mb-0.5" style={{ color: meta.color }} />
-              <p className="text-[8.5px] uppercase tracking-wider text-zinc-500 font-semibold truncate">{meta.short}</p>
+              <p className="text-[8.5px] uppercase tracking-wider text-zinc-500 font-semibold truncate">{meta.label}</p>
               <p className={`text-base font-black tabular-nums ${v === 0 ? "text-zinc-600" : "text-white"}`}>{v}</p>
             </div>
           );
@@ -346,7 +455,7 @@ function PersonCard({ person, allDays }: { person: JoinedPerson; allDays: string
 
       {/* daily sparkline */}
       <div className="px-3 pb-3">
-        <DailyBars person={person} allDays={allDays} />
+        <DailyBars person={person} allDays={allDays} metricKeys={metricKeys} />
       </div>
 
       {idle && (
@@ -360,17 +469,36 @@ function PersonCard({ person, allDays }: { person: JoinedPerson; allDays: string
 
 /* ============================== daily bars ============================== */
 
-function DailyBars({ person, allDays }: { person: JoinedPerson; allDays: string[] }) {
-  const daily = person.daily.length ? person.daily : allDays.map((d) => ({ date: d, comp_found: 0, og_created: 0, base_edits: 0, pintu_sets: 0, posted: 0 }));
-  const max = Math.max(1, ...daily.map((d) => METRIC_KEYS.reduce((s, k) => s + (d as any)[k], 0)));
+function DailyBars({
+  person,
+  allDays,
+  metricKeys,
+}: {
+  person: JoinedPerson;
+  allDays: string[];
+  metricKeys: BandwidthMetricKey[];
+}) {
+  const daily: BandwidthDailyRow[] = person.daily.length
+    ? person.daily
+    : allDays.map((d) => zeroDaily(d));
+  const dayTotal = (row: BandwidthDailyRow) => metricKeys.reduce((s, k) => s + (row[k] || 0), 0);
+  const max = Math.max(1, ...daily.map(dayTotal));
   const today = new Date().toISOString().slice(0, 10);
 
   return (
     <div>
       <div className="flex items-end gap-0.5 h-12">
         {daily.map((d) => {
-          const total = METRIC_KEYS.reduce((s, k) => s + (d as any)[k], 0);
+          const total = dayTotal(d);
           const isToday = d.date === today;
+          // Dominant metric decides the bar color.
+          let domK: BandwidthMetricKey = metricKeys[0];
+          let domV = 0;
+          for (const k of metricKeys) {
+            const v = d[k] || 0;
+            if (v > domV) { domV = v; domK = k; }
+          }
+          const color = METRIC_META[domK].color;
           return (
             <div
               key={d.date}
@@ -381,10 +509,7 @@ function DailyBars({ person, allDays }: { person: JoinedPerson; allDays: string[
                 className={`w-full rounded-sm transition-all ${total === 0 ? "bg-zinc-800/50" : ""}`}
                 style={{
                   height: total === 0 ? 2 : `${Math.max(4, (total / max) * 48)}px`,
-                  background:
-                    total === 0
-                      ? undefined
-                      : `linear-gradient(to top, ${stackedGradient(d as any)})`,
+                  background: total === 0 ? undefined : `linear-gradient(to top, ${color}, ${color})`,
                   outline: isToday ? "1px solid rgba(124,58,237,0.5)" : undefined,
                 }}
               />
@@ -398,19 +523,4 @@ function DailyBars({ person, allDays }: { person: JoinedPerson; allDays: string[
       </div>
     </div>
   );
-}
-
-function stackedGradient(day: Record<MetricKey, number>): string {
-  // Build a simple vertical stack by just using the dominant-metric color.
-  // Keeps the bar readable at tiny widths without rendering 5 rects per day.
-  let maxK: MetricKey = "comp_found";
-  let maxV = 0;
-  for (const k of METRIC_KEYS) {
-    const v = day[k] || 0;
-    if (v > maxV) {
-      maxV = v;
-      maxK = k;
-    }
-  }
-  return `${METRIC_META[maxK].color}, ${METRIC_META[maxK].color}`;
 }

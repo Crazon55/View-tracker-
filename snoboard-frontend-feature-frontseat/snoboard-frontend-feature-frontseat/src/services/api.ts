@@ -114,12 +114,20 @@ export const deleteTrackerNiche = (id: string) =>
 
 export const getTrackerIdeas = (type?: string) => fetchApi<any[]>(`/api/v1/tracker/ideas${type ? `?type=${type}` : ""}`);
 
+export type BandwidthMetricKey =
+  | "reel_comp" | "reel_og" | "reel_base_edits" | "reel_pintu" | "reel_posted"
+  | "post_comp" | "post_og" | "post_mm" | "post_edits" | "post_posted";
+
+export type BandwidthTotals = Record<BandwidthMetricKey, number>;
+
+export type BandwidthDailyRow = { date: string } & Record<BandwidthMetricKey, number>;
+
 export type BandwidthPerson = {
   name: string;
   niche_guess: "garfields" | "goofies" | "unassigned";
   niche_counts: { garfields: number; goofies: number; unassigned: number };
-  totals: { comp_found: number; og_created: number; base_edits: number; pintu_sets: number; posted: number };
-  daily: Array<{ date: string; comp_found: number; og_created: number; base_edits: number; pintu_sets: number; posted: number }>;
+  totals: BandwidthTotals;
+  daily: BandwidthDailyRow[];
 };
 
 export type BandwidthData = {
@@ -128,13 +136,13 @@ export type BandwidthData = {
   days: number;
   type: string | null;
   all_days: string[];
-  metric_keys: string[];
+  metric_keys: BandwidthMetricKey[];
   people: BandwidthPerson[];
-  team_totals: Record<"garfields" | "goofies" | "unassigned", Record<string, number>>;
+  team_totals: Record<"garfields" | "goofies" | "unassigned", BandwidthTotals>;
 };
 
-export const getBandwidth = (days: number = 14, type: string = "reel") =>
-  fetchApi<BandwidthData>(`/api/v1/bandwidth?days=${days}&type=${encodeURIComponent(type)}`);
+export const getBandwidth = (days: number = 14, type?: string) =>
+  fetchApi<BandwidthData>(`/api/v1/bandwidth?days=${days}${type ? `&type=${encodeURIComponent(type)}` : ""}`);
 
 export const getTeamsPerformance = () =>
   fetchApi<{

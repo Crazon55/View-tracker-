@@ -24,16 +24,16 @@ export type SeedPerson = {
   emoji?: string;
 };
 
-// NOTE: Role/niche assignments below are starter values mirrored from
-// TEAM_META in teamPerformanceCompute.ts. Correct them to match reality.
+// Role / niche assignments. Edit here when the team changes.
 export const PEOPLE_SEED: SeedPerson[] = [
   // Garfields
-  { name: "Deepak", role: "cs",  niche: "garfields", emoji: "🧠" },
-  { name: "Kaavya", role: "cs",  niche: "garfields", aliases: ["Kaavya Mahajan"], emoji: "🧠" },
-  { name: "Swati",  role: "cdi", niche: "garfields", emoji: "🎬" },
+  { name: "Om Verma", role: "cs",  niche: "garfields", emoji: "🧠" }, // CS lead
+  { name: "Deepak",   role: "cs",  niche: "garfields", emoji: "🧠" },
+  { name: "Kaavya",   role: "cw",  niche: "garfields", aliases: ["Kaavya Mahajan"], emoji: "📝" },
+  { name: "Swati",    role: "cdi", niche: "garfields", emoji: "🎬" },
   // Goofies
   { name: "Arohi",  role: "cs",  niche: "goofies", emoji: "🧠" },
-  { name: "Harish", role: "cs",  niche: "goofies", aliases: ["Harish R"], emoji: "🧠" },
+  { name: "Harish", role: "cw",  niche: "goofies", aliases: ["Harish R"], emoji: "📝" },
   { name: "Pulkit", role: "cdi", niche: "goofies", emoji: "🎬" },
 ];
 
