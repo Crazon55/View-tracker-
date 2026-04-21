@@ -29,15 +29,26 @@ const PT: Record<string,{label:string;color:string;bg:string}> = {
 };
 const SOURCES = ["original","competitor"];
 
-const today = () => new Date().toISOString().slice(0,10);
+// All date math here is intentionally LOCAL. `toISOString().slice(0,10)` is
+// poison on any machine east of UTC (e.g. IST = UTC+5:30) — midnight local
+// converts to 18:30 the previous day in UTC, and the slice gives you
+// yesterday's date, which is exactly how the old calendar ended up labelling
+// Apr 21 (Tue) as Thu. `toLocalISO` formats strictly from local accessors.
+const toLocalISO = (d: Date) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+};
+const today = () => toLocalISO(new Date());
 const fmtD = (d: string) => { const dt=new Date(d+"T00:00:00"); return dt.toLocaleDateString("en-US",{month:"short",day:"numeric"}); };
 const fmtDFull = (d: string) => { const dt=new Date(d+"T00:00:00"); return dt.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}); };
 const fmtNum = (n: number) => { if(n>=1000000) return (n/1000000).toFixed(1)+"M"; if(n>=1000) return (n/1000).toFixed(1)+"k"; return n.toString(); };
 const gPerf = (v: number|null, b: number|null) => { if(!v||!b) return null; const r=v/b; if(r>=20) return "viral"; if(r>=5) return "topline"; if(r>=0.8) return "baseline"; return "below"; };
-const getMonday = (d: string) => { const dt=new Date(d+"T00:00:00"); const day=dt.getDay(); dt.setDate(dt.getDate()-day+(day===0?-6:1)); return dt.toISOString().slice(0,10); };
-const addD = (s: string, n: number) => { const d=new Date(s+"T00:00:00"); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); };
+const getMonday = (d: string) => { const dt=new Date(d+"T00:00:00"); const day=dt.getDay(); dt.setDate(dt.getDate()-day+(day===0?-6:1)); return toLocalISO(dt); };
+const addD = (s: string, n: number) => { const d=new Date(s+"T00:00:00"); d.setDate(d.getDate()+n); return toLocalISO(d); };
 const getWD = (m: string) => Array.from({length:7},(_,i)=>addD(m,i));
-const monthStart = () => { const d=new Date(); return new Date(d.getFullYear(),d.getMonth(),1).toISOString().slice(0,10); };
+const monthStart = () => { const d=new Date(); return toLocalISO(new Date(d.getFullYear(),d.getMonth(),1)); };
 
 /** Map a raw API idea to the shape the UI expects */
 function mapIdea(raw: any): any {

@@ -581,7 +581,11 @@ function DailyBars({
     : allDays.map((d) => zeroDaily(d));
   const dayTotal = (row: BandwidthDailyRow) => metricKeys.reduce((s, k) => s + (row[k] || 0), 0);
   const max = Math.max(1, ...daily.map(dayTotal));
-  const today = new Date().toISOString().slice(0, 10);
+  // Use local calendar date, not UTC. `toISOString().slice(0,10)` yields
+  // yesterday for anyone east of UTC after local midnight.
+  const _tNow = new Date();
+  const today =
+    `${_tNow.getFullYear()}-${String(_tNow.getMonth() + 1).padStart(2, "0")}-${String(_tNow.getDate()).padStart(2, "0")}`;
 
   return (
     <div>
