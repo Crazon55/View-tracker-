@@ -136,7 +136,10 @@ export function buildTeamPerformanceFromTracker(
     s.ideas_total += 1;
     if (bucket === "post") s.post_total += 1;
     else s.reel_total += 1;
-    if (st === "posted") {
+    // Post Tracker uses "uploaded" for the final shipped state, Content
+    // Tracker uses "posted". Treat them as the same thing so a PostTracker
+    // idea marked uploaded counts toward the team's posted totals.
+    if (st === "posted" || st === "uploaded") {
       s.ideas_posted += 1;
       if (bucket === "post") s.post_posted += 1;
       else s.reel_posted += 1;

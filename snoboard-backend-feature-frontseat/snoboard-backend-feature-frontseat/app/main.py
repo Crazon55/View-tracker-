@@ -1666,7 +1666,10 @@ async def teams_performance():
         st = (idea.get("stage") or "").lower()
         stats[tk]["ideas_total"] += 1
         stats[tk][f"{bucket}_total"] += 1
-        if st == "posted":
+        # Post Tracker uses "uploaded" for the final shipped state, Content
+        # Tracker uses "posted". Treat them as the same thing so a PostTracker
+        # idea marked uploaded counts toward the team's posted totals.
+        if st in ("posted", "uploaded"):
             stats[tk]["ideas_posted"] += 1
             stats[tk][f"{bucket}_posted"] += 1
         elif st == "kill":
