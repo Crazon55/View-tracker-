@@ -2285,14 +2285,15 @@ async def bandwidth_tracker(days: int = 14, type: str | None = "reel"):
         rec["totals"][metric] += 1
         team_totals[nk][metric] += 1
 
-    # Which stages indicate an idea has *reached* each milestone. An idea at
-    # stage "posted" has (by definition) also had a base edit and a Pintu
-    # batch set on the reel pipeline, so we credit all three.
-    REEL_STAGES_PAST_BASE_EDIT = {"base_edit", "testing", "proven_ideas", "scheduled", "posted"}
-    REEL_STAGES_PAST_PINTU     = {"proven_ideas", "scheduled", "posted"}
-    REEL_STAGES_POSTED         = {"posted"}
+    # Count the metric only when the idea is currently sitting in that
+    # exact kanban column in the Reel Tracker -- matches what the user
+    # sees in the "Base edit" / "Proven ideas/Batch edit" / "Posted"
+    # columns. No "has passed through" credit.
+    REEL_STAGE_BASE_EDIT = {"base_edit"}
+    REEL_STAGE_PINTU     = {"proven_ideas"}
+    REEL_STAGE_POSTED    = {"posted"}
     # Post Tracker uses "uploaded" as its shipped stage.
-    POST_STAGES_POSTED         = {"uploaded"}
+    POST_STAGE_POSTED    = {"uploaded"}
 
     for idea in ideas:
         niche_team = _idea_team(idea)
@@ -2310,15 +2311,16 @@ async def bandwidth_tracker(days: int = 14, type: str | None = "reel"):
                 metric = "comp_found" if src == "competitor" else "og_created"
                 _bump(name, niche_team, created_at_day, metric)
 
-        # --- Base edits (reel pipeline only; post tracker has no base edit)
-        if idea_type == "reel" and stage in REEL_STAGES_PAST_BASE_EDIT:
+        # --- Base edits: idea must currently be in the "Base edit" column.
+        if idea_type == "reel" and stage in REEL_STAGE_BASE_EDIT:
             be_day = _date_key(idea.get("base_edit_at")) or created_at_day
             be_name = _norm_name(idea.get("base_edit_by") or created_by)
             if be_day and be_name and _in_window(be_day):
                 _bump(be_name, niche_team, be_day, "base_edits")
 
-        # --- Pintu / batch edit set (reel pipeline only)
-        if idea_type == "reel" and stage in REEL_STAGES_PAST_PINTU:
+        # --- Pintu / batch edit set: idea must currently be in the
+        # "Proven ideas / Batch edit" column.
+        if idea_type == "reel" and stage in REEL_STAGE_PINTU:
             ps_day = _date_key(idea.get("pintu_set_at")) or created_at_day
             ps_name = _norm_name(idea.get("pintu_set_by") or created_by)
             if ps_day and ps_name and _in_window(ps_day):
@@ -2327,8 +2329,8 @@ async def bandwidth_tracker(days: int = 14, type: str | None = "reel"):
         # --- Posted. Real dates from tracker_postings beat created_at when
         # we have them; prefer the stamp if set.
         is_shipped = (
-            (idea_type == "reel" and stage in REEL_STAGES_POSTED)
-            or (idea_type == "post" and stage in POST_STAGES_POSTED)
+            (idea_type == "reel" and stage in REEL_STAGE_POSTED)
+            or (idea_type == "post" and stage in POST_STAGE_POSTED)
         )
         if is_shipped:
             po_day = (
