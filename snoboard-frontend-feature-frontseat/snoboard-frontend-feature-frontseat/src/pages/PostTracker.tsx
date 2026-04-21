@@ -133,6 +133,16 @@ function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove}: {po:any;page:s
   const [views,setViews]=useState(po.views?.toString()||"");
   const [perfTag,setPerfTag]=useState(po.perf_tag||"");
   const [postDate,setPostDate]=useState(po.date||"");
+  // Dirty flags so we sync from `po` on external refetches (e.g. another user
+  // edits, or an optimistic cache update elsewhere) but do NOT clobber the
+  // user's in-progress edits. Reset on save so the next refetch's confirmed
+  // value becomes the source of truth.
+  const viewsDirty=useRef(false);
+  const tagDirty=useRef(false);
+  const dateDirty=useRef(false);
+  useEffect(()=>{ if(!viewsDirty.current) setViews(po.views?.toString()||""); },[po.views]);
+  useEffect(()=>{ if(!tagDirty.current) setPerfTag(po.perf_tag||""); },[po.perf_tag]);
+  useEffect(()=>{ if(!dateDirty.current) setPostDate(po.date||""); },[po.date]);
   const fmtNum = (n: number) => { if(n>=1000000) return (n/1000000).toFixed(1)+"M"; if(n>=1000) return (n/1000).toFixed(1)+"k"; return n.toString(); };
 
   if(!editing && hasSaved){
@@ -158,19 +168,35 @@ function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove}: {po:any;page:s
       </div>
       <div style={{display:"flex",alignItems:"center",gap:8,marginLeft:30}}>
         <span style={{fontSize:10,color:"#71717a",fontWeight:600}}>Date</span>
-        <input type="date" value={postDate} onChange={e=>setPostDate(e.target.value)} style={{padding:"5px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:12,background:"#09090b",color:"#fff",cursor:"pointer"}}/>
+        <input type="date" value={postDate} onChange={e=>{dateDirty.current=true;setPostDate(e.target.value);}} style={{padding:"5px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:12,background:"#09090b",color:"#fff",cursor:"pointer"}}/>
       </div>
       <div style={{display:"flex",alignItems:"center",gap:8,marginLeft:30}}>
         <span style={{fontSize:10,color:"#71717a",fontWeight:600}}>Views</span>
-        <input type="number" value={views} onChange={e=>setViews(e.target.value)} placeholder="Enter views" style={{width:100,padding:"5px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:12,background:"#09090b",color:"#fff"}}/>
+        <input type="number" value={views} onChange={e=>{viewsDirty.current=true;setViews(e.target.value);}} placeholder="Enter views" style={{width:100,padding:"5px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:12,background:"#09090b",color:"#fff"}}/>
       </div>
       <div style={{display:"flex",gap:4,marginLeft:30}}>
         {(["below","baseline","topline","viral"] as const).map(tag=>{const t=PT[tag];const active=perfTag===tag;return(
-          <button key={tag} onClick={()=>setPerfTag(tag)} style={{padding:"4px 10px",borderRadius:6,border:active?`2px solid ${t.color}`:"1px solid #3f3f46",background:active?t.bg:"transparent",color:active?t.color:"#52525b",fontSize:10,fontWeight:600,cursor:"pointer",transition:"all 0.15s"}}>{t.label}</button>
+          <button key={tag} onClick={()=>{tagDirty.current=true;setPerfTag(tag);}} style={{padding:"4px 10px",borderRadius:6,border:active?`2px solid ${t.color}`:"1px solid #3f3f46",background:active?t.bg:"transparent",color:active?t.color:"#52525b",fontSize:10,fontWeight:600,cursor:"pointer",transition:"all 0.15s"}}>{t.label}</button>
         );})}
       </div>
       <div style={{display:"flex",gap:6,marginLeft:30,marginTop:2}}>
-        <button onClick={()=>{updatePostingMut.mutate({id:po.id,data:{views:Number(views)||null,perf_tag:perfTag||null,date:postDate||null}},{onSuccess:()=>setEditing(false)});}} disabled={updatePostingMut.isPending} style={{padding:"5px 16px",borderRadius:7,border:"none",fontSize:11,fontWeight:600,cursor:"pointer",background:updatePostingMut.isPending?"#52525b":"#7c3aed",color:"#fff"}}>{updatePostingMut.isPending?"Saving...":"Save"}</button>
+        <button onClick={()=>{
+          // Snapshot the user's pick so we can surface a loud error if the
+          // backend doesn't persist it (e.g. silent Supabase write issue).
+          const sentDate = postDate || null;
+          updatePostingMut.mutate(
+            {id:po.id,data:{views:Number(views)||null,perf_tag:perfTag||null,date:sentDate}},
+            {
+              onSuccess:(_result:any, _vars:any, _ctx:any)=>{
+                // Clear dirty flags so the next refetch becomes authoritative.
+                viewsDirty.current=false;
+                tagDirty.current=false;
+                dateDirty.current=false;
+                setEditing(false);
+              },
+            }
+          );
+        }} disabled={updatePostingMut.isPending} style={{padding:"5px 16px",borderRadius:7,border:"none",fontSize:11,fontWeight:600,cursor:"pointer",background:updatePostingMut.isPending?"#52525b":"#7c3aed",color:"#fff"}}>{updatePostingMut.isPending?"Saving...":"Save"}</button>
         {hasSaved&&<button onClick={()=>setEditing(false)} style={{padding:"5px 12px",borderRadius:7,border:"1px solid #3f3f46",fontSize:11,fontWeight:500,cursor:"pointer",background:"transparent",color:"#a1a1aa"}}>Cancel</button>}
         <button onClick={onRemove} style={{padding:"5px 12px",borderRadius:7,border:"1px solid #3f3f46",fontSize:11,fontWeight:500,cursor:"pointer",background:"transparent",color:"#FF7070",marginLeft:"auto"}}>Remove</button>
       </div>

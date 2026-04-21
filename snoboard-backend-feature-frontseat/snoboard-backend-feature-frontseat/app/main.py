@@ -2222,12 +2222,51 @@ async def tracker_postings_update(posting_id: str, request: Request):
     if "baseline_views" in allowed:
         allowed["baseline_views"] = int(allowed["baseline_views"])
     client.table("tracker_postings").update(allowed).eq("id", posting_id).execute()
+
+    # Re-SELECT so the frontend can verify what was actually persisted. This
+    # kills the class of "I picked 24 but it shows 16" bug where the client's
+    # local state disagrees with DB reality after a refetch race.
+    try:
+        fresh = (
+            client.table("tracker_postings")
+            .select("id, idea_id, page, date, baseline_views, views, perf_tag")
+            .eq("id", posting_id)
+            .single()
+            .execute()
+            .data
+        )
+    except Exception:
+        fresh = None
+
+    # Loud check: if the client explicitly sent `date` and the stored value
+    # doesn't match, raise so the frontend can surface it instead of pretending.
+    if fresh is not None and "date" in body:
+        sent_date = body.get("date")
+        got_date = fresh.get("date")
+        if sent_date and got_date and str(sent_date)[:10] != str(got_date)[:10]:
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    f"Posting date save mismatch: sent {str(sent_date)[:10]} "
+                    f"but stored as {str(got_date)[:10]}. The DB may have a "
+                    f"trigger or RLS policy mutating this value."
+                ),
+            )
+        if sent_date and not got_date:
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    f"Posting date save failed: sent {str(sent_date)[:10]} "
+                    f"but the DB did not store it."
+                ),
+            )
+
     # Sync to content_entries
     try:
         _sync_posting_to_content_entry(client, posting_id)
     except Exception:
         pass
-    return {"success": True}
+    return {"success": True, "data": fresh}
 
 
 @app.delete("/api/v1/tracker/postings/{posting_id}")
