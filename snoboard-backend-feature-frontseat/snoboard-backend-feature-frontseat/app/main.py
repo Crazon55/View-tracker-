@@ -1965,16 +1965,32 @@ async def tracker_ideas_update(idea_id: str, request: Request):
             allowed.setdefault("posted_by", actor)
             allowed.setdefault("posted_at", now_iso)
 
+    bw_keys = {"base_edit_by", "base_edit_at", "pintu_set_by", "pintu_set_at", "posted_by", "posted_at"}
+    # Did the client explicitly send a bandwidth field (e.g. user editing the
+    # posted_at date picker), or did they only show up from our auto-stamp
+    # logic above? If user-explicit, we want a loud failure when the column
+    # is missing so the frontend can surface it; otherwise we silently strip.
+    user_explicit_bw = {k for k in bw_keys if k in body}
+
     try:
         client.table("tracker_ideas").update(allowed).eq("id", idea_id).execute()
     except Exception as e:
-        # If the bandwidth columns aren't in the DB yet (migration not run),
-        # strip them and retry so stage transitions still work.
         msg = str(e).lower()
-        bw_keys = {"base_edit_by", "base_edit_at", "pintu_set_by", "pintu_set_at", "posted_by", "posted_at"}
-        if any(k in msg for k in bw_keys) or "column" in msg:
+        is_bw_err = any(k in msg for k in bw_keys) or "column" in msg or "schema cache" in msg
+        if is_bw_err and user_explicit_bw:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Bandwidth columns not in DB. "
+                    "Run migrations/migration_bandwidth_fields.sql in Supabase "
+                    "to enable editable posted_at / base_edit_at / pintu_set_at."
+                ),
+            )
+        if is_bw_err:
+            # Auto-stamp path: keep trackers working by dropping bw keys.
             lean = {k: v for k, v in allowed.items() if k not in bw_keys}
-            client.table("tracker_ideas").update(lean).eq("id", idea_id).execute()
+            if lean:
+                client.table("tracker_ideas").update(lean).eq("id", idea_id).execute()
         else:
             raise
     return {"success": True}
