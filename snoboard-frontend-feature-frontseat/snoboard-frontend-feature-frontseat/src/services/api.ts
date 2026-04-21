@@ -114,6 +114,28 @@ export const deleteTrackerNiche = (id: string) =>
 
 export const getTrackerIdeas = (type?: string) => fetchApi<any[]>(`/api/v1/tracker/ideas${type ? `?type=${type}` : ""}`);
 
+export type BandwidthPerson = {
+  name: string;
+  niche_guess: "garfields" | "goofies" | "unassigned";
+  niche_counts: { garfields: number; goofies: number; unassigned: number };
+  totals: { comp_found: number; og_created: number; base_edits: number; pintu_sets: number; posted: number };
+  daily: Array<{ date: string; comp_found: number; og_created: number; base_edits: number; pintu_sets: number; posted: number }>;
+};
+
+export type BandwidthData = {
+  window_start: string;
+  window_end: string;
+  days: number;
+  type: string | null;
+  all_days: string[];
+  metric_keys: string[];
+  people: BandwidthPerson[];
+  team_totals: Record<"garfields" | "goofies" | "unassigned", Record<string, number>>;
+};
+
+export const getBandwidth = (days: number = 14, type: string = "reel") =>
+  fetchApi<BandwidthData>(`/api/v1/bandwidth?days=${days}&type=${encodeURIComponent(type)}`);
+
 export const getTeamsPerformance = () =>
   fetchApi<{
     teams: any[];
