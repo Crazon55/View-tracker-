@@ -5,18 +5,25 @@ import { useEffect, useRef, useState } from "react";
  * or reel tracker "Posted" stage). Drives the Bandwidth tracker's Posted
  * metric attribution date.
  *
- * Design notes (hard-won):
- *  - The picker is keyed on `ideaId`: local state resets ONLY when a
- *    different idea is opened, NOT on every `value` prop flicker. This
- *    prevents the snap-back race where a React-Query refetch during the
- *    save round-trip would blow away the user's pick.
- *  - `onSave` is expected to return the fresh server row (from the PUT
- *    endpoint which now re-SELECTs after update). We trust that return
- *    value as the authoritative persisted date and sync local to it.
- *  - Save errors (missing column, RLS, etc.) surface as a visible banner +
- *    revert local to the pre-edit server value.
- *  - Dates are stored as UTC noon (`YYYY-MM-DDT12:00:00.000Z`) so they round
- *    trip identically regardless of the viewer's timezone.
+ * Core invariant: once the user picks a date, the picker's displayed value
+ * is controlled ONLY by this component's own state machine:
+ *   - pick → "saving" (showing user's pick)
+ *   - save ok with verified row → "idle" showing server-confirmed value
+ *   - save error → "error" showing last known good (pre-edit) value
+ * We intentionally do NOT sync from the parent's `value` prop on every
+ * change, because a stale React-Query refetch during the save round-trip
+ * would otherwise clobber the user's pick (the classic "I picked 24 but it
+ * changed to 16" bug — 16 was the old auto-stamped date from when the card
+ * first entered "uploaded", which the refetch was still returning).
+ *
+ * We key reset solely on `ideaId` changing (the parent passes the idea's
+ * primary key). Opening a different idea → fresh mount state; editing the
+ * same idea → local state is king.
+ *
+ * Backend contract: `onSave(iso)` must resolve with the fresh row from the
+ * PUT endpoint, which re-SELECTs after update. We read `result.posted_at`
+ * as the authoritative persisted value. If the backend can't confirm what
+ * was stored, we fail loud instead of lying.
  */
 
 function isoToDateInput(iso: string | null | undefined): string {
@@ -24,7 +31,7 @@ function isoToDateInput(iso: string | null | undefined): string {
   try {
     const d = new Date(iso);
     if (isNaN(d.getTime())) return "";
-    // Use UTC date components, since we always save as UTC noon.
+    // UTC accessors, since we always save as UTC noon.
     const y = d.getUTCFullYear();
     const m = String(d.getUTCMonth() + 1).padStart(2, "0");
     const dd = String(d.getUTCDate()).padStart(2, "0");
@@ -62,38 +69,43 @@ export default function PostedDateEditor({
   onSave: (iso: string | null) => Promise<any>;
 }) {
   const [local, setLocal] = useState<string>(isoToDateInput(value));
-  const [serverValue, setServerValue] = useState<string | null | undefined>(value);
+  const [confirmed, setConfirmed] = useState<string | null | undefined>(value);
   const [status, setStatus] = useState<"idle" | "saving" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const lastIdeaId = useRef(ideaId);
+  const hasInteracted = useRef(false);
 
-  // Reset ONLY when a different idea is opened. Do NOT reset on every
-  // `value` change — the parent's refetch during our save would otherwise
-  // blow away the user's pick.
+  // Reset ONLY when a different idea is opened. Within the same idea,
+  // local state is the source of truth — we do NOT re-sync from the
+  // `value` prop, because a stale refetch during the save round-trip
+  // would otherwise blow away the user's pick.
   useEffect(() => {
     if (lastIdeaId.current !== ideaId) {
       lastIdeaId.current = ideaId;
       setLocal(isoToDateInput(value));
-      setServerValue(value);
+      setConfirmed(value);
       setStatus("idle");
       setErrorMsg(null);
+      hasInteracted.current = false;
     }
   }, [ideaId, value]);
 
-  // If the parent's value prop changes to something we haven't seen (and
-  // we're not currently saving), accept it. This keeps us in sync if the
-  // date changes via a different code path (e.g. auto-stamp on stage move).
+  // One-shot: if we mounted before the parent query resolved (`value` was
+  // null at mount but is now non-null), and the user hasn't interacted,
+  // accept the first real value.
   useEffect(() => {
-    if (status === "saving") return;
-    if (value !== serverValue) {
-      setServerValue(value);
-      setLocal(isoToDateInput(value));
-    }
+    if (hasInteracted.current) return;
+    if (status !== "idle") return;
+    if (value == null) return;
+    if (confirmed != null) return;
+    setLocal(isoToDateInput(value));
+    setConfirmed(value);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
   async function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const v = e.target.value;
+    hasInteracted.current = true;
     setLocal(v);
     setStatus("saving");
     setErrorMsg(null);
@@ -101,22 +113,35 @@ export default function PostedDateEditor({
 
     try {
       const result = await onSave(iso);
-      // Backend now returns { data: { posted_at, ... } } via fetchApi's
-      // `json.data ?? json` unwrap, so `result` should be the fresh row.
-      const persisted = result?.posted_at ?? iso;
-      setServerValue(persisted);
-      setLocal(isoToDateInput(persisted));
+      // Backend's PUT endpoint re-SELECTs and returns the fresh row; the
+      // fetchApi wrapper unwraps `json.data`, so `result` IS the row.
+      const persisted =
+        result && typeof result === "object" && "posted_at" in result
+          ? (result as any).posted_at
+          : undefined;
+
+      if (persisted === undefined) {
+        // Older backend response shape — no re-SELECT. Trust the request
+        // went through (we got a 2xx) and use what we sent. Not ideal,
+        // but at least we don't get a ghost snap-back.
+        setConfirmed(iso);
+        setLocal(isoToDateInput(iso));
+      } else {
+        setConfirmed(persisted);
+        setLocal(isoToDateInput(persisted));
+      }
       setStatus("idle");
     } catch (err: any) {
       const msg = err?.message || String(err || "Save failed");
       setStatus("error");
       setErrorMsg(msg);
-      // Revert to the last known server value so the UI doesn't lie.
-      setLocal(isoToDateInput(serverValue));
+      // Revert to the last confirmed server value so the UI reflects
+      // reality. (Not `value`, which may be stale/wrong mid-refetch.)
+      setLocal(isoToDateInput(confirmed));
     }
   }
 
-  const storedPretty = prettyDate(serverValue);
+  const storedPretty = prettyDate(confirmed);
   const isSaving = status === "saving";
   const isError = status === "error";
 
@@ -160,7 +185,7 @@ export default function PostedDateEditor({
         />
         {isSaving ? (
           <span style={{ fontSize: 11, color: "#F0C060" }}>Saving…</span>
-        ) : serverValue ? (
+        ) : confirmed ? (
           <span style={{ fontSize: 11, color: "#52525b" }}>
             Stored as <strong style={{ color: "#a1a1aa" }}>{storedPretty}</strong>
             &nbsp;&middot; counts toward Bandwidth on this date
