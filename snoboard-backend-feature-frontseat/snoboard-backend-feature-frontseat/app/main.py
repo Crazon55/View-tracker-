@@ -1965,7 +1965,18 @@ async def tracker_ideas_update(idea_id: str, request: Request):
             allowed.setdefault("posted_by", actor)
             allowed.setdefault("posted_at", now_iso)
 
-    client.table("tracker_ideas").update(allowed).eq("id", idea_id).execute()
+    try:
+        client.table("tracker_ideas").update(allowed).eq("id", idea_id).execute()
+    except Exception as e:
+        # If the bandwidth columns aren't in the DB yet (migration not run),
+        # strip them and retry so stage transitions still work.
+        msg = str(e).lower()
+        bw_keys = {"base_edit_by", "base_edit_at", "pintu_set_by", "pintu_set_at", "posted_by", "posted_at"}
+        if any(k in msg for k in bw_keys) or "column" in msg:
+            lean = {k: v for k, v in allowed.items() if k not in bw_keys}
+            client.table("tracker_ideas").update(lean).eq("id", idea_id).execute()
+        else:
+            raise
     return {"success": True}
 
 
@@ -2174,14 +2185,28 @@ async def bandwidth_tracker(days: int = 14, type: str | None = "reel"):
     today = _dt.now(_tz.utc).date()
     window_start = today - _td(days=days - 1)
 
-    query = client.table("tracker_ideas").select(
+    # Try to select the Bandwidth attribution columns; if they don't exist
+    # yet (migration not run), fall back to a lean select. Everything still
+    # works because the fallbacks use created_by + created_at.
+    full_cols = (
         "id, title, source, type, stage, niche_id, niche_ids, created_at, "
         "created_by, base_edit_by, base_edit_at, pintu_set_by, pintu_set_at, "
         "posted_by, posted_at"
     )
-    if type:
-        query = query.eq("type", type)
-    ideas = query.execute().data or []
+    lean_cols = (
+        "id, title, source, type, stage, niche_id, niche_ids, created_at, "
+        "created_by"
+    )
+    try:
+        q = client.table("tracker_ideas").select(full_cols)
+        if type:
+            q = q.eq("type", type)
+        ideas = q.execute().data or []
+    except Exception:
+        q = client.table("tracker_ideas").select(lean_cols)
+        if type:
+            q = q.eq("type", type)
+        ideas = q.execute().data or []
 
     niches = client.table("tracker_niches").select("id,name,pages").execute().data or []
 
