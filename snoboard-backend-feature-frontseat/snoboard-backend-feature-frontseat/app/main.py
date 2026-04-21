@@ -2185,6 +2185,24 @@ async def bandwidth_tracker(days: int = 14, type: str | None = "reel"):
 
     niches = client.table("tracker_niches").select("id,name,pages").execute().data or []
 
+    # Pull postings so we can use the real posting date as the "posted_at"
+    # fallback for historical ideas that were marked posted before the
+    # posted_at column existed. We key by idea_id -> earliest posting date.
+    try:
+        postings = client.table("tracker_postings").select("idea_id,date").execute().data or []
+    except Exception:
+        postings = []
+    earliest_posting_date: dict[str, str] = {}
+    for p in postings:
+        iid = p.get("idea_id")
+        d = p.get("date")
+        if not iid or not d:
+            continue
+        d_str = str(d)[:10]
+        prev = earliest_posting_date.get(iid)
+        if prev is None or d_str < prev:
+            earliest_posting_date[iid] = d_str
+
     # ---- niche -> team key (garfields / goofies) -------------------------
     # Mirrors teamPerformanceCompute.ts substring match.
     NICHE_TEAM_SUBSTRINGS = {"garfields": "garfields", "goofies": "goofies"}
@@ -2267,39 +2285,60 @@ async def bandwidth_tracker(days: int = 14, type: str | None = "reel"):
         rec["totals"][metric] += 1
         team_totals[nk][metric] += 1
 
+    # Which stages indicate an idea has *reached* each milestone. An idea at
+    # stage "posted" has (by definition) also had a base edit and a Pintu
+    # batch set on the reel pipeline, so we credit all three.
+    REEL_STAGES_PAST_BASE_EDIT = {"base_edit", "testing", "proven_ideas", "scheduled", "posted"}
+    REEL_STAGES_PAST_PINTU     = {"proven_ideas", "scheduled", "posted"}
+    REEL_STAGES_POSTED         = {"posted"}
+    # Post Tracker uses "uploaded" as its shipped stage.
+    POST_STAGES_POSTED         = {"uploaded"}
+
     for idea in ideas:
         niche_team = _idea_team(idea)
+        idea_id = idea.get("id")
+        stage = (idea.get("stage") or "").lower()
+        created_by = idea.get("created_by")
+        created_at_day = _date_key(idea.get("created_at"))
+        idea_type = (idea.get("type") or "reel").lower()
 
-        # Competitor found / OG created -> credited to created_by on the
-        # day the idea row was created.
-        created_day = _date_key(idea.get("created_at"))
-        if created_day and _in_window(created_day):
-            name = _norm_name(idea.get("created_by"))
+        # --- Competitor found / OG created (real data, no fallbacks needed)
+        if created_at_day and _in_window(created_at_day):
+            name = _norm_name(created_by)
             if name:
                 src = str(idea.get("source") or "original").lower()
                 metric = "comp_found" if src == "competitor" else "og_created"
-                _bump(name, niche_team, created_day, metric)
+                _bump(name, niche_team, created_at_day, metric)
 
-        # Base edit -> base_edit_by on base_edit_at day.
-        be_day = _date_key(idea.get("base_edit_at"))
-        if be_day and _in_window(be_day):
-            name = _norm_name(idea.get("base_edit_by"))
-            if name:
-                _bump(name, niche_team, be_day, "base_edits")
+        # --- Base edits (reel pipeline only; post tracker has no base edit)
+        if idea_type == "reel" and stage in REEL_STAGES_PAST_BASE_EDIT:
+            be_day = _date_key(idea.get("base_edit_at")) or created_at_day
+            be_name = _norm_name(idea.get("base_edit_by") or created_by)
+            if be_day and be_name and _in_window(be_day):
+                _bump(be_name, niche_team, be_day, "base_edits")
 
-        # Pintu / batch set -> pintu_set_by on pintu_set_at day.
-        ps_day = _date_key(idea.get("pintu_set_at"))
-        if ps_day and _in_window(ps_day):
-            name = _norm_name(idea.get("pintu_set_by"))
-            if name:
-                _bump(name, niche_team, ps_day, "pintu_sets")
+        # --- Pintu / batch edit set (reel pipeline only)
+        if idea_type == "reel" and stage in REEL_STAGES_PAST_PINTU:
+            ps_day = _date_key(idea.get("pintu_set_at")) or created_at_day
+            ps_name = _norm_name(idea.get("pintu_set_by") or created_by)
+            if ps_day and ps_name and _in_window(ps_day):
+                _bump(ps_name, niche_team, ps_day, "pintu_sets")
 
-        # Posted -> posted_by on posted_at day.
-        po_day = _date_key(idea.get("posted_at"))
-        if po_day and _in_window(po_day):
-            name = _norm_name(idea.get("posted_by"))
-            if name:
-                _bump(name, niche_team, po_day, "posted")
+        # --- Posted. Real dates from tracker_postings beat created_at when
+        # we have them; prefer the stamp if set.
+        is_shipped = (
+            (idea_type == "reel" and stage in REEL_STAGES_POSTED)
+            or (idea_type == "post" and stage in POST_STAGES_POSTED)
+        )
+        if is_shipped:
+            po_day = (
+                _date_key(idea.get("posted_at"))
+                or earliest_posting_date.get(idea_id)
+                or created_at_day
+            )
+            po_name = _norm_name(idea.get("posted_by") or created_by)
+            if po_day and po_name and _in_window(po_day):
+                _bump(po_name, niche_team, po_day, "posted")
 
     # Fill in missing days with zero rows so the frontend can draw a clean
     # sparkline without holes.
