@@ -231,9 +231,7 @@ export default function BandwidthTracker() {
 
         {/* footnote */}
         <p className="text-center text-[11px] text-zinc-600 mt-10 max-w-2xl mx-auto">
-          Attribution is captured when you click the stage buttons in the Reel Tracker (Start base edit, Proven / Batch edit, Mark posted).
-          Historical ideas moved before this feature shipped won't appear under Base edits / Pintu sets / Posted until they're re-stamped.
-          Edit <code className="text-zinc-500">src/lib/peopleSeed.ts</code> to fix roles or niches.
+          Base edits / Pintu sets / Posted are counted from each idea's stage in the Reel Tracker. Historical ideas are credited to their <code className="text-zinc-500">created_by</code> person; once someone clicks a stage button (Start base edit / Proven &middot; Batch edit / Mark posted) the real actor is stamped and overrides the creator fallback. Posted dates use the actual post date from <code className="text-zinc-500">tracker_postings</code> when available. Edit <code className="text-zinc-500">src/lib/peopleSeed.ts</code> to fix roles or niches.
         </p>
       </div>
     </div>
