@@ -773,6 +773,28 @@ export default function ContentTracker(){
             </div>
             {sa[cd.stage]?.length>0&&<div style={{display:"flex",gap:6}}>{sa[cd.stage].map(a=><button key={a.stage} onClick={()=>moveIdea(cd.id,a.stage)} style={a.style}>{a.label}</button>)}</div>}
 
+            {/* Posted date editor — drives Bandwidth tracker's Posted metric */}
+            {cd.stage==="posted"&&(
+              <div style={{padding:"10px 12px",background:"rgba(34,197,94,0.06)",borderRadius:8,border:"1.5px solid rgba(34,197,94,0.25)"}}>
+                <label style={ls}>Posted date</label>
+                <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                  <input
+                    type="date"
+                    value={cd.posted_at?new Date(cd.posted_at).toISOString().slice(0,10):""}
+                    onChange={e=>{
+                      const v=e.target.value;
+                      const iso=v?new Date(v+"T12:00:00Z").toISOString():null;
+                      updateIdeaMut.mutate({id:cd.id,data:{posted_at:iso}});
+                    }}
+                    style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #3f3f46",fontSize:13,background:"#09090b",color:"#e4e4e7"}}
+                  />
+                  {cd.posted_at
+                    ? <span style={{fontSize:11,color:"#52525b"}}>Counts toward Bandwidth &rarr; Posted on this date</span>
+                    : <span style={{fontSize:11,color:"#a1a1aa"}}>Not set &mdash; Bandwidth falls back to earliest page posting date</span>}
+                </div>
+              </div>
+            )}
+
             {/* Editable fields */}
             <div><label style={ls}>Niches</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{niches.map((n: any)=>{const sel=detailNicheIds.includes(n.id);return <button key={n.id} onClick={()=>{const next=sel?detailNicheIds.filter((x: string)=>x!==n.id):[...detailNicheIds,n.id];setDetailNicheIds(next);saveNiches(cd.id,next);}} style={{padding:"6px 12px",borderRadius:8,border:sel?"2px solid #7c3aed":"1.5px solid #3f3f46",background:sel?"#27272a":"#18181b",fontSize:12,fontWeight:600,cursor:"pointer",color:sel?"#fff":"#71717a"}}>{n.name}</button>;})}</div></div>
             <div><label style={ls}>Hook variations</label><SafeTextArea value={(cd.hook_variations||[]).join("\n")} onSave={v=>{const lines=v.split("\n").map((l: string)=>l.trim()).filter(Boolean);updateIdeaMut.mutate({id:cd.id,data:{hook_variations:lines.length>0?lines:null}});}} rows={3} placeholder="One hook per line" style={{...is,resize:"vertical",minHeight:60}}/></div>
