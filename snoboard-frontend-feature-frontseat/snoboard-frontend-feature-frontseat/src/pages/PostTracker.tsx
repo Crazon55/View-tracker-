@@ -790,6 +790,7 @@ export default function PostTracker(){
 
             {cd.stage==="uploaded"&&(
               <PostedDateEditor
+                ideaId={cd.id}
                 label="Uploaded date"
                 value={cd.posted_at}
                 onSave={(iso)=>updateIdeaMut.mutateAsync({id:cd.id,data:{posted_at:iso}})}
