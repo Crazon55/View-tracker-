@@ -7,6 +7,7 @@ import {
   getTrackerIdeas, createTrackerIdea, updateTrackerIdea, deleteTrackerIdea,
   createTrackerPosting, updateTrackerPosting, deleteTrackerPosting,
 } from "@/services/api";
+import PostedDateEditor from "@/components/PostedDateEditor";
 
 const STAGES = ["new","approved","base_edit","testing","proven_ideas","scheduled","posted","kill"];
 const SL: Record<string,string> = { new:"New ideas", approved:"Approved", base_edit:"Base edit", testing:"Testing", proven_ideas:"Proven ideas/ Batch edit", scheduled:"Scheduled", posted:"Posted", kill:"Killed" };
@@ -773,26 +774,12 @@ export default function ContentTracker(){
             </div>
             {sa[cd.stage]?.length>0&&<div style={{display:"flex",gap:6}}>{sa[cd.stage].map(a=><button key={a.stage} onClick={()=>moveIdea(cd.id,a.stage)} style={a.style}>{a.label}</button>)}</div>}
 
-            {/* Posted date editor — drives Bandwidth tracker's Posted metric */}
             {cd.stage==="posted"&&(
-              <div style={{padding:"10px 12px",background:"rgba(34,197,94,0.06)",borderRadius:8,border:"1.5px solid rgba(34,197,94,0.25)"}}>
-                <label style={ls}>Posted date</label>
-                <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                  <input
-                    type="date"
-                    value={cd.posted_at?new Date(cd.posted_at).toISOString().slice(0,10):""}
-                    onChange={e=>{
-                      const v=e.target.value;
-                      const iso=v?new Date(v+"T12:00:00Z").toISOString():null;
-                      updateIdeaMut.mutate({id:cd.id,data:{posted_at:iso}});
-                    }}
-                    style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #3f3f46",fontSize:13,background:"#09090b",color:"#e4e4e7"}}
-                  />
-                  {cd.posted_at
-                    ? <span style={{fontSize:11,color:"#52525b"}}>Counts toward Bandwidth &rarr; Posted on this date</span>
-                    : <span style={{fontSize:11,color:"#a1a1aa"}}>Not set &mdash; Bandwidth falls back to earliest page posting date</span>}
-                </div>
-              </div>
+              <PostedDateEditor
+                label="Posted date"
+                value={cd.posted_at}
+                onSave={(iso)=>updateIdeaMut.mutateAsync({id:cd.id,data:{posted_at:iso}})}
+              />
             )}
 
             {/* Editable fields */}
