@@ -2162,18 +2162,30 @@ async def tracker_postings_delete(posting_id: str):
 
 # --- Bandwidth tracker ----------------------------------------------------
 @app.get("/api/v1/bandwidth")
-async def bandwidth_tracker(days: int = 14, type: str | None = "reel"):
-    """Per-person daily bandwidth: competitor ideas found, OG ideas created,
-    base edits done, Pintu batch sets, posts posted.
+async def bandwidth_tracker(days: int = 14, type: str | None = None):
+    """Per-person daily bandwidth across BOTH the reel pipeline (CS + CDI)
+    and the post pipeline (CW).
 
-    Source of truth: `tracker_ideas` (reel tracker by default). Attribution
-    comes from created_by / base_edit_by / pintu_set_by / posted_by columns;
-    the *_by columns are stamped on stage transitions by the UI.
+    Reel metrics (type=reel):
+      reel_comp        source=competitor, date=created_at
+      reel_og          source=original,   date=created_at
+      reel_base_edits  stage==base_edit
+      reel_pintu       stage==proven_ideas
+      reel_posted      stage==posted
 
-    Responds with per-person daily breakdown over the last `days` days (the
-    window ends today, inclusive), plus per-niche team totals. Role/niche
-    for each person is looked up by the caller against a seed table; the
-    backend just aggregates by name.
+    Post metrics (type=post):
+      post_comp        source=competitor, date=created_at
+      post_og          source=original,   date=created_at
+      post_mm          content_pillar==MM, date=created_at
+      post_edits       stage==scripted
+      post_posted      stage==uploaded
+
+    Attribution uses the per-stage `*_by` stamps when available; otherwise
+    falls back to `created_by`. Posted dates prefer `posted_at`, then the
+    earliest `tracker_postings.date` for that idea, then `created_at`.
+
+    `type` filter is optional: None (default) returns both pipelines so the
+    frontend can pick slots per role; "reel" or "post" narrows the fetch.
     """
     from app.database.client import get_supabase_client
     from datetime import datetime as _dt, timezone as _tz, timedelta as _td
@@ -2189,13 +2201,14 @@ async def bandwidth_tracker(days: int = 14, type: str | None = "reel"):
     # yet (migration not run), fall back to a lean select. Everything still
     # works because the fallbacks use created_by + created_at.
     full_cols = (
-        "id, title, source, type, stage, niche_id, niche_ids, created_at, "
-        "created_by, base_edit_by, base_edit_at, pintu_set_by, pintu_set_at, "
+        "id, title, source, type, stage, niche_id, niche_ids, content_pillar, "
+        "created_at, created_by, "
+        "base_edit_by, base_edit_at, pintu_set_by, pintu_set_at, "
         "posted_by, posted_at"
     )
     lean_cols = (
-        "id, title, source, type, stage, niche_id, niche_ids, created_at, "
-        "created_by"
+        "id, title, source, type, stage, niche_id, niche_ids, content_pillar, "
+        "created_at, created_by"
     )
     try:
         q = client.table("tracker_ideas").select(full_cols)
@@ -2281,7 +2294,12 @@ async def bandwidth_tracker(days: int = 14, type: str | None = "reel"):
             return False
         return window_start <= d <= today
 
-    METRIC_KEYS = ("comp_found", "og_created", "base_edits", "pintu_sets", "posted")
+    METRIC_KEYS = (
+        # Reel pipeline (CS creates, CDI edits + posts)
+        "reel_comp", "reel_og", "reel_base_edits", "reel_pintu", "reel_posted",
+        # Post pipeline (CW creates + edits + posts)
+        "post_comp", "post_og", "post_mm", "post_edits", "post_posted",
+    )
 
     def _empty_day_row(date_iso: str) -> dict:
         return {"date": date_iso, **{k: 0 for k in METRIC_KEYS}}
@@ -2310,14 +2328,12 @@ async def bandwidth_tracker(days: int = 14, type: str | None = "reel"):
         rec["totals"][metric] += 1
         team_totals[nk][metric] += 1
 
-    # Count the metric only when the idea is currently sitting in that
-    # exact kanban column in the Reel Tracker -- matches what the user
-    # sees in the "Base edit" / "Proven ideas/Batch edit" / "Posted"
-    # columns. No "has passed through" credit.
+    # Each metric is counted only when the idea is currently sitting in that
+    # exact kanban column, matching what the user sees in the trackers.
     REEL_STAGE_BASE_EDIT = {"base_edit"}
     REEL_STAGE_PINTU     = {"proven_ideas"}
     REEL_STAGE_POSTED    = {"posted"}
-    # Post Tracker uses "uploaded" as its shipped stage.
+    POST_STAGE_EDITS     = {"scripted"}
     POST_STAGE_POSTED    = {"uploaded"}
 
     for idea in ideas:
@@ -2327,45 +2343,75 @@ async def bandwidth_tracker(days: int = 14, type: str | None = "reel"):
         created_by = idea.get("created_by")
         created_at_day = _date_key(idea.get("created_at"))
         idea_type = (idea.get("type") or "reel").lower()
+        source = str(idea.get("source") or "original").lower()
+        pillar = str(idea.get("content_pillar") or "").strip().lower()
 
-        # --- Competitor found / OG created (real data, no fallbacks needed)
-        if created_at_day and _in_window(created_at_day):
-            name = _norm_name(created_by)
-            if name:
-                src = str(idea.get("source") or "original").lower()
-                metric = "comp_found" if src == "competitor" else "og_created"
-                _bump(name, niche_team, created_at_day, metric)
+        # ----- REEL PIPELINE --------------------------------------------------
+        if idea_type == "reel":
+            # Comp / OG at creation time.
+            if created_at_day and _in_window(created_at_day):
+                name = _norm_name(created_by)
+                if name:
+                    metric = "reel_comp" if source == "competitor" else "reel_og"
+                    _bump(name, niche_team, created_at_day, metric)
 
-        # --- Base edits: idea must currently be in the "Base edit" column.
-        if idea_type == "reel" and stage in REEL_STAGE_BASE_EDIT:
-            be_day = _date_key(idea.get("base_edit_at")) or created_at_day
-            be_name = _norm_name(idea.get("base_edit_by") or created_by)
-            if be_day and be_name and _in_window(be_day):
-                _bump(be_name, niche_team, be_day, "base_edits")
+            # Base edits: currently sitting in base_edit column.
+            if stage in REEL_STAGE_BASE_EDIT:
+                be_day = _date_key(idea.get("base_edit_at")) or created_at_day
+                be_name = _norm_name(idea.get("base_edit_by") or created_by)
+                if be_day and be_name and _in_window(be_day):
+                    _bump(be_name, niche_team, be_day, "reel_base_edits")
 
-        # --- Pintu / batch edit set: idea must currently be in the
-        # "Proven ideas / Batch edit" column.
-        if idea_type == "reel" and stage in REEL_STAGE_PINTU:
-            ps_day = _date_key(idea.get("pintu_set_at")) or created_at_day
-            ps_name = _norm_name(idea.get("pintu_set_by") or created_by)
-            if ps_day and ps_name and _in_window(ps_day):
-                _bump(ps_name, niche_team, ps_day, "pintu_sets")
+            # Pintu: currently sitting in proven_ideas column.
+            if stage in REEL_STAGE_PINTU:
+                ps_day = _date_key(idea.get("pintu_set_at")) or created_at_day
+                ps_name = _norm_name(idea.get("pintu_set_by") or created_by)
+                if ps_day and ps_name and _in_window(ps_day):
+                    _bump(ps_name, niche_team, ps_day, "reel_pintu")
 
-        # --- Posted. Real dates from tracker_postings beat created_at when
-        # we have them; prefer the stamp if set.
-        is_shipped = (
-            (idea_type == "reel" and stage in REEL_STAGE_POSTED)
-            or (idea_type == "post" and stage in POST_STAGE_POSTED)
-        )
-        if is_shipped:
-            po_day = (
-                _date_key(idea.get("posted_at"))
-                or earliest_posting_date.get(idea_id)
-                or created_at_day
-            )
-            po_name = _norm_name(idea.get("posted_by") or created_by)
-            if po_day and po_name and _in_window(po_day):
-                _bump(po_name, niche_team, po_day, "posted")
+            # Posted: currently sitting in posted column.
+            if stage in REEL_STAGE_POSTED:
+                po_day = (
+                    _date_key(idea.get("posted_at"))
+                    or earliest_posting_date.get(idea_id)
+                    or created_at_day
+                )
+                po_name = _norm_name(idea.get("posted_by") or created_by)
+                if po_day and po_name and _in_window(po_day):
+                    _bump(po_name, niche_team, po_day, "reel_posted")
+
+        # ----- POST PIPELINE --------------------------------------------------
+        elif idea_type == "post":
+            # Comp / OG at creation time.
+            if created_at_day and _in_window(created_at_day):
+                name = _norm_name(created_by)
+                if name:
+                    metric = "post_comp" if source == "competitor" else "post_og"
+                    _bump(name, niche_team, created_at_day, metric)
+
+                    # MM is a content-pillar tag; counted at creation too, in
+                    # addition to the comp/og bucket above (so a Kaavya MM OG
+                    # post shows up in BOTH OG and MM slots).
+                    if pillar == "mm":
+                        _bump(name, niche_team, created_at_day, "post_mm")
+
+            # Edits: currently sitting in the "Scripted" column.
+            if stage in POST_STAGE_EDITS:
+                ed_day = _date_key(idea.get("base_edit_at")) or created_at_day
+                ed_name = _norm_name(idea.get("base_edit_by") or created_by)
+                if ed_day and ed_name and _in_window(ed_day):
+                    _bump(ed_name, niche_team, ed_day, "post_edits")
+
+            # Posted: stage == uploaded on the post pipeline.
+            if stage in POST_STAGE_POSTED:
+                po_day = (
+                    _date_key(idea.get("posted_at"))
+                    or earliest_posting_date.get(idea_id)
+                    or created_at_day
+                )
+                po_name = _norm_name(idea.get("posted_by") or created_by)
+                if po_day and po_name and _in_window(po_day):
+                    _bump(po_name, niche_team, po_day, "post_posted")
 
     # Fill in missing days with zero rows so the frontend can draw a clean
     # sparkline without holes.
