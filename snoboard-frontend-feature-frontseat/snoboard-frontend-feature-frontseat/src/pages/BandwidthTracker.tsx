@@ -90,8 +90,31 @@ function weekdayLabel(iso: string): string {
 
 /* ============================== page ============================== */
 
+type WindowKey = "today" | "7d" | "14d" | "month";
+
+function daysForWindow(w: WindowKey): number {
+  switch (w) {
+    case "today": return 1;
+    case "7d":    return 7;
+    case "14d":   return 14;
+    case "month": {
+      // 1st of the current month through today, inclusive.
+      const now = new Date();
+      return now.getDate();
+    }
+  }
+}
+
+const WINDOW_OPTS: { key: WindowKey; label: string }[] = [
+  { key: "today", label: "Today" },
+  { key: "7d",    label: "7d" },
+  { key: "14d",   label: "14d" },
+  { key: "month", label: "Month" },
+];
+
 export default function BandwidthTracker() {
-  const [days, setDays] = useState<number>(14);
+  const [windowKey, setWindowKey] = useState<WindowKey>("14d");
+  const days = daysForWindow(windowKey);
   const [roleFilter, setRoleFilter] = useState<"all" | PersonRole>("all");
   const [nicheFilter, setNicheFilter] = useState<"all" | PersonNiche>("all");
 
@@ -232,13 +255,13 @@ export default function BandwidthTracker() {
           <div className="flex flex-wrap gap-2">
             {/* window */}
             <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-900 p-0.5 text-[11px] font-bold">
-              {[7, 14, 30].map((d) => (
+              {WINDOW_OPTS.map((w) => (
                 <button
-                  key={d}
-                  onClick={() => setDays(d)}
-                  className={`px-3 py-1.5 rounded-md transition-colors ${days === d ? "bg-violet-500 text-white" : "text-zinc-400 hover:text-white"}`}
+                  key={w.key}
+                  onClick={() => setWindowKey(w.key)}
+                  className={`px-3 py-1.5 rounded-md transition-colors ${windowKey === w.key ? "bg-violet-500 text-white" : "text-zinc-400 hover:text-white"}`}
                 >
-                  {d}d
+                  {w.label}
                 </button>
               ))}
             </div>
