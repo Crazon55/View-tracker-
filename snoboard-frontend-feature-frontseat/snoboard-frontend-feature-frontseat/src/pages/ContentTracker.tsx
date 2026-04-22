@@ -147,15 +147,29 @@ function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove,stage}: {po:any;
   const stageColor = stage==="testing"?"#D4952A":stage==="proven_ideas"?"#1D9E75":stage==="kill"?"#C93B3B":stage==="scheduled"?"#534AB7":stage==="posted"?"#2D9E5F":"#7c3aed";
 
   if(!editing){
-    const t = perfTag && PT[perfTag] ? PT[perfTag] : null;
+    // Unified "TESTED" indicator: tells you which of the 4 buckets the
+    // posting landed in. Prefers the manually-tagged perf_tag, falls back
+    // to auto-computing from views vs baseline so older postings (before
+    // we asked for perf_tag) still display a result.
+    const autoTag = gPerf(po.views, po.baselineViews);
+    const effectiveTag = (perfTag && PT[perfTag]) ? perfTag : autoTag;
+    const t = effectiveTag && PT[effectiveTag] ? PT[effectiveTag] : null;
+    const isTested = po.views!=null && (stage==="testing"||stage==="proven_ideas"||stage==="scheduled"||stage==="posted");
     return(
       <div style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}} onClick={()=>setEditing(true)}>
         <div onClick={e=>{e.stopPropagation();onRemove();}} title="Remove page" style={{width:20,height:20,borderRadius:5,background:stageColor,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,cursor:"pointer"}}><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
         <span style={{fontSize:13,fontWeight:600,color:"#fff"}}>@{page}</span>
-        {po.views!=null&&<span style={{fontSize:12,fontWeight:700,color:"#fff",fontFamily:"monospace"}}>{fmtNum(po.views)}</span>}
-        {!po.views&&<span style={{fontSize:11,color:"#52525b"}}>no views yet</span>}
-        {t&&<span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:99,background:t.bg,color:t.color}}>{t.label}</span>}
-        {po.views!=null&&(stage==="proven_ideas"||stage==="scheduled"||stage==="posted")&&<span style={{fontSize:9,fontWeight:600,padding:"1px 6px",borderRadius:99,background:"rgba(212,149,42,0.15)",color:"#D4952A",border:"1px solid rgba(212,149,42,0.3)"}}>TESTED</span>}
+        {po.views!=null&&<span style={{fontSize:17,fontWeight:800,color:"#fff",fontFamily:"monospace",letterSpacing:"-0.02em"}}>{fmtNum(po.views)}</span>}
+        {po.views==null&&<span style={{fontSize:11,color:"#52525b"}}>no views yet</span>}
+        {isTested && t && (
+          <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:t.bg,color:t.color,border:`1px solid ${t.color}55`,textTransform:"uppercase",letterSpacing:"0.05em"}}>
+            <span style={{opacity:0.75}}>Tested ·</span>
+            <span>{t.label}</span>
+          </span>
+        )}
+        {isTested && !t && (
+          <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:"rgba(212,149,42,0.15)",color:"#D4952A",border:"1px solid rgba(212,149,42,0.35)",textTransform:"uppercase",letterSpacing:"0.05em"}}>Tested · Set baseline</span>
+        )}
         <span style={{fontSize:11,color:"#52525b",marginLeft:"auto",whiteSpace:"nowrap"}}>{po.date ? fmtD(po.date) : ""}</span>
       </div>
     );

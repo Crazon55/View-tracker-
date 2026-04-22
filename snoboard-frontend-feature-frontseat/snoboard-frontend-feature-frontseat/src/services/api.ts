@@ -115,7 +115,7 @@ export const deleteTrackerNiche = (id: string) =>
 export const getTrackerIdeas = (type?: string) => fetchApi<any[]>(`/api/v1/tracker/ideas${type ? `?type=${type}` : ""}`);
 
 export type BandwidthMetricKey =
-  | "reel_comp" | "reel_og" | "reel_base_edits" | "reel_pintu" | "reel_posted"
+  | "reel_comp" | "reel_og" | "reel_base_edits" | "reel_testing" | "reel_pintu" | "reel_posted"
   | "post_comp" | "post_og" | "post_mm" | "post_edits" | "post_posted";
 
 export type BandwidthTotals = Record<BandwidthMetricKey, number>;
