@@ -30,6 +30,7 @@ import {
   Megaphone,
   FileText,
   FlaskConical,
+  Skull,
 } from "lucide-react";
 
 /* ============================== metric meta ============================== */
@@ -43,12 +44,13 @@ type MetricCell = {
 
 const METRIC_META: Record<BandwidthMetricKey, MetricCell> = {
   // Reel pipeline
-  reel_comp:       { key: "reel_comp",       label: "Comp",      icon: Search,       color: "#7BB0FF" },
-  reel_og:         { key: "reel_og",         label: "OG",        icon: Lightbulb,    color: "#F0C060" },
-  reel_base_edits: { key: "reel_base_edits", label: "Base edit", icon: Scissors,     color: "#B49EFF" },
-  reel_testing:    { key: "reel_testing",    label: "Testing",   icon: FlaskConical, color: "#F0C060" },
-  reel_pintu:      { key: "reel_pintu",      label: "Pintu",     icon: Film,         color: "#9B8FFF" },
-  reel_posted:     { key: "reel_posted",     label: "Posted",    icon: Rocket,       color: "#5AE0A0" },
+  reel_comp:       { key: "reel_comp",       label: "Comp",         icon: Search,       color: "#7BB0FF" },
+  reel_og:         { key: "reel_og",         label: "OG",           icon: Lightbulb,    color: "#F0C060" },
+  reel_base_edits: { key: "reel_base_edits", label: "Base edit",    icon: Scissors,     color: "#B49EFF" },
+  reel_testing:    { key: "reel_testing",    label: "Testing",      icon: FlaskConical, color: "#F0C060" },
+  reel_pintu:      { key: "reel_pintu",      label: "Proven ideas", icon: Film,         color: "#9B8FFF" },
+  reel_posted:     { key: "reel_posted",     label: "Posted",       icon: Rocket,       color: "#5AE0A0" },
+  reel_killed:     { key: "reel_killed",     label: "Killed",       icon: Skull,        color: "#FF7070" },
   // Post pipeline
   post_comp:       { key: "post_comp",       label: "Comp",      icon: Search,    color: "#7BB0FF" },
   post_og:         { key: "post_og",         label: "OG",        icon: Lightbulb, color: "#F0C060" },
@@ -57,11 +59,12 @@ const METRIC_META: Record<BandwidthMetricKey, MetricCell> = {
   post_posted:     { key: "post_posted",     label: "Posted",    icon: Rocket,    color: "#5AE0A0" },
 };
 
-// Which cells a given role sees on their card. Reel pipeline is 6 wide
-// (Comp · OG · Base edit · Testing · Pintu · Posted); post pipeline stays
-// at 5 wide.
+// Which cells a given role sees on their card. Reel pipeline is 7 wide
+// (Comp · OG · Base edit · Testing · Proven ideas · Posted · Killed);
+// post pipeline stays at 5 wide.
 const REEL_METRICS: BandwidthMetricKey[] = [
-  "reel_comp", "reel_og", "reel_base_edits", "reel_testing", "reel_pintu", "reel_posted",
+  "reel_comp", "reel_og", "reel_base_edits", "reel_testing",
+  "reel_pintu", "reel_posted", "reel_killed",
 ];
 const POST_METRICS: BandwidthMetricKey[] = [
   "post_comp", "post_og", "post_mm", "post_edits", "post_posted",
@@ -75,7 +78,8 @@ function metricsForRole(role: PersonRole | null | undefined): BandwidthMetricKey
 
 function zeroTotals(): BandwidthTotals {
   return {
-    reel_comp: 0, reel_og: 0, reel_base_edits: 0, reel_testing: 0, reel_pintu: 0, reel_posted: 0,
+    reel_comp: 0, reel_og: 0, reel_base_edits: 0, reel_testing: 0,
+    reel_pintu: 0, reel_posted: 0, reel_killed: 0,
     post_comp: 0, post_og: 0, post_mm: 0, post_edits: 0, post_posted: 0,
   };
 }
@@ -416,7 +420,7 @@ export default function BandwidthTracker() {
 
         {/* footnote */}
         <p className="text-center text-[11px] text-zinc-600 mt-10 max-w-2xl mx-auto">
-          <strong className="text-zinc-500">CS / CDI</strong> see reel-pipeline metrics (Comp &middot; OG &middot; Base edit &middot; Testing &middot; Pintu &middot; Posted).{" "}
+          <strong className="text-zinc-500">CS / CDI</strong> see reel-pipeline metrics (Comp &middot; OG &middot; Base edit &middot; Testing &middot; Proven ideas &middot; Posted &middot; Killed).{" "}
           <strong className="text-zinc-500">CW</strong> see post-pipeline metrics (Comp &middot; OG &middot; MM &middot; Edits &middot; Posted).
           Each count is based on the idea's current stage / tag in the trackers. Historical ideas are credited to <code className="text-zinc-500">created_by</code>;
           once someone clicks a stage button (Start base edit / Proven-Batch edit / Mark posted) the real actor overrides. Edit <code className="text-zinc-500">src/lib/peopleSeed.ts</code> to fix roles or niches.
