@@ -1927,7 +1927,7 @@ async def tracker_ideas_update(idea_id: str, request: Request):
         "content_pillar", "content_bucket", "caption", "canva_link",
         # Bandwidth attribution fields (allow direct admin edits)
         "base_edit_by", "base_edit_at", "pintu_set_by", "pintu_set_at",
-        "posted_by", "posted_at",
+        "posted_by", "posted_at", "killed_by", "killed_at",
     }
     allowed = {k: v for k, v in body.items() if k in allowed_keys}
     if "niche_ids" in allowed:
@@ -1944,7 +1944,7 @@ async def tracker_ideas_update(idea_id: str, request: Request):
         try:
             existing = (
                 client.table("tracker_ideas")
-                .select("base_edit_by, pintu_set_by, posted_by")
+                .select("base_edit_by, pintu_set_by, posted_by, killed_by")
                 .eq("id", idea_id)
                 .execute()
                 .data
@@ -1964,8 +1964,11 @@ async def tracker_ideas_update(idea_id: str, request: Request):
         elif new_stage in ("posted", "uploaded") and not current.get("posted_by"):
             allowed.setdefault("posted_by", actor)
             allowed.setdefault("posted_at", now_iso)
+        elif new_stage == "kill" and not current.get("killed_by"):
+            allowed.setdefault("killed_by", actor)
+            allowed.setdefault("killed_at", now_iso)
 
-    bw_keys = {"base_edit_by", "base_edit_at", "pintu_set_by", "pintu_set_at", "posted_by", "posted_at"}
+    bw_keys = {"base_edit_by", "base_edit_at", "pintu_set_by", "pintu_set_at", "posted_by", "posted_at", "killed_by", "killed_at"}
     # Did the client explicitly send a bandwidth field (e.g. user editing the
     # posted_at date picker)? If so we want a loud failure when the column is
     # missing; otherwise we silently strip to keep stage transitions working.
@@ -1996,6 +1999,20 @@ async def tracker_ideas_update(idea_id: str, request: Request):
             )
         # Auto-stamp path: silently drop so stage transitions still work.
         for k in bw_keys:
+            allowed.pop(k, None)
+
+    # Separate probe for the `killed_*` columns, which ship in a later
+    # migration (migration_killed_fields.sql). If they're missing we quietly
+    # strip the kill-stage stamps so the main update still succeeds — the
+    # user will just miss the "Killed" bandwidth cell until they run it.
+    if not hasattr(tracker_ideas_update, "_killed_cols_cache"):
+        try:
+            client.table("tracker_ideas").select("killed_at").limit(1).execute()
+            tracker_ideas_update._killed_cols_cache = True
+        except Exception:
+            tracker_ideas_update._killed_cols_cache = False
+    if not tracker_ideas_update._killed_cols_cache:
+        for k in ("killed_by", "killed_at"):
             allowed.pop(k, None)
 
     try:
@@ -2298,8 +2315,9 @@ async def bandwidth_tracker(
       reel_og          source=original,   date=created_at
       reel_base_edits  stage==base_edit
       reel_testing     stage==testing
-      reel_pintu       stage==proven_ideas
+      reel_pintu       stage==proven_ideas       (shown as "Proven ideas")
       reel_posted      stage==posted
+      reel_killed      stage==kill
 
     Post metrics (type=post):
       post_comp        source=competitor, date=created_at
@@ -2361,6 +2379,13 @@ async def bandwidth_tracker(
         "id, title, source, type, stage, niche_id, niche_ids, content_pillar, "
         "created_at, created_by, "
         "base_edit_by, base_edit_at, pintu_set_by, pintu_set_at, "
+        "posted_by, posted_at, killed_by, killed_at"
+    )
+    # Columns without killed_* (for older DBs missing the killed migration).
+    mid_cols = (
+        "id, title, source, type, stage, niche_id, niche_ids, content_pillar, "
+        "created_at, created_by, "
+        "base_edit_by, base_edit_at, pintu_set_by, pintu_set_at, "
         "posted_by, posted_at"
     )
     lean_cols = (
@@ -2373,10 +2398,18 @@ async def bandwidth_tracker(
             q = q.eq("type", type)
         ideas = q.execute().data or []
     except Exception:
-        q = client.table("tracker_ideas").select(lean_cols)
-        if type:
-            q = q.eq("type", type)
-        ideas = q.execute().data or []
+        # First fallback: same bandwidth cols minus killed_* (for DBs that
+        # ran migration_bandwidth_fields.sql but not migration_killed_fields.sql).
+        try:
+            q = client.table("tracker_ideas").select(mid_cols)
+            if type:
+                q = q.eq("type", type)
+            ideas = q.execute().data or []
+        except Exception:
+            q = client.table("tracker_ideas").select(lean_cols)
+            if type:
+                q = q.eq("type", type)
+            ideas = q.execute().data or []
 
     niches = client.table("tracker_niches").select("id,name,pages").execute().data or []
 
@@ -2453,7 +2486,8 @@ async def bandwidth_tracker(
 
     METRIC_KEYS = (
         # Reel pipeline (CS creates, CDI edits + posts)
-        "reel_comp", "reel_og", "reel_base_edits", "reel_testing", "reel_pintu", "reel_posted",
+        "reel_comp", "reel_og", "reel_base_edits", "reel_testing",
+        "reel_pintu", "reel_posted", "reel_killed",
         # Post pipeline (CW creates + edits + posts)
         "post_comp", "post_og", "post_mm", "post_edits", "post_posted",
     )
@@ -2491,6 +2525,7 @@ async def bandwidth_tracker(
     REEL_STAGE_TESTING   = {"testing"}
     REEL_STAGE_PINTU     = {"proven_ideas"}
     REEL_STAGE_POSTED    = {"posted"}
+    STAGE_KILLED         = {"kill"}
     POST_STAGE_EDITS     = {"scripted"}
     POST_STAGE_POSTED    = {"uploaded"}
 
@@ -2548,6 +2583,24 @@ async def bandwidth_tracker(
                 po_name = _norm_name(idea.get("posted_by") or created_by)
                 if po_day and po_name and _in_window(po_day):
                     _bump(po_name, niche_team, po_day, "reel_posted")
+
+            # Killed: currently sitting in kill column. Credit the explicit
+            # killed_by stamp when we have it; otherwise fall back to whoever
+            # was most recently working on it (base editor / tester) or the
+            # creator. Same fallback chain for the date.
+            if stage in STAGE_KILLED:
+                ki_day = (
+                    _date_key(idea.get("killed_at"))
+                    or _date_key(idea.get("base_edit_at"))
+                    or created_at_day
+                )
+                ki_name = _norm_name(
+                    idea.get("killed_by")
+                    or idea.get("base_edit_by")
+                    or created_by
+                )
+                if ki_day and ki_name and _in_window(ki_day):
+                    _bump(ki_name, niche_team, ki_day, "reel_killed")
 
         # ----- POST PIPELINE --------------------------------------------------
         elif idea_type == "post":
