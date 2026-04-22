@@ -1863,6 +1863,21 @@ async def teams_performance():
 
 
 # --- Ideas ---
+
+
+def _tracker_ideas_approved_for_pages_col_exists(client) -> bool:
+    """True if approved_for_pages exists (migration_approved_for_pages.sql)."""
+    c = getattr(_tracker_ideas_approved_for_pages_col_exists, "_cache", None)
+    if c is not None:
+        return c
+    try:
+        client.table("tracker_ideas").select("approved_for_pages").limit(1).execute()
+        _tracker_ideas_approved_for_pages_col_exists._cache = True
+    except Exception:
+        _tracker_ideas_approved_for_pages_col_exists._cache = False
+    return _tracker_ideas_approved_for_pages_col_exists._cache
+
+
 @app.get("/api/v1/tracker/ideas")
 async def tracker_ideas_list(type: str | None = None):
     from app.database.client import get_supabase_client
@@ -1908,9 +1923,13 @@ async def tracker_ideas_create(request: Request):
         "caption": body.get("caption"),
         "canva_link": body.get("canva_link"),
     }
+    if body.get("approved_for_pages") is not None:
+        row["approved_for_pages"] = body.get("approved_for_pages") or []
     # Remove None values so Supabase doesn't store explicit nulls for optional fields
     row = {k: v for k, v in row.items() if v is not None}
     row.setdefault("title", body["title"])
+    if not _tracker_ideas_approved_for_pages_col_exists(client):
+        row.pop("approved_for_pages", None)
     result = client.table("tracker_ideas").insert(row).execute().data[0]
     return {"success": True, "data": result}
 
@@ -1928,6 +1947,7 @@ async def tracker_ideas_update(idea_id: str, request: Request):
         # Bandwidth attribution fields (allow direct admin edits)
         "base_edit_by", "base_edit_at", "pintu_set_by", "pintu_set_at",
         "posted_by", "posted_at", "killed_by", "killed_at",
+        "approved_for_pages",
     }
     allowed = {k: v for k, v in body.items() if k in allowed_keys}
     if "niche_ids" in allowed:
@@ -2014,6 +2034,9 @@ async def tracker_ideas_update(idea_id: str, request: Request):
     if not tracker_ideas_update._killed_cols_cache:
         for k in ("killed_by", "killed_at"):
             allowed.pop(k, None)
+
+    if not _tracker_ideas_approved_for_pages_col_exists(client):
+        allowed.pop("approved_for_pages", None)
 
     try:
         client.table("tracker_ideas").update(allowed).eq("id", idea_id).execute()

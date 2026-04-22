@@ -44,6 +44,8 @@ const today = () => toLocalISO(new Date());
 const fmtD = (d: string) => { const dt=new Date(d+"T00:00:00"); return dt.toLocaleDateString("en-US",{month:"short",day:"numeric"}); };
 const fmtDFull = (d: string) => { const dt=new Date(d+"T00:00:00"); return dt.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}); };
 const fmtNum = (n: number) => { if(n>=1000000) return (n/1000000).toFixed(1)+"M"; if(n>=1000) return (n/1000).toFixed(1)+"k"; return n.toString(); };
+/** Match niche page handle strings (with or without @) */
+const normH = (s: string) => String(s).replace(/^@/,"").trim().toLowerCase();
 const gPerf = (v: number|null, b: number|null) => { if(!v||!b) return null; const r=v/b; if(r>=20) return "viral"; if(r>=5) return "topline"; if(r>=0.8) return "baseline"; return "below"; };
 const getMonday = (d: string) => { const dt=new Date(d+"T00:00:00"); const day=dt.getDay(); dt.setDate(dt.getDate()-day+(day===0?-6:1)); return toLocalISO(dt); };
 const addD = (s: string, n: number) => { const d=new Date(s+"T00:00:00"); d.setDate(d.getDate()+n); return toLocalISO(d); };
@@ -72,6 +74,7 @@ function mapIdea(raw: any): any {
       views: p.views,
       perf_tag: p.perf_tag || null,
     })),
+    approvedForPages: Array.isArray(raw.approved_for_pages) ? raw.approved_for_pages : [],
   };
 }
 
@@ -534,12 +537,20 @@ export default function ContentTracker(){
   const [addOpen,setAddOpen]=useState(false);
   const [detailIdea,setDetailIdea]=useState<any>(null);
   const [detailNicheIds,setDetailNicheIds]=useState<string[]>([]);
+  const [detailApprovedPages,setDetailApprovedPages]=useState<string[]>([]);
   const nicheSaveTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const nicheSaveRef=useRef<string[]>([]);
   const saveNiches=useCallback((ideaId: string, next: string[])=>{
     nicheSaveRef.current=next;
     if(nicheSaveTimer.current) clearTimeout(nicheSaveTimer.current);
     nicheSaveTimer.current=setTimeout(()=>{updateIdeaMut.mutate({id:ideaId,data:{niche_ids:nicheSaveRef.current}});},400);
+  },[]);
+  const approvedSaveTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
+  const approvedSaveRef=useRef<string[]>([]);
+  const saveApprovedPages=useCallback((ideaId: string, next: string[])=>{
+    approvedSaveRef.current=next;
+    if(approvedSaveTimer.current) clearTimeout(approvedSaveTimer.current);
+    approvedSaveTimer.current=setTimeout(()=>{updateIdeaMut.mutate({id:ideaId,data:{approved_for_pages:approvedSaveRef.current}});},400);
   },[]);
   const [settingsOpen,setSettingsOpen]=useState(false);
   const [addNicheOpen,setAddNicheOpen]=useState(false);
@@ -593,10 +604,10 @@ export default function ContentTracker(){
     setAddOpen(false);
   }
   function moveIdea(id: string, ns: string){
-    // Attach actor so the backend can stamp base_edit_by / pintu_set_by /
-    // posted_by on stage transitions for the Bandwidth tracker.
-    const actor = user?.user_metadata?.full_name || user?.email?.split("@")[0] || user?.email || null;
-    updateIdeaMut.mutate({ id, data: { stage: ns, actor } });
+    const data: Record<string, unknown> = { stage: ns, actor: user?.user_metadata?.full_name || user?.email?.split("@")[0] || user?.email || null };
+    if(approvedSaveTimer.current){ clearTimeout(approvedSaveTimer.current); approvedSaveTimer.current=null; (data as any).approved_for_pages = approvedSaveRef.current; }
+    if(nicheSaveTimer.current){ clearTimeout(nicheSaveTimer.current); nicheSaveTimer.current=null; (data as any).niche_ids = nicheSaveRef.current; }
+    updateIdeaMut.mutate({ id, data: data as any });
   }
   function deleteIdea(id: string){
     deleteIdeaMut.mutate(id);
@@ -685,6 +696,13 @@ export default function ContentTracker(){
   const cd=detailIdea?ideas.find(i=>i.id===detailIdea.id)||detailIdea:null;
   const cdNiches=cd?niches.filter((n: any)=>detailNicheIds.includes(n.id)):[];
   const cdPages=cdNiches.flatMap((n: any)=>n.pages||[]).filter((v: string,i: number,a: string[])=>a.indexOf(v)===i);
+  /** If any handles are stored on the idea, testing+ checklists use only those; else all niche pages. */
+  const effectiveCdPages=useMemo(()=>{
+    if(!cd) return [];
+    const ap=cd.approvedForPages;
+    if(!Array.isArray(ap)||!ap.length) return cdPages;
+    return cdPages.filter((p: string)=>ap.some((af: string)=>normH(String(af))===normH(String(p))));
+  },[cd,cdPages]);
 
   const sa: Record<string, {label:string;stage:string;style:React.CSSProperties}[]>={
     new:[{label:"Approve",stage:"approved",style:bp},{label:"Reject",stage:"kill",style:{...bs,color:"#C93B3B"}}],
@@ -697,7 +715,12 @@ export default function ContentTracker(){
   };
 
   const counts: Record<string,number>={};STAGES.forEach(s=>{counts[s]=filteredIdeas.filter(i=>i.stage===s).length;});
-  function openDetail(idea: any){setDetailIdea(idea);setDetailNicheIds(idea.nicheIds||[]);setScheduleDate({});}
+  function openDetail(idea: any){
+    setDetailIdea(idea);
+    setDetailNicheIds(idea.nicheIds||[]);
+    setDetailApprovedPages(Array.isArray(idea.approvedForPages) ? idea.approvedForPages : []);
+    setScheduleDate({});
+  }
 
   // ---- Loading spinner ----
   if(isLoading){
@@ -846,7 +869,13 @@ export default function ContentTracker(){
       </Modal>
 
       {/* Detail Modal */}
-      <Modal open={!!cd} onClose={()=>{if(nicheSaveTimer.current){clearTimeout(nicheSaveTimer.current);nicheSaveTimer.current=null;if(cd)updateIdeaMut.mutate({id:cd.id,data:{niche_ids:nicheSaveRef.current}});}setDetailIdea(null);}} title={cd?.title||""} wide>
+      <Modal open={!!cd} onClose={()=>{
+        const d: Record<string, unknown> = {};
+        if(approvedSaveTimer.current){ clearTimeout(approvedSaveTimer.current); approvedSaveTimer.current=null; d.approved_for_pages = approvedSaveRef.current; }
+        if(nicheSaveTimer.current){ clearTimeout(nicheSaveTimer.current); nicheSaveTimer.current=null; d.niche_ids = nicheSaveRef.current; }
+        if(cd && Object.keys(d).length) updateIdeaMut.mutate({ id: cd.id, data: d as any });
+        setDetailIdea(null);
+      }} title={cd?.title||""} wide>
         {cd&&(()=>{const pp=(cd.postings||[]).map((p: any)=>p.page);return(
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
             <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
@@ -869,6 +898,12 @@ export default function ContentTracker(){
                 )}
               </div>
             )}
+            {["testing","proven_ideas","scheduled","posted"].includes(cd.stage) && Array.isArray(cd.approvedForPages) && cd.approvedForPages.length > 0 && (
+              <p style={{fontSize:11,color:"#71717a",margin:0,lineHeight:1.5}}>
+                <span style={{fontWeight:600,color:"#52525b"}}>Scoped to </span>
+                {cd.approvedForPages.map((h: string) => "@" + String(h).replace(/^@/,"")).join(" · ")}
+              </p>
+            )}
 
             {cd.stage==="posted"&&(
               <PostedDateEditor
@@ -880,7 +915,37 @@ export default function ContentTracker(){
             )}
 
             {/* Editable fields */}
-            <div><label style={ls}>Niches</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{niches.map((n: any)=>{const sel=detailNicheIds.includes(n.id);return <button key={n.id} onClick={()=>{const next=sel?detailNicheIds.filter((x: string)=>x!==n.id):[...detailNicheIds,n.id];setDetailNicheIds(next);saveNiches(cd.id,next);}} style={{padding:"6px 12px",borderRadius:8,border:sel?"2px solid #7c3aed":"1.5px solid #3f3f46",background:sel?"#27272a":"#18181b",fontSize:12,fontWeight:600,cursor:"pointer",color:sel?"#fff":"#71717a"}}>{n.name}</button>;})}</div></div>
+            <div><label style={ls}>Niches</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{niches.map((n: any)=>{const sel=detailNicheIds.includes(n.id);return <button key={n.id} onClick={()=>{const next=sel?detailNicheIds.filter((x: string)=>x!==n.id):[...detailNicheIds,n.id];setDetailNicheIds(next);saveNiches(cd.id,next);const newCdPages=niches.filter((nn: any)=>next.includes(nn.id)).flatMap((nn: any)=>nn.pages||[]).filter((v: string,i: number,a: string[])=>a.indexOf(v)===i);setDetailApprovedPages((prev: string[])=>{const pr=prev.filter(p=>newCdPages.some((np: string)=>normH(np)===normH(p)));if(pr.length!==prev.length) saveApprovedPages(cd.id,pr);return pr;});}} style={{padding:"6px 12px",borderRadius:8,border:sel?"2px solid #7c3aed":"1.5px solid #3f3f46",background:sel?"#27272a":"#18181b",fontSize:12,fontWeight:600,cursor:"pointer",color:sel?"#fff":"#71717a"}}>{n.name}</button>;})}</div></div>
+            {cdPages.length>0 && (cd.stage==="approved" || cd.stage==="base_edit") && (
+              <div>
+                <label style={ls}>Approved for pages</label>
+                <p style={{fontSize:11,color:"#52525b",margin:"0 0 8px",lineHeight:1.45}}>Pick which @handles this idea is approved to run on (under the niches above). Leave <strong style={{color:"#a1a1aa"}}>none</strong> selected to use <strong style={{color:"#a1a1aa"}}>all</strong> of those pages when you start testing.</p>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {cdPages.map((page: string) => {
+                    const sel = detailApprovedPages.some((af: string) => normH(af) === normH(page));
+                    return (
+                      <button
+                        key={page}
+                        type="button"
+                        onClick={() => {
+                          const next = sel ? detailApprovedPages.filter((af: string) => normH(af) !== normH(page)) : [...detailApprovedPages, page];
+                          setDetailApprovedPages(next);
+                          saveApprovedPages(cd.id, next);
+                        }}
+                        style={{
+                          padding:"6px 12px",borderRadius:8,
+                          border:sel?"2px solid #2D9E5F":"1.5px solid #3f3f46",
+                          background:sel?"rgba(45,158,95,0.12)":"#18181b",
+                          fontSize:12,fontWeight:600,cursor:"pointer",
+                          color:sel?"#5AE0A0":"#71717a",
+                        }}
+                      >@{String(page).replace(/^@/,"")}</button>
+                    );
+                  })}
+                </div>
+                <p style={{fontSize:10,color:"#3f3f46",margin:"6px 0 0"}}>{detailApprovedPages.length ? `${detailApprovedPages.length} of ${cdPages.length} selected` : `All ${cdPages.length} page${cdPages.length === 1 ? "" : "s"} available in testing`}</p>
+              </div>
+            )}
             <div><label style={ls}>Hook variations</label><SafeTextArea value={(cd.hook_variations||[]).join("\n")} onSave={v=>{const lines=v.split("\n").map((l: string)=>l.trim()).filter(Boolean);updateIdeaMut.mutate({id:cd.id,data:{hook_variations:lines.length>0?lines:null}});}} rows={3} placeholder="One hook per line" style={{...is,resize:"vertical",minHeight:60}}/></div>
             <div style={{display:"flex",gap:10}}>
               <div style={{flex:1}}><label style={ls}>Music reference / suggestions</label><SafeTextInput value={cd.music_ref} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{music_ref:v}})} placeholder="e.g. Dark cinematic, trending audio" style={is}/></div>
@@ -896,10 +961,10 @@ export default function ContentTracker(){
             {cd.comp_link&&<a href={cd.comp_link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.comp_link}</a>}
 
             {/* Page checklist — from testing stage onwards */}
-            {cdPages.length>0&&!["new","approved","base_edit"].includes(cd.stage)&&(
+            {effectiveCdPages.length>0&&!["new","approved","base_edit"].includes(cd.stage)&&(
               <div>
                 <label style={{...ls,marginBottom:8}}>Pages ({cdNiches.map((n: any)=>n.name).join(", ")}) — select, schedule & track</label>
-                {cdPages.map((page: string)=>{const isP=pp.includes(page);const pi=(cd.postings||[]).findIndex((p: any)=>p.page===page);const po=pi>=0?cd.postings[pi]:null;const dk=`${cd.id}_${page}`;
+                {effectiveCdPages.map((page: string)=>{const isP=pp.includes(page);const pi=(cd.postings||[]).findIndex((p: any)=>p.page===page);const po=pi>=0?cd.postings[pi]:null;const dk=`${cd.id}_${page}`;
                   const sBorder=isP?(cd.stage==="testing"?"1.5px solid rgba(212,149,42,0.4)":cd.stage==="proven_ideas"?"1.5px solid rgba(29,158,117,0.4)":cd.stage==="kill"?"1.5px solid rgba(201,59,59,0.4)":(cd.stage==="scheduled"||cd.stage==="posted")?"1.5px solid rgba(34,197,94,0.4)":"1.5px solid #3f3f46"):"1px solid #27272a";
                   const sBg=isP?(cd.stage==="testing"?"rgba(212,149,42,0.04)":cd.stage==="proven_ideas"?"rgba(29,158,117,0.04)":cd.stage==="kill"?"rgba(201,59,59,0.04)":(cd.stage==="scheduled"||cd.stage==="posted")?"rgba(34,197,94,0.04)":"#1a1a2e"):"#18181b";
                   return(
@@ -915,7 +980,7 @@ export default function ContentTracker(){
                       </div>
                     )}
                   </div>);})}
-                <div style={{marginTop:8,fontSize:11,color:"#52525b"}}>{pp.length}/{cdPages.length} pages selected</div>
+                <div style={{marginTop:8,fontSize:11,color:"#52525b"}}>{pp.length}/{effectiveCdPages.length} pages selected</div>
               </div>
             )}
             <button onClick={()=>deleteIdea(cd.id)} style={{...bs,color:"#FF7070",borderColor:"#3f3f46",marginTop:6,fontSize:12}}>Delete idea</button>
