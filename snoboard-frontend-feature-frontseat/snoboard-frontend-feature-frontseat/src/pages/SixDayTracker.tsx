@@ -84,8 +84,19 @@ export default function SixDayTracker() {
   const monthDate = monthData?.month_date || `${selectedMonth}-01`;
 
   /* Niche filter: map each page handle to a niche bucket (garfields / goofies / tech).
-     Niches come from tracker_niches; we match by substring on the niche name. */
-  const [nicheFilter, setNicheFilter] = useState<"all" | "garfields" | "goofies" | "tech">("all");
+     Niches come from tracker_niches; we match by substring on the niche name.
+     Multi-select: empty set == "All" (show everything). Otherwise show only
+     pages whose niche is in the selected set. */
+  type NicheKey = "garfields" | "goofies" | "tech";
+  const [nicheFilters, setNicheFilters] = useState<NicheKey[]>([]);
+  const nicheFilterSet = useMemo(() => new Set(nicheFilters), [nicheFilters]);
+  const isAllActive = nicheFilters.length === 0;
+  const toggleNiche = (k: NicheKey) => {
+    setNicheFilters((prev) =>
+      prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k],
+    );
+  };
+  const clearNiche = () => setNicheFilters([]);
 
   const handleToNiche = useMemo(() => {
     const m = new Map<string, "garfields" | "goofies" | "tech">();
@@ -116,16 +127,16 @@ export default function SixDayTracker() {
   }, [allPages, handleToNiche]);
 
   const pages = useMemo(() => {
-    if (nicheFilter === "all") return allPages;
+    if (isAllActive) return allPages;
     return allPages.filter((p: any) => {
       const key = handleToNiche.get(String(p.handle || "").replace(/^@/, "").trim().toLowerCase());
-      return key === nicheFilter;
+      return !!key && nicheFilterSet.has(key);
     });
-  }, [allPages, handleToNiche, nicheFilter]);
+  }, [allPages, handleToNiche, nicheFilterSet, isAllActive]);
 
   const allowedPageIds = useMemo(
-    () => (nicheFilter === "all" ? null : new Set(pages.map((p: any) => p.id))),
-    [pages, nicheFilter],
+    () => (isAllActive ? null : new Set(pages.map((p: any) => p.id))),
+    [pages, isAllActive],
   );
 
   const cycles = useMemo(() => {
@@ -305,22 +316,35 @@ export default function SixDayTracker() {
           )}
         </div>
 
-        {/* Niche filter */}
+        {/* Niche filter (multi-select: click to toggle, All clears) */}
         <div className="mb-5 flex flex-wrap items-center gap-2">
           <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold mr-1">
             Filter by niche
           </span>
+          <button
+            onClick={clearNiche}
+            className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-full border text-xs font-bold transition-all ${
+              isAllActive
+                ? "bg-violet-600 text-white border-violet-500 shadow-lg shadow-violet-600/20"
+                : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700"
+            }`}
+          >
+            <span>All</span>
+            <span className={`text-[10px] tabular-nums ${isAllActive ? "opacity-80" : "text-zinc-500"}`}>
+              {nicheCounts.all}
+            </span>
+          </button>
           {([
-            { key: "all", label: "All", emoji: "", count: nicheCounts.all, active: "bg-violet-600 text-white border-violet-500 shadow-lg shadow-violet-600/20" },
             { key: "garfields", label: "Garfields", emoji: "🐱", count: nicheCounts.garfields, active: "bg-gradient-to-r from-orange-500 to-amber-500 text-zinc-900 border-orange-400 shadow-lg shadow-orange-500/25" },
             { key: "goofies", label: "Goofies", emoji: "🐶", count: nicheCounts.goofies, active: "bg-gradient-to-r from-sky-500 to-indigo-500 text-white border-indigo-400 shadow-lg shadow-indigo-500/25" },
             { key: "tech", label: "Tech", emoji: "💻", count: nicheCounts.tech, active: "bg-gradient-to-r from-emerald-500 to-teal-500 text-zinc-900 border-emerald-400 shadow-lg shadow-emerald-500/25" },
           ] as const).map((opt) => {
-            const isActive = nicheFilter === opt.key;
+            const isActive = nicheFilterSet.has(opt.key);
             return (
               <button
                 key={opt.key}
-                onClick={() => setNicheFilter(opt.key)}
+                onClick={() => toggleNiche(opt.key)}
+                aria-pressed={isActive}
                 className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-full border text-xs font-bold transition-all ${
                   isActive
                     ? opt.active
@@ -335,12 +359,18 @@ export default function SixDayTracker() {
               </button>
             );
           })}
-          {nicheFilter !== "all" && (
+          {!isAllActive && (
             <span className="text-[11px] text-zinc-500 ml-1">
               Showing <span className="text-white font-semibold">{pages.length}</span> account{pages.length === 1 ? "" : "s"}
+              <button
+                onClick={clearNiche}
+                className="ml-2 text-[10px] uppercase tracking-wider text-zinc-500 hover:text-white underline-offset-2 hover:underline"
+              >
+                Clear
+              </button>
             </span>
           )}
-          {nicheCounts.none > 0 && nicheFilter === "all" && (
+          {nicheCounts.none > 0 && isAllActive && (
             <span className="text-[10px] text-zinc-600 ml-auto italic">
               {nicheCounts.none} account{nicheCounts.none === 1 ? "" : "s"} not in a niche yet
             </span>
