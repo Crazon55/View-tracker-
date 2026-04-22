@@ -1865,6 +1865,18 @@ async def teams_performance():
 # --- Ideas ---
 
 
+def _merge_apfp_into_tags(tags, pages) -> list:
+    """Store approved page handles in tags when approved_for_pages column is missing."""
+    import json
+    from urllib.parse import quote
+
+    afp = "__apfp1:"
+    rest = [t for t in (tags or []) if not str(t).startswith(afp)]
+    if not isinstance(pages, list) or len(pages) == 0:
+        return rest
+    return rest + [afp + quote(json.dumps(pages), safe="")]
+
+
 def _tracker_ideas_approved_for_pages_col_exists(client) -> bool:
     """True if approved_for_pages exists (migration_approved_for_pages.sql)."""
     c = getattr(_tracker_ideas_approved_for_pages_col_exists, "_cache", None)
@@ -1929,7 +1941,9 @@ async def tracker_ideas_create(request: Request):
     row = {k: v for k, v in row.items() if v is not None}
     row.setdefault("title", body["title"])
     if not _tracker_ideas_approved_for_pages_col_exists(client):
-        row.pop("approved_for_pages", None)
+        apv = row.pop("approved_for_pages", None)
+        if apv is not None:
+            row["tags"] = _merge_apfp_into_tags(row.get("tags") or [], apv if isinstance(apv, list) else [])
     result = client.table("tracker_ideas").insert(row).execute().data[0]
     return {"success": True, "data": result}
 
@@ -2036,7 +2050,24 @@ async def tracker_ideas_update(idea_id: str, request: Request):
             allowed.pop(k, None)
 
     if not _tracker_ideas_approved_for_pages_col_exists(client):
-        allowed.pop("approved_for_pages", None)
+        if "approved_for_pages" in allowed:
+            ap_body = body.get("approved_for_pages")
+            allowed.pop("approved_for_pages", None)
+            # Persist the selection via tags when the JSONB column is not deployed yet.
+            if "tags" not in allowed and "approved_for_pages" in body and ap_body is not None:
+                try:
+                    row = (
+                        client.table("tracker_ideas")
+                        .select("tags")
+                        .eq("id", idea_id)
+                        .execute()
+                        .data
+                        or []
+                    )[0] or {}
+                    t = list(row.get("tags") or [])
+                except Exception:
+                    t = []
+                allowed["tags"] = _merge_apfp_into_tags(t, ap_body if isinstance(ap_body, list) else [])
 
     try:
         client.table("tracker_ideas").update(allowed).eq("id", idea_id).execute()
