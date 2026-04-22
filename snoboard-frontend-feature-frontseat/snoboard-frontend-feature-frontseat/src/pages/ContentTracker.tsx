@@ -46,6 +46,13 @@ const fmtDFull = (d: string) => { const dt=new Date(d+"T00:00:00"); return dt.to
 const fmtNum = (n: number) => { if(n>=1000000) return (n/1000000).toFixed(1)+"M"; if(n>=1000) return (n/1000).toFixed(1)+"k"; return n.toString(); };
 /** Match niche page handle strings (with or without @) */
 const normH = (s: string) => String(s).replace(/^@/,"").trim().toLowerCase();
+function sortStrArr(a: string[]) { return [...a].map(String).sort(); }
+function nicheIdsEqual(a: string[] | undefined, b: string[] | undefined) {
+  return JSON.stringify(sortStrArr(a || [])) === JSON.stringify(sortStrArr(b || []));
+}
+function approvedPagesEqual(a: string[] | undefined, b: string[] | undefined) {
+  return JSON.stringify(sortStrArr((a || []).map(normH))) === JSON.stringify(sortStrArr((b || []).map(normH)));
+}
 const gPerf = (v: number|null, b: number|null) => { if(!v||!b) return null; const r=v/b; if(r>=20) return "viral"; if(r>=5) return "topline"; if(r>=0.8) return "baseline"; return "below"; };
 const getMonday = (d: string) => { const dt=new Date(d+"T00:00:00"); const day=dt.getDay(); dt.setDate(dt.getDate()-day+(day===0?-6:1)); return toLocalISO(dt); };
 const addD = (s: string, n: number) => { const d=new Date(s+"T00:00:00"); d.setDate(d.getDate()+n); return toLocalISO(d); };
@@ -543,14 +550,20 @@ export default function ContentTracker(){
   const saveNiches=useCallback((ideaId: string, next: string[])=>{
     nicheSaveRef.current=next;
     if(nicheSaveTimer.current) clearTimeout(nicheSaveTimer.current);
-    nicheSaveTimer.current=setTimeout(()=>{updateIdeaMut.mutate({id:ideaId,data:{niche_ids:nicheSaveRef.current}});},400);
+    nicheSaveTimer.current=setTimeout(()=>{
+      updateIdeaMut.mutate({id:ideaId,data:{niche_ids:nicheSaveRef.current}});
+      nicheSaveTimer.current=null;
+    },400);
   },[]);
   const approvedSaveTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const approvedSaveRef=useRef<string[]>([]);
   const saveApprovedPages=useCallback((ideaId: string, next: string[])=>{
     approvedSaveRef.current=next;
     if(approvedSaveTimer.current) clearTimeout(approvedSaveTimer.current);
-    approvedSaveTimer.current=setTimeout(()=>{updateIdeaMut.mutate({id:ideaId,data:{approved_for_pages:approvedSaveRef.current}});},400);
+    approvedSaveTimer.current=setTimeout(()=>{
+      updateIdeaMut.mutate({id:ideaId,data:{approved_for_pages:approvedSaveRef.current}});
+      approvedSaveTimer.current=null;
+    },400);
   },[]);
   const [settingsOpen,setSettingsOpen]=useState(false);
   const [addNicheOpen,setAddNicheOpen]=useState(false);
@@ -604,9 +617,15 @@ export default function ContentTracker(){
     setAddOpen(false);
   }
   function moveIdea(id: string, ns: string){
+    if(approvedSaveTimer.current){ clearTimeout(approvedSaveTimer.current); approvedSaveTimer.current=null; }
+    if(nicheSaveTimer.current){ clearTimeout(nicheSaveTimer.current); nicheSaveTimer.current=null; }
     const data: Record<string, unknown> = { stage: ns, actor: user?.user_metadata?.full_name || user?.email?.split("@")[0] || user?.email || null };
-    if(approvedSaveTimer.current){ clearTimeout(approvedSaveTimer.current); approvedSaveTimer.current=null; (data as any).approved_for_pages = approvedSaveRef.current; }
-    if(nicheSaveTimer.current){ clearTimeout(nicheSaveTimer.current); nicheSaveTimer.current=null; (data as any).niche_ids = nicheSaveRef.current; }
+    // Always push latest modal state for the open idea so page/niche picks persist
+    // when moving stage (timer may have already fired and nulled itself).
+    if(detailIdea && detailIdea.id===id){
+      (data as any).niche_ids = detailNicheIds;
+      (data as any).approved_for_pages = detailApprovedPages;
+    }
     updateIdeaMut.mutate({ id, data: data as any });
   }
   function deleteIdea(id: string){
@@ -717,8 +736,12 @@ export default function ContentTracker(){
   const counts: Record<string,number>={};STAGES.forEach(s=>{counts[s]=filteredIdeas.filter(i=>i.stage===s).length;});
   function openDetail(idea: any){
     setDetailIdea(idea);
-    setDetailNicheIds(idea.nicheIds||[]);
-    setDetailApprovedPages(Array.isArray(idea.approvedForPages) ? idea.approvedForPages : []);
+    const nids = idea.nicheIds||[];
+    const ap = Array.isArray(idea.approvedForPages) ? idea.approvedForPages : [];
+    setDetailNicheIds(nids);
+    setDetailApprovedPages(ap);
+    nicheSaveRef.current = nids;
+    approvedSaveRef.current = ap;
     setScheduleDate({});
   }
 
@@ -870,10 +893,14 @@ export default function ContentTracker(){
 
       {/* Detail Modal */}
       <Modal open={!!cd} onClose={()=>{
-        const d: Record<string, unknown> = {};
-        if(approvedSaveTimer.current){ clearTimeout(approvedSaveTimer.current); approvedSaveTimer.current=null; d.approved_for_pages = approvedSaveRef.current; }
-        if(nicheSaveTimer.current){ clearTimeout(nicheSaveTimer.current); nicheSaveTimer.current=null; d.niche_ids = nicheSaveRef.current; }
-        if(cd && Object.keys(d).length) updateIdeaMut.mutate({ id: cd.id, data: d as any });
+        if(approvedSaveTimer.current){ clearTimeout(approvedSaveTimer.current); approvedSaveTimer.current=null; }
+        if(nicheSaveTimer.current){ clearTimeout(nicheSaveTimer.current); nicheSaveTimer.current=null; }
+        if(cd){
+          const d: Record<string, unknown> = {};
+          if(!nicheIdsEqual(detailNicheIds, cd.nicheIds)) d.niche_ids = detailNicheIds;
+          if(!approvedPagesEqual(detailApprovedPages, cd.approvedForPages)) d.approved_for_pages = detailApprovedPages;
+          if(Object.keys(d).length) updateIdeaMut.mutate({ id: cd.id, data: d as any });
+        }
         setDetailIdea(null);
       }} title={cd?.title||""} wide>
         {cd&&(()=>{const pp=(cd.postings||[]).map((p: any)=>p.page);return(
