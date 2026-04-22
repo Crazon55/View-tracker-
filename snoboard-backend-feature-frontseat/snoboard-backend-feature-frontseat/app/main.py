@@ -2297,6 +2297,7 @@ async def bandwidth_tracker(
       reel_comp        source=competitor, date=created_at
       reel_og          source=original,   date=created_at
       reel_base_edits  stage==base_edit
+      reel_testing     stage==testing
       reel_pintu       stage==proven_ideas
       reel_posted      stage==posted
 
@@ -2452,7 +2453,7 @@ async def bandwidth_tracker(
 
     METRIC_KEYS = (
         # Reel pipeline (CS creates, CDI edits + posts)
-        "reel_comp", "reel_og", "reel_base_edits", "reel_pintu", "reel_posted",
+        "reel_comp", "reel_og", "reel_base_edits", "reel_testing", "reel_pintu", "reel_posted",
         # Post pipeline (CW creates + edits + posts)
         "post_comp", "post_og", "post_mm", "post_edits", "post_posted",
     )
@@ -2487,6 +2488,7 @@ async def bandwidth_tracker(
     # Each metric is counted only when the idea is currently sitting in that
     # exact kanban column, matching what the user sees in the trackers.
     REEL_STAGE_BASE_EDIT = {"base_edit"}
+    REEL_STAGE_TESTING   = {"testing"}
     REEL_STAGE_PINTU     = {"proven_ideas"}
     REEL_STAGE_POSTED    = {"posted"}
     POST_STAGE_EDITS     = {"scripted"}
@@ -2517,6 +2519,17 @@ async def bandwidth_tracker(
                 be_name = _norm_name(idea.get("base_edit_by") or created_by)
                 if be_day and be_name and _in_window(be_day):
                     _bump(be_name, niche_team, be_day, "reel_base_edits")
+
+            # Testing: currently sitting in the testing column. No dedicated
+            # `testing_by` column yet — the CDI who did the base edit owns the
+            # testing loop, so we credit base_edit_by (falling back to the
+            # creator). Date is base_edit_at if we have it, otherwise the
+            # idea's created_at.
+            if stage in REEL_STAGE_TESTING:
+                te_day = _date_key(idea.get("base_edit_at")) or created_at_day
+                te_name = _norm_name(idea.get("base_edit_by") or created_by)
+                if te_day and te_name and _in_window(te_day):
+                    _bump(te_name, niche_team, te_day, "reel_testing")
 
             # Pintu: currently sitting in proven_ideas column.
             if stage in REEL_STAGE_PINTU:
