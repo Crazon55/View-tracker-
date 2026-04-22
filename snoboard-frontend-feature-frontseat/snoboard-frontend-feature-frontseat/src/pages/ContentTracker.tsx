@@ -53,6 +53,30 @@ function nicheIdsEqual(a: string[] | undefined, b: string[] | undefined) {
 function approvedPagesEqual(a: string[] | undefined, b: string[] | undefined) {
   return JSON.stringify(sortStrArr((a || []).map(normH))) === JSON.stringify(sortStrArr((b || []).map(normH)));
 }
+/** Persists in `tags` when the DB has no `approved_for_pages` column (see migration). */
+const AFP_TAG_PREFIX = "__apfp1:";
+function parseApprovedForPagesFromRaw(raw: any): string[] {
+  const c = raw?.approved_for_pages;
+  if (Array.isArray(c) && c.length > 0) return c.map(String);
+  if (typeof c === "string" && c.trim().startsWith("[")) {
+    try { const p = JSON.parse(c); if (Array.isArray(p) && p.length) return p.map(String); } catch { /* */ }
+  }
+  const t = (raw?.tags || []).find((x: any) => String(x).startsWith(AFP_TAG_PREFIX));
+  if (t) {
+    try {
+      const a = JSON.parse(decodeURIComponent(String(t).slice(AFP_TAG_PREFIX.length)));
+      if (Array.isArray(a) && a.length) return a.map(String);
+    } catch { /* */ }
+  }
+  return Array.isArray(c) ? c.map(String) : [];
+}
+function mergeAfpIntoTags(tags: string[] | undefined, pages: string[]): string[] {
+  const rest = (tags || []).filter((t) => !String(t).startsWith(AFP_TAG_PREFIX));
+  if (pages && pages.length > 0) {
+    return [...rest, `${AFP_TAG_PREFIX}${encodeURIComponent(JSON.stringify(pages))}`];
+  }
+  return rest;
+}
 const gPerf = (v: number|null, b: number|null) => { if(!v||!b) return null; const r=v/b; if(r>=20) return "viral"; if(r>=5) return "topline"; if(r>=0.8) return "baseline"; return "below"; };
 const getMonday = (d: string) => { const dt=new Date(d+"T00:00:00"); const day=dt.getDay(); dt.setDate(dt.getDate()-day+(day===0?-6:1)); return toLocalISO(dt); };
 const addD = (s: string, n: number) => { const d=new Date(s+"T00:00:00"); d.setDate(d.getDate()+n); return toLocalISO(d); };
@@ -81,7 +105,7 @@ function mapIdea(raw: any): any {
       views: p.views,
       perf_tag: p.perf_tag || null,
     })),
-    approvedForPages: Array.isArray(raw.approved_for_pages) ? raw.approved_for_pages : [],
+    approvedForPages: parseApprovedForPagesFromRaw(raw),
   };
 }
 
@@ -483,6 +507,8 @@ export default function ContentTracker(){
   const niches = rawNiches as any[];
   const ideas = useMemo(() => (rawIdeas as any[]).map(mapIdea), [rawIdeas]);
   const isLoading = nichesLoading || ideasLoading;
+  const ideasRef = useRef(ideas);
+  ideasRef.current = ideas;
 
   // ---- Mutations ----
   const invalidate = () => {
@@ -561,7 +587,12 @@ export default function ContentTracker(){
     approvedSaveRef.current=next;
     if(approvedSaveTimer.current) clearTimeout(approvedSaveTimer.current);
     approvedSaveTimer.current=setTimeout(()=>{
-      updateIdeaMut.mutate({id:ideaId,data:{approved_for_pages:approvedSaveRef.current}});
+      const ap = approvedSaveRef.current;
+      const idea = ideasRef.current.find((i: any) => i.id === ideaId);
+      updateIdeaMut.mutate({
+        id: ideaId,
+        data: { approved_for_pages: ap, tags: mergeAfpIntoTags(idea?.tags, ap) },
+      });
       approvedSaveTimer.current=null;
     },400);
   },[]);
@@ -625,6 +656,7 @@ export default function ContentTracker(){
     if(detailIdea && detailIdea.id===id){
       (data as any).niche_ids = detailNicheIds;
       (data as any).approved_for_pages = detailApprovedPages;
+      (data as any).tags = mergeAfpIntoTags(ideasRef.current.find((i: any) => i.id === id)?.tags, detailApprovedPages);
     }
     updateIdeaMut.mutate({ id, data: data as any });
   }
@@ -654,7 +686,7 @@ export default function ContentTracker(){
       yt_timestamps: idea.yt_timestamps || null,
       comp_link: idea.comp_link || null,
       frame_link: idea.frame_link || null,
-      tags: idea.tags || [],
+      tags: (idea.tags || []).filter((t: string) => !String(t).startsWith(AFP_TAG_PREFIX)),
       format: idea.format || null,
       main_page_hook: idea.main_page_hook || null,
       content_pillar: idea.content_pillar || null,
@@ -898,7 +930,10 @@ export default function ContentTracker(){
         if(cd){
           const d: Record<string, unknown> = {};
           if(!nicheIdsEqual(detailNicheIds, cd.nicheIds)) d.niche_ids = detailNicheIds;
-          if(!approvedPagesEqual(detailApprovedPages, cd.approvedForPages)) d.approved_for_pages = detailApprovedPages;
+          if(!approvedPagesEqual(detailApprovedPages, cd.approvedForPages)) {
+            d.approved_for_pages = detailApprovedPages;
+            d.tags = mergeAfpIntoTags(cd.tags, detailApprovedPages);
+          }
           if(Object.keys(d).length) updateIdeaMut.mutate({ id: cd.id, data: d as any });
         }
         setDetailIdea(null);
