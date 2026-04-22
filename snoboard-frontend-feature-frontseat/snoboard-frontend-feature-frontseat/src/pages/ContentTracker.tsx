@@ -203,17 +203,37 @@ function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove,stage}: {po:any;
   );
 }
 
-function IdeaCard({idea,niches,onClick}: {idea:any;niches:any[];onClick:()=>void}){
+function IdeaCard({idea,niches,onClick,onDuplicate,duplicating}: {idea:any;niches:any[];onClick:()=>void;onDuplicate?:()=>void;duplicating?:boolean}){
   const ideaNiches=niches.filter((n: any)=>(idea.nicheIds||[]).includes(n.id));
   const pc=idea.postings?.length||0;
   const bp=idea.postings?.reduce((b: string|null, p: any)=>{const t=gPerf(p.views,p.baselineViews);const o: Record<string,number>={viral:4,topline:3,baseline:2,below:1};return(o[t||""]||0)>(o[b||""]||0)?t:b;},null);
   const hv=idea.hook_variations?.length||0;
+  // Duplicate affordance is only relevant once an idea has been proven.
+  // Shown as a tiny icon button in the top-right so multiple owners
+  // (e.g. Swati -> Pulkit) can fork a winning idea without fighting over
+  // the same card. created_by gets re-stamped to the current user.
+  const canDuplicate = !!onDuplicate && idea.stage === "proven_ideas";
   return(
-    <div onClick={onClick} style={{background:"#18181b",borderRadius:10,padding:"11px 13px",marginBottom:5,border:"1px solid #27272a",cursor:"grab",transition:"box-shadow 0.15s"}}
+    <div onClick={onClick} style={{background:"#18181b",borderRadius:10,padding:"11px 13px",marginBottom:5,border:"1px solid #27272a",cursor:"grab",transition:"box-shadow 0.15s",position:"relative"}}
       onMouseEnter={e=>(e.currentTarget.style.boxShadow="0 3px 12px rgba(0,0,0,0.3)")} onMouseLeave={e=>(e.currentTarget.style.boxShadow="none")}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
         <p style={{margin:0,fontSize:13,fontWeight:500,color:"#fff",lineHeight:1.35,flex:1}}>{idea.title}</p>
-        {bp&&<PB tag={bp}/>}
+        <div style={{display:"flex",gap:4,alignItems:"center",flexShrink:0}}>
+          {bp&&<PB tag={bp}/>}
+          {canDuplicate&&(
+            <button
+              onClick={e=>{e.stopPropagation();if(!duplicating)onDuplicate!();}}
+              disabled={duplicating}
+              title="Duplicate for me — makes a copy with me as the owner"
+              aria-label="Duplicate idea"
+              style={{padding:"2px 6px",borderRadius:6,border:"1px solid #3f3f46",background:"#27272a",color:duplicating?"#52525b":"#a1a1aa",fontSize:11,fontWeight:600,cursor:duplicating?"wait":"pointer",lineHeight:1,display:"inline-flex",alignItems:"center",gap:3}}
+              onMouseDown={e=>e.stopPropagation()}
+              draggable={false}
+            >
+              {duplicating?"…":"⎘"}
+            </button>
+          )}
+        </div>
       </div>
       {/* Tags row */}
       <div style={{display:"flex",gap:4,marginTop:6,flexWrap:"wrap",alignItems:"center"}}>
@@ -583,6 +603,40 @@ export default function ContentTracker(){
     setDetailIdea(null);
   }
 
+  // Fork a proven idea so a second CDI (e.g. Pulkit wants Swati's idea for
+  // his niche) gets their own card with their own postings / attribution.
+  // Everything content-related (title, hooks, music, links, niches) copies
+  // over; everything attribution-related (who created it, who base-edited,
+  // tested results, postings) resets to a fresh start owned by the current
+  // user.
+  function duplicateIdea(idea: any){
+    const me = user?.user_metadata?.full_name || user?.email?.split("@")[0] || user?.email || null;
+    const payload: Record<string, any> = {
+      title: idea.title,
+      source: idea.source || "original",
+      niche_ids: idea.nicheIds || [],
+      stage: "proven_ideas",
+      type: idea.type || "reel",
+      created_by: me,
+      hook_variations: (idea.hook_variations && idea.hook_variations.length) ? idea.hook_variations : null,
+      music_ref: idea.music_ref || null,
+      yt_url: idea.yt_url || null,
+      yt_timestamps: idea.yt_timestamps || null,
+      comp_link: idea.comp_link || null,
+      frame_link: idea.frame_link || null,
+      tags: idea.tags || [],
+      format: idea.format || null,
+      main_page_hook: idea.main_page_hook || null,
+      content_pillar: idea.content_pillar || null,
+      content_bucket: idea.content_bucket || null,
+      caption: idea.caption || null,
+      canva_link: idea.canva_link || null,
+    };
+    createIdeaMut.mutate(payload, {
+      onSuccess: () => toast.success(`Duplicated — you're now the owner`),
+    });
+  }
+
   function togglePage(iid: string, page: string, bv: any, date: string){
     const idea = ideas.find(i => i.id === iid);
     if (!idea) return;
@@ -723,7 +777,7 @@ export default function ContentTracker(){
               <div style={{minHeight:50,padding:1,borderRadius:9,transition:"all 0.15s",border:dropStage===stage?"2px solid #7c3aed":"2px solid transparent",background:dropStage===stage?"rgba(124,58,237,0.05)":"transparent"}}>
                 {filteredIdeas.filter(i=>i.stage===stage).sort((a,b)=>b.createdAt-a.createdAt).map(idea=>(
                   <div key={idea.id} draggable onDragStart={e=>{setDraggingId(idea.id);e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain",idea.id);}} onDragEnd={()=>{setDraggingId(null);setDropStage(null);}} style={{opacity:draggingId===idea.id?0.4:1,transition:"opacity 0.15s"}}>
-                    <IdeaCard idea={idea} niches={niches} onClick={()=>openDetail(idea)}/>
+                    <IdeaCard idea={idea} niches={niches} onClick={()=>openDetail(idea)} onDuplicate={()=>duplicateIdea(idea)} duplicating={createIdeaMut.isPending}/>
                   </div>
                 ))}
                 {counts[stage]===0&&<div style={{padding:"24px 12px",textAlign:"center",color:"#3f3f46",fontSize:11,border:"1.5px dashed #3f3f46",borderRadius:9}}>Empty</div>}
@@ -750,6 +804,9 @@ export default function ContentTracker(){
                   <span style={{fontSize:11,color:"#52525b"}}>{ideaNiches.map((n: any)=>n.name).join(", ")}</span>
                   <span style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:idea.source==="competitor"?"#EEEDFE":"#E8F5EE",color:idea.source==="competitor"?"#534AB7":"#1A5E3A",fontWeight:500}}>{idea.source==="competitor"?"Comp":"Orig"}</span>
                   {idea.postings?.length>0&&<span style={{fontSize:10,color:"#52525b"}}>{idea.postings.length}pg</span>}
+                  {idea.stage==="proven_ideas"&&(
+                    <button onClick={e=>{e.stopPropagation();if(!createIdeaMut.isPending)duplicateIdea(idea);}} disabled={createIdeaMut.isPending} title="Duplicate for me — makes a copy with me as the owner" style={{padding:"3px 8px",borderRadius:6,border:"1px solid #3f3f46",background:"#27272a",color:createIdeaMut.isPending?"#52525b":"#a1a1aa",fontSize:11,fontWeight:600,cursor:createIdeaMut.isPending?"wait":"pointer"}}>⎘ Duplicate</button>
+                  )}
                 </div>);})}
             </div>
           );})}
@@ -797,7 +854,21 @@ export default function ContentTracker(){
               <span style={{fontSize:11,padding:"3px 9px",borderRadius:99,background:cd.source==="competitor"?"#EEEDFE":"#E8F5EE",color:cd.source==="competitor"?"#534AB7":"#1A5E3A",fontWeight:500}}>{cd.source==="competitor"?"Competitor":"Original"}</span>
               {cdNiches.map((n: any)=><span key={n.id} style={{fontSize:11,padding:"3px 9px",borderRadius:99,background:"#27272a",color:"#a1a1aa",fontWeight:500}}>{n.name}</span>)}
             </div>
-            {sa[cd.stage]?.length>0&&<div style={{display:"flex",gap:6}}>{sa[cd.stage].map(a=><button key={a.stage} onClick={()=>moveIdea(cd.id,a.stage)} style={a.style}>{a.label}</button>)}</div>}
+            {(sa[cd.stage]?.length>0||cd.stage==="proven_ideas")&&(
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {sa[cd.stage]?.map(a=><button key={a.stage} onClick={()=>moveIdea(cd.id,a.stage)} style={a.style}>{a.label}</button>)}
+                {cd.stage==="proven_ideas"&&(
+                  <button
+                    onClick={()=>{duplicateIdea(cd);setDetailIdea(null);}}
+                    disabled={createIdeaMut.isPending}
+                    title="Creates a copy with you as the owner so two people can ship the same idea"
+                    style={{...bs,opacity:createIdeaMut.isPending?0.5:1,cursor:createIdeaMut.isPending?"wait":"pointer"}}
+                  >
+                    {createIdeaMut.isPending?"Duplicating…":"⎘ Duplicate for me"}
+                  </button>
+                )}
+              </div>
+            )}
 
             {cd.stage==="posted"&&(
               <PostedDateEditor
