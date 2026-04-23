@@ -107,13 +107,14 @@ function mapIdea(raw: any): any {
       perf_tag: p.perf_tag || null,
     })),
     approvedForPages: parseApprovedForPagesFromRaw(raw),
-    pintu_set_at: raw.pintu_set_at ?? null,
-    pintu_set_by: raw.pintu_set_by ?? null,
     killed_at: raw.killed_at ?? null,
   };
 }
 
-/** All-time content tracker stats (reel ideas). Scaled = stamped on testing → proven. */
+/** Stages that count as “past testing” for the Scaled header (current board state). */
+const SCALED_STAGES = new Set(["proven_ideas", "scheduled", "posted"]);
+
+/** Content tracker header stats (reel ideas). Scaled = ideas currently in Proven, Scheduled, or Posted. */
 function contentTrackerLifecycleStats(ideas: any[]) {
   let nComp = 0;
   let nOrig = 0;
@@ -125,11 +126,9 @@ function contentTrackerLifecycleStats(ideas: any[]) {
     if (src === "competitor") nComp += 1;
     else if (src === "original") nOrig += 1;
     else nOther += 1;
-    const hasProvenStamp =
-      (i.pintu_set_at != null && String(i.pintu_set_at).length > 0) ||
-      (i.pintu_set_by != null && String(i.pintu_set_by).trim() !== "");
-    if (hasProvenStamp) scaled += 1;
-    if (i.stage === "kill") killed += 1;
+    const st = (i.stage || "") as string;
+    if (SCALED_STAGES.has(st)) scaled += 1;
+    if (st === "kill") killed += 1;
   }
   const denom = ideas.length;
   const pct = (c: number) => (denom > 0 ? (100 * c) / denom : 0);
@@ -788,7 +787,7 @@ export default function ContentTracker(){
             <p style={{margin:"3px 0 0",fontSize:12,color:"#71717a"}}>{ideas.length} ideas · {niches.length} niches · {niches.reduce((a: number,n: any)=>a+n.pages.length,0)} pages</p>
             <p
               style={{ margin: "6px 0 0", fontSize: 11, color: "#a1a1aa", lineHeight: 1.5, maxWidth: 900 }}
-              title="Source % is share of all ideas. Scaled = ideas that were moved from Testing to Proven / Batch edit (stamped once; not the same as current Proven count). Killed = ideas in the Killed column."
+              title="Source % = each label’s share of all ideas. Scaled = ideas currently in Proven, Scheduled, or Posted (past Testing)—if you move an idea back to Testing, it leaves this count. Killed = ideas in the Killed column."
             >
               <span style={{ color: "#71717a" }}>Source</span>{" "}
               — Original {lifecycleStats.origPct.toFixed(0)}% ({lifecycleStats.nOrig}) · Comp {lifecycleStats.compPct.toFixed(0)}% ({lifecycleStats.nComp})
@@ -796,8 +795,11 @@ export default function ContentTracker(){
                 <> · Other {lifecycleStats.otherPct.toFixed(0)}% ({lifecycleStats.nOther})</>
               )}
               <span style={{ color: "#3f3f46" }}> · </span>
-              <span style={{ color: "#50E0B0" }} title="Times an idea was moved from Testing to Proven / Batch edit (tracked by proven stamp)">
-                Scaled (testing → proven): {lifecycleStats.scaled}
+              <span
+                style={{ color: "#50E0B0" }}
+                title="Live count: ideas in Proven / Batch edit, Scheduled, or Posted. Moving an idea from Proven back to Testing removes it from this number."
+              >
+                Scaled (past testing): {lifecycleStats.scaled}
               </span>
               <span style={{ color: "#3f3f46" }}> · </span>
               <span style={{ color: "#FF7070" }} title="Ideas in the Killed column">{lifecycleStats.killed} killed</span>
