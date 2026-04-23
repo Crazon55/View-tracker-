@@ -114,6 +114,18 @@ function mapIdea(raw: any): any {
 /** Stages that count as “past testing” for the Scaled header (current board state). */
 const SCALED_STAGES = new Set(["proven_ideas", "scheduled", "posted"]);
 
+/** Filter ideas for header stats by `created_at` (YYYY-MM-DD, local). */
+function filterIdeasByCreatedDateRange(ideas: any[], from: string, to: string): any[] {
+  if (!from || !to) return ideas;
+  const lo = from <= to ? from : to;
+  const hi = from <= to ? to : from;
+  return ideas.filter((i) => {
+    const d = (i.created_at || "").slice(0, 10);
+    if (!d) return false;
+    return d >= lo && d <= hi;
+  });
+}
+
 /** Content tracker header stats (reel ideas). Scaled = ideas currently in Proven, Scheduled, or Posted. */
 function contentTrackerLifecycleStats(ideas: any[]) {
   let nComp = 0;
@@ -523,7 +535,22 @@ export default function ContentTracker(){
 
   const niches = rawNiches as any[];
   const ideas = useMemo(() => (rawIdeas as any[]).map(mapIdea), [rawIdeas]);
-  const lifecycleStats = useMemo(() => contentTrackerLifecycleStats(ideas), [ideas]);
+  /** Header Source / Scaled / Killed: default today; optional all-time or custom created-date range. */
+  const [statFilterMode, setStatFilterMode] = useState<"today" | "all" | "custom">("today");
+  const [statFrom, setStatFrom] = useState(() => today());
+  const [statTo, setStatTo] = useState(() => today());
+  const ideasForHeaderStats = useMemo(() => {
+    if (statFilterMode === "all") return ideas;
+    if (statFilterMode === "today") {
+      const t = today();
+      return filterIdeasByCreatedDateRange(ideas, t, t);
+    }
+    if (statFilterMode === "custom" && statFrom && statTo) {
+      return filterIdeasByCreatedDateRange(ideas, statFrom, statTo);
+    }
+    return [];
+  }, [ideas, statFilterMode, statFrom, statTo]);
+  const lifecycleStats = useMemo(() => contentTrackerLifecycleStats(ideasForHeaderStats), [ideasForHeaderStats]);
   const isLoading = nichesLoading || ideasLoading;
   const ideasRef = useRef(ideas);
   ideasRef.current = ideas;
@@ -785,10 +812,96 @@ export default function ContentTracker(){
           <div>
             <h1 style={{margin:0,fontSize:20,fontWeight:700,letterSpacing:"-0.03em"}}>Content tracker</h1>
             <p style={{margin:"3px 0 0",fontSize:12,color:"#71717a"}}>{ideas.length} ideas · {niches.length} niches · {niches.reduce((a: number,n: any)=>a+n.pages.length,0)} pages</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 8 }}>
+              <span style={{ fontSize: 10, color: "#71717a", fontWeight: 600, letterSpacing: "0.04em" }}>STATS SCOPE</span>
+              <button
+                type="button"
+                onClick={() => setStatFilterMode("today")}
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: 6,
+                  border: statFilterMode === "today" ? "1px solid #7c3aed" : "1px solid #3f3f46",
+                  background: statFilterMode === "today" ? "rgba(124,58,237,0.2)" : "transparent",
+                  color: statFilterMode === "today" ? "#fff" : "#a1a1aa",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatFilterMode("all")}
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: 6,
+                  border: statFilterMode === "all" ? "1px solid #7c3aed" : "1px solid #3f3f46",
+                  background: statFilterMode === "all" ? "rgba(124,58,237,0.2)" : "transparent",
+                  color: statFilterMode === "all" ? "#fff" : "#a1a1aa",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                All time
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setStatFilterMode("custom");
+                  setStatFrom((f) => f || today());
+                  setStatTo((t) => t || today());
+                }}
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: 6,
+                  border: statFilterMode === "custom" ? "1px solid #7c3aed" : "1px solid #3f3f46",
+                  background: statFilterMode === "custom" ? "rgba(124,58,237,0.2)" : "transparent",
+                  color: statFilterMode === "custom" ? "#fff" : "#a1a1aa",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Custom
+              </button>
+              {statFilterMode === "custom" && (
+                <>
+                  <input
+                    type="date"
+                    value={statFrom}
+                    onChange={(e) => setStatFrom(e.target.value)}
+                    style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #3f3f46", fontSize: 11, background: "#09090b", color: "#e4e4e7" }}
+                    title="Created on or after"
+                  />
+                  <span style={{ fontSize: 10, color: "#52525b" }}>to</span>
+                  <input
+                    type="date"
+                    value={statTo}
+                    onChange={(e) => setStatTo(e.target.value)}
+                    style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #3f3f46", fontSize: 11, background: "#09090b", color: "#e4e4e7" }}
+                    title="Created on or before"
+                  />
+                </>
+              )}
+            </div>
             <p
-              style={{ margin: "6px 0 0", fontSize: 11, color: "#a1a1aa", lineHeight: 1.5, maxWidth: 900 }}
-              title="Source % = each label’s share of all ideas. Scaled = ideas currently in Proven, Scheduled, or Posted (past Testing)—if you move an idea back to Testing, it leaves this count. Killed = ideas in the Killed column."
+              style={{ margin: "6px 0 0", fontSize: 11, color: "#a1a1aa", lineHeight: 1.5, maxWidth: 920 }}
+              title="Uses ideas whose created date falls in the scope above. Source % = share within that set. Scaled = those ideas currently in Proven, Scheduled, or Posted. Killed = those in the Killed column."
             >
+              <span style={{ color: "#a1a1aa" }}>
+                {ideasForHeaderStats.length} in scope
+                {statFilterMode === "today" && " · created today"}
+                {statFilterMode === "all" && " · all ideas"}
+                {statFilterMode === "custom" && statFrom && statTo && (
+                  <>
+                    {" "}
+                    · created {statFrom === statTo ? fmtD(statFrom) : `${fmtD(statFrom)} – ${fmtD(statTo)}`}
+                  </>
+                )}
+              </span>
+              <br />
               <span style={{ color: "#71717a" }}>Source</span>{" "}
               — Original {lifecycleStats.origPct.toFixed(0)}% ({lifecycleStats.nOrig}) · Comp {lifecycleStats.compPct.toFixed(0)}% ({lifecycleStats.nComp})
               {lifecycleStats.nOther > 0 && (
@@ -797,12 +910,14 @@ export default function ContentTracker(){
               <span style={{ color: "#3f3f46" }}> · </span>
               <span
                 style={{ color: "#50E0B0" }}
-                title="Live count: ideas in Proven / Batch edit, Scheduled, or Posted. Moving an idea from Proven back to Testing removes it from this number."
+                title="Among in-scope ideas: currently in Proven, Scheduled, or Posted"
               >
                 Scaled (past testing): {lifecycleStats.scaled}
               </span>
               <span style={{ color: "#3f3f46" }}> · </span>
-              <span style={{ color: "#FF7070" }} title="Ideas in the Killed column">{lifecycleStats.killed} killed</span>
+              <span style={{ color: "#FF7070" }} title="Among in-scope ideas: in the Killed column">
+                {lifecycleStats.killed} killed
+              </span>
             </p>
           </div>
         </div>
