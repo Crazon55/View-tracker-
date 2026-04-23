@@ -1928,6 +1928,7 @@ async def tracker_ideas_create(request: Request):
         "type": body.get("type", "reel"),
         "tags": body.get("tags") or [],
         "frame_link": body.get("frame_link"),
+        "kalakar_link": body.get("kalakar_link"),
         "format": body.get("format"),
         "main_page_hook": body.get("main_page_hook"),
         "content_pillar": body.get("content_pillar"),
@@ -1956,7 +1957,7 @@ async def tracker_ideas_update(idea_id: str, request: Request):
     allowed_keys = {
         "title", "source", "niche_id", "niche_ids", "stage", "link", "notes",
         "hook_variations", "music_ref", "yt_url", "yt_timestamps", "comp_link",
-        "type", "tags", "frame_link", "format", "main_page_hook",
+        "type", "tags", "frame_link", "kalakar_link", "format", "main_page_hook",
         "content_pillar", "content_bucket", "caption", "canva_link",
         # Bandwidth attribution fields (allow direct admin edits)
         "base_edit_by", "base_edit_at", "pintu_set_by", "pintu_set_at",
