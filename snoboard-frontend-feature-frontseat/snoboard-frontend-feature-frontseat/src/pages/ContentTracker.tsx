@@ -107,6 +107,41 @@ function mapIdea(raw: any): any {
       perf_tag: p.perf_tag || null,
     })),
     approvedForPages: parseApprovedForPagesFromRaw(raw),
+    pintu_set_at: raw.pintu_set_at ?? null,
+    pintu_set_by: raw.pintu_set_by ?? null,
+    killed_at: raw.killed_at ?? null,
+  };
+}
+
+/** All-time content tracker stats (reel ideas). Scaled = stamped on testing → proven. */
+function contentTrackerLifecycleStats(ideas: any[]) {
+  let nComp = 0;
+  let nOrig = 0;
+  let nOther = 0;
+  let scaled = 0;
+  let killed = 0;
+  for (const i of ideas) {
+    const src = (i.source || "original") as string;
+    if (src === "competitor") nComp += 1;
+    else if (src === "original") nOrig += 1;
+    else nOther += 1;
+    const hasProvenStamp =
+      (i.pintu_set_at != null && String(i.pintu_set_at).length > 0) ||
+      (i.pintu_set_by != null && String(i.pintu_set_by).trim() !== "");
+    if (hasProvenStamp) scaled += 1;
+    if (i.stage === "kill") killed += 1;
+  }
+  const denom = ideas.length;
+  const pct = (c: number) => (denom > 0 ? (100 * c) / denom : 0);
+  return {
+    nComp,
+    nOrig,
+    nOther,
+    compPct: pct(nComp),
+    origPct: pct(nOrig),
+    otherPct: pct(nOther),
+    scaled,
+    killed,
   };
 }
 
@@ -489,6 +524,7 @@ export default function ContentTracker(){
 
   const niches = rawNiches as any[];
   const ideas = useMemo(() => (rawIdeas as any[]).map(mapIdea), [rawIdeas]);
+  const lifecycleStats = useMemo(() => contentTrackerLifecycleStats(ideas), [ideas]);
   const isLoading = nichesLoading || ideasLoading;
   const ideasRef = useRef(ideas);
   ideasRef.current = ideas;
@@ -750,6 +786,22 @@ export default function ContentTracker(){
           <div>
             <h1 style={{margin:0,fontSize:20,fontWeight:700,letterSpacing:"-0.03em"}}>Content tracker</h1>
             <p style={{margin:"3px 0 0",fontSize:12,color:"#71717a"}}>{ideas.length} ideas · {niches.length} niches · {niches.reduce((a: number,n: any)=>a+n.pages.length,0)} pages</p>
+            <p
+              style={{ margin: "6px 0 0", fontSize: 11, color: "#a1a1aa", lineHeight: 1.5, maxWidth: 900 }}
+              title="Source % is share of all ideas. Scaled = ideas that were moved from Testing to Proven / Batch edit (stamped once; not the same as current Proven count). Killed = ideas in the Killed column."
+            >
+              <span style={{ color: "#71717a" }}>Source</span>{" "}
+              — Original {lifecycleStats.origPct.toFixed(0)}% ({lifecycleStats.nOrig}) · Comp {lifecycleStats.compPct.toFixed(0)}% ({lifecycleStats.nComp})
+              {lifecycleStats.nOther > 0 && (
+                <> · Other {lifecycleStats.otherPct.toFixed(0)}% ({lifecycleStats.nOther})</>
+              )}
+              <span style={{ color: "#3f3f46" }}> · </span>
+              <span style={{ color: "#50E0B0" }} title="Times an idea was moved from Testing to Proven / Batch edit (tracked by proven stamp)">
+                Scaled (testing → proven): {lifecycleStats.scaled}
+              </span>
+              <span style={{ color: "#3f3f46" }}> · </span>
+              <span style={{ color: "#FF7070" }} title="Ideas in the Killed column">{lifecycleStats.killed} killed</span>
+            </p>
           </div>
         </div>
         <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap",alignItems:"center"}}>
