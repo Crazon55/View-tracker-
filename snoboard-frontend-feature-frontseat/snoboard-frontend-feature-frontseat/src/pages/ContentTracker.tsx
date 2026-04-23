@@ -96,6 +96,7 @@ function mapIdea(raw: any): any {
     yt_timestamps: raw.yt_timestamps || null,
     comp_link: raw.comp_link || null,
     frame_link: raw.frame_link || null,
+    kalakar_link: raw.kalakar_link ?? null,
     tags: raw.tags || [],
     postings: (raw.tracker_postings || []).map((p: any) => ({
       id: p.id,
@@ -686,6 +687,7 @@ export default function ContentTracker(){
       yt_timestamps: idea.yt_timestamps || null,
       comp_link: idea.comp_link || null,
       frame_link: idea.frame_link || null,
+      kalakar_link: idea.kalakar_link || null,
       tags: (idea.tags || []).filter((t: string) => !String(t).startsWith(AFP_TAG_PREFIX)),
       format: idea.format || null,
       main_page_hook: idea.main_page_hook || null,
@@ -1014,6 +1016,19 @@ export default function ContentTracker(){
             </div>
             <div><label style={ls}>Frame link</label><SafeTextInput value={cd.frame_link} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{frame_link:v}})} placeholder="Google Drive / reference frames link" style={is}/></div>
             {cd.frame_link&&<a href={cd.frame_link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.frame_link}</a>}
+            {cd.stage==="base_edit"&&(
+              <div>
+                <label style={ls}>Kalakar link</label>
+                <SafeTextInput value={cd.kalakar_link} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{kalakar_link:v}})} placeholder="Paste Kalakar project or edit link" style={is}/>
+                {!!cd.kalakar_link && <a href={cd.kalakar_link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all",display:"block",marginTop:4}}>{cd.kalakar_link}</a>}
+              </div>
+            )}
+            {cd.stage!=="base_edit" && cd.kalakar_link && (
+              <div>
+                <label style={ls}>Kalakar link</label>
+                <a href={cd.kalakar_link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.kalakar_link}</a>
+              </div>
+            )}
             <div style={{display:"flex",gap:10}}>
               <div style={{flex:1}}><label style={ls}>YT link (original source)</label><SafeTextInput value={cd.yt_url} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{yt_url:v}})} placeholder="https://youtube.com/watch?v=..." style={is}/></div>
               <div style={{flex:"0 0 140px"}}><label style={ls}>YT timestamps</label><SafeTextInput value={cd.yt_timestamps} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{yt_timestamps:v}})} placeholder="0:30-1:45" style={is}/></div>
