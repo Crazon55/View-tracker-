@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence, useMotionValue, useTransform, animate, useAnimationControls } from "framer-motion";
-import { getTeamsPerformance, getTrackerIdeas, getTrackerNiches } from "@/services/api";
+import { getSixDayMonth, getTeamsPerformance, getTrackerIdeas, getTrackerNiches } from "@/services/api";
 import { buildTeamPerformanceFromTracker } from "@/lib/teamPerformanceCompute";
 import {
   Trophy,
@@ -151,10 +151,16 @@ async function fetchPerf(): Promise<PerfData> {
     const data = await getTeamsPerformance();
     return { ...data, _source: "api" };
   } catch {
-    const [ideas, niches] = await Promise.all([getTrackerIdeas(), getTrackerNiches()]);
+    const y = new Date();
+    const ym = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, "0")}`;
+    const [ideas, niches, sixDay] = await Promise.all([
+      getTrackerIdeas(),
+      getTrackerNiches(),
+      getSixDayMonth(ym).catch(() => null),
+    ]);
     const ideaList = Array.isArray(ideas) ? ideas : [];
     const nicheList = Array.isArray(niches) ? niches : [];
-    return { ...buildTeamPerformanceFromTracker(ideaList, nicheList), _source: "client" };
+    return { ...buildTeamPerformanceFromTracker(ideaList, nicheList, sixDay), _source: "client" };
   }
 }
 
@@ -322,7 +328,7 @@ function HeroScoreboard({
               >
                 <Crown className="w-4 h-4" />
               </motion.span>
-              {leaderKey === teamA.key ? teamA.label : teamB.label} lead by {formatViews(margin6d)} views this week
+              {leaderKey === teamA.key ? teamA.label : teamB.label} lead by {formatViews(margin6d)} views this month
             </motion.div>
           )}
         </AnimatePresence>
@@ -345,11 +351,12 @@ function HeroScoreboard({
         <TeamScorePanel team={teamB} isLeader={leaderKey === teamB.key} align="left" />
       </div>
 
-      {/* 6-day views bar */}
+      {/* 6-day tracker: month-total view split */}
       <div className="mt-7">
         <div className="flex justify-between text-[11px] text-zinc-500 mb-1.5 uppercase tracking-wider font-semibold">
           <span className="flex items-center gap-1">
-            <Flame className="w-3.5 h-3.5 text-orange-400" /> 6-day view split
+            <Flame className="w-3.5 h-3.5 text-orange-400" /> Month view split
+            <span className="lowercase text-zinc-600 font-medium normal-case tracking-normal">(6-day tracker)</span>
           </span>
           <span className="text-white tabular-nums">{formatViews(totalViews6d)} total</span>
         </div>
@@ -461,7 +468,7 @@ function TeamScorePanel({
         {skin.tagline}
       </div>
       <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold mt-1">
-        Views · last 6d
+        Views · tracker (month)
       </div>
       <div className={`text-3xl sm:text-5xl font-black tabular-nums ${isLeader ? "text-white" : "text-zinc-400"}`}>
         <Odometer value={team.views_6d || 0} format={formatViews} />

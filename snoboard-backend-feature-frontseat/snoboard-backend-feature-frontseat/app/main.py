@@ -1508,16 +1508,64 @@ TEAM_PERFORMANCE_CONFIG: dict[str, dict] = {
 }
 
 
+def _team_views_6d_from_six_day_tracker(
+    client,
+    team_accounts: dict[str, set[str]],
+    today,
+) -> dict[str, int] | None:
+    """If the current month has at least one `six_day_entries` row (any cycle),
+    return per-team view totals summed across the full month; otherwise return
+    None to keep posting-based rolling-6d.
+    """
+    y, m = today.year, today.month
+    month_date = f"{y}-{m:02d}-01"
+    entries = (
+        client.table("six_day_entries")
+        .select("page_id,views")
+        .eq("month", month_date)
+        .execute()
+        .data
+        or []
+    )
+    if not entries:
+        return None
+    pages = client.table("pages").select("id,handle").execute().data or []
+    pid_to_h = {
+        str(p["id"]): str(p.get("handle") or "").lstrip("@").strip().lower()
+        for p in pages
+        if p.get("id")
+    }
+    handle_to_team: dict[str, str] = {}
+    for tk, handles in team_accounts.items():
+        for h in handles:
+            handle_to_team[str(h).lstrip("@").strip().lower()] = tk
+    out: dict[str, int] = {k: 0 for k in TEAM_PERFORMANCE_CONFIG}
+    for e in entries:
+        pid = str(e.get("page_id") or "")
+        h = pid_to_h.get(pid, "")
+        if not h:
+            continue
+        tk = handle_to_team.get(h)
+        if not tk or tk not in out:
+            continue
+        out[tk] += int(e.get("views") or 0)
+    return out
+
+
 @app.get("/api/v1/teams/performance")
 async def teams_performance():
     """Gamified leaderboard: Garfields vs Goofies.
 
-    Aggregates tracker_postings views (per team, per-creator, per-idea, per-6-day
-    window) plus idea counts by stage, so the UI can render a scoreboard
-    with hall-of-fame awards and a people leaderboard.
+    Team `views_6d` and the leader margin use the **6-Day Performance Tracker**
+    month total (sum of `six_day_entries.views` for the current month, all
+    cycles) when that month has data; otherwise they fall back to a rolling
+    6-calendar-day sum from `tracker_postings`.
+
+    Other stats (all-time views, per-creator 6d, hall-of-fame) still use postings.
+    Idea counts by stage come from `tracker_ideas`.
     """
     from app.database.client import get_supabase_client
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
     client = get_supabase_client()
 
     niches = client.table("tracker_niches").select("id,name,pages").execute().data or []
@@ -1588,7 +1636,7 @@ async def teams_performance():
             idea_by_id[iid] = idea
 
     # ---- Aggregate views --------------------------------------------------
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
     cutoff_6d = today - timedelta(days=6)
 
     # Per team: total + 6d views; per creator inside team: views + idea count
@@ -1648,6 +1696,12 @@ async def teams_performance():
             cmap["ideas"].add(iid)
             if in_6d:
                 cmap["views_6d"] += v
+
+    # ---- 6-day tracker: team scoreboard from month total (all cycles in month)
+    try:
+        six_day_team_6d = _team_views_6d_from_six_day_tracker(client, team_accounts, today)
+    except Exception:
+        six_day_team_6d = None
 
     # ---- Idea counts by stage --------------------------------------------
     stats: dict[str, dict[str, int]] = {
@@ -1756,7 +1810,11 @@ async def teams_performance():
             "post_posted": st["post_posted"],
             "post_killed": st["post_killed"],
             "views_total": ts["views_total"],
-            "views_6d": ts["views_6d"],
+            "views_6d": (
+                six_day_team_6d[team_key]
+                if six_day_team_6d is not None
+                else ts["views_6d"]
+            ),
             "top_creator_6d": top_creator_6d,
             "top_creator_all": top_creator_all,
             "top_idea_6d": top_idea_6d,

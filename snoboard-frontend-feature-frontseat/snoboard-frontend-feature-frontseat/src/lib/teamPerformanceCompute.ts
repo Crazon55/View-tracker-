@@ -35,6 +35,44 @@ function emptyStats() {
   };
 }
 
+/** All cycles in the month (getSixDayMonth) → per-team month totals, or null to use posting 6d. */
+function computeTeamViews6dFromSixDay(
+  teamAccounts: Record<TeamKey, Set<string>>,
+  sixDayMonth: any | null | undefined,
+): Record<TeamKey, number> | null {
+  if (!sixDayMonth?.cycles?.length) return null;
+  const handleToTeam: Record<string, TeamKey> = {};
+  for (const k of TEAM_ORDER) {
+    for (const h of teamAccounts[k]) {
+      handleToTeam[h] = k;
+    }
+  }
+  const pidToH = new Map<string, string>();
+  for (const p of sixDayMonth.pages || []) {
+    if (!p?.id) continue;
+    const h = String(p.handle || "")
+      .replace(/^@/, "")
+      .trim()
+      .toLowerCase();
+    pidToH.set(String(p.id), h);
+  }
+  const entries: any[] = [];
+  for (const c of sixDayMonth.cycles as Array<{ entries?: any[] }>) {
+    for (const e of c?.entries || []) {
+      entries.push(e);
+    }
+  }
+  if (entries.length === 0) return null;
+  const out: Record<TeamKey, number> = { garfields: 0, goofies: 0 };
+  for (const e of entries) {
+    const h = pidToH.get(String(e.page_id)) || "";
+    const tk = handleToTeam[h];
+    if (!tk) continue;
+    out[tk] += Number(e?.views || 0) || 0;
+  }
+  return out;
+}
+
 function normCreator(raw: any): string {
   if (!raw) return "";
   let s = String(raw).trim();
@@ -50,6 +88,7 @@ function normCreator(raw: any): string {
 export function buildTeamPerformanceFromTracker(
   ideas: any[],
   niches: any[],
+  sixDayMonth?: any,
 ): {
   teams: any[];
   leader_key: string | null;
@@ -192,6 +231,8 @@ export function buildTeamPerformanceFromTracker(
     };
   }
 
+  const sixDayByTeam = computeTeamViews6dFromSixDay(teamAccounts, sixDayMonth);
+
   const teams_out = TEAM_ORDER.map((team_key) => {
     const handles = Array.from(teamAccounts[team_key]).sort();
     const st = stats[team_key];
@@ -241,7 +282,7 @@ export function buildTeamPerformanceFromTracker(
       post_killed: st.post_killed,
       posted_rate: st.ideas_total > 0 ? st.ideas_posted / st.ideas_total : 0,
       views_total: tv.views_total,
-      views_6d: tv.views_6d,
+      views_6d: sixDayByTeam != null ? sixDayByTeam[team_key] : tv.views_6d,
       top_creator_6d,
       top_creator_all,
       top_idea_6d,
