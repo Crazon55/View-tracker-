@@ -1993,6 +1993,8 @@ async def tracker_ideas_create(request: Request):
         "content_bucket": body.get("content_bucket"),
         "caption": body.get("caption"),
         "canva_link": body.get("canva_link"),
+        "hook_text": body.get("hook_text"),
+        "slides_content": body.get("slides_content"),
     }
     if body.get("approved_for_pages") is not None:
         row["approved_for_pages"] = body.get("approved_for_pages") or []
@@ -2017,6 +2019,7 @@ async def tracker_ideas_update(idea_id: str, request: Request):
         "hook_variations", "music_ref", "yt_url", "yt_timestamps", "comp_link",
         "type", "tags", "frame_link", "kalakar_link", "format", "main_page_hook",
         "content_pillar", "content_bucket", "caption", "canva_link",
+        "hook_text", "slides_content",
         # Bandwidth attribution fields (allow direct admin edits)
         "base_edit_by", "base_edit_at", "pintu_set_by", "pintu_set_at",
         "posted_by", "posted_at", "killed_by", "killed_at",

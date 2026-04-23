@@ -67,6 +67,8 @@ function mapIdea(raw: any): any {
     content_bucket: raw.content_bucket || null,
     caption: raw.caption || null,
     canva_link: raw.canva_link || null,
+    hook_text: raw.hook_text || null,
+    slides_content: Array.isArray(raw.slides_content) ? raw.slides_content : [],
     postings: (raw.tracker_postings || []).map((p: any) => ({
       id: p.id,
       page: p.page,
@@ -119,6 +121,98 @@ function SafeTextArea({value, onSave, style, placeholder, rows}: {value: string;
       rows={rows}
       style={style}
     />
+  );
+}
+
+/** Carousel: slide dropdown + per-slide copy; saves full `slides_content` array. */
+function SlidesContentEditor({
+  instanceKey,
+  value,
+  onSave,
+  is,
+  ls,
+}: {
+  instanceKey: string;
+  value: string[];
+  onSave: (rows: string[]) => void;
+  is: React.CSSProperties;
+  ls: React.CSSProperties;
+}) {
+  const norm = (v: string[] | null | undefined) => (v && v.length > 0 ? v.map((s) => String(s)) : [""]);
+  const [slides, setSlides] = useState<string[]>(() => norm(value));
+  const [sel, setSel] = useState(0);
+  const dirty = useRef(false);
+  const valueKey = JSON.stringify(value ?? []);
+  useEffect(() => {
+    if (dirty.current) return;
+    const n = norm(value);
+    setSlides(n);
+    setSel((i) => Math.min(i, Math.max(0, n.length - 1)));
+  }, [instanceKey, valueKey]);
+  const push = (rows: string[]) => {
+    setSlides(rows);
+    dirty.current = false;
+    onSave(rows);
+  };
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+        <span style={ls}>Slides content</span>
+        <select
+          value={Math.min(sel, Math.max(0, slides.length - 1))}
+          onChange={(e) => setSel(Number(e.target.value))}
+          style={{ ...is, width: "auto", minWidth: 120, padding: "6px 10px", fontSize: 12, cursor: "pointer" }}
+        >
+          {slides.map((_, i) => (
+            <option key={i} value={i}>
+              Slide {i + 1}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={() => {
+            const next = [...slides, ""];
+            setSel(next.length - 1);
+            dirty.current = true;
+            push(next);
+          }}
+          style={{ padding: "5px 10px", borderRadius: 7, border: "1px solid #3f3f46", background: "#27272a", color: "#e4e4e7", fontSize: 11, fontWeight: 600, cursor: "pointer" }}
+        >
+          + Add slide
+        </button>
+        {slides.length > 1 && (
+          <button
+            type="button"
+            onClick={() => {
+              const next = slides.filter((_, j) => j !== sel);
+              const nSel = Math.min(sel, next.length - 1);
+              setSel(Math.max(0, nSel));
+              dirty.current = true;
+              push(next.length ? next : [""]);
+            }}
+            style={{ padding: "5px 10px", borderRadius: 7, border: "1px solid #3f3f46", background: "transparent", color: "#C93B3B", fontSize: 11, fontWeight: 600, cursor: "pointer" }}
+          >
+            Remove slide
+          </button>
+        )}
+      </div>
+      <textarea
+        value={slides[sel] ?? ""}
+        onChange={(e) => {
+          const t = e.target.value;
+          const next = slides.map((s, j) => (j === sel ? t : s));
+          setSlides(next);
+          dirty.current = true;
+        }}
+        onBlur={() => {
+          push(slides);
+        }}
+        rows={4}
+        placeholder="Copy for this slide…"
+        style={{ ...is, resize: "vertical", minHeight: 80 }}
+      />
+    </div>
   );
 }
 
@@ -534,7 +628,7 @@ export default function PostTracker(){
   const [addNicheOpen,setAddNicheOpen]=useState(false);
   const [editNiche,setEditNiche]=useState<any>(null);
   const [newNiche,setNewNiche]=useState({name:"",pages:""});
-  const [newIdea,setNewIdea]=useState({title:"",source:"original",nicheIds:[] as string[],format:"static",caption:"",canva_link:"",content_pillar:"",content_bucket:"",comp_link:""});
+  const [newIdea,setNewIdea]=useState({title:"",source:"original",nicheIds:[] as string[],format:"static",caption:"",canva_link:"",content_pillar:"",content_bucket:"",comp_link:"",hook_text:"",carousel_slides: [""] as string[]});
   const [viewMode,setViewMode]=useState("board");
   const [nicheFilter,setNicheFilter]=useState("all");
   const [pageFilter,setPageFilter]=useState("all");
@@ -563,6 +657,11 @@ export default function PostTracker(){
   // ---- Actions wired to mutations ----
   function addIdeaFn(){
     if(!newIdea.title.trim()||newIdea.nicheIds.length===0)return;
+    const slideRows =
+      newIdea.format === "carousel"
+        ? (newIdea.carousel_slides || []).map((s) => s.trim()).filter((s) => s.length > 0)
+        : null;
+    const slides_content = slideRows && slideRows.length > 0 ? slideRows : null;
     createIdeaMut.mutate({
       title: newIdea.title.trim(),
       source: newIdea.source,
@@ -570,6 +669,8 @@ export default function PostTracker(){
       format: newIdea.format,
       caption: newIdea.caption.trim() || null,
       canva_link: newIdea.canva_link.trim() || null,
+      hook_text: newIdea.hook_text.trim() || null,
+      slides_content: slides_content,
       content_pillar: newIdea.content_pillar || null,
       content_bucket: newIdea.content_bucket || null,
       comp_link: newIdea.source === "competitor" ? (newIdea.comp_link.trim() || null) : null,
@@ -577,7 +678,7 @@ export default function PostTracker(){
       type: "post",
       created_by: user?.user_metadata?.full_name || user?.email?.split("@")[0] || user?.email || null,
     });
-    setNewIdea({title:"",source:"original",nicheIds:[],format:"static",caption:"",canva_link:"",content_pillar:"",content_bucket:"",comp_link:""});
+    setNewIdea({title:"",source:"original",nicheIds:[],format:"static",caption:"",canva_link:"",content_pillar:"",content_bucket:"",comp_link:"",hook_text:"",carousel_slides: [""]});
     setAddOpen(false);
   }
   function moveIdea(id: string, ns: string){
@@ -783,7 +884,17 @@ export default function PostTracker(){
             <div style={{flex:1}}><label style={ls}>Niches *</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{niches.map((n: any)=>{const sel=newIdea.nicheIds.includes(n.id);return <button key={n.id} type="button" onClick={()=>setNewIdea(p=>({...p,nicheIds:sel?p.nicheIds.filter(x=>x!==n.id):[...p.nicheIds,n.id]}))} style={{padding:"6px 12px",borderRadius:8,border:sel?"2px solid #7c3aed":"1.5px solid #3f3f46",background:sel?"#27272a":"#18181b",fontSize:12,fontWeight:600,cursor:"pointer",color:sel?"#fff":"#71717a"}}>{n.name}</button>;})}</div></div>
             <div style={{flex:1}}><label style={ls}>Created by</label><div style={{...is,background:"#27272a",color:"#a1a1aa"}}>{user?.user_metadata?.full_name || user?.email?.split("@")[0] || "—"}</div></div>
           </div>
+          <div><label style={ls}>Hook text</label><textarea value={newIdea.hook_text} onChange={e=>setNewIdea(p=>({...p,hook_text:e.target.value}))} rows={2} placeholder="Short feed hook — the scroll-stopper line" style={{...is,resize:"vertical",minHeight:56}}/></div>
           <div><label style={ls}>Caption</label><textarea value={newIdea.caption} onChange={e=>setNewIdea(p=>({...p,caption:e.target.value}))} rows={4} placeholder="Paste the full Instagram caption here…" style={{...is,resize:"vertical",minHeight:90}}/></div>
+          {newIdea.format === "carousel" && (
+            <SlidesContentEditor
+              instanceKey="new-idea"
+              value={newIdea.carousel_slides}
+              onSave={(rows) => setNewIdea((p) => ({ ...p, carousel_slides: rows }))}
+              is={is}
+              ls={ls}
+            />
+          )}
           <div><label style={ls}>Canva link</label><input value={newIdea.canva_link} onChange={e=>setNewIdea(p=>({...p,canva_link:e.target.value}))} placeholder="https://canva.com/design/…" style={is}/></div>
           <div style={{display:"flex",gap:10}}>
             <div style={{flex:1}}>
@@ -836,7 +947,17 @@ export default function PostTracker(){
 
             {/* Editable fields */}
             <div><label style={ls}>Niches</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{niches.map((n: any)=>{const sel=detailNicheIds.includes(n.id);return <button key={n.id} onClick={()=>{const next=sel?detailNicheIds.filter((x: string)=>x!==n.id):[...detailNicheIds,n.id];setDetailNicheIds(next);saveNiches(cd.id,next);}} style={{padding:"6px 12px",borderRadius:8,border:sel?"2px solid #7c3aed":"1.5px solid #3f3f46",background:sel?"#27272a":"#18181b",fontSize:12,fontWeight:600,cursor:"pointer",color:sel?"#fff":"#71717a"}}>{n.name}</button>;})}</div></div>
+            <div><label style={ls}>Hook text</label><SafeTextArea value={cd.hook_text || ""} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{hook_text:v.trim()||null}})} rows={2} placeholder="Short feed hook — the scroll-stopper line" style={{...is,resize:"vertical",minHeight:56}}/></div>
             <div><label style={ls}>Caption</label><SafeTextArea value={cd.caption} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{caption:v}})} rows={4} placeholder="Paste the full Instagram caption here…" style={{...is,resize:"vertical",minHeight:90}}/></div>
+            {cd.format === "carousel" && (
+              <SlidesContentEditor
+                instanceKey={cd.id}
+                value={Array.isArray(cd.slides_content) ? cd.slides_content : []}
+                onSave={(rows) => updateIdeaMut.mutate({ id: cd.id, data: { slides_content: rows } })}
+                is={is}
+                ls={ls}
+              />
+            )}
             <div>
               <label style={ls}>Canva link</label>
               <SafeTextInput value={cd.canva_link} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{canva_link:v}})} placeholder="https://canva.com/design/…" style={is}/>
