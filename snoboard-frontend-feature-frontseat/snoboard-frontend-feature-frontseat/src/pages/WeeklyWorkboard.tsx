@@ -20,6 +20,8 @@ import {
   workboardMentionSubtitle,
 } from "@/lib/workboardTypes";
 import type { WorkboardMentionPerson } from "@/services/api";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import { LayoutGrid, List, ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Plus, Trash2, Link2, AtSign, User } from "lucide-react";
 
 const STORAGE_KEY = "fsboard-weekly-workboard-v1";
@@ -598,11 +600,22 @@ export default function WeeklyWorkboard() {
   );
 }
 
-function ProgressBar({ pct }: { pct: number }) {
+function interruptRollupPercent(interrupts: WorkboardInterrupt[]): number {
+  if (!interrupts.length) return 0;
+  const done = interrupts.filter((i) => i.status === "completed").length;
+  return Math.round((done / interrupts.length) * 100);
+}
+
+function ProgressBar({ pct, variant = "sky" }: { pct: number; variant?: "sky" | "orange" }) {
   return (
     <div className="h-2 rounded-full bg-zinc-800/80 overflow-hidden">
       <div
-        className="h-full rounded-full bg-gradient-to-r from-sky-500 to-sky-400/90 transition-all duration-300"
+        className={cn(
+          "h-full rounded-full transition-all duration-300",
+          variant === "orange"
+            ? "bg-gradient-to-r from-orange-500 to-amber-400/90"
+            : "bg-gradient-to-r from-sky-500 to-sky-400/90",
+        )}
         style={{ width: `${pct}%` }}
       />
     </div>
@@ -612,22 +625,95 @@ function ProgressBar({ pct }: { pct: number }) {
 function ChunkStatusSelect({
   value,
   onChange,
+  accent = "sky",
 }: {
   value: ChunkStatus;
   onChange: (v: ChunkStatus) => void;
+  /** Ring color when focused (chunks vs interrupts). */
+  accent?: "sky" | "orange";
 }) {
   return (
-    <select
+    <Select value={value} onValueChange={(v) => onChange(v as ChunkStatus)}>
+      <SelectTrigger
+        className={cn(
+          "h-9 w-[min(100%,11rem)] shrink-0 rounded-xl border border-white/10 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-100 shadow-none",
+          "focus:ring-2 data-[state=open]:ring-2",
+          accent === "orange" ? "focus:ring-orange-500/30 data-[state=open]:ring-orange-500/30" : "focus:ring-sky-500/30 data-[state=open]:ring-sky-500/30",
+        )}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent
+        position="popper"
+        className="z-[200] border border-white/10 bg-zinc-950 text-zinc-100 shadow-xl"
+      >
+        {STATUS_OPTIONS.map((s) => (
+          <SelectItem
+            key={s}
+            value={s}
+            className="cursor-pointer text-zinc-100 focus:bg-white/10 focus:text-white"
+          >
+            {CHUNK_STATUS_LABEL[s]}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+const INTERRUPT_BLOCKS_NONE = "__none__";
+
+function InterruptBlocksSelect({
+  blockOptions,
+  targetKind,
+  targetId,
+  onChange,
+}: {
+  blockOptions: { id: string; kind: "main" | "chunk"; label: string }[];
+  targetKind: "main" | "chunk" | null;
+  targetId: string | null;
+  onChange: (kind: "main" | "chunk" | null, id: string | null) => void;
+}) {
+  const value =
+    targetId && targetKind ? `${targetKind}:${targetId}` : INTERRUPT_BLOCKS_NONE;
+  return (
+    <Select
       value={value}
-      onChange={(e) => onChange(e.target.value as ChunkStatus)}
-      className="text-xs rounded-xl border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-zinc-200 focus:outline-none focus:ring-2 focus:ring-sky-500/25"
+      onValueChange={(v) => {
+        if (v === INTERRUPT_BLOCKS_NONE) {
+          onChange(null, null);
+          return;
+        }
+        const i = v.indexOf(":");
+        const kind = v.slice(0, i) as "main" | "chunk";
+        const id = v.slice(i + 1);
+        onChange(kind, id);
+      }}
     >
-      {STATUS_OPTIONS.map((s) => (
-        <option key={s} value={s}>
-          {CHUNK_STATUS_LABEL[s]}
-        </option>
-      ))}
-    </select>
+      <SelectTrigger className="h-8 min-w-[160px] max-w-[min(100%,280px)] rounded-lg border border-white/10 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-100 shadow-none focus:ring-2 focus:ring-orange-500/25 data-[state=open]:ring-2 data-[state=open]:ring-orange-500/25">
+        <SelectValue placeholder="Nothing linked" />
+      </SelectTrigger>
+      <SelectContent
+        position="popper"
+        className="z-[200] max-h-72 border border-white/10 bg-zinc-950 text-zinc-100 shadow-xl"
+      >
+        <SelectItem
+          value={INTERRUPT_BLOCKS_NONE}
+          className="cursor-pointer text-zinc-100 focus:bg-white/10 focus:text-white"
+        >
+          Nothing linked
+        </SelectItem>
+        {blockOptions.map((o) => (
+          <SelectItem
+            key={`${o.kind}:${o.id}`}
+            value={`${o.kind}:${o.id}`}
+            className="cursor-pointer text-zinc-100 focus:bg-white/10 focus:text-white"
+          >
+            {o.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -658,6 +744,8 @@ function AssignmentEditor({
   updateInterrupt: (assignmentId: string, intId: string, patch: Partial<WorkboardInterrupt>) => void;
 }) {
   const pct = rollupPercent(a.chunks);
+  const intPct = interruptRollupPercent(a.interrupts);
+  const intDoneCount = a.interrupts.filter((i) => i.status === "completed").length;
   const blockOptions: { id: string; kind: "main" | "chunk"; label: string }[] = [
     { id: a.id, kind: "main", label: `Main: ${a.title || "(untitled)"}` },
     ...a.chunks.map((c) => ({ id: c.id, kind: "chunk" as const, label: `Chunk: ${c.title || "…"}` })),
@@ -825,6 +913,17 @@ function AssignmentEditor({
             Add item
           </button>
         </div>
+        {a.interrupts.length > 0 && (
+          <div className="mb-3 space-y-1">
+            <div className="flex items-center justify-between text-[11px] text-zinc-500">
+              <span>Extra work progress</span>
+              <span>
+                {intPct}% · {intDoneCount}/{a.interrupts.length} done
+              </span>
+            </div>
+            <ProgressBar pct={intPct} variant="orange" />
+          </div>
+        )}
         {a.interrupts.length === 0 ? (
           <p className="text-sm text-zinc-500 py-2">Urgent asks, bugs, or interrupts — say what they blocked.</p>
         ) : (
@@ -841,6 +940,7 @@ function AssignmentEditor({
                   <ChunkStatusSelect
                     value={it.status}
                     onChange={(v) => updateInterrupt(a.id, it.id, { status: v })}
+                    accent="orange"
                   />
                   <button
                     type="button"
@@ -852,37 +952,17 @@ function AssignmentEditor({
                 </div>
                 <div className="flex flex-wrap gap-2 items-center text-xs">
                   <span className="text-zinc-500">Blocks:</span>
-                  <select
-                    value={
-                      it.blocks_target_id
-                        ? `${it.blocks_target_kind}:${it.blocks_target_id}`
-                        : ""
-                    }
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      if (!v) {
-                        updateInterrupt(a.id, it.id, {
-                          blocks_target_id: null,
-                          blocks_target_kind: null,
-                        });
-                        return;
-                      }
-                      const [kind, ...rest] = v.split(":");
-                      const id = rest.join(":");
+                  <InterruptBlocksSelect
+                    blockOptions={blockOptions}
+                    targetKind={it.blocks_target_kind}
+                    targetId={it.blocks_target_id}
+                    onChange={(kind, id) => {
                       updateInterrupt(a.id, it.id, {
-                        blocks_target_kind: kind as "main" | "chunk",
+                        blocks_target_kind: kind,
                         blocks_target_id: id,
                       });
                     }}
-                    className="rounded-lg border border-white/[0.1] bg-white/[0.05] px-2 py-1.5 text-sm text-zinc-200"
-                  >
-                    <option value="">Nothing linked</option>
-                    {blockOptions.map((o) => (
-                      <option key={`${o.kind}:${o.id}`} value={`${o.kind}:${o.id}`}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
                 <textarea
                   value={it.note}
@@ -949,6 +1029,8 @@ function ListView({
       {weekAssignments.map((a) => {
         const open = listIsOpen(a.id);
         const pct = rollupPercent(a.chunks);
+        const listIntPct = interruptRollupPercent(a.interrupts);
+        const listIntDone = a.interrupts.filter((i) => i.status === "completed").length;
         return (
           <div
             key={a.id}
@@ -977,8 +1059,16 @@ function ListView({
                     </span>
                     {a.interrupts.length > 0 && <span className="text-orange-300/80">{a.interrupts.length} extra</span>}
                   </div>
-                  <div className="mt-2 max-w-md">
+                  <div className="mt-2 max-w-md space-y-1.5">
                     <ProgressBar pct={pct} />
+                    {a.interrupts.length > 0 && (
+                      <>
+                        <ProgressBar pct={listIntPct} variant="orange" />
+                        <p className="text-[10px] text-zinc-600">
+                          Extra work {listIntPct}% · {listIntDone}/{a.interrupts.length} done
+                        </p>
+                      </>
+                    )}
                   </div>
                   {!open && <TagChipsRow tags={allAssignmentTags(a)} />}
                   {!open && <BlockingLines a={a} />}
@@ -1079,6 +1169,8 @@ function GalleryView({
           );
         }
         const pct = rollupPercent(a.chunks);
+        const intPct = interruptRollupPercent(a.interrupts);
+        const intDoneCount = a.interrupts.filter((i) => i.status === "completed").length;
         const open = expandId === a.id;
         const doneChunks = a.chunks.filter((c) => c.status === "completed").length;
         return (
@@ -1102,6 +1194,15 @@ function GalleryView({
                   {pct}% · {doneChunks}/{a.chunks.length || 0} chunks done
                   {a.interrupts.length > 0 ? ` · ${a.interrupts.length} interrupts` : ""}
                 </p>
+                {a.interrupts.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-[11px] font-medium text-orange-300/80 mb-1">Extra work progress</p>
+                    <ProgressBar pct={intPct} variant="orange" />
+                    <p className="text-[11px] text-zinc-500 mt-1">
+                      {intPct}% · {intDoneCount}/{a.interrupts.length} cleared
+                    </p>
+                  </div>
+                )}
               </div>
 
               {allAssignmentTags(a).length > 0 && (
