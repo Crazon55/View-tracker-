@@ -9,14 +9,15 @@ import {
 } from "@/services/api";
 import PostedDateEditor from "@/components/PostedDateEditor";
 
-const STAGES = ["new","approved","design_approval","scripted","testing","batch_production","scheduled","uploaded"];
-const SL: Record<string,string> = { new:"New ideas", approved:"Approved", design_approval:"Design approval", scripted:"Scripted", testing:"Testing", batch_production:"Batch production", scheduled:"Scheduled", uploaded:"Uploaded" };
+const STAGES = ["new","approved","design_approval","scripted","testing","proven_ideas","batch_production","scheduled","uploaded"];
+const SL: Record<string,string> = { new:"New ideas", approved:"Approved", design_approval:"Design approval", scripted:"Scripted", testing:"Testing", proven_ideas:"Proven ideas", batch_production:"Batch production", scheduled:"Scheduled", uploaded:"Uploaded" };
 const SC: Record<string,{bg:string;text:string;dot:string}> = {
   new:{ bg:"rgba(74,127,212,0.15)",text:"#7BB0FF",dot:"#4A7FD4" },
   approved:{ bg:"rgba(45,158,95,0.15)",text:"#5AE0A0",dot:"#2D9E5F" },
   design_approval:{ bg:"rgba(123,97,196,0.15)",text:"#B49EFF",dot:"#7B61C4" },
   scripted:{ bg:"rgba(212,149,42,0.15)",text:"#F0C060",dot:"#D4952A" },
   testing:{ bg:"rgba(212,118,42,0.15)",text:"#F0A050",dot:"#D4762A" },
+  proven_ideas:{ bg:"rgba(29,158,117,0.12)",text:"#50E0B0",dot:"#1D9E75" },
   batch_production:{ bg:"rgba(29,158,117,0.15)",text:"#50E0B0",dot:"#1D9E75" },
   scheduled:{ bg:"rgba(83,74,183,0.15)",text:"#9B8FFF",dot:"#534AB7" },
   uploaded:{ bg:"rgba(138,138,128,0.15)",text:"#a1a1aa",dot:"#8A8A80" },
@@ -824,7 +825,8 @@ export default function PostTracker(){
     approved:[{label:"Approve design",stage:"design_approval",style:bp}],
     design_approval:[{label:"Mark scripted",stage:"scripted",style:bp}],
     scripted:[{label:"Start testing",stage:"testing",style:bp}],
-    testing:[{label:"Move to batch",stage:"batch_production",style:bp}],
+    testing:[{label:"Mark proven",stage:"proven_ideas",style:{...bp,background:"#1D9E75"}}],
+    proven_ideas:[{label:"Move to batch",stage:"batch_production",style:bp}],
     batch_production:[{label:"Schedule",stage:"scheduled",style:{...bp,background:"#534AB7"}}],
     scheduled:[{label:"Mark uploaded",stage:"uploaded",style:{...bp,background:"#1D9E75"}}],
     uploaded:[],
