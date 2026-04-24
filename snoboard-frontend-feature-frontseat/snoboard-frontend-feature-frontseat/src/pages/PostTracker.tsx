@@ -316,12 +316,25 @@ function IdeaCard({idea,niches,onClick}: {idea:any;niches:any[];onClick:()=>void
   const ideaNiches=niches.filter((n: any)=>(idea.nicheIds||[]).includes(n.id));
   const pc=idea.postings?.length||0;
   const bp=idea.postings?.reduce((b: string|null, p: any)=>{const t=gPerf(p.views,p.baselineViews);const o: Record<string,number>={viral:4,topline:3,baseline:2,below:1};return(o[t||""]||0)>(o[b||""]||0)?t:b;},null);
+  const shareUrl = `${window.location.origin}/post-tracker?idea=${idea.id}`;
   return(
     <div onClick={onClick} style={{background:"#18181b",borderRadius:10,padding:"11px 13px",marginBottom:5,border:"1px solid #27272a",cursor:"grab",transition:"box-shadow 0.15s"}}
       onMouseEnter={e=>(e.currentTarget.style.boxShadow="0 3px 12px rgba(0,0,0,0.3)")} onMouseLeave={e=>(e.currentTarget.style.boxShadow="none")}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
         <p style={{margin:0,fontSize:13,fontWeight:500,color:"#fff",lineHeight:1.35,flex:1}}>{idea.title}</p>
-        {bp&&<PB tag={bp}/>}
+        <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+          <button
+            onClick={async (e)=>{e.stopPropagation();try{await navigator.clipboard.writeText(shareUrl);toast.success("Link copied");}catch{toast.error("Failed to copy link");}}}
+            title="Copy share link"
+            style={{width:22,height:22,borderRadius:6,border:"1px solid #3f3f46",background:"transparent",color:"#a1a1aa",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+              <path d="M10 13a5 5 0 0 1 0-7l1.5-1.5a5 5 0 0 1 7 7L17 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M14 11a5 5 0 0 1 0 7L12.5 19.5a5 5 0 0 1-7-7L7 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+          {bp&&<PB tag={bp}/>}
+        </div>
       </div>
       <div style={{display:"flex",gap:4,marginTop:6,flexWrap:"wrap",alignItems:"center"}}>
         <span style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:idea.source==="competitor"?"#EEEDFE":"#E8F5EE",color:idea.source==="competitor"?"#534AB7":"#1A5E3A",fontWeight:500}}>{idea.source==="competitor"?"Comp":"Orig"}</span>
