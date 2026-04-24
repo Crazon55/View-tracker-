@@ -26,9 +26,12 @@ import { LayoutGrid, List, ChevronLeft, ChevronRight, ChevronDown, ChevronRight 
 
 const STORAGE_KEY = "fsboard-weekly-workboard-v1";
 
-/** Match App layout greeting pill: translucent glass */
+/** Greeting-pill glass (App top bar): minimal tint, heavy blur — not gray slabs */
 const BENTO_SURFACE =
-  "rounded-2xl border border-white/10 bg-white/[0.07] backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.28)]";
+  "rounded-2xl border border-white/10 bg-white/5 backdrop-blur-2xl shadow-[0_8px_40px_rgba(0,0,0,0.55),0_0_100px_-40px_rgba(124,58,237,0.18)]";
+
+const GLASS_INPUT =
+  "border border-white/10 bg-white/[0.03] backdrop-blur-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-violet-500/35 focus:border-violet-500/25";
 
 function loadStore(): MainAssignment[] {
   try {
@@ -184,8 +187,8 @@ function TagField({
                   compact ? "text-[11px]" : "text-[12px]"
                 } ${
                   person
-                    ? "bg-sky-500/15 text-sky-100 border-sky-400/25"
-                    : "bg-stone-500/10 text-stone-200 border-stone-400/15"
+                    ? "bg-violet-500/15 text-violet-100 border-violet-400/30"
+                    : "bg-white/[0.06] text-zinc-200 border-white/10"
                 }`}
               >
                 {person ? <AtSign className="w-3 h-3 shrink-0 opacity-70" /> : null}
@@ -196,7 +199,7 @@ function TagField({
                   type="button"
                   onClick={() => onChange(tags.filter((x) => x !== t))}
                   className={`shrink-0 px-1 rounded-full text-sm leading-none opacity-60 hover:opacity-100 ${
-                    person ? "hover:bg-sky-500/20" : "hover:bg-stone-500/20"
+                    person ? "hover:bg-violet-500/25" : "hover:bg-white/10"
                   }`}
                   aria-label={`Remove ${t}`}
                 >
@@ -245,10 +248,7 @@ function TagField({
             }
           }}
           placeholder={placeholder || "Type @ for people, #ticket and Enter…"}
-          className={cn(
-            "w-full rounded-xl border border-white/[0.08] bg-white/[0.04] text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-violet-500/30",
-            compact ? "px-2.5 py-1.5 text-xs" : "px-3 py-2.5 text-sm",
-          )}
+          className={cn("w-full rounded-xl", GLASS_INPUT, compact ? "px-2.5 py-1.5 text-xs" : "px-3 py-2.5 text-sm")}
           role="combobox"
           aria-expanded={Boolean(mentionMenu)}
           aria-controls={mentionMenu ? `${mentionListId}-listbox` : undefined}
@@ -258,7 +258,7 @@ function TagField({
           <ul
             id={`${mentionListId}-listbox`}
             role="listbox"
-            className="absolute z-50 left-0 right-0 bottom-full mb-1.5 max-h-[min(320px,50vh)] overflow-y-auto rounded-xl border border-white/[0.12] bg-[#141416]/[0.98] shadow-[0_-16px_48px_rgba(0,0,0,0.55)] py-1.5 backdrop-blur-md"
+            className="absolute z-50 left-0 right-0 bottom-full mb-1.5 max-h-[min(320px,50vh)] overflow-y-auto rounded-xl border border-white/10 bg-black/45 py-1.5 shadow-[0_-20px_50px_rgba(0,0,0,0.65),0_0_40px_-10px_rgba(124,58,237,0.12)] backdrop-blur-2xl"
           >
             <li className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500" role="presentation">
               People
@@ -281,8 +281,8 @@ function TagField({
                       aria-selected={idx === mentionHighlight}
                       className={`mx-1 flex w-[calc(100%-0.5rem)] items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors ${
                         idx === mentionHighlight
-                          ? "bg-white/[0.1] text-zinc-50"
-                          : "text-zinc-200 hover:bg-white/[0.05]"
+                          ? "bg-violet-500/20 text-white"
+                          : "text-zinc-200 hover:bg-white/[0.06]"
                       }`}
                       onMouseDown={(ev) => {
                         ev.preventDefault();
@@ -290,7 +290,7 @@ function TagField({
                       }}
                       onMouseEnter={() => setMentionHighlight(idx)}
                     >
-                      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-zinc-400">
+                      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-violet-300/80">
                         <User className="h-4 w-4" aria-hidden />
                       </span>
                       <span className="min-w-0 flex-1">
@@ -324,8 +324,8 @@ function TagChipsRow({ tags, max = 6 }: { tags: string[]; max?: number }) {
             key={t}
             className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] max-w-[170px] truncate border ${
               person
-                ? "bg-sky-500/12 text-sky-100/90 border-sky-400/20"
-                : "bg-stone-500/10 text-stone-300 border-stone-400/12"
+                ? "bg-violet-500/12 text-violet-100/95 border-violet-400/25"
+                : "bg-white/[0.06] text-zinc-300 border-white/10"
             }`}
             title={t}
           >
@@ -508,16 +508,16 @@ export default function WeeklyWorkboard() {
 
   return (
     <div
-      className="min-h-screen text-zinc-100 bg-zinc-950"
+      className="min-h-screen text-zinc-100 bg-black"
       style={{
         fontFamily: "'DM Sans', ui-sans-serif, system-ui, sans-serif",
         backgroundImage:
-          "radial-gradient(ellipse 120% 80% at 50% -20%, rgba(139, 92, 246, 0.12), transparent 50%), radial-gradient(ellipse 80% 50% at 100% 50%, rgba(56, 189, 248, 0.06), transparent 45%)",
+          "radial-gradient(ellipse 130% 90% at 50% -20%, rgba(109, 40, 217, 0.28), transparent 52%), radial-gradient(ellipse 90% 70% at 100% 0%, rgba(124, 58, 237, 0.12), transparent 42%), radial-gradient(ellipse 70% 50% at 0% 100%, rgba(91, 33, 182, 0.1), transparent 45%)",
       }}
     >
       <div className="pl-[70px] pr-6 pt-8 pb-12 max-w-[1200px] mx-auto">
         <header className={`${BENTO_SURFACE} p-6 mb-8`}>
-          <p className="text-sm text-violet-300/90 font-medium mb-1">Weekly workboard</p>
+          <p className="text-sm text-violet-400 font-medium mb-1 tracking-wide">Weekly workboard</p>
           <h1 className="text-3xl font-semibold tracking-tight text-white">Studio &amp; ops</h1>
           <p className="text-[15px] text-zinc-400 mt-3 max-w-2xl leading-relaxed">
             Plan by role, split into steps, and log blockers. Add{" "}
@@ -534,18 +534,18 @@ export default function WeeklyWorkboard() {
             <button
               type="button"
               onClick={() => setWeekStart((w) => addDaysISO(w, -7))}
-              className="p-2.5 rounded-xl hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-200 transition-colors"
+              className="p-2.5 rounded-xl text-zinc-400 hover:text-white hover:bg-violet-500/15 transition-colors"
               aria-label="Previous week"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="px-4 text-sm font-medium text-zinc-100 min-w-[200px] text-center tabular-nums">
+            <span className="px-4 text-sm font-medium text-white min-w-[200px] text-center tabular-nums">
               {fmtWeekRange(weekStart)}
             </span>
             <button
               type="button"
               onClick={() => setWeekStart((w) => addDaysISO(w, 7))}
-              className="p-2.5 rounded-xl hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-200 transition-colors"
+              className="p-2.5 rounded-xl text-zinc-400 hover:text-white hover:bg-violet-500/15 transition-colors"
               aria-label="Next week"
             >
               <ChevronRight className="w-4 h-4" />
@@ -553,7 +553,7 @@ export default function WeeklyWorkboard() {
             <button
               type="button"
               onClick={() => setWeekStart(getMondayISO())}
-              className="ml-0.5 mr-1 px-3 py-2 text-xs font-medium rounded-xl bg-white/[0.08] text-zinc-200 hover:bg-white/[0.12] transition-colors"
+              className="ml-0.5 mr-1 px-3 py-2 text-xs font-semibold rounded-xl border border-violet-500/35 bg-violet-600/25 text-white hover:bg-violet-600/45 transition-colors shadow-[0_0_24px_-6px_rgba(124,58,237,0.5)]"
             >
               This week
             </button>
@@ -565,8 +565,8 @@ export default function WeeklyWorkboard() {
               onClick={() => setView("list")}
               className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-colors ${
                 view === "list"
-                  ? "bg-violet-600 text-white shadow-lg shadow-violet-600/20"
-                  : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06]"
+                  ? "bg-violet-600 text-white shadow-lg shadow-violet-600/35"
+                  : "text-zinc-400 hover:text-white hover:bg-violet-500/10"
               }`}
             >
               <List className="w-4 h-4" />
@@ -577,8 +577,8 @@ export default function WeeklyWorkboard() {
               onClick={() => setView("gallery")}
               className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-colors ${
                 view === "gallery"
-                  ? "bg-violet-600 text-white shadow-lg shadow-violet-600/20"
-                  : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06]"
+                  ? "bg-violet-600 text-white shadow-lg shadow-violet-600/35"
+                  : "text-zinc-400 hover:text-white hover:bg-violet-500/10"
               }`}
             >
               <LayoutGrid className="w-4 h-4" />
@@ -627,7 +627,7 @@ function interruptRollupPercent(interrupts: WorkboardInterrupt[]): number {
 
 function ProgressBar({ pct, variant = "violet" }: { pct: number; variant?: "violet" | "orange" }) {
   return (
-    <div className="h-2 rounded-full bg-zinc-800/80 overflow-hidden">
+    <div className="h-2 rounded-full border border-white/[0.06] bg-white/[0.04] backdrop-blur-sm overflow-hidden">
       <div
         className={cn(
           "h-full rounded-full transition-all duration-300",
@@ -655,7 +655,7 @@ function ChunkStatusSelect({
     <Select value={value} onValueChange={(v) => onChange(v as ChunkStatus)}>
       <SelectTrigger
         className={cn(
-          "h-9 w-[min(100%,11rem)] shrink-0 rounded-xl border border-white/10 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-100 shadow-none",
+          "h-9 w-[min(100%,11rem)] shrink-0 rounded-xl border border-white/10 bg-black/40 px-2.5 py-1.5 text-xs text-zinc-100 shadow-none backdrop-blur-md",
           "focus:ring-2 data-[state=open]:ring-2",
           accent === "orange"
             ? "focus:ring-orange-500/30 data-[state=open]:ring-orange-500/30"
@@ -666,7 +666,7 @@ function ChunkStatusSelect({
       </SelectTrigger>
       <SelectContent
         position="popper"
-        className="z-[200] border border-white/10 bg-zinc-950 text-zinc-100 shadow-xl"
+        className="z-[200] border border-white/10 bg-black/55 text-zinc-100 shadow-xl backdrop-blur-2xl"
       >
         {STATUS_OPTIONS.map((s) => (
           <SelectItem
@@ -711,12 +711,12 @@ function InterruptBlocksSelect({
         onChange(kind, id);
       }}
     >
-      <SelectTrigger className="h-8 min-w-[160px] max-w-[min(100%,280px)] rounded-lg border border-white/10 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-100 shadow-none focus:ring-2 focus:ring-orange-500/25 data-[state=open]:ring-2 data-[state=open]:ring-orange-500/25">
+      <SelectTrigger className="h-8 min-w-[160px] max-w-[min(100%,280px)] rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-zinc-100 shadow-none backdrop-blur-md focus:ring-2 focus:ring-orange-500/25 data-[state=open]:ring-2 data-[state=open]:ring-orange-500/25">
         <SelectValue placeholder="Nothing linked" />
       </SelectTrigger>
       <SelectContent
         position="popper"
-        className="z-[200] max-h-72 border border-white/10 bg-zinc-950 text-zinc-100 shadow-xl"
+        className="z-[200] max-h-72 border border-white/10 bg-black/55 text-zinc-100 shadow-xl backdrop-blur-2xl"
       >
         <SelectItem
           value={INTERRUPT_BLOCKS_NONE}
@@ -788,7 +788,7 @@ function AssignmentEditor({
                 value={a.title}
                 onChange={(e) => patchAssignment(a.id, { title: e.target.value })}
                 placeholder="What you’re shipping this week…"
-                className="flex-1 min-w-[200px] rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25"
+                className={cn("flex-1 min-w-[200px] rounded-xl px-3 py-2.5 text-sm", GLASS_INPUT)}
               />
             </div>
           </div>
@@ -813,14 +813,14 @@ function AssignmentEditor({
               value={a.title}
               onChange={(e) => patchAssignment(a.id, { title: e.target.value })}
               placeholder="What you’re shipping this week…"
-              className="mt-1.5 w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25"
+              className={cn("mt-1.5 w-full rounded-xl px-3 py-2.5 text-sm", GLASS_INPUT)}
             />
           ) : (
             <input
               type="date"
               value={a.due_date}
               onChange={(e) => patchAssignment(a.id, { due_date: e.target.value })}
-              className="mt-1.5 w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25"
+              className={cn("mt-1.5 w-full rounded-xl px-3 py-2.5 text-sm", GLASS_INPUT)}
             />
           )}
         </div>
@@ -832,7 +832,7 @@ function AssignmentEditor({
                 type="date"
                 value={a.due_date}
                 onChange={(e) => patchAssignment(a.id, { due_date: e.target.value })}
-                className="mt-1.5 w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25"
+                className={cn("mt-1.5 w-full rounded-xl px-3 py-2.5 text-sm", GLASS_INPUT)}
               />
             </div>
             <div>
@@ -865,7 +865,7 @@ function AssignmentEditor({
           onChange={(e) => patchAssignment(a.id, { description: e.target.value })}
           rows={compact ? 2 : 3}
           placeholder="Context, links, expectations…"
-          className="mt-1.5 w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-violet-500/25"
+          className={cn("mt-1.5 w-full rounded-xl px-3 py-2.5 text-sm resize-y", GLASS_INPUT)}
         />
       </div>
 
@@ -888,14 +888,14 @@ function AssignmentEditor({
             {a.chunks.map((c) => (
               <li
                 key={c.id}
-                className="rounded-xl border border-white/[0.08] bg-white/[0.04] p-3 space-y-2 backdrop-blur-sm"
+                className="rounded-xl border border-white/10 bg-white/[0.03] p-3 space-y-2 backdrop-blur-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]"
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <input
                     value={c.title}
                     onChange={(e) => updateChunk(a.id, c.id, { title: e.target.value })}
                     placeholder="Step name"
-                    className="flex-1 min-w-[140px] rounded-lg border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25"
+                    className={cn("flex-1 min-w-[140px] rounded-lg px-2.5 py-1.5 text-sm", GLASS_INPUT)}
                   />
                   <ChunkStatusSelect value={c.status} onChange={(v) => updateChunk(a.id, c.id, { status: v })} />
                   <button
@@ -957,13 +957,16 @@ function AssignmentEditor({
         ) : (
           <ul className="space-y-3">
             {a.interrupts.map((it) => (
-              <li key={it.id} className="rounded-xl border border-white/[0.07] bg-orange-950/[0.12] p-3 space-y-2">
+              <li
+                key={it.id}
+                className="rounded-xl border border-orange-500/20 bg-orange-500/[0.06] backdrop-blur-md p-3 space-y-2 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]"
+              >
                 <div className="flex flex-wrap gap-2 items-center">
                   <input
                     value={it.title}
                     onChange={(e) => updateInterrupt(a.id, it.id, { title: e.target.value })}
                     placeholder="What came up?"
-                    className="flex-1 min-w-[160px] rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+                    className="flex-1 min-w-[160px] rounded-lg border border-white/10 bg-white/[0.03] backdrop-blur-sm px-2.5 py-1.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-orange-500/30"
                   />
                   <ChunkStatusSelect
                     value={it.status}
@@ -997,7 +1000,7 @@ function AssignmentEditor({
                   onChange={(e) => updateInterrupt(a.id, it.id, { note: e.target.value })}
                   placeholder="Note: e.g. spent 4h here today; main chunk slipped…"
                   rows={2}
-                  className="w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+                  className="w-full rounded-lg border border-white/10 bg-white/[0.03] backdrop-blur-sm px-2.5 py-1.5 text-sm text-zinc-100 resize-y focus:outline-none focus:ring-2 focus:ring-orange-500/30"
                 />
                 <div className="pt-1">
                   <label className="text-xs font-medium text-zinc-500">Mentions for this item</label>
@@ -1065,7 +1068,7 @@ function ListView({
               <button
                 type="button"
                 onClick={() => toggleListCard(a.id)}
-                className="flex flex-1 items-start gap-3 p-4 text-left hover:bg-white/[0.04] transition-colors min-w-0"
+                className="flex flex-1 items-start gap-3 p-4 text-left hover:bg-violet-500/[0.06] transition-colors min-w-0"
               >
                 {open ? (
                   <ChevronDown className="w-5 h-5 text-zinc-500 shrink-0 mt-0.5" />
@@ -1112,7 +1115,7 @@ function ListView({
               </div>
             </div>
             {open && (
-              <div className="border-t border-white/[0.08] px-4 pb-4 pt-3 bg-black/25 backdrop-blur-sm">
+              <div className="border-t border-white/10 px-4 pb-4 pt-3 bg-black/35 backdrop-blur-xl">
                 <AssignmentEditor
                   a={a}
                   embedBelowListHeader
@@ -1140,7 +1143,7 @@ function ListView({
                 key={r.id}
                 type="button"
                 onClick={() => addAssignment(r.id)}
-                className="px-3 py-2 rounded-xl text-xs font-medium bg-white/[0.08] text-zinc-200 hover:bg-violet-600 hover:text-white border border-white/[0.08] transition-colors"
+                className="px-3 py-2 rounded-xl text-xs font-medium border border-violet-500/25 bg-violet-600/15 text-zinc-100 hover:bg-violet-600 hover:text-white hover:border-violet-500/50 transition-colors shadow-[0_0_20px_-8px_rgba(124,58,237,0.4)]"
               >
                 + {r.short}
               </button>
@@ -1190,7 +1193,7 @@ function GalleryView({
               className={cn(
                 BENTO_SURFACE,
                 "border-2 border-dashed min-h-[160px] flex flex-col justify-center p-6 text-left",
-                "hover:border-violet-500/45 hover:bg-white/[0.09] transition-colors",
+                "hover:border-violet-400/50 hover:bg-violet-500/[0.08] hover:shadow-[0_0_40px_-12px_rgba(124,58,237,0.35)] transition-colors",
                 roleIdx === 0 && "xl:col-span-2 xl:min-h-[200px]",
               )}
             >
@@ -1306,11 +1309,11 @@ function GalleryView({
                 </div>
               )}
             </div>
-            <div className="border-t border-white/[0.08] p-2 flex gap-2 bg-black/20 backdrop-blur-sm">
+            <div className="border-t border-white/10 p-2 flex gap-2 bg-black/40 backdrop-blur-xl">
               <button
                 type="button"
                 onClick={() => setExpandId(open ? null : a.id)}
-                className="flex-1 py-2.5 text-xs font-medium rounded-xl bg-white/[0.08] text-zinc-100 hover:bg-violet-600/80 transition-colors"
+                className="flex-1 py-2.5 text-xs font-semibold rounded-xl border border-violet-500/20 bg-violet-600/20 text-white hover:bg-violet-600 hover:border-violet-400/40 transition-colors shadow-[0_0_28px_-8px_rgba(124,58,237,0.45)]"
               >
                 {open ? "Collapse" : "Expand"}
               </button>
@@ -1323,7 +1326,7 @@ function GalleryView({
               </button>
             </div>
             {open && (
-              <div className="border-t border-white/[0.08] p-4 bg-black/30 backdrop-blur-md max-h-[70vh] overflow-y-auto">
+              <div className="border-t border-white/10 p-4 bg-black/45 backdrop-blur-2xl max-h-[70vh] overflow-y-auto">
                 <AssignmentEditor
                   a={a}
                   compact
