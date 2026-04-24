@@ -310,11 +310,21 @@ function IdeaCard({idea,niches,onClick}: {idea:any;niches:any[];onClick:()=>void
         {idea.created_by&&<span style={{fontSize:10,color:"#52525b"}}>by {idea.created_by}</span>}
         {hv>0&&<span style={{fontSize:10,color:"#52525b"}}>{hv} hook{hv>1?"s":""}</span>}
         {idea.music_ref&&<span style={{fontSize:10,color:"#3f3f46",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>♪ {idea.music_ref}</span>}
-        {(idea.comp_link || idea.yt_url || idea.frame_link || idea.kalakar_link) && (
+        {((idea.comp_link || idea.link) || idea.yt_url || idea.frame_link || idea.kalakar_link) && (
           <div
             style={{display:"flex",flexWrap:"wrap",gap:8,alignItems:"center"}}
             onClick={(e) => e.stopPropagation()}
           >
+            {!!idea.link && idea.link !== idea.comp_link && (
+              <a
+                href={idea.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{fontSize:10,color:"#4A7FD4",fontWeight:500}}
+              >
+                Source ↗
+              </a>
+            )}
             {idea.comp_link && (
               <a
                 href={idea.comp_link}
