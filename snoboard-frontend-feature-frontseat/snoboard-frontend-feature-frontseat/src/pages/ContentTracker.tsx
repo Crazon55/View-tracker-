@@ -298,7 +298,7 @@ function IdeaCard({idea,niches,onClick}: {idea:any;niches:any[];onClick:()=>void
         <p style={{margin:0,fontSize:13,fontWeight:500,color:"#fff",lineHeight:1.35,flex:1}}>{idea.title}</p>
         <div style={{display:"flex",gap:4,alignItems:"center",flexShrink:0}}>
           <button
-            onClick={async (e)=>{e.stopPropagation();try{await navigator.clipboard.writeText(shareUrl);toast.success(\"Link copied\");}catch{toast.error(\"Failed to copy link\");}}}
+            onClick={async (e)=>{e.stopPropagation();try{await navigator.clipboard.writeText(shareUrl);toast.success("Link copied");}catch{toast.error("Failed to copy link");}}}
             title="Copy share link"
             style={{width:22,height:22,borderRadius:6,border:"1px solid #3f3f46",background:"transparent",color:"#a1a1aa",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
           >
