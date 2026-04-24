@@ -331,11 +331,21 @@ function IdeaCard({idea,niches,onClick}: {idea:any;niches:any[];onClick:()=>void
       {/* Info row */}
       <div style={{marginTop:5,display:"flex",flexDirection:"column",gap:2}}>
         {idea.tags?.includes("comp_research")&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:99,background:"rgba(212,118,42,0.15)",color:"#F0A050",fontWeight:600,alignSelf:"flex-start"}}>COMP RESEARCH</span>}
-        {(idea.comp_link || idea.canva_link) && (
+        {(idea.comp_link || idea.link || idea.canva_link || idea.yt_url || idea.base_drive_link || idea.edited_drive_link || idea.pintu_batch_link) && (
           <div
             style={{display:"flex",flexWrap:"wrap",gap:8,alignItems:"center"}}
             onClick={(e) => e.stopPropagation()}
           >
+            {!!idea.link && idea.link !== idea.comp_link && (
+              <a
+                href={idea.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{fontSize:10,color:"#4A7FD4",fontWeight:500}}
+              >
+                Source ↗
+              </a>
+            )}
             {idea.comp_link && (
               <a
                 href={idea.comp_link}
@@ -344,6 +354,46 @@ function IdeaCard({idea,niches,onClick}: {idea:any;niches:any[];onClick:()=>void
                 style={{fontSize:10,color:"#4A7FD4",fontWeight:500}}
               >
                 {idea.source === "competitor" ? "Comp" : "Ref"} ↗
+              </a>
+            )}
+            {idea.yt_url && (
+              <a
+                href={idea.yt_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{fontSize:10,color:"#4A7FD4",fontWeight:500}}
+              >
+                YT ↗
+              </a>
+            )}
+            {idea.base_drive_link && (
+              <a
+                href={idea.base_drive_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{fontSize:10,color:"#F0A050",fontWeight:500}}
+              >
+                Base ↗
+              </a>
+            )}
+            {idea.edited_drive_link && (
+              <a
+                href={idea.edited_drive_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{fontSize:10,color:"#F0A050",fontWeight:500}}
+              >
+                Edit ↗
+              </a>
+            )}
+            {idea.pintu_batch_link && (
+              <a
+                href={idea.pintu_batch_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{fontSize:10,color:"#B49EFF",fontWeight:500}}
+              >
+                Batch ↗
               </a>
             )}
             {idea.canva_link && (
