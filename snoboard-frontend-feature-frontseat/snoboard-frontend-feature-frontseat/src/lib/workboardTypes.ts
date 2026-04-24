@@ -21,7 +21,8 @@ export const WORKBOARD_ROLES: { id: WorkboardRoleId; label: string; short: strin
 export function workboardRoleLabel(roleId: string | null | undefined): string | null {
   if (!roleId) return null;
   const hit = WORKBOARD_ROLES.find((r) => r.id === roleId);
-  return hit?.label ?? null;
+  if (hit) return hit.label;
+  return roleId.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 /** Secondary line under the name in @mention menu (role · email). */
