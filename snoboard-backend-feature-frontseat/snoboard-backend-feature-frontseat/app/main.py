@@ -63,20 +63,85 @@ def _workboard_collect_string_fields(
     return out
 
 
+_WORKBOARD_MENTION_SKIP: frozenset[str] = frozenset({"", "tracker", "comp research"})
+
+
+def _workboard_paginate_table(
+    client, table: str, cols: str, page_size: int = 1000
+) -> list[dict]:
+    rows_out: list[dict] = []
+    offset = 0
+    while True:
+        batch = (
+            client.table(table)
+            .select(cols)
+            .range(offset, offset + page_size - 1)
+            .execute()
+            .data
+        ) or []
+        rows_out.extend(batch)
+        if len(batch) < page_size:
+            break
+        offset += page_size
+    return rows_out
+
+
 @app.get("/api/v1/workboard/mention-candidates")
 async def workboard_mention_candidates():
     """
-    Display names for @mentions on the weekly workboard.
-    Aggregates distinct non-empty values from tracker/content usage and directory tables
-    (not a live "who is online" list).
+    People for @mentions on the weekly workboard: structured rows with optional role_id/email
+    from user_roles, plus names seen in tracker/content. Not a live online list.
     """
     from app.database.client import get_supabase_client
 
     client = get_supabase_client()
-    names: set[str] = set()
+    by_display_lower: dict[str, dict] = {}
+
+    def add_person(display: str, role_id: str | None, email: str | None, source: str) -> None:
+        d = (display or "").strip()
+        if not d:
+            return
+        low = d.lower()
+        if low in _WORKBOARD_MENTION_SKIP:
+            return
+        row = {"display": d, "role_id": role_id, "email": email, "source": source}
+        existing = by_display_lower.get(low)
+        if existing is None:
+            by_display_lower[low] = row
+            return
+        # Prefer user_roles / roster over bare activity strings
+        rank = {"user_roles": 3, "content_strategist": 2, "activity": 1}
+        if rank.get(source, 0) > rank.get(existing["source"], 0):
+            by_display_lower[low] = row
+        elif rank.get(source, 0) == rank.get(existing["source"], 0):
+            if role_id and not existing.get("role_id"):
+                existing["role_id"] = role_id
+            if email and not existing.get("email"):
+                existing["email"] = email
 
     try:
-        names |= _workboard_collect_string_fields(
+        for ur in _workboard_paginate_table(client, "user_roles", "name,email,role"):
+            name = (ur.get("name") or "").strip()
+            email = (ur.get("email") or "").strip() or None
+            role_raw = ur.get("role")
+            role_id = role_raw.strip() if isinstance(role_raw, str) and role_raw.strip() else None
+            disp = name or (email.split("@")[0] if email else "")
+            if disp:
+                add_person(disp, role_id, email, "user_roles")
+    except Exception:
+        pass
+
+    try:
+        for row in get_cs_repository().get_all() or []:
+            n = row.get("name")
+            if isinstance(n, str) and n.strip():
+                add_person(n.strip(), None, None, "content_strategist")
+    except Exception:
+        pass
+
+    activity_names: set[str] = set()
+    try:
+        activity_names |= _workboard_collect_string_fields(
             client,
             "tracker_ideas",
             (
@@ -91,25 +156,24 @@ async def workboard_mention_candidates():
         pass
 
     try:
-        names |= _workboard_collect_string_fields(client, "content_entries", ("created_by",))
+        activity_names |= _workboard_collect_string_fields(client, "content_entries", ("created_by",))
     except Exception:
         pass
 
-    try:
-        names |= _workboard_collect_string_fields(client, "user_roles", ("name",))
-    except Exception:
-        pass
+    for s in activity_names:
+        add_person(s, None, None, "activity")
 
-    try:
-        for row in get_cs_repository().get_all() or []:
-            n = row.get("name")
-            if isinstance(n, str) and n.strip():
-                names.add(n.strip())
-    except Exception:
-        pass
+    people: list[dict] = [
+        {
+            "display": row["display"],
+            "role_id": row.get("role_id"),
+            "email": row.get("email"),
+        }
+        for row in by_display_lower.values()
+    ]
 
-    ordered = sorted(names, key=lambda s: s.lower())
-    return {"success": True, "data": {"names": ordered}}
+    people.sort(key=lambda p: (p["display"] or "").lower())
+    return {"success": True, "data": {"people": people}}
 
 
 def _last_monday() -> str:

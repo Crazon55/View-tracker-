@@ -18,8 +18,10 @@ import {
   normalizeAssignments,
   WORKBOARD_MENTION_PEOPLE,
   mentionFromName,
+  workboardMentionSubtitle,
 } from "@/lib/workboardTypes";
-import { LayoutGrid, List, ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Plus, Trash2, Link2, AtSign } from "lucide-react";
+import type { WorkboardMentionPerson } from "@/services/api";
+import { LayoutGrid, List, ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Plus, Trash2, Link2, AtSign, User } from "lucide-react";
 
 const STORAGE_KEY = "fsboard-weekly-workboard-v1";
 
@@ -98,21 +100,44 @@ function TagField({
     queryFn: getWorkboardMentionCandidates,
     staleTime: 5 * 60 * 1000,
   });
-  const apiNames = mentionPayload?.names ?? [];
+  const apiPeople: WorkboardMentionPerson[] = mentionPayload?.people ?? [];
 
-  const mentionPickerNames = useMemo(() => {
+  const mentionPickerPeople = useMemo(() => {
     const self = workboardSelfMention(user)?.toLowerCase() ?? "";
-    const seen = new Map<string, string>();
-    for (const raw of [...WORKBOARD_MENTION_PEOPLE, ...apiNames]) {
-      const t = raw.trim();
-      if (!t) continue;
-      const tag = mentionFromName(t);
-      if (!tag || tag.toLowerCase() === self) continue;
-      const key = tag.toLowerCase();
-      if (!seen.has(key)) seen.set(key, t.replace(/^@/, ""));
+    const byKey = new Map<string, WorkboardMentionPerson>();
+
+    const consider = (p: WorkboardMentionPerson) => {
+      const disp = (p.display || "").trim();
+      if (!disp) return;
+      const tag = mentionFromName(disp).toLowerCase();
+      if (!tag || tag === self) return;
+      const key = disp.toLowerCase();
+      const prev = byKey.get(key);
+      if (!prev) {
+        byKey.set(key, p);
+        return;
+      }
+      const rank = (x: WorkboardMentionPerson) => (x.role_id || x.email ? 1 : 0);
+      if (rank(p) > rank(prev)) byKey.set(key, p);
+      else if (rank(p) === rank(prev)) {
+        byKey.set(key, {
+          display: disp,
+          role_id: p.role_id || prev.role_id,
+          email: p.email || prev.email,
+        });
+      }
+    };
+
+    for (const name of WORKBOARD_MENTION_PEOPLE) {
+      const d = name.trim().replace(/^@/, "");
+      if (d) consider({ display: d, role_id: null, email: null });
     }
-    return [...seen.values()].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
-  }, [user, apiNames]);
+    for (const p of apiPeople) consider(p);
+
+    return [...byKey.values()].sort((a, b) =>
+      a.display.toLowerCase().localeCompare(b.display.toLowerCase()),
+    );
+  }, [user, apiPeople]);
 
   const mentionMenu = useMemo(() => {
     const at = draft.lastIndexOf("@");
@@ -125,11 +150,14 @@ function TagField({
   const mentionFiltered = useMemo(() => {
     if (!mentionMenu) return [];
     const q = mentionMenu.filter;
-    return mentionPickerNames.filter((name) => {
-      const disp = name.toLowerCase();
-      return !q || disp.includes(q);
+    return mentionPickerPeople.filter((p) => {
+      if (!q) return true;
+      const disp = p.display.toLowerCase();
+      const em = (p.email || "").toLowerCase();
+      const sub = (workboardMentionSubtitle(p.role_id, p.email) || "").toLowerCase();
+      return disp.includes(q) || em.includes(q) || sub.includes(q);
     });
-  }, [mentionMenu, mentionPickerNames]);
+  }, [mentionMenu, mentionPickerPeople]);
 
   useEffect(() => {
     setMentionHighlight(0);
@@ -151,10 +179,10 @@ function TagField({
     onChange([...tags, t]);
   };
 
-  const pickMention = (displayName: string) => {
+  const pickMention = (person: WorkboardMentionPerson) => {
     if (!mentionMenu) return;
     setDraft(draft.slice(0, mentionMenu.at));
-    pushTag(mentionFromName(displayName));
+    pushTag(mentionFromName(person.display));
     requestAnimationFrame(() => inputRef.current?.focus());
   };
 
@@ -198,21 +226,23 @@ function TagField({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
-            if (mentionMenu && mentionFiltered.length) {
-              if (e.key === "ArrowDown") {
-                e.preventDefault();
-                setMentionHighlight((i) => (i + 1) % mentionFiltered.length);
-                return;
-              }
-              if (e.key === "ArrowUp") {
-                e.preventDefault();
-                setMentionHighlight((i) => (i - 1 + mentionFiltered.length) % mentionFiltered.length);
-                return;
-              }
-              if (e.key === "Enter") {
-                e.preventDefault();
-                pickMention(mentionFiltered[mentionHighlight]!);
-                return;
+            if (mentionMenu) {
+              if (mentionFiltered.length) {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setMentionHighlight((i) => (i + 1) % mentionFiltered.length);
+                  return;
+                }
+                if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setMentionHighlight((i) => (i - 1 + mentionFiltered.length) % mentionFiltered.length);
+                  return;
+                }
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  pickMention(mentionFiltered[mentionHighlight]!);
+                  return;
+                }
               }
               if (e.key === "Escape") {
                 e.preventDefault();
@@ -222,68 +252,70 @@ function TagField({
             }
             if (e.key === "Enter") {
               e.preventDefault();
+              if (mentionMenu && mentionFiltered.length === 0) return;
               pushTag(draft);
               setDraft("");
             }
           }}
-          placeholder={placeholder || "Type @name or #ticket and press Enter…"}
+          placeholder={placeholder || "Type @ for people, #ticket and Enter…"}
           className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-sky-500/30"
           role="combobox"
-          aria-expanded={Boolean(mentionMenu && mentionFiltered.length)}
-          aria-controls={mentionFiltered.length ? `${mentionListId}-listbox` : undefined}
+          aria-expanded={Boolean(mentionMenu)}
+          aria-controls={mentionMenu ? `${mentionListId}-listbox` : undefined}
           aria-autocomplete="list"
         />
-        {mentionMenu && mentionFiltered.length > 0 ? (
+        {mentionMenu ? (
           <ul
             id={`${mentionListId}-listbox`}
             role="listbox"
-            className="absolute z-50 left-0 right-0 mt-1 max-h-52 overflow-y-auto rounded-xl border border-white/[0.1] bg-zinc-950/98 shadow-[0_12px_40px_rgba(0,0,0,0.45)] py-1 backdrop-blur-md"
+            className="absolute z-50 left-0 right-0 bottom-full mb-1.5 max-h-[min(320px,50vh)] overflow-y-auto rounded-xl border border-white/[0.12] bg-[#141416]/[0.98] shadow-[0_-16px_48px_rgba(0,0,0,0.55)] py-1.5 backdrop-blur-md"
           >
-            {mentionFiltered.map((name, idx) => (
-              <li key={name} role="presentation">
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={idx === mentionHighlight}
-                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
-                    idx === mentionHighlight
-                      ? "bg-sky-500/20 text-sky-50"
-                      : "text-zinc-200 hover:bg-white/[0.06]"
-                  }`}
-                  onMouseDown={(ev) => {
-                    ev.preventDefault();
-                    pickMention(name);
-                  }}
-                  onMouseEnter={() => setMentionHighlight(idx)}
-                >
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-sky-500/25 to-violet-500/20 text-[11px] font-semibold uppercase text-sky-100/90">
-                    {name.slice(0, 2)}
-                  </span>
-                  <span className="min-w-0 truncate font-medium">{name}</span>
-                  <AtSign className="ml-auto h-3.5 w-3.5 shrink-0 opacity-40" aria-hidden />
-                </button>
+            <li className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500" role="presentation">
+              People
+            </li>
+            {mentionFiltered.length === 0 ? (
+              <li className="px-3 py-2.5 text-xs text-zinc-500" role="presentation">
+                No matches — keep typing or press Esc
               </li>
-            ))}
+            ) : (
+              mentionFiltered.map((person, idx) => {
+                const sub = workboardMentionSubtitle(person.role_id, person.email);
+                const rowKey = `${person.display}|${person.email ?? ""}|${person.role_id ?? ""}`;
+                return (
+                  <li key={rowKey} role="presentation">
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={idx === mentionHighlight}
+                      className={`mx-1 flex w-[calc(100%-0.5rem)] items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors ${
+                        idx === mentionHighlight
+                          ? "bg-white/[0.1] text-zinc-50"
+                          : "text-zinc-200 hover:bg-white/[0.05]"
+                      }`}
+                      onMouseDown={(ev) => {
+                        ev.preventDefault();
+                        pickMention(person);
+                      }}
+                      onMouseEnter={() => setMentionHighlight(idx)}
+                    >
+                      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-zinc-400">
+                        <User className="h-4 w-4" aria-hidden />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13px] font-medium leading-tight">{person.display}</span>
+                        {sub ? (
+                          <span className="mt-0.5 block truncate text-[11px] leading-tight text-zinc-500">{sub}</span>
+                        ) : null}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })
+            )}
           </ul>
         ) : null}
       </div>
-      {mentionPickerNames.length > 0 && (
-        <div>
-          <p className="text-[12px] text-zinc-500 mb-1.5">Who asked for this (tap to add @mention)</p>
-          <div className="flex flex-wrap gap-1.5">
-            {mentionPickerNames.map((name) => (
-              <button
-                key={name}
-                type="button"
-                onClick={() => pushTag(mentionFromName(name))}
-                className="rounded-full px-2.5 py-1 text-xs font-medium text-zinc-200 bg-white/[0.06] border border-white/[0.08] hover:bg-white/[0.11] transition-colors"
-              >
-                @{name.replace(/^@/, "")}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      <p className="text-[11px] text-zinc-600">Type @ — menu opens above the field. Roles show when set in user roster.</p>
     </div>
   );
 }

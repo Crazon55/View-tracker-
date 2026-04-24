@@ -239,9 +239,15 @@ export const getSixDayDeadlines = () => fetchApi<any>("/api/v1/six-day/deadlines
 export const getSixDayPageData = (pageId: string, month?: string) =>
   fetchApi<any>(`/api/v1/six-day/page/${pageId}${month ? `?month=${month}` : ""}`);
 
-// Weekly workboard — people seen in tracker / content / roles (for @mentions)
+// Weekly workboard — roster + activity (for @mentions)
+export type WorkboardMentionPerson = {
+  display: string;
+  role_id: string | null;
+  email: string | null;
+};
+
 export const getWorkboardMentionCandidates = () =>
-  fetchApi<{ names: string[] }>("/api/v1/workboard/mention-candidates");
+  fetchApi<{ people: WorkboardMentionPerson[] }>("/api/v1/workboard/mention-candidates");
 
 // Deadlines
 export const getDeadlines = (role?: string) =>
