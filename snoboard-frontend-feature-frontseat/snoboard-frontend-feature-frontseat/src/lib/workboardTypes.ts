@@ -70,6 +70,8 @@ export type WorkboardChunk = {
   title: string;
   status: ChunkStatus;
   sort_order: number;
+  /** @mentions / #tickets for this step */
+  tags: string[];
 };
 
 export type WorkboardInterrupt = {
@@ -140,12 +142,29 @@ export function newId(): string {
 
 /** Ensure tags exist on rows loaded from older localStorage. */
 export function normalizeAssignments(list: MainAssignment[]): MainAssignment[] {
-  return list.map((a) => ({
-    ...a,
-    tags: Array.isArray(a.tags) ? a.tags : [],
-    interrupts: (a.interrupts || []).map((i) => ({
-      ...i,
-      tags: Array.isArray(i.tags) ? i.tags : [],
-    })),
-  }));
+  return list.map((a) => {
+    let topTags = Array.isArray(a.tags) ? [...a.tags] : [];
+    const chunksRaw = a.chunks || [];
+    let chunks: WorkboardChunk[] = chunksRaw.map((c) => ({
+      ...c,
+      tags: Array.isArray(c.tags) ? c.tags : [],
+    }));
+    if (
+      chunks.length > 0 &&
+      topTags.length > 0 &&
+      chunks.every((c) => !c.tags.length)
+    ) {
+      chunks = chunks.map((c, i) => (i === 0 ? { ...c, tags: [...topTags] } : c));
+      topTags = [];
+    }
+    return {
+      ...a,
+      tags: topTags,
+      chunks,
+      interrupts: (a.interrupts || []).map((i) => ({
+        ...i,
+        tags: Array.isArray(i.tags) ? i.tags : [],
+      })),
+    };
+  });
 }

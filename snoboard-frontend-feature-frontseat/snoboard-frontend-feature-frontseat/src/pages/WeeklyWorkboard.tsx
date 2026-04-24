@@ -26,6 +26,10 @@ import { LayoutGrid, List, ChevronLeft, ChevronRight, ChevronDown, ChevronRight 
 
 const STORAGE_KEY = "fsboard-weekly-workboard-v1";
 
+/** Match App layout greeting pill: translucent glass */
+const BENTO_SURFACE =
+  "rounded-2xl border border-white/10 bg-white/[0.07] backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.28)]";
+
 function loadStore(): MainAssignment[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -77,6 +81,7 @@ function isPersonMentionTag(t: string): boolean {
 function allAssignmentTags(a: MainAssignment): string[] {
   const set = new Set<string>();
   (a.tags || []).forEach((t) => t && set.add(t));
+  a.chunks.forEach((c) => (c.tags || []).forEach((t) => t && set.add(t)));
   a.interrupts.forEach((i) => (i.tags || []).forEach((t) => t && set.add(t)));
   return [...set];
 }
@@ -85,10 +90,13 @@ function TagField({
   tags,
   onChange,
   placeholder,
+  compact,
 }: {
   tags: string[];
   onChange: (next: string[]) => void;
   placeholder?: string;
+  /** Tighter layout for step rows */
+  compact?: boolean;
 }) {
   const { user } = useAuth();
   const mentionListId = useId();
@@ -164,7 +172,7 @@ function TagField({
   };
 
   return (
-    <div className="space-y-2">
+    <div className={compact ? "space-y-1.5" : "space-y-2"}>
       {tags.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {tags.map((t) => {
@@ -172,7 +180,9 @@ function TagField({
             return (
               <span
                 key={t}
-                className={`inline-flex items-center gap-0.5 pl-2.5 pr-1 py-0.5 rounded-full text-[12px] max-w-full border ${
+                className={`inline-flex items-center gap-0.5 pl-2.5 pr-1 py-0.5 rounded-full max-w-full border ${
+                  compact ? "text-[11px]" : "text-[12px]"
+                } ${
                   person
                     ? "bg-sky-500/15 text-sky-100 border-sky-400/25"
                     : "bg-stone-500/10 text-stone-200 border-stone-400/15"
@@ -235,7 +245,10 @@ function TagField({
             }
           }}
           placeholder={placeholder || "Type @ for people, #ticket and Enter…"}
-          className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-sky-500/30"
+          className={cn(
+            "w-full rounded-xl border border-white/[0.08] bg-white/[0.04] text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-violet-500/30",
+            compact ? "px-2.5 py-1.5 text-xs" : "px-3 py-2.5 text-sm",
+          )}
           role="combobox"
           aria-expanded={Boolean(mentionMenu)}
           aria-controls={mentionMenu ? `${mentionListId}-listbox` : undefined}
@@ -426,7 +439,7 @@ export default function WeeklyWorkboard() {
           ...a,
           chunks: [
             ...a.chunks,
-            { id: newId(), title: "", status: "not_started", sort_order: n },
+            { id: newId(), title: "", status: "not_started", sort_order: n, tags: [] },
           ],
         };
       })
@@ -495,27 +508,29 @@ export default function WeeklyWorkboard() {
 
   return (
     <div
-      className="min-h-screen text-zinc-100 bg-[#1a1a1c]"
+      className="min-h-screen text-zinc-100 bg-zinc-950"
       style={{
         fontFamily: "'DM Sans', ui-sans-serif, system-ui, sans-serif",
-        backgroundImage: "radial-gradient(ellipse 120% 80% at 50% -20%, rgba(56, 189, 248, 0.08), transparent 55%)",
+        backgroundImage:
+          "radial-gradient(ellipse 120% 80% at 50% -20%, rgba(139, 92, 246, 0.12), transparent 50%), radial-gradient(ellipse 80% 50% at 100% 50%, rgba(56, 189, 248, 0.06), transparent 45%)",
       }}
     >
-      <div className="pl-[70px] pr-6 pt-8 pb-12 max-w-[1100px] mx-auto">
-        <header className="mb-10">
-          <p className="text-sm text-sky-300/90 font-medium mb-1">Weekly workboard</p>
+      <div className="pl-[70px] pr-6 pt-8 pb-12 max-w-[1200px] mx-auto">
+        <header className={`${BENTO_SURFACE} p-6 mb-8`}>
+          <p className="text-sm text-violet-300/90 font-medium mb-1">Weekly workboard</p>
           <h1 className="text-3xl font-semibold tracking-tight text-white">Studio &amp; ops</h1>
           <p className="text-[15px] text-zinc-400 mt-3 max-w-2xl leading-relaxed">
-            Plan the week by role, split work into steps, and note what got in the way. Mention teammates with{" "}
-            <span className="text-zinc-200">@name</span> (like Notion) or tickets with{" "}
-            <span className="text-zinc-200">#13</span>. Edit the teammate list in{" "}
-            <code className="text-zinc-500 text-[13px]">workboardTypes.ts</code> if needed. Saves on this device for now.
+            Plan by role, split into steps, and log blockers. Add{" "}
+            <span className="text-zinc-200">@name</span> / <span className="text-zinc-200">#ticket</span>{" "}
+            <span className="text-zinc-300">inside each step</span> so asks stay with the work. Saves on this device.
           </p>
           {user?.email && <p className="text-xs text-zinc-600 mt-3">{user.email}</p>}
         </header>
 
         <div className="flex flex-wrap items-center gap-3 mb-8">
-          <div className="flex items-center gap-0.5 rounded-2xl border border-white/[0.08] bg-white/[0.04] p-1 shadow-sm">
+          <div
+            className={`flex items-center gap-0.5 ${BENTO_SURFACE} p-1`}
+          >
             <button
               type="button"
               onClick={() => setWeekStart((w) => addDaysISO(w, -7))}
@@ -544,12 +559,14 @@ export default function WeeklyWorkboard() {
             </button>
           </div>
 
-          <div className="inline-flex rounded-2xl border border-white/[0.08] bg-white/[0.04] p-1 shadow-sm">
+          <div className={`inline-flex ${BENTO_SURFACE} p-1`}>
             <button
               type="button"
               onClick={() => setView("list")}
               className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-colors ${
-                view === "list" ? "bg-sky-600 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.05]"
+                view === "list"
+                  ? "bg-violet-600 text-white shadow-lg shadow-violet-600/20"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06]"
               }`}
             >
               <List className="w-4 h-4" />
@@ -559,7 +576,9 @@ export default function WeeklyWorkboard() {
               type="button"
               onClick={() => setView("gallery")}
               className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-colors ${
-                view === "gallery" ? "bg-sky-600 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.05]"
+                view === "gallery"
+                  ? "bg-violet-600 text-white shadow-lg shadow-violet-600/20"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06]"
               }`}
             >
               <LayoutGrid className="w-4 h-4" />
@@ -606,7 +625,7 @@ function interruptRollupPercent(interrupts: WorkboardInterrupt[]): number {
   return Math.round((done / interrupts.length) * 100);
 }
 
-function ProgressBar({ pct, variant = "sky" }: { pct: number; variant?: "sky" | "orange" }) {
+function ProgressBar({ pct, variant = "violet" }: { pct: number; variant?: "violet" | "orange" }) {
   return (
     <div className="h-2 rounded-full bg-zinc-800/80 overflow-hidden">
       <div
@@ -614,7 +633,7 @@ function ProgressBar({ pct, variant = "sky" }: { pct: number; variant?: "sky" | 
           "h-full rounded-full transition-all duration-300",
           variant === "orange"
             ? "bg-gradient-to-r from-orange-500 to-amber-400/90"
-            : "bg-gradient-to-r from-sky-500 to-sky-400/90",
+            : "bg-gradient-to-r from-violet-500 to-violet-400/85",
         )}
         style={{ width: `${pct}%` }}
       />
@@ -625,12 +644,12 @@ function ProgressBar({ pct, variant = "sky" }: { pct: number; variant?: "sky" | 
 function ChunkStatusSelect({
   value,
   onChange,
-  accent = "sky",
+  accent = "violet",
 }: {
   value: ChunkStatus;
   onChange: (v: ChunkStatus) => void;
   /** Ring color when focused (chunks vs interrupts). */
-  accent?: "sky" | "orange";
+  accent?: "violet" | "orange";
 }) {
   return (
     <Select value={value} onValueChange={(v) => onChange(v as ChunkStatus)}>
@@ -638,7 +657,9 @@ function ChunkStatusSelect({
         className={cn(
           "h-9 w-[min(100%,11rem)] shrink-0 rounded-xl border border-white/10 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-100 shadow-none",
           "focus:ring-2 data-[state=open]:ring-2",
-          accent === "orange" ? "focus:ring-orange-500/30 data-[state=open]:ring-orange-500/30" : "focus:ring-sky-500/30 data-[state=open]:ring-sky-500/30",
+          accent === "orange"
+            ? "focus:ring-orange-500/30 data-[state=open]:ring-orange-500/30"
+            : "focus:ring-violet-500/30 data-[state=open]:ring-violet-500/30",
         )}
       >
         <SelectValue />
@@ -753,21 +774,21 @@ function AssignmentEditor({
 
   const shellClass = embedBelowListHeader
     ? `${compact ? "p-4" : "p-5"}`
-    : `rounded-2xl border border-white/[0.07] bg-white/[0.03] shadow-sm ${compact ? "p-4" : "p-6"}`;
+    : `${BENTO_SURFACE} ${compact ? "p-4" : "p-6"}`;
 
   return (
     <div className={shellClass}>
       {!embedBelowListHeader && (
         <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
           <div>
-            <span className="text-xs font-medium text-sky-300/90">{roleLabel(a.role_id)}</span>
+            <span className="text-xs font-medium text-violet-300/90">{roleLabel(a.role_id)}</span>
             <div className="flex items-center gap-2 mt-2">
               <span className="text-xs text-zinc-500 w-24 shrink-0">Main task</span>
               <input
                 value={a.title}
                 onChange={(e) => patchAssignment(a.id, { title: e.target.value })}
                 placeholder="What you’re shipping this week…"
-                className="flex-1 min-w-[200px] rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/25"
+                className="flex-1 min-w-[200px] rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25"
               />
             </div>
           </div>
@@ -792,14 +813,14 @@ function AssignmentEditor({
               value={a.title}
               onChange={(e) => patchAssignment(a.id, { title: e.target.value })}
               placeholder="What you’re shipping this week…"
-              className="mt-1.5 w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/25"
+              className="mt-1.5 w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25"
             />
           ) : (
             <input
               type="date"
               value={a.due_date}
               onChange={(e) => patchAssignment(a.id, { due_date: e.target.value })}
-              className="mt-1.5 w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/25"
+              className="mt-1.5 w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25"
             />
           )}
         </div>
@@ -811,7 +832,7 @@ function AssignmentEditor({
                 type="date"
                 value={a.due_date}
                 onChange={(e) => patchAssignment(a.id, { due_date: e.target.value })}
-                className="mt-1.5 w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/25"
+                className="mt-1.5 w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25"
               />
             </div>
             <div>
@@ -844,20 +865,8 @@ function AssignmentEditor({
           onChange={(e) => patchAssignment(a.id, { description: e.target.value })}
           rows={compact ? 2 : 3}
           placeholder="Context, links, expectations…"
-          className="mt-1.5 w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-sky-500/25"
+          className="mt-1.5 w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-violet-500/25"
         />
-      </div>
-
-      <div className="mb-5">
-        <label className="text-xs font-medium text-zinc-500 flex items-center gap-1.5">
-          <AtSign className="w-3.5 h-3.5 opacity-70" />
-          Mentions &amp; labels
-        </label>
-        <p className="text-[12px] text-zinc-500 mt-1 mb-2">
-          Tag <span className="text-zinc-300">who assigned or cares</span> — not yourself. Quick picks below; or type{" "}
-          <span className="text-zinc-300">@name</span> / <span className="text-zinc-300">#ticket</span>.
-        </p>
-        <TagField tags={a.tags || []} onChange={(tags) => patchAssignment(a.id, { tags })} />
       </div>
 
       <div className="mb-5">
@@ -866,7 +875,7 @@ function AssignmentEditor({
           <button
             type="button"
             onClick={() => addChunk(a.id)}
-            className="flex items-center gap-1 text-sm font-medium text-sky-400 hover:text-sky-300"
+            className="flex items-center gap-1 text-sm font-medium text-violet-400 hover:text-violet-300"
           >
             <Plus className="w-4 h-4" />
             Add step
@@ -877,21 +886,40 @@ function AssignmentEditor({
         ) : (
           <ul className="space-y-2">
             {a.chunks.map((c) => (
-              <li key={c.id} className="flex flex-wrap items-center gap-2 rounded-xl bg-white/[0.03] border border-white/[0.06] p-2.5">
-                <input
-                  value={c.title}
-                  onChange={(e) => updateChunk(a.id, c.id, { title: e.target.value })}
-                  placeholder="Step name"
-                  className="flex-1 min-w-[140px] rounded-lg border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20"
-                />
-                <ChunkStatusSelect value={c.status} onChange={(v) => updateChunk(a.id, c.id, { status: v })} />
-                <button
-                  type="button"
-                  onClick={() => removeChunk(a.id, c.id)}
-                  className="p-1.5 text-zinc-600 hover:text-red-400"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+              <li
+                key={c.id}
+                className="rounded-xl border border-white/[0.08] bg-white/[0.04] p-3 space-y-2 backdrop-blur-sm"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    value={c.title}
+                    onChange={(e) => updateChunk(a.id, c.id, { title: e.target.value })}
+                    placeholder="Step name"
+                    className="flex-1 min-w-[140px] rounded-lg border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/25"
+                  />
+                  <ChunkStatusSelect value={c.status} onChange={(v) => updateChunk(a.id, c.id, { status: v })} />
+                  <button
+                    type="button"
+                    onClick={() => removeChunk(a.id, c.id)}
+                    className="p-1.5 text-zinc-600 hover:text-red-400"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <div>
+                  <label className="text-[10px] font-medium text-zinc-500 flex items-center gap-1">
+                    <AtSign className="w-3 h-3 opacity-60" />
+                    Mentions for this step
+                  </label>
+                  <div className="mt-1">
+                    <TagField
+                      compact
+                      tags={c.tags || []}
+                      onChange={(tags) => updateChunk(a.id, c.id, { tags })}
+                      placeholder="@who · #ticket — Enter"
+                    />
+                  </div>
+                </div>
               </li>
             ))}
           </ul>
@@ -1032,10 +1060,7 @@ function ListView({
         const listIntPct = interruptRollupPercent(a.interrupts);
         const listIntDone = a.interrupts.filter((i) => i.status === "completed").length;
         return (
-          <div
-            key={a.id}
-            className="rounded-2xl border border-white/[0.07] bg-white/[0.03] shadow-sm overflow-hidden"
-          >
+          <div key={a.id} className={cn(BENTO_SURFACE, "overflow-hidden")}>
             <div className="flex items-stretch gap-0">
               <button
                 type="button"
@@ -1048,29 +1073,30 @@ function ListView({
                   <ChevronRightIcon className="w-5 h-5 text-zinc-500 shrink-0 mt-0.5" />
                 )}
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium text-sky-300/90">{roleLabel(a.role_id)}</div>
+                  <div className="text-xs font-medium text-violet-300/90">{roleLabel(a.role_id)}</div>
                   <div className="text-[15px] font-medium text-white mt-1 break-words">
                     {a.title || "Untitled main task"}
                   </div>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-zinc-500">
                     <span>Due {a.due_date}</span>
-                    <span>
-                      {pct}% · {a.chunks.filter((c) => c.status === "completed").length}/{a.chunks.length || 0} steps
+                    <span className="text-zinc-400">
+                      Steps {pct}% ({a.chunks.filter((c) => c.status === "completed").length}/{a.chunks.length || 0})
                     </span>
-                    {a.interrupts.length > 0 && <span className="text-orange-300/80">{a.interrupts.length} extra</span>}
-                  </div>
-                  <div className="mt-2 max-w-md space-y-1.5">
-                    <ProgressBar pct={pct} />
                     {a.interrupts.length > 0 && (
-                      <>
-                        <ProgressBar pct={listIntPct} variant="orange" />
-                        <p className="text-[10px] text-zinc-600">
-                          Extra work {listIntPct}% · {listIntDone}/{a.interrupts.length} done
-                        </p>
-                      </>
+                      <span className="text-orange-300/90">
+                        Extra {listIntPct}% ({listIntDone}/{a.interrupts.length})
+                      </span>
                     )}
                   </div>
-                  {!open && <TagChipsRow tags={allAssignmentTags(a)} />}
+                  <div className="mt-2 max-w-md space-y-1">
+                    <ProgressBar pct={pct} />
+                    {a.interrupts.length > 0 && <ProgressBar pct={listIntPct} variant="orange" />}
+                  </div>
+                  {!open && allAssignmentTags(a).length > 0 && (
+                    <div className="mt-2">
+                      <TagChipsRow tags={allAssignmentTags(a)} />
+                    </div>
+                  )}
                   {!open && <BlockingLines a={a} />}
                 </div>
               </button>
@@ -1086,7 +1112,7 @@ function ListView({
               </div>
             </div>
             {open && (
-              <div className="border-t border-white/[0.06] px-4 pb-4 pt-3 bg-black/20">
+              <div className="border-t border-white/[0.08] px-4 pb-4 pt-3 bg-black/25 backdrop-blur-sm">
                 <AssignmentEditor
                   a={a}
                   embedBelowListHeader
@@ -1106,7 +1132,7 @@ function ListView({
       })}
 
       {missingRoles.length > 0 && (
-        <div className="rounded-2xl border border-dashed border-white/[0.12] bg-white/[0.02] p-5">
+        <div className={cn(BENTO_SURFACE, "border-dashed p-5")}>
           <p className="text-sm text-zinc-500 mb-3">Add a card for someone’s role this week:</p>
           <div className="flex flex-wrap gap-2">
             {missingRoles.map((r) => (
@@ -1114,7 +1140,7 @@ function ListView({
                 key={r.id}
                 type="button"
                 onClick={() => addAssignment(r.id)}
-                className="px-3 py-2 rounded-xl text-xs font-medium bg-white/[0.08] text-zinc-200 hover:bg-sky-600 hover:text-white border border-white/[0.08] transition-colors"
+                className="px-3 py-2 rounded-xl text-xs font-medium bg-white/[0.08] text-zinc-200 hover:bg-violet-600 hover:text-white border border-white/[0.08] transition-colors"
               >
                 + {r.short}
               </button>
@@ -1152,8 +1178,8 @@ function GalleryView({
   const [expandId, setExpandId] = useState<string | null>(null);
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      {WORKBOARD_ROLES.map((r) => {
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      {WORKBOARD_ROLES.map((r, roleIdx) => {
         const a = byRole.get(r.id);
         if (!a) {
           return (
@@ -1161,9 +1187,14 @@ function GalleryView({
               key={r.id}
               type="button"
               onClick={() => addAssignment(r.id)}
-              className="rounded-2xl border-2 border-dashed border-white/[0.12] bg-white/[0.02] p-6 text-left hover:border-sky-500/40 hover:bg-white/[0.04] transition-colors min-h-[160px] flex flex-col justify-center"
+              className={cn(
+                BENTO_SURFACE,
+                "border-2 border-dashed min-h-[160px] flex flex-col justify-center p-6 text-left",
+                "hover:border-violet-500/45 hover:bg-white/[0.09] transition-colors",
+                roleIdx === 0 && "xl:col-span-2 xl:min-h-[200px]",
+              )}
             >
-              <span className="text-sm font-medium text-zinc-300">{r.label}</span>
+              <span className="text-sm font-medium text-zinc-200">{r.label}</span>
               <span className="text-xs text-zinc-500 mt-2">Add this week’s focus</span>
             </button>
           );
@@ -1176,11 +1207,15 @@ function GalleryView({
         return (
           <div
             key={a.id}
-            className="rounded-2xl border border-white/[0.07] bg-white/[0.03] shadow-sm overflow-hidden flex flex-col"
+            className={cn(
+              BENTO_SURFACE,
+              "overflow-hidden flex flex-col min-h-0",
+              roleIdx === 0 && "xl:col-span-2 xl:min-h-[300px]",
+            )}
           >
             <div className="p-4 flex-1 flex flex-col min-h-0">
               <div className="flex items-center justify-between gap-2 mb-2">
-                <span className="text-xs font-medium text-sky-300/90">{roleShort(r.id)}</span>
+                <span className="text-xs font-medium text-violet-300/90">{roleShort(r.id)}</span>
                 <span className="text-[11px] text-zinc-500">{a.due_date}</span>
               </div>
               <p className="text-[11px] font-medium text-zinc-500 mb-1">Assigned</p>
@@ -1220,12 +1255,16 @@ function GalleryView({
                   <p className="text-[11px] font-medium text-zinc-500 mb-1.5">Steps</p>
                   <ul className="space-y-1 max-h-[88px] overflow-y-auto pr-0.5">
                     {a.chunks.map((c) => (
-                      <li
-                        key={c.id}
-                        className="flex items-start justify-between gap-2 text-[11px] text-zinc-300 leading-tight"
-                      >
-                        <span className="truncate min-w-0">{c.title || "Untitled chunk"}</span>
-                        <span className="shrink-0 text-zinc-500 text-[10px]">{CHUNK_STATUS_LABEL[c.status]}</span>
+                      <li key={c.id} className="text-[11px] text-zinc-300 leading-tight">
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="truncate min-w-0">{c.title || "Untitled chunk"}</span>
+                          <span className="shrink-0 text-zinc-500 text-[10px]">{CHUNK_STATUS_LABEL[c.status]}</span>
+                        </div>
+                        {(c.tags || []).length > 0 && (
+                          <div className="mt-1 pl-0">
+                            <TagChipsRow tags={c.tags} max={4} />
+                          </div>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -1267,11 +1306,11 @@ function GalleryView({
                 </div>
               )}
             </div>
-            <div className="border-t border-white/[0.06] p-2 flex gap-2 bg-black/15">
+            <div className="border-t border-white/[0.08] p-2 flex gap-2 bg-black/20 backdrop-blur-sm">
               <button
                 type="button"
                 onClick={() => setExpandId(open ? null : a.id)}
-                className="flex-1 py-2.5 text-xs font-medium rounded-xl bg-white/[0.08] text-zinc-100 hover:bg-white/[0.12] transition-colors"
+                className="flex-1 py-2.5 text-xs font-medium rounded-xl bg-white/[0.08] text-zinc-100 hover:bg-violet-600/80 transition-colors"
               >
                 {open ? "Collapse" : "Expand"}
               </button>
@@ -1284,7 +1323,7 @@ function GalleryView({
               </button>
             </div>
             {open && (
-              <div className="border-t border-white/[0.06] p-4 bg-black/25 max-h-[70vh] overflow-y-auto">
+              <div className="border-t border-white/[0.08] p-4 bg-black/30 backdrop-blur-md max-h-[70vh] overflow-y-auto">
                 <AssignmentEditor
                   a={a}
                   compact
