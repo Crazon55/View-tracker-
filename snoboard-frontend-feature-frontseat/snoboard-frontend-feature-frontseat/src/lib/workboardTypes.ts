@@ -17,6 +17,25 @@ export const WORKBOARD_ROLES: { id: WorkboardRoleId; label: string; short: strin
   { id: "content_creator", label: "Content Creator", short: "Content" },
 ];
 
+/** Label for app `user_roles.role` / assignment `role_id` (extend WORKBOARD_ROLES when adding roles). */
+export function workboardRoleLabel(roleId: string | null | undefined): string | null {
+  if (!roleId) return null;
+  const hit = WORKBOARD_ROLES.find((r) => r.id === roleId);
+  return hit?.label ?? null;
+}
+
+/** Secondary line under the name in @mention menu (role · email). */
+export function workboardMentionSubtitle(
+  roleId: string | null | undefined,
+  email: string | null | undefined,
+): string | null {
+  const parts: string[] = [];
+  const rl = workboardRoleLabel(roleId);
+  if (rl) parts.push(rl);
+  if (email?.trim()) parts.push(email.trim());
+  return parts.length ? parts.join(" · ") : null;
+}
+
 /**
  * Quick @mentions for who assigned work or needs visibility (Notion-style).
  * Edit this list for your team — first names or display names work best.
