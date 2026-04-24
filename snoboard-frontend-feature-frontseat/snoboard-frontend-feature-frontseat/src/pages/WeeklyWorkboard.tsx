@@ -14,7 +14,7 @@ import {
   rollupPercent,
   newId,
 } from "@/lib/workboardTypes";
-import { LayoutGrid, List, ChevronLeft, ChevronRight, Plus, Trash2, Link2 } from "lucide-react";
+import { LayoutGrid, List, ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Plus, Trash2, Link2 } from "lucide-react";
 
 const STORAGE_KEY = "fsboard-weekly-workboard-v1";
 
@@ -43,6 +43,35 @@ function roleShort(id: WorkboardRoleId) {
 }
 
 const STATUS_OPTIONS: ChunkStatus[] = ["not_started", "in_progress", "completed"];
+
+/** Human label for what an interrupt is blocking (main vs chunk title). */
+function blockTargetLabel(a: MainAssignment, kind: "main" | "chunk" | null, targetId: string | null): string {
+  if (!kind || !targetId) return "";
+  if (kind === "main") return `main: ${a.title || "(untitled)"}`;
+  const ch = a.chunks.find((c) => c.id === targetId);
+  return ch?.title ? `chunk: ${ch.title}` : "a chunk";
+}
+
+function BlockingLines({ a }: { a: MainAssignment }) {
+  const lines = a.interrupts
+    .filter((it) => it.blocks_target_id && it.blocks_target_kind)
+    .map((it) => {
+      const tgt = blockTargetLabel(a, it.blocks_target_kind, it.blocks_target_id);
+      const name = it.title?.trim() || "Interrupt";
+      return `${name} → blocking ${tgt}`;
+    });
+  if (!lines.length) return null;
+  return (
+    <ul className="mt-2 space-y-1">
+      {lines.map((line, i) => (
+        <li key={i} className="text-[11px] text-amber-400/90 leading-snug flex gap-1.5">
+          <span className="text-amber-500/70 shrink-0">●</span>
+          <span>{line}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export default function WeeklyWorkboard() {
   const { user } = useAuth();
@@ -331,6 +360,8 @@ function ChunkStatusSelect({
 function AssignmentEditor({
   a,
   compact,
+  /** When true, skip role + trash header; main task is edited in the grid (for list view under collapsible header). */
+  embedBelowListHeader,
   removeAssignment,
   patchAssignment,
   addChunk,
@@ -342,6 +373,7 @@ function AssignmentEditor({
 }: {
   a: MainAssignment;
   compact?: boolean;
+  embedBelowListHeader?: boolean;
   removeAssignment: (id: string) => void;
   patchAssignment: (id: string, patch: Partial<MainAssignment>) => void;
   addChunk: (assignmentId: string) => void;
@@ -357,50 +389,92 @@ function AssignmentEditor({
     ...a.chunks.map((c) => ({ id: c.id, kind: "chunk" as const, label: `Chunk: ${c.title || "…"}` })),
   ];
 
+  const shellClass = embedBelowListHeader
+    ? `${compact ? "p-4" : "p-5"}`
+    : `rounded-xl border border-zinc-800 bg-zinc-900/40 ${compact ? "p-4" : "p-5"}`;
+
   return (
-    <div className={`rounded-xl border border-zinc-800 bg-zinc-900/40 ${compact ? "p-4" : "p-5"}`}>
-      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
-        <div>
-          <span className="text-[10px] font-bold uppercase tracking-wider text-violet-400">
-            {roleLabel(a.role_id)}
-          </span>
-          <div className="flex items-center gap-2 mt-1">
-            <span className="text-xs text-zinc-500 w-24">Main task</span>
+    <div className={shellClass}>
+      {!embedBelowListHeader && (
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-violet-400">
+              {roleLabel(a.role_id)}
+            </span>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-xs text-zinc-500 w-24">Main task</span>
+              <input
+                value={a.title}
+                onChange={(e) => patchAssignment(a.id, { title: e.target.value })}
+                placeholder="e.g. Ship view tracker + bandwidth"
+                className="flex-1 min-w-[200px] rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => removeAssignment(a.id)}
+            className="p-2 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10"
+            title="Remove assignment"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      <div className={`grid gap-3 mb-4 ${embedBelowListHeader ? "sm:grid-cols-2" : "sm:grid-cols-2"}`}>
+        <div className={embedBelowListHeader ? "sm:col-span-2" : ""}>
+          <label className="text-[10px] uppercase font-semibold text-zinc-500">
+            {embedBelowListHeader ? "Main task" : "Due date"}
+          </label>
+          {embedBelowListHeader ? (
             <input
               value={a.title}
               onChange={(e) => patchAssignment(a.id, { title: e.target.value })}
               placeholder="e.g. Ship view tracker + bandwidth"
-              className="flex-1 min-w-[200px] rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
             />
-          </div>
+          ) : (
+            <input
+              type="date"
+              value={a.due_date}
+              onChange={(e) => patchAssignment(a.id, { due_date: e.target.value })}
+              className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+            />
+          )}
         </div>
-        <button
-          type="button"
-          onClick={() => removeAssignment(a.id)}
-          className="p-2 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10"
-          title="Remove assignment"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2 mb-4">
-        <div>
-          <label className="text-[10px] uppercase font-semibold text-zinc-500">Due date</label>
-          <input
-            type="date"
-            value={a.due_date}
-            onChange={(e) => patchAssignment(a.id, { due_date: e.target.value })}
-            className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label className="text-[10px] uppercase font-semibold text-zinc-500">Rollup (from chunks)</label>
-          <div className="mt-2">
-            <ProgressBar pct={pct} />
-            <p className="text-xs text-zinc-500 mt-1">{pct}% — {a.chunks.filter((c) => c.status === "completed").length}/{a.chunks.length || 0} chunks done</p>
-          </div>
-        </div>
+        {embedBelowListHeader ? (
+          <>
+            <div>
+              <label className="text-[10px] uppercase font-semibold text-zinc-500">Due date</label>
+              <input
+                type="date"
+                value={a.due_date}
+                onChange={(e) => patchAssignment(a.id, { due_date: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] uppercase font-semibold text-zinc-500">Rollup (from chunks)</label>
+              <div className="mt-2">
+                <ProgressBar pct={pct} />
+                <p className="text-xs text-zinc-500 mt-1">
+                  {pct}% — {a.chunks.filter((c) => c.status === "completed").length}/{a.chunks.length || 0} chunks done
+                </p>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <label className="text-[10px] uppercase font-semibold text-zinc-500">Rollup (from chunks)</label>
+              <div className="mt-2">
+                <ProgressBar pct={pct} />
+                <p className="text-xs text-zinc-500 mt-1">{pct}% — {a.chunks.filter((c) => c.status === "completed").length}/{a.chunks.length || 0} chunks done</p>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="mb-4">
@@ -565,24 +639,89 @@ function ListView({
   removeInterrupt: (assignmentId: string, intId: string) => void;
   updateInterrupt: (assignmentId: string, intId: string, patch: Partial<WorkboardInterrupt>) => void;
 }) {
+  const [listExpanded, setListExpanded] = useState<Record<string, boolean>>({});
+  const listIsOpen = (id: string) => listExpanded[id] !== false;
+  const toggleListCard = (id: string) => {
+    setListExpanded((p) => {
+      const open = p[id] !== false;
+      return { ...p, [id]: !open };
+    });
+  };
+
   const missingRoles = WORKBOARD_ROLES.filter((r) => !weekAssignments.some((a) => a.role_id === r.id));
 
   return (
-    <div className="space-y-6">
-      {weekAssignments.map((a) => (
-        <AssignmentEditor
-          key={a.id}
-          a={a}
-          removeAssignment={removeAssignment}
-          patchAssignment={patchAssignment}
-          addChunk={addChunk}
-          removeChunk={removeChunk}
-          updateChunk={updateChunk}
-          addInterrupt={addInterrupt}
-          removeInterrupt={removeInterrupt}
-          updateInterrupt={updateInterrupt}
-        />
-      ))}
+    <div className="space-y-4">
+      {weekAssignments.map((a) => {
+        const open = listIsOpen(a.id);
+        const pct = rollupPercent(a.chunks);
+        return (
+          <div
+            key={a.id}
+            className="rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden"
+          >
+            <div className="flex items-stretch gap-0">
+              <button
+                type="button"
+                onClick={() => toggleListCard(a.id)}
+                className="flex flex-1 items-start gap-3 p-4 text-left hover:bg-zinc-900/70 transition-colors min-w-0"
+              >
+                {open ? (
+                  <ChevronDown className="w-5 h-5 text-zinc-500 shrink-0 mt-0.5" />
+                ) : (
+                  <ChevronRightIcon className="w-5 h-5 text-zinc-500 shrink-0 mt-0.5" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-violet-400">
+                    {roleLabel(a.role_id)}
+                  </div>
+                  <div className="text-sm font-semibold text-white mt-0.5 break-words">
+                    {a.title || "Untitled main task"}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-zinc-500">
+                    <span>Due {a.due_date}</span>
+                    <span>
+                      {pct}% · {a.chunks.filter((c) => c.status === "completed").length}/{a.chunks.length || 0}{" "}
+                      chunks
+                    </span>
+                    {a.interrupts.length > 0 && <span className="text-amber-400/80">{a.interrupts.length} interrupts</span>}
+                  </div>
+                  <div className="mt-2 max-w-md">
+                    <ProgressBar pct={pct} />
+                  </div>
+                  {!open && <BlockingLines a={a} />}
+                </div>
+              </button>
+              <div className="flex items-start p-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => removeAssignment(a.id)}
+                  className="p-2 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10"
+                  title="Remove assignment"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            {open && (
+              <div className="border-t border-zinc-800 px-4 pb-4 pt-2 bg-zinc-950/30">
+                <AssignmentEditor
+                  a={a}
+                  embedBelowListHeader
+                  removeAssignment={removeAssignment}
+                  patchAssignment={patchAssignment}
+                  addChunk={addChunk}
+                  removeChunk={removeChunk}
+                  updateChunk={updateChunk}
+                  addInterrupt={addInterrupt}
+                  removeInterrupt={removeInterrupt}
+                  updateInterrupt={updateInterrupt}
+                />
+              </div>
+            )}
+          </div>
+        );
+      })}
 
       {missingRoles.length > 0 && (
         <div className="rounded-xl border border-dashed border-zinc-700 p-4">
@@ -649,23 +788,74 @@ function GalleryView({
         }
         const pct = rollupPercent(a.chunks);
         const open = expandId === a.id;
+        const doneChunks = a.chunks.filter((c) => c.status === "completed").length;
         return (
           <div
             key={a.id}
             className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden flex flex-col"
           >
-            <div className="p-4 flex-1">
+            <div className="p-4 flex-1 flex flex-col min-h-0">
               <div className="flex items-center justify-between gap-2 mb-2">
                 <span className="text-xs font-bold text-violet-400 uppercase tracking-wide">{roleShort(r.id)}</span>
                 <span className="text-[10px] text-zinc-500">{a.due_date}</span>
               </div>
-              <h2 className="text-sm font-semibold text-white line-clamp-2 min-h-[2.5rem]">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 mb-1">Assigned</p>
+              <h2 className="text-sm font-semibold text-white line-clamp-3 min-h-[2.75rem]">
                 {a.title || "Untitled main task"}
               </h2>
               <div className="mt-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 mb-1">Main progress</p>
                 <ProgressBar pct={pct} />
-                <p className="text-[11px] text-zinc-500 mt-1">{pct}% complete · {a.interrupts.length} interrupts</p>
+                <p className="text-[11px] text-zinc-500 mt-1">
+                  {pct}% · {doneChunks}/{a.chunks.length || 0} chunks done
+                  {a.interrupts.length > 0 ? ` · ${a.interrupts.length} interrupts` : ""}
+                </p>
               </div>
+
+              {a.chunks.length > 0 && (
+                <div className="mt-3 border-t border-zinc-800/90 pt-2">
+                  <p className="text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Chunks</p>
+                  <ul className="space-y-1 max-h-[88px] overflow-y-auto pr-0.5">
+                    {a.chunks.map((c) => (
+                      <li
+                        key={c.id}
+                        className="flex items-start justify-between gap-2 text-[11px] text-zinc-300 leading-tight"
+                      >
+                        <span className="truncate min-w-0">{c.title || "Untitled chunk"}</span>
+                        <span className="shrink-0 text-zinc-500 text-[10px]">{CHUNK_STATUS_LABEL[c.status]}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="mt-3 border-t border-zinc-800/90 pt-2">
+                <p className="text-[10px] font-bold uppercase text-amber-400/90 mb-1 flex items-center gap-1">
+                  <Link2 className="w-3 h-3" />
+                  Blocking
+                </p>
+                {a.interrupts.some((it) => it.blocks_target_id && it.blocks_target_kind) ? (
+                  <div className="max-h-[72px] overflow-y-auto">
+                    <BlockingLines a={a} />
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-zinc-600">Nothing linked yet — add interrupts and what they block.</p>
+                )}
+              </div>
+
+              {a.interrupts.length > 0 && (
+                <div className="mt-3 border-t border-zinc-800/90 pt-2 flex-1 min-h-0">
+                  <p className="text-[10px] font-bold uppercase text-amber-500/90 mb-1.5">New / interrupts</p>
+                  <ul className="space-y-1 max-h-[72px] overflow-y-auto">
+                    {a.interrupts.map((it) => (
+                      <li key={it.id} className="text-[11px] text-zinc-400 leading-snug flex gap-1.5">
+                        <span className="text-amber-500/60 shrink-0">+</span>
+                        <span className="line-clamp-2">{it.title || "Untitled"}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
             <div className="border-t border-zinc-800 p-2 flex gap-2">
               <button
