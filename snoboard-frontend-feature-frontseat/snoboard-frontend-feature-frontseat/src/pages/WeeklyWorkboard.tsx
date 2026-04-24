@@ -13,8 +13,9 @@ import {
   fmtWeekRange,
   rollupPercent,
   newId,
+  normalizeAssignments,
 } from "@/lib/workboardTypes";
-import { LayoutGrid, List, ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Plus, Trash2, Link2 } from "lucide-react";
+import { LayoutGrid, List, ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Plus, Trash2, Link2, Hash } from "lucide-react";
 
 const STORAGE_KEY = "fsboard-weekly-workboard-v1";
 
@@ -23,7 +24,7 @@ function loadStore(): MainAssignment[] {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const p = JSON.parse(raw);
-    if (p?.version === 1 && Array.isArray(p.assignments)) return p.assignments;
+    if (p?.version === 1 && Array.isArray(p.assignments)) return normalizeAssignments(p.assignments);
   } catch {
     /* ignore */
   }
@@ -50,6 +51,115 @@ function blockTargetLabel(a: MainAssignment, kind: "main" | "chunk" | null, targ
   if (kind === "main") return `main: ${a.title || "(untitled)"}`;
   const ch = a.chunks.find((c) => c.id === targetId);
   return ch?.title ? `chunk: ${ch.title}` : "a chunk";
+}
+
+/** @mention-style stamp for the signed-in user (first name or email local-part). */
+function workboardUserStamp(user: { user_metadata?: { full_name?: string; name?: string }; email?: string } | null): string | null {
+  if (!user) return null;
+  const full = (user.user_metadata?.full_name || user.user_metadata?.name || "").trim();
+  const first = full.split(/\s+/).filter(Boolean)[0];
+  if (first) return `@${first}`;
+  const local = (user.email || "").split("@")[0];
+  return local ? `@${local}` : null;
+}
+
+function allAssignmentTags(a: MainAssignment): string[] {
+  const set = new Set<string>();
+  (a.tags || []).forEach((t) => t && set.add(t));
+  a.interrupts.forEach((i) => (i.tags || []).forEach((t) => t && set.add(t)));
+  return [...set];
+}
+
+function TagField({
+  tags,
+  onChange,
+  meStamp,
+  placeholder,
+}: {
+  tags: string[];
+  onChange: (next: string[]) => void;
+  meStamp: string | null;
+  placeholder?: string;
+}) {
+  const [draft, setDraft] = useState("");
+  const pushTag = (raw: string) => {
+    const t = raw.trim();
+    if (!t) return;
+    if (tags.includes(t)) return;
+    onChange([...tags, t]);
+  };
+  return (
+    <div className="space-y-2">
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {tags.map((t) => (
+            <span
+              key={t}
+              className="inline-flex items-center gap-0.5 pl-2 pr-1 py-0.5 rounded-md bg-cyan-950/90 text-cyan-200 text-[11px] border border-cyan-800/70 max-w-full"
+            >
+              <span className="truncate max-w-[220px]" title={t}>
+                {t}
+              </span>
+              <button
+                type="button"
+                onClick={() => onChange(tags.filter((x) => x !== t))}
+                className="shrink-0 px-1 rounded hover:bg-cyan-900 text-cyan-400 hover:text-white"
+                aria-label={`Remove ${t}`}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2 items-center">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              pushTag(draft);
+              setDraft("");
+            }
+          }}
+          placeholder={placeholder || "e.g. #13 ticket raised-by-Om — Enter to add"}
+          className="flex-1 min-w-[180px] rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-200"
+        />
+        {meStamp && (
+          <button
+            type="button"
+            onClick={() => pushTag(meStamp)}
+            className="text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-violet-900/40 text-violet-200 border border-violet-700/40 hover:bg-violet-800/50 whitespace-nowrap"
+            title="Add your name tag from this login"
+          >
+            + Me
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TagChipsRow({ tags, max = 6 }: { tags: string[]; max?: number }) {
+  if (!tags.length) return null;
+  const show = tags.slice(0, max);
+  const more = tags.length - show.length;
+  return (
+    <div className="flex flex-wrap gap-1 mt-2">
+      {show.map((t) => (
+        <span
+          key={t}
+          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] bg-cyan-950/70 text-cyan-300/95 border border-cyan-800/60 max-w-[160px] truncate"
+          title={t}
+        >
+          <Hash className="w-2.5 h-2.5 shrink-0 opacity-50" />
+          <span className="truncate">{t}</span>
+        </span>
+      ))}
+      {more > 0 && <span className="text-[10px] text-zinc-500">+{more}</span>}
+    </div>
+  );
 }
 
 function BlockingLines({ a }: { a: MainAssignment }) {
@@ -122,6 +232,7 @@ export default function WeeklyWorkboard() {
         due_date: addDaysISO(weekStart, 4),
         chunks: [],
         interrupts: [],
+        tags: [],
       });
     },
     [weekStart, upsertAssignment]
@@ -197,6 +308,7 @@ export default function WeeklyWorkboard() {
               note: "",
               blocks_target_id: null,
               blocks_target_kind: null,
+              tags: [],
             },
           ],
         };
@@ -230,8 +342,9 @@ export default function WeeklyWorkboard() {
             <span className="text-zinc-400">
               AI Developer, Graphic Designer, Ops Manager, Boss Man, Video Editor, Content Creator
             </span>
-            . Managers set the main assignment; each person breaks it into phases, tracks interrupts, and links what
-            blocked what. Data is stored in this browser for now — we can wire Supabase next.
+            .             Managers set the main assignment; each person breaks it into phases, tracks interrupts, and links what
+            blocked what. Use tags (e.g. <span className="text-zinc-400">#13 raised-by-Om</span>) and{" "}
+            <span className="text-zinc-400">+ Me</span> to stamp who&apos;s logged in. Data stays in this browser until we wire Supabase.
           </p>
           {user?.email && (
             <p className="text-xs text-zinc-600 mt-2">Signed in as {user.email}</p>
@@ -383,6 +496,8 @@ function AssignmentEditor({
   removeInterrupt: (assignmentId: string, intId: string) => void;
   updateInterrupt: (assignmentId: string, intId: string, patch: Partial<WorkboardInterrupt>) => void;
 }) {
+  const { user } = useAuth();
+  const meStamp = workboardUserStamp(user);
   const pct = rollupPercent(a.chunks);
   const blockOptions: { id: string; kind: "main" | "chunk"; label: string }[] = [
     { id: a.id, kind: "main", label: `Main: ${a.title || "(untitled)"}` },
@@ -485,6 +600,22 @@ function AssignmentEditor({
           rows={compact ? 2 : 3}
           placeholder="What the manager asked for…"
           className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm resize-y"
+        />
+      </div>
+
+      <div className="mb-4">
+        <label className="text-[10px] uppercase font-semibold text-zinc-500 flex items-center gap-1">
+          <Hash className="w-3 h-3" />
+          Tags (whole assignment)
+        </label>
+        <p className="text-[11px] text-zinc-600 mt-0.5 mb-2">
+          e.g. <span className="text-zinc-500">#13 ticket raised-by-Om</span> — Enter to add each tag.{" "}
+          <span className="text-violet-400/90">+ Me</span> adds your name from this login.
+        </p>
+        <TagField
+          tags={a.tags || []}
+          onChange={(tags) => patchAssignment(a.id, { tags })}
+          meStamp={meStamp}
         />
       </div>
 
@@ -607,6 +738,15 @@ function AssignmentEditor({
                   rows={2}
                   className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm resize-y"
                 />
+                <div className="pt-1">
+                  <label className="text-[10px] uppercase font-semibold text-zinc-500">Tags for this interrupt</label>
+                  <TagField
+                    tags={it.tags || []}
+                    onChange={(tags) => updateInterrupt(a.id, it.id, { tags })}
+                    meStamp={meStamp}
+                    placeholder="#13 raised-by-Om — Enter"
+                  />
+                </div>
               </li>
             ))}
           </ul>
@@ -689,6 +829,7 @@ function ListView({
                   <div className="mt-2 max-w-md">
                     <ProgressBar pct={pct} />
                   </div>
+                  {!open && <TagChipsRow tags={allAssignmentTags(a)} />}
                   {!open && <BlockingLines a={a} />}
                 </div>
               </button>
@@ -812,6 +953,16 @@ function GalleryView({
                 </p>
               </div>
 
+              {allAssignmentTags(a).length > 0 && (
+                <div className="mt-3 border-t border-zinc-800/90 pt-2">
+                  <p className="text-[10px] font-bold uppercase text-cyan-600/90 mb-1 flex items-center gap-1">
+                    <Hash className="w-3 h-3" />
+                    Tags
+                  </p>
+                  <TagChipsRow tags={allAssignmentTags(a)} max={8} />
+                </div>
+              )}
+
               {a.chunks.length > 0 && (
                 <div className="mt-3 border-t border-zinc-800/90 pt-2">
                   <p className="text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Chunks</p>
@@ -846,11 +997,18 @@ function GalleryView({
               {a.interrupts.length > 0 && (
                 <div className="mt-3 border-t border-zinc-800/90 pt-2 flex-1 min-h-0">
                   <p className="text-[10px] font-bold uppercase text-amber-500/90 mb-1.5">New / interrupts</p>
-                  <ul className="space-y-1 max-h-[72px] overflow-y-auto">
+                  <ul className="space-y-2 max-h-[96px] overflow-y-auto">
                     {a.interrupts.map((it) => (
-                      <li key={it.id} className="text-[11px] text-zinc-400 leading-snug flex gap-1.5">
-                        <span className="text-amber-500/60 shrink-0">+</span>
-                        <span className="line-clamp-2">{it.title || "Untitled"}</span>
+                      <li key={it.id} className="text-[11px] text-zinc-400 leading-snug">
+                        <div className="flex gap-1.5">
+                          <span className="text-amber-500/60 shrink-0">+</span>
+                          <span className="line-clamp-2 min-w-0">{it.title || "Untitled"}</span>
+                        </div>
+                        {(it.tags || []).length > 0 && (
+                          <div className="mt-1 ml-4">
+                            <TagChipsRow tags={it.tags} max={4} />
+                          </div>
+                        )}
                       </li>
                     ))}
                   </ul>
