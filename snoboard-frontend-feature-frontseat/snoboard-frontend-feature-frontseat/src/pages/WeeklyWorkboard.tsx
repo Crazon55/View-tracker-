@@ -14,8 +14,10 @@ import {
   rollupPercent,
   newId,
   normalizeAssignments,
+  WORKBOARD_MENTION_PEOPLE,
+  mentionFromName,
 } from "@/lib/workboardTypes";
-import { LayoutGrid, List, ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Plus, Trash2, Link2, Hash } from "lucide-react";
+import { LayoutGrid, List, ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Plus, Trash2, Link2, AtSign } from "lucide-react";
 
 const STORAGE_KEY = "fsboard-weekly-workboard-v1";
 
@@ -53,14 +55,18 @@ function blockTargetLabel(a: MainAssignment, kind: "main" | "chunk" | null, targ
   return ch?.title ? `chunk: ${ch.title}` : "a chunk";
 }
 
-/** @mention-style stamp for the signed-in user (first name or email local-part). */
-function workboardUserStamp(user: { user_metadata?: { full_name?: string; name?: string }; email?: string } | null): string | null {
+/** Logged-in user's @mention — used only to hide that person from quick-pick (don't tag yourself). */
+function workboardSelfMention(user: { user_metadata?: { full_name?: string; name?: string }; email?: string } | null): string | null {
   if (!user) return null;
   const full = (user.user_metadata?.full_name || user.user_metadata?.name || "").trim();
   const first = full.split(/\s+/).filter(Boolean)[0];
   if (first) return `@${first}`;
   const local = (user.email || "").split("@")[0];
   return local ? `@${local}` : null;
+}
+
+function isPersonMentionTag(t: string): boolean {
+  return t.trim().startsWith("@");
 }
 
 function allAssignmentTags(a: MainAssignment): string[] {
@@ -73,70 +79,102 @@ function allAssignmentTags(a: MainAssignment): string[] {
 function TagField({
   tags,
   onChange,
-  meStamp,
   placeholder,
 }: {
   tags: string[];
   onChange: (next: string[]) => void;
-  meStamp: string | null;
   placeholder?: string;
 }) {
+  const { user } = useAuth();
   const [draft, setDraft] = useState("");
+  const suggested = useMemo(() => {
+    const self = workboardSelfMention(user)?.toLowerCase() ?? "";
+    return WORKBOARD_MENTION_PEOPLE.filter((name) => {
+      const tag = mentionFromName(name).toLowerCase();
+      return tag && tag !== self;
+    });
+  }, [user]);
+
   const pushTag = (raw: string) => {
-    const t = raw.trim();
+    let t = raw.trim();
     if (!t) return;
+    if (!t.startsWith("@") && !t.startsWith("#")) {
+      if (t.includes(" ")) {
+        /* keep as free-form label */
+      } else if (/^\d+$/.test(t)) {
+        t = `#${t}`;
+      } else {
+        t = `@${t}`;
+      }
+    }
     if (tags.includes(t)) return;
     onChange([...tags, t]);
   };
+
   return (
     <div className="space-y-2">
       {tags.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
-          {tags.map((t) => (
-            <span
-              key={t}
-              className="inline-flex items-center gap-0.5 pl-2 pr-1 py-0.5 rounded-md bg-cyan-950/90 text-cyan-200 text-[11px] border border-cyan-800/70 max-w-full"
-            >
-              <span className="truncate max-w-[220px]" title={t}>
-                {t}
-              </span>
-              <button
-                type="button"
-                onClick={() => onChange(tags.filter((x) => x !== t))}
-                className="shrink-0 px-1 rounded hover:bg-cyan-900 text-cyan-400 hover:text-white"
-                aria-label={`Remove ${t}`}
+          {tags.map((t) => {
+            const person = isPersonMentionTag(t);
+            return (
+              <span
+                key={t}
+                className={`inline-flex items-center gap-0.5 pl-2.5 pr-1 py-0.5 rounded-full text-[12px] max-w-full border ${
+                  person
+                    ? "bg-sky-500/15 text-sky-100 border-sky-400/25"
+                    : "bg-stone-500/10 text-stone-200 border-stone-400/15"
+                }`}
               >
-                ×
-              </button>
-            </span>
-          ))}
+                {person ? <AtSign className="w-3 h-3 shrink-0 opacity-70" /> : null}
+                <span className="truncate max-w-[200px]" title={t}>
+                  {person ? t.slice(1) : t}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onChange(tags.filter((x) => x !== t))}
+                  className={`shrink-0 px-1 rounded-full text-sm leading-none opacity-60 hover:opacity-100 ${
+                    person ? "hover:bg-sky-500/20" : "hover:bg-stone-500/20"
+                  }`}
+                  aria-label={`Remove ${t}`}
+                >
+                  ×
+                </button>
+              </span>
+            );
+          })}
         </div>
       )}
-      <div className="flex flex-wrap gap-2 items-center">
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              pushTag(draft);
-              setDraft("");
-            }
-          }}
-          placeholder={placeholder || "e.g. #13 ticket raised-by-Om — Enter to add"}
-          className="flex-1 min-w-[180px] rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-200"
-        />
-        {meStamp && (
-          <button
-            type="button"
-            onClick={() => pushTag(meStamp)}
-            className="text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-violet-900/40 text-violet-200 border border-violet-700/40 hover:bg-violet-800/50 whitespace-nowrap"
-            title="Add your name tag from this login"
-          >
-            + Me
-          </button>
-        )}
-      </div>
+      <input
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            pushTag(draft);
+            setDraft("");
+          }
+        }}
+        placeholder={placeholder || "Type @name or #ticket and press Enter…"}
+        className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-sky-500/30"
+      />
+      {suggested.length > 0 && (
+        <div>
+          <p className="text-[12px] text-zinc-500 mb-1.5">Who asked for this (tap to add @mention)</p>
+          <div className="flex flex-wrap gap-1.5">
+            {suggested.map((name) => (
+              <button
+                key={name}
+                type="button"
+                onClick={() => pushTag(mentionFromName(name))}
+                className="rounded-full px-2.5 py-1 text-xs font-medium text-zinc-200 bg-white/[0.06] border border-white/[0.08] hover:bg-white/[0.11] transition-colors"
+              >
+                @{name.replace(/^@/, "")}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -147,17 +185,24 @@ function TagChipsRow({ tags, max = 6 }: { tags: string[]; max?: number }) {
   const more = tags.length - show.length;
   return (
     <div className="flex flex-wrap gap-1 mt-2">
-      {show.map((t) => (
-        <span
-          key={t}
-          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] bg-cyan-950/70 text-cyan-300/95 border border-cyan-800/60 max-w-[160px] truncate"
-          title={t}
-        >
-          <Hash className="w-2.5 h-2.5 shrink-0 opacity-50" />
-          <span className="truncate">{t}</span>
-        </span>
-      ))}
-      {more > 0 && <span className="text-[10px] text-zinc-500">+{more}</span>}
+      {show.map((t) => {
+        const person = isPersonMentionTag(t);
+        return (
+          <span
+            key={t}
+            className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] max-w-[170px] truncate border ${
+              person
+                ? "bg-sky-500/12 text-sky-100/90 border-sky-400/20"
+                : "bg-stone-500/10 text-stone-300 border-stone-400/12"
+            }`}
+            title={t}
+          >
+            {person ? <AtSign className="w-2.5 h-2.5 shrink-0 opacity-60" /> : null}
+            <span className="truncate">{person ? t.slice(1) : t}</span>
+          </span>
+        );
+      })}
+      {more > 0 && <span className="text-[10px] text-zinc-500 self-center">+{more}</span>}
     </div>
   );
 }
@@ -174,8 +219,8 @@ function BlockingLines({ a }: { a: MainAssignment }) {
   return (
     <ul className="mt-2 space-y-1">
       {lines.map((line, i) => (
-        <li key={i} className="text-[11px] text-amber-400/90 leading-snug flex gap-1.5">
-          <span className="text-amber-500/70 shrink-0">●</span>
+        <li key={i} className="text-[12px] text-orange-200/85 leading-snug flex gap-2">
+          <span className="text-orange-400/50 shrink-0 mt-0.5">○</span>
           <span>{line}</span>
         </li>
       ))}
@@ -330,44 +375,43 @@ export default function WeeklyWorkboard() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
-      <div className="pl-[70px] pr-6 pt-6 pb-10 max-w-[1200px] mx-auto">
-        <header className="mb-8">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-violet-400 mb-1">
-            Cross-team weekly workboard
+    <div
+      className="min-h-screen text-zinc-100 bg-[#1a1a1c]"
+      style={{
+        fontFamily: "'DM Sans', ui-sans-serif, system-ui, sans-serif",
+        backgroundImage: "radial-gradient(ellipse 120% 80% at 50% -20%, rgba(56, 189, 248, 0.08), transparent 55%)",
+      }}
+    >
+      <div className="pl-[70px] pr-6 pt-8 pb-12 max-w-[1100px] mx-auto">
+        <header className="mb-10">
+          <p className="text-sm text-sky-300/90 font-medium mb-1">Weekly workboard</p>
+          <h1 className="text-3xl font-semibold tracking-tight text-white">Studio &amp; ops</h1>
+          <p className="text-[15px] text-zinc-400 mt-3 max-w-2xl leading-relaxed">
+            Plan the week by role, split work into steps, and note what got in the way. Mention teammates with{" "}
+            <span className="text-zinc-200">@name</span> (like Notion) or tickets with{" "}
+            <span className="text-zinc-200">#13</span>. Edit the teammate list in{" "}
+            <code className="text-zinc-500 text-[13px]">workboardTypes.ts</code> if needed. Saves on this device for now.
           </p>
-          <h1 className="text-2xl font-bold tracking-tight">Studio & ops bandwidth</h1>
-          <p className="text-sm text-zinc-500 mt-2 max-w-2xl">
-            For{" "}
-            <span className="text-zinc-400">
-              AI Developer, Graphic Designer, Ops Manager, Boss Man, Video Editor, Content Creator
-            </span>
-            .             Managers set the main assignment; each person breaks it into phases, tracks interrupts, and links what
-            blocked what. Use tags (e.g. <span className="text-zinc-400">#13 raised-by-Om</span>) and{" "}
-            <span className="text-zinc-400">+ Me</span> to stamp who&apos;s logged in. Data stays in this browser until we wire Supabase.
-          </p>
-          {user?.email && (
-            <p className="text-xs text-zinc-600 mt-2">Signed in as {user.email}</p>
-          )}
+          {user?.email && <p className="text-xs text-zinc-600 mt-3">{user.email}</p>}
         </header>
 
-        <div className="flex flex-wrap items-center gap-3 mb-6">
-          <div className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900/80 p-1">
+        <div className="flex flex-wrap items-center gap-3 mb-8">
+          <div className="flex items-center gap-0.5 rounded-2xl border border-white/[0.08] bg-white/[0.04] p-1 shadow-sm">
             <button
               type="button"
               onClick={() => setWeekStart((w) => addDaysISO(w, -7))}
-              className="p-2 rounded-md hover:bg-zinc-800 text-zinc-400"
+              className="p-2.5 rounded-xl hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-200 transition-colors"
               aria-label="Previous week"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="px-3 text-sm font-medium text-zinc-200 min-w-[200px] text-center">
+            <span className="px-4 text-sm font-medium text-zinc-100 min-w-[200px] text-center tabular-nums">
               {fmtWeekRange(weekStart)}
             </span>
             <button
               type="button"
               onClick={() => setWeekStart((w) => addDaysISO(w, 7))}
-              className="p-2 rounded-md hover:bg-zinc-800 text-zinc-400"
+              className="p-2.5 rounded-xl hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-200 transition-colors"
               aria-label="Next week"
             >
               <ChevronRight className="w-4 h-4" />
@@ -375,18 +419,18 @@ export default function WeeklyWorkboard() {
             <button
               type="button"
               onClick={() => setWeekStart(getMondayISO())}
-              className="ml-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+              className="ml-0.5 mr-1 px-3 py-2 text-xs font-medium rounded-xl bg-white/[0.08] text-zinc-200 hover:bg-white/[0.12] transition-colors"
             >
               This week
             </button>
           </div>
 
-          <div className="flex rounded-lg border border-zinc-800 overflow-hidden">
+          <div className="inline-flex rounded-2xl border border-white/[0.08] bg-white/[0.04] p-1 shadow-sm">
             <button
               type="button"
               onClick={() => setView("list")}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium ${
-                view === "list" ? "bg-violet-600 text-white" : "bg-zinc-900 text-zinc-400 hover:text-white"
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-colors ${
+                view === "list" ? "bg-sky-600 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.05]"
               }`}
             >
               <List className="w-4 h-4" />
@@ -395,8 +439,8 @@ export default function WeeklyWorkboard() {
             <button
               type="button"
               onClick={() => setView("gallery")}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-l border-zinc-800 ${
-                view === "gallery" ? "bg-violet-600 text-white" : "bg-zinc-900 text-zinc-400 hover:text-white"
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-colors ${
+                view === "gallery" ? "bg-sky-600 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.05]"
               }`}
             >
               <LayoutGrid className="w-4 h-4" />
@@ -439,9 +483,9 @@ export default function WeeklyWorkboard() {
 
 function ProgressBar({ pct }: { pct: number }) {
   return (
-    <div className="h-2 rounded-full bg-zinc-800 overflow-hidden">
+    <div className="h-2 rounded-full bg-zinc-800/80 overflow-hidden">
       <div
-        className="h-full rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-500 transition-all"
+        className="h-full rounded-full bg-gradient-to-r from-sky-500 to-sky-400/90 transition-all duration-300"
         style={{ width: `${pct}%` }}
       />
     </div>
@@ -459,7 +503,7 @@ function ChunkStatusSelect({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value as ChunkStatus)}
-      className="text-xs rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-zinc-200"
+      className="text-xs rounded-xl border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-zinc-200 focus:outline-none focus:ring-2 focus:ring-sky-500/25"
     >
       {STATUS_OPTIONS.map((s) => (
         <option key={s} value={s}>
@@ -496,8 +540,6 @@ function AssignmentEditor({
   removeInterrupt: (assignmentId: string, intId: string) => void;
   updateInterrupt: (assignmentId: string, intId: string, patch: Partial<WorkboardInterrupt>) => void;
 }) {
-  const { user } = useAuth();
-  const meStamp = workboardUserStamp(user);
   const pct = rollupPercent(a.chunks);
   const blockOptions: { id: string; kind: "main" | "chunk"; label: string }[] = [
     { id: a.id, kind: "main", label: `Main: ${a.title || "(untitled)"}` },
@@ -506,30 +548,28 @@ function AssignmentEditor({
 
   const shellClass = embedBelowListHeader
     ? `${compact ? "p-4" : "p-5"}`
-    : `rounded-xl border border-zinc-800 bg-zinc-900/40 ${compact ? "p-4" : "p-5"}`;
+    : `rounded-2xl border border-white/[0.07] bg-white/[0.03] shadow-sm ${compact ? "p-4" : "p-6"}`;
 
   return (
     <div className={shellClass}>
       {!embedBelowListHeader && (
-        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-violet-400">
-              {roleLabel(a.role_id)}
-            </span>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-xs text-zinc-500 w-24">Main task</span>
+            <span className="text-xs font-medium text-sky-300/90">{roleLabel(a.role_id)}</span>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-xs text-zinc-500 w-24 shrink-0">Main task</span>
               <input
                 value={a.title}
                 onChange={(e) => patchAssignment(a.id, { title: e.target.value })}
-                placeholder="e.g. Ship view tracker + bandwidth"
-                className="flex-1 min-w-[200px] rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+                placeholder="What you’re shipping this week…"
+                className="flex-1 min-w-[200px] rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/25"
               />
             </div>
           </div>
           <button
             type="button"
             onClick={() => removeAssignment(a.id)}
-            className="p-2 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10"
+            className="p-2 rounded-xl text-zinc-500 hover:text-red-300 hover:bg-red-500/10 transition-colors"
             title="Remove assignment"
           >
             <Trash2 className="w-4 h-4" />
@@ -539,38 +579,38 @@ function AssignmentEditor({
 
       <div className={`grid gap-3 mb-4 ${embedBelowListHeader ? "sm:grid-cols-2" : "sm:grid-cols-2"}`}>
         <div className={embedBelowListHeader ? "sm:col-span-2" : ""}>
-          <label className="text-[10px] uppercase font-semibold text-zinc-500">
+          <label className="text-xs font-medium text-zinc-500">
             {embedBelowListHeader ? "Main task" : "Due date"}
           </label>
           {embedBelowListHeader ? (
             <input
               value={a.title}
               onChange={(e) => patchAssignment(a.id, { title: e.target.value })}
-              placeholder="e.g. Ship view tracker + bandwidth"
-              className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+              placeholder="What you’re shipping this week…"
+              className="mt-1.5 w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/25"
             />
           ) : (
             <input
               type="date"
               value={a.due_date}
               onChange={(e) => patchAssignment(a.id, { due_date: e.target.value })}
-              className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+              className="mt-1.5 w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/25"
             />
           )}
         </div>
         {embedBelowListHeader ? (
           <>
             <div>
-              <label className="text-[10px] uppercase font-semibold text-zinc-500">Due date</label>
+              <label className="text-xs font-medium text-zinc-500">Due date</label>
               <input
                 type="date"
                 value={a.due_date}
                 onChange={(e) => patchAssignment(a.id, { due_date: e.target.value })}
-                className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+                className="mt-1.5 w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/25"
               />
             </div>
             <div>
-              <label className="text-[10px] uppercase font-semibold text-zinc-500">Rollup (from chunks)</label>
+              <label className="text-xs font-medium text-zinc-500">Progress from steps</label>
               <div className="mt-2">
                 <ProgressBar pct={pct} />
                 <p className="text-xs text-zinc-500 mt-1">
@@ -582,7 +622,7 @@ function AssignmentEditor({
         ) : (
           <>
             <div>
-              <label className="text-[10px] uppercase font-semibold text-zinc-500">Rollup (from chunks)</label>
+              <label className="text-xs font-medium text-zinc-500">Progress from steps</label>
               <div className="mt-2">
                 <ProgressBar pct={pct} />
                 <p className="text-xs text-zinc-500 mt-1">{pct}% — {a.chunks.filter((c) => c.status === "completed").length}/{a.chunks.length || 0} chunks done</p>
@@ -592,56 +632,52 @@ function AssignmentEditor({
         )}
       </div>
 
-      <div className="mb-4">
-        <label className="text-[10px] uppercase font-semibold text-zinc-500">Details / brief</label>
+      <div className="mb-5">
+        <label className="text-xs font-medium text-zinc-500">Brief from manager</label>
         <textarea
           value={a.description}
           onChange={(e) => patchAssignment(a.id, { description: e.target.value })}
           rows={compact ? 2 : 3}
-          placeholder="What the manager asked for…"
-          className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm resize-y"
+          placeholder="Context, links, expectations…"
+          className="mt-1.5 w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-sky-500/25"
         />
       </div>
 
-      <div className="mb-4">
-        <label className="text-[10px] uppercase font-semibold text-zinc-500 flex items-center gap-1">
-          <Hash className="w-3 h-3" />
-          Tags (whole assignment)
+      <div className="mb-5">
+        <label className="text-xs font-medium text-zinc-500 flex items-center gap-1.5">
+          <AtSign className="w-3.5 h-3.5 opacity-70" />
+          Mentions &amp; labels
         </label>
-        <p className="text-[11px] text-zinc-600 mt-0.5 mb-2">
-          e.g. <span className="text-zinc-500">#13 ticket raised-by-Om</span> — Enter to add each tag.{" "}
-          <span className="text-violet-400/90">+ Me</span> adds your name from this login.
+        <p className="text-[12px] text-zinc-500 mt-1 mb-2">
+          Tag <span className="text-zinc-300">who assigned or cares</span> — not yourself. Quick picks below; or type{" "}
+          <span className="text-zinc-300">@name</span> / <span className="text-zinc-300">#ticket</span>.
         </p>
-        <TagField
-          tags={a.tags || []}
-          onChange={(tags) => patchAssignment(a.id, { tags })}
-          meStamp={meStamp}
-        />
+        <TagField tags={a.tags || []} onChange={(tags) => patchAssignment(a.id, { tags })} />
       </div>
 
-      <div className="mb-4">
+      <div className="mb-5">
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-xs font-bold uppercase text-zinc-400">Your chunks (phases)</h3>
+          <h3 className="text-sm font-medium text-zinc-300">Steps (chunks)</h3>
           <button
             type="button"
             onClick={() => addChunk(a.id)}
-            className="flex items-center gap-1 text-xs font-semibold text-violet-400 hover:text-violet-300"
+            className="flex items-center gap-1 text-sm font-medium text-sky-400 hover:text-sky-300"
           >
-            <Plus className="w-3.5 h-3.5" />
-            Add chunk
+            <Plus className="w-4 h-4" />
+            Add step
           </button>
         </div>
         {a.chunks.length === 0 ? (
-          <p className="text-xs text-zinc-600 py-2">Break the main task into steps (wireframe, UI, build, ship…).</p>
+          <p className="text-sm text-zinc-500 py-2">Split the work into phases (design, build, review…).</p>
         ) : (
           <ul className="space-y-2">
             {a.chunks.map((c) => (
-              <li key={c.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-zinc-950/80 border border-zinc-800 p-2">
+              <li key={c.id} className="flex flex-wrap items-center gap-2 rounded-xl bg-white/[0.03] border border-white/[0.06] p-2.5">
                 <input
                   value={c.title}
                   onChange={(e) => updateChunk(a.id, c.id, { title: e.target.value })}
-                  placeholder="Chunk name"
-                  className="flex-1 min-w-[140px] rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm"
+                  placeholder="Step name"
+                  className="flex-1 min-w-[140px] rounded-lg border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20"
                 />
                 <ChunkStatusSelect value={c.status} onChange={(v) => updateChunk(a.id, c.id, { status: v })} />
                 <button
@@ -659,31 +695,31 @@ function AssignmentEditor({
 
       <div>
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-xs font-bold uppercase text-zinc-400 flex items-center gap-1">
-            <Link2 className="w-3.5 h-3.5" />
-            Interrupts & blockers
+          <h3 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+            <Link2 className="w-4 h-4 text-orange-300/70" />
+            Extra work &amp; blockers
           </h3>
           <button
             type="button"
             onClick={() => addInterrupt(a.id)}
-            className="flex items-center gap-1 text-xs font-semibold text-amber-400/90 hover:text-amber-300"
+            className="flex items-center gap-1 text-sm font-medium text-orange-300/90 hover:text-orange-200"
           >
-            <Plus className="w-3.5 h-3.5" />
-            Add interrupt
+            <Plus className="w-4 h-4" />
+            Add item
           </button>
         </div>
         {a.interrupts.length === 0 ? (
-          <p className="text-xs text-zinc-600 py-2">Urgent tickets, bugs, or side quests — link what they blocked.</p>
+          <p className="text-sm text-zinc-500 py-2">Urgent asks, bugs, or interrupts — say what they blocked.</p>
         ) : (
           <ul className="space-y-3">
             {a.interrupts.map((it) => (
-              <li key={it.id} className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 space-y-2">
+              <li key={it.id} className="rounded-xl border border-white/[0.07] bg-orange-950/[0.12] p-3 space-y-2">
                 <div className="flex flex-wrap gap-2 items-center">
                   <input
                     value={it.title}
                     onChange={(e) => updateInterrupt(a.id, it.id, { title: e.target.value })}
                     placeholder="What came up?"
-                    className="flex-1 min-w-[160px] rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm"
+                    className="flex-1 min-w-[160px] rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20"
                   />
                   <ChunkStatusSelect
                     value={it.status}
@@ -721,9 +757,9 @@ function AssignmentEditor({
                         blocks_target_id: id,
                       });
                     }}
-                    className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-zinc-200"
+                    className="rounded-lg border border-white/[0.1] bg-white/[0.05] px-2 py-1.5 text-sm text-zinc-200"
                   >
-                    <option value="">— nothing linked —</option>
+                    <option value="">Nothing linked</option>
                     {blockOptions.map((o) => (
                       <option key={`${o.kind}:${o.id}`} value={`${o.kind}:${o.id}`}>
                         {o.label}
@@ -736,16 +772,17 @@ function AssignmentEditor({
                   onChange={(e) => updateInterrupt(a.id, it.id, { note: e.target.value })}
                   placeholder="Note: e.g. spent 4h here today; main chunk slipped…"
                   rows={2}
-                  className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm resize-y"
+                  className="w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-orange-500/20"
                 />
                 <div className="pt-1">
-                  <label className="text-[10px] uppercase font-semibold text-zinc-500">Tags for this interrupt</label>
-                  <TagField
-                    tags={it.tags || []}
-                    onChange={(tags) => updateInterrupt(a.id, it.id, { tags })}
-                    meStamp={meStamp}
-                    placeholder="#13 raised-by-Om — Enter"
-                  />
+                  <label className="text-xs font-medium text-zinc-500">Mentions for this item</label>
+                  <div className="mt-1">
+                    <TagField
+                      tags={it.tags || []}
+                      onChange={(tags) => updateInterrupt(a.id, it.id, { tags })}
+                      placeholder="@who asked · #ticket — Enter"
+                    />
+                  </div>
                 </div>
               </li>
             ))}
@@ -798,13 +835,13 @@ function ListView({
         return (
           <div
             key={a.id}
-            className="rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden"
+            className="rounded-2xl border border-white/[0.07] bg-white/[0.03] shadow-sm overflow-hidden"
           >
             <div className="flex items-stretch gap-0">
               <button
                 type="button"
                 onClick={() => toggleListCard(a.id)}
-                className="flex flex-1 items-start gap-3 p-4 text-left hover:bg-zinc-900/70 transition-colors min-w-0"
+                className="flex flex-1 items-start gap-3 p-4 text-left hover:bg-white/[0.04] transition-colors min-w-0"
               >
                 {open ? (
                   <ChevronDown className="w-5 h-5 text-zinc-500 shrink-0 mt-0.5" />
@@ -812,19 +849,16 @@ function ListView({
                   <ChevronRightIcon className="w-5 h-5 text-zinc-500 shrink-0 mt-0.5" />
                 )}
                 <div className="flex-1 min-w-0">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-violet-400">
-                    {roleLabel(a.role_id)}
-                  </div>
-                  <div className="text-sm font-semibold text-white mt-0.5 break-words">
+                  <div className="text-xs font-medium text-sky-300/90">{roleLabel(a.role_id)}</div>
+                  <div className="text-[15px] font-medium text-white mt-1 break-words">
                     {a.title || "Untitled main task"}
                   </div>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-zinc-500">
                     <span>Due {a.due_date}</span>
                     <span>
-                      {pct}% · {a.chunks.filter((c) => c.status === "completed").length}/{a.chunks.length || 0}{" "}
-                      chunks
+                      {pct}% · {a.chunks.filter((c) => c.status === "completed").length}/{a.chunks.length || 0} steps
                     </span>
-                    {a.interrupts.length > 0 && <span className="text-amber-400/80">{a.interrupts.length} interrupts</span>}
+                    {a.interrupts.length > 0 && <span className="text-orange-300/80">{a.interrupts.length} extra</span>}
                   </div>
                   <div className="mt-2 max-w-md">
                     <ProgressBar pct={pct} />
@@ -837,7 +871,7 @@ function ListView({
                 <button
                   type="button"
                   onClick={() => removeAssignment(a.id)}
-                  className="p-2 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10"
+                  className="p-2 rounded-xl text-zinc-500 hover:text-red-300 hover:bg-red-500/10 transition-colors"
                   title="Remove assignment"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -845,7 +879,7 @@ function ListView({
               </div>
             </div>
             {open && (
-              <div className="border-t border-zinc-800 px-4 pb-4 pt-2 bg-zinc-950/30">
+              <div className="border-t border-white/[0.06] px-4 pb-4 pt-3 bg-black/20">
                 <AssignmentEditor
                   a={a}
                   embedBelowListHeader
@@ -865,15 +899,15 @@ function ListView({
       })}
 
       {missingRoles.length > 0 && (
-        <div className="rounded-xl border border-dashed border-zinc-700 p-4">
-          <p className="text-xs text-zinc-500 mb-3">Add a row for a role (manager assignment for this week):</p>
+        <div className="rounded-2xl border border-dashed border-white/[0.12] bg-white/[0.02] p-5">
+          <p className="text-sm text-zinc-500 mb-3">Add a card for someone’s role this week:</p>
           <div className="flex flex-wrap gap-2">
             {missingRoles.map((r) => (
               <button
                 key={r.id}
                 type="button"
                 onClick={() => addAssignment(r.id)}
-                className="px-3 py-2 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-300 hover:bg-violet-600 hover:text-white border border-zinc-700"
+                className="px-3 py-2 rounded-xl text-xs font-medium bg-white/[0.08] text-zinc-200 hover:bg-sky-600 hover:text-white border border-white/[0.08] transition-colors"
               >
                 + {r.short}
               </button>
@@ -920,10 +954,10 @@ function GalleryView({
               key={r.id}
               type="button"
               onClick={() => addAssignment(r.id)}
-              className="rounded-xl border-2 border-dashed border-zinc-700 bg-zinc-900/20 p-6 text-left hover:border-violet-500/50 hover:bg-zinc-900/40 transition-colors min-h-[160px] flex flex-col justify-center"
+              className="rounded-2xl border-2 border-dashed border-white/[0.12] bg-white/[0.02] p-6 text-left hover:border-sky-500/40 hover:bg-white/[0.04] transition-colors min-h-[160px] flex flex-col justify-center"
             >
-              <span className="text-sm font-bold text-zinc-400">{r.label}</span>
-              <span className="text-xs text-zinc-600 mt-2">Click to add this week&apos;s assignment</span>
+              <span className="text-sm font-medium text-zinc-300">{r.label}</span>
+              <span className="text-xs text-zinc-500 mt-2">Add this week’s focus</span>
             </button>
           );
         }
@@ -933,19 +967,19 @@ function GalleryView({
         return (
           <div
             key={a.id}
-            className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden flex flex-col"
+            className="rounded-2xl border border-white/[0.07] bg-white/[0.03] shadow-sm overflow-hidden flex flex-col"
           >
             <div className="p-4 flex-1 flex flex-col min-h-0">
               <div className="flex items-center justify-between gap-2 mb-2">
-                <span className="text-xs font-bold text-violet-400 uppercase tracking-wide">{roleShort(r.id)}</span>
-                <span className="text-[10px] text-zinc-500">{a.due_date}</span>
+                <span className="text-xs font-medium text-sky-300/90">{roleShort(r.id)}</span>
+                <span className="text-[11px] text-zinc-500">{a.due_date}</span>
               </div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 mb-1">Assigned</p>
-              <h2 className="text-sm font-semibold text-white line-clamp-3 min-h-[2.75rem]">
+              <p className="text-[11px] font-medium text-zinc-500 mb-1">Assigned</p>
+              <h2 className="text-sm font-medium text-white line-clamp-3 min-h-[2.75rem] leading-snug">
                 {a.title || "Untitled main task"}
               </h2>
               <div className="mt-3">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 mb-1">Main progress</p>
+                <p className="text-[11px] font-medium text-zinc-500 mb-1">Progress</p>
                 <ProgressBar pct={pct} />
                 <p className="text-[11px] text-zinc-500 mt-1">
                   {pct}% · {doneChunks}/{a.chunks.length || 0} chunks done
@@ -954,18 +988,18 @@ function GalleryView({
               </div>
 
               {allAssignmentTags(a).length > 0 && (
-                <div className="mt-3 border-t border-zinc-800/90 pt-2">
-                  <p className="text-[10px] font-bold uppercase text-cyan-600/90 mb-1 flex items-center gap-1">
-                    <Hash className="w-3 h-3" />
-                    Tags
+                <div className="mt-3 border-t border-white/[0.06] pt-2">
+                  <p className="text-[11px] font-medium text-zinc-500 mb-1 flex items-center gap-1">
+                    <AtSign className="w-3 h-3 opacity-70" />
+                    Mentions
                   </p>
                   <TagChipsRow tags={allAssignmentTags(a)} max={8} />
                 </div>
               )}
 
               {a.chunks.length > 0 && (
-                <div className="mt-3 border-t border-zinc-800/90 pt-2">
-                  <p className="text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Chunks</p>
+                <div className="mt-3 border-t border-white/[0.06] pt-2">
+                  <p className="text-[11px] font-medium text-zinc-500 mb-1.5">Steps</p>
                   <ul className="space-y-1 max-h-[88px] overflow-y-auto pr-0.5">
                     {a.chunks.map((c) => (
                       <li
@@ -980,8 +1014,8 @@ function GalleryView({
                 </div>
               )}
 
-              <div className="mt-3 border-t border-zinc-800/90 pt-2">
-                <p className="text-[10px] font-bold uppercase text-amber-400/90 mb-1 flex items-center gap-1">
+              <div className="mt-3 border-t border-white/[0.06] pt-2">
+                <p className="text-[11px] font-medium text-orange-300/90 mb-1 flex items-center gap-1">
                   <Link2 className="w-3 h-3" />
                   Blocking
                 </p>
@@ -995,8 +1029,8 @@ function GalleryView({
               </div>
 
               {a.interrupts.length > 0 && (
-                <div className="mt-3 border-t border-zinc-800/90 pt-2 flex-1 min-h-0">
-                  <p className="text-[10px] font-bold uppercase text-amber-500/90 mb-1.5">New / interrupts</p>
+                <div className="mt-3 border-t border-white/[0.06] pt-2 flex-1 min-h-0">
+                  <p className="text-[11px] font-medium text-orange-300/90 mb-1.5">Extra work</p>
                   <ul className="space-y-2 max-h-[96px] overflow-y-auto">
                     {a.interrupts.map((it) => (
                       <li key={it.id} className="text-[11px] text-zinc-400 leading-snug">
@@ -1015,24 +1049,24 @@ function GalleryView({
                 </div>
               )}
             </div>
-            <div className="border-t border-zinc-800 p-2 flex gap-2">
+            <div className="border-t border-white/[0.06] p-2 flex gap-2 bg-black/15">
               <button
                 type="button"
                 onClick={() => setExpandId(open ? null : a.id)}
-                className="flex-1 py-2 text-xs font-semibold rounded-lg bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+                className="flex-1 py-2.5 text-xs font-medium rounded-xl bg-white/[0.08] text-zinc-100 hover:bg-white/[0.12] transition-colors"
               >
                 {open ? "Collapse" : "Expand"}
               </button>
               <button
                 type="button"
                 onClick={() => removeAssignment(a.id)}
-                className="px-3 py-2 text-xs rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10"
+                className="px-3 py-2 text-xs rounded-xl text-zinc-500 hover:text-red-300 hover:bg-red-500/10 transition-colors"
               >
                 <Trash2 className="w-4 h-4 mx-auto" />
               </button>
             </div>
             {open && (
-              <div className="border-t border-zinc-800 p-4 bg-zinc-950/80 max-h-[70vh] overflow-y-auto">
+              <div className="border-t border-white/[0.06] p-4 bg-black/25 max-h-[70vh] overflow-y-auto">
                 <AssignmentEditor
                   a={a}
                   compact

@@ -17,6 +17,23 @@ export const WORKBOARD_ROLES: { id: WorkboardRoleId; label: string; short: strin
   { id: "content_creator", label: "Content Creator", short: "Content" },
 ];
 
+/**
+ * Quick @mentions for who assigned work or needs visibility (Notion-style).
+ * Edit this list for your team — first names or display names work best.
+ */
+export const WORKBOARD_MENTION_PEOPLE: string[] = [
+  "Om",
+  "Priyanka",
+  "Koushik",
+  "Manager",
+];
+
+export function mentionFromName(name: string): string {
+  const n = name.trim();
+  if (!n) return "";
+  return n.startsWith("@") ? n : `@${n}`;
+}
+
 export type ChunkStatus = "not_started" | "in_progress" | "completed";
 
 export const CHUNK_STATUS_LABEL: Record<ChunkStatus, string> = {
