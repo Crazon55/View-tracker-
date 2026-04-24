@@ -94,7 +94,7 @@ function mapIdea(raw: any): any {
     music_ref: raw.music_ref || null,
     yt_url: raw.yt_url || null,
     yt_timestamps: raw.yt_timestamps || null,
-    comp_link: raw.comp_link || null,
+    comp_link: raw.comp_link || raw.link || null,
     frame_link: raw.frame_link || null,
     kalakar_link: raw.kalakar_link ?? null,
     tags: raw.tags || [],
@@ -683,7 +683,7 @@ export default function ContentTracker(){
       music_ref: newIdea.music_ref.trim() || null,
       yt_url: newIdea.yt_url.trim() || null,
       yt_timestamps: newIdea.yt_timestamps.trim() || null,
-      comp_link: newIdea.source === "competitor" ? (newIdea.comp_link.trim() || null) : null,
+      comp_link: newIdea.comp_link.trim() || null,
       frame_link: newIdea.frame_link.trim() || null,
       stage: "new",
       type: "reel",
@@ -1040,6 +1040,7 @@ export default function ContentTracker(){
 
       {/* Detail Modal */}
       <Modal open={!!cd} onClose={()=>{
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
         if(approvedSaveTimer.current){ clearTimeout(approvedSaveTimer.current); approvedSaveTimer.current=null; }
         if(nicheSaveTimer.current){ clearTimeout(nicheSaveTimer.current); nicheSaveTimer.current=null; }
         if(cd){

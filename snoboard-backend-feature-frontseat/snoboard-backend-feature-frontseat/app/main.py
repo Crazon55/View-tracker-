@@ -2001,6 +2001,9 @@ async def tracker_ideas_create(request: Request):
     # Remove None values so Supabase doesn't store explicit nulls for optional fields
     row = {k: v for k, v in row.items() if v is not None}
     row.setdefault("title", body["title"])
+    # Keep legacy `link` in sync with comp_link so older clients and the UI agree.
+    if "comp_link" in row:
+        row["link"] = row["comp_link"]
     if not _tracker_ideas_approved_for_pages_col_exists(client):
         apv = row.pop("approved_for_pages", None)
         if apv is not None:
@@ -2028,6 +2031,8 @@ async def tracker_ideas_update(idea_id: str, request: Request):
     allowed = {k: v for k, v in body.items() if k in allowed_keys}
     if "niche_ids" in allowed:
         allowed["niche_id"] = allowed["niche_ids"][0] if allowed["niche_ids"] else None
+    if "comp_link" in allowed:
+        allowed["link"] = allowed["comp_link"]
 
     # ---- Bandwidth stage-stamping --------------------------------------
     # When an idea transitions into one of the attributed stages, credit the
@@ -2154,12 +2159,12 @@ async def tracker_ideas_update(idea_id: str, request: Request):
         else:
             raise
 
-    # Re-fetch the row so the frontend can verify what was actually stored
-    # (eliminates the "I picked 27 but it shows 25" class of bug).
+    # Re-fetch the full row (same shape as list) so clients see canva_link,
+    # comp_link, postings, etc. Bandwidth checks still use the date fields here.
     try:
         fresh = (
             client.table("tracker_ideas")
-            .select("id, stage, posted_at, base_edit_at, pintu_set_at, posted_by, base_edit_by, pintu_set_by")
+            .select("*, tracker_niches(id,name,pages), tracker_postings(*)")
             .eq("id", idea_id)
             .single()
             .execute()
@@ -2167,6 +2172,18 @@ async def tracker_ideas_update(idea_id: str, request: Request):
         )
     except Exception:
         fresh = None
+    if not fresh:
+        try:
+            fresh = (
+                client.table("tracker_ideas")
+                .select("id, stage, posted_at, base_edit_at, pintu_set_at, posted_by, base_edit_by, pintu_set_by")
+                .eq("id", idea_id)
+                .single()
+                .execute()
+                .data
+            )
+        except Exception:
+            fresh = None
 
     # If the user explicitly tried to set posted_at (or similar) and the
     # stored value doesn't match, surface that loudly. Compare by date-string

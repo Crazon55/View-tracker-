@@ -59,7 +59,8 @@ function mapIdea(raw: any): any {
     createdAt: raw.created_at ? new Date(raw.created_at).getTime() : Date.now(),
     hook_variations: raw.hook_variations || [],
     music_ref: raw.music_ref || null,
-    comp_link: raw.comp_link || null,
+    // Prefer comp_link; fall back to legacy `link` column so older rows still show references.
+    comp_link: raw.comp_link || raw.link || null,
     tags: raw.tags || [],
     format: raw.format || null,
     main_page_hook: raw.main_page_hook || null,
@@ -673,7 +674,7 @@ export default function PostTracker(){
       slides_content: slides_content,
       content_pillar: newIdea.content_pillar || null,
       content_bucket: newIdea.content_bucket || null,
-      comp_link: newIdea.source === "competitor" ? (newIdea.comp_link.trim() || null) : null,
+      comp_link: newIdea.comp_link.trim() || null,
       stage: "new",
       type: "post",
       created_by: user?.user_metadata?.full_name || user?.email?.split("@")[0] || user?.email || null,
@@ -923,7 +924,11 @@ export default function PostTracker(){
       </Modal>
 
       {/* Detail Modal */}
-      <Modal open={!!cd} onClose={()=>{if(nicheSaveTimer.current){clearTimeout(nicheSaveTimer.current);nicheSaveTimer.current=null;if(cd)updateIdeaMut.mutate({id:cd.id,data:{niche_ids:nicheSaveRef.current}});}setDetailIdea(null);}} title={cd?.title||""} wide>
+      <Modal open={!!cd} onClose={()=>{
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        if(nicheSaveTimer.current){clearTimeout(nicheSaveTimer.current);nicheSaveTimer.current=null;if(cd)updateIdeaMut.mutate({id:cd.id,data:{niche_ids:nicheSaveRef.current}});}
+        setDetailIdea(null);
+      }} title={cd?.title||""} wide>
         {cd&&(()=>{const pp=(cd.postings||[]).map((p: any)=>p.page);return(
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
             <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
