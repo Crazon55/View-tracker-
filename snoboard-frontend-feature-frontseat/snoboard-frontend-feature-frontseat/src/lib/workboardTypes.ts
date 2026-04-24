@@ -40,6 +40,8 @@ export type WorkboardInterrupt = {
   /** What this interrupt blocks: chunk id or main assignment id */
   blocks_target_id: string | null;
   blocks_target_kind: "chunk" | "main" | null;
+  /** Free-form tags, e.g. #13, raised-by-om, @koushik */
+  tags: string[];
 };
 
 export type MainAssignment = {
@@ -51,6 +53,7 @@ export type MainAssignment = {
   due_date: string;
   chunks: WorkboardChunk[];
   interrupts: WorkboardInterrupt[];
+  tags: string[];
 };
 
 export type WorkboardStore = {
@@ -93,4 +96,16 @@ export function rollupPercent(chunks: WorkboardChunk[]): number {
 
 export function newId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/** Ensure tags exist on rows loaded from older localStorage. */
+export function normalizeAssignments(list: MainAssignment[]): MainAssignment[] {
+  return list.map((a) => ({
+    ...a,
+    tags: Array.isArray(a.tags) ? a.tags : [],
+    interrupts: (a.interrupts || []).map((i) => ({
+      ...i,
+      tags: Array.isArray(i.tags) ? i.tags : [],
+    })),
+  }));
 }
