@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
+import { getWorkboardMentionCandidates } from "@/services/api";
 import {
   WORKBOARD_ROLES,
   CHUNK_STATUS_LABEL,
@@ -86,14 +88,52 @@ function TagField({
   placeholder?: string;
 }) {
   const { user } = useAuth();
+  const mentionListId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState("");
-  const suggested = useMemo(() => {
+  const [mentionHighlight, setMentionHighlight] = useState(0);
+
+  const { data: mentionPayload } = useQuery({
+    queryKey: ["workboard-mention-candidates"],
+    queryFn: getWorkboardMentionCandidates,
+    staleTime: 5 * 60 * 1000,
+  });
+  const apiNames = mentionPayload?.names ?? [];
+
+  const mentionPickerNames = useMemo(() => {
     const self = workboardSelfMention(user)?.toLowerCase() ?? "";
-    return WORKBOARD_MENTION_PEOPLE.filter((name) => {
-      const tag = mentionFromName(name).toLowerCase();
-      return tag && tag !== self;
+    const seen = new Map<string, string>();
+    for (const raw of [...WORKBOARD_MENTION_PEOPLE, ...apiNames]) {
+      const t = raw.trim();
+      if (!t) continue;
+      const tag = mentionFromName(t);
+      if (!tag || tag.toLowerCase() === self) continue;
+      const key = tag.toLowerCase();
+      if (!seen.has(key)) seen.set(key, t.replace(/^@/, ""));
+    }
+    return [...seen.values()].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+  }, [user, apiNames]);
+
+  const mentionMenu = useMemo(() => {
+    const at = draft.lastIndexOf("@");
+    if (at === -1) return null;
+    const after = draft.slice(at + 1);
+    if (/\s/.test(after)) return null;
+    return { at, filter: after.toLowerCase() };
+  }, [draft]);
+
+  const mentionFiltered = useMemo(() => {
+    if (!mentionMenu) return [];
+    const q = mentionMenu.filter;
+    return mentionPickerNames.filter((name) => {
+      const disp = name.toLowerCase();
+      return !q || disp.includes(q);
     });
-  }, [user]);
+  }, [mentionMenu, mentionPickerNames]);
+
+  useEffect(() => {
+    setMentionHighlight(0);
+  }, [mentionMenu?.at, mentionMenu?.filter, mentionFiltered.length]);
 
   const pushTag = (raw: string) => {
     let t = raw.trim();
@@ -109,6 +149,13 @@ function TagField({
     }
     if (tags.includes(t)) return;
     onChange([...tags, t]);
+  };
+
+  const pickMention = (displayName: string) => {
+    if (!mentionMenu) return;
+    setDraft(draft.slice(0, mentionMenu.at));
+    pushTag(mentionFromName(displayName));
+    requestAnimationFrame(() => inputRef.current?.focus());
   };
 
   return (
@@ -145,24 +192,86 @@ function TagField({
           })}
         </div>
       )}
-      <input
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            pushTag(draft);
-            setDraft("");
-          }
-        }}
-        placeholder={placeholder || "Type @name or #ticket and press Enter…"}
-        className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-sky-500/30"
-      />
-      {suggested.length > 0 && (
+      <div className="relative">
+        <input
+          ref={inputRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (mentionMenu && mentionFiltered.length) {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setMentionHighlight((i) => (i + 1) % mentionFiltered.length);
+                return;
+              }
+              if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setMentionHighlight((i) => (i - 1 + mentionFiltered.length) % mentionFiltered.length);
+                return;
+              }
+              if (e.key === "Enter") {
+                e.preventDefault();
+                pickMention(mentionFiltered[mentionHighlight]!);
+                return;
+              }
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setDraft(draft.slice(0, mentionMenu.at));
+                return;
+              }
+            }
+            if (e.key === "Enter") {
+              e.preventDefault();
+              pushTag(draft);
+              setDraft("");
+            }
+          }}
+          placeholder={placeholder || "Type @name or #ticket and press Enter…"}
+          className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-sky-500/30"
+          role="combobox"
+          aria-expanded={Boolean(mentionMenu && mentionFiltered.length)}
+          aria-controls={mentionFiltered.length ? `${mentionListId}-listbox` : undefined}
+          aria-autocomplete="list"
+        />
+        {mentionMenu && mentionFiltered.length > 0 ? (
+          <ul
+            id={`${mentionListId}-listbox`}
+            role="listbox"
+            className="absolute z-50 left-0 right-0 mt-1 max-h-52 overflow-y-auto rounded-xl border border-white/[0.1] bg-zinc-950/98 shadow-[0_12px_40px_rgba(0,0,0,0.45)] py-1 backdrop-blur-md"
+          >
+            {mentionFiltered.map((name, idx) => (
+              <li key={name} role="presentation">
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={idx === mentionHighlight}
+                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                    idx === mentionHighlight
+                      ? "bg-sky-500/20 text-sky-50"
+                      : "text-zinc-200 hover:bg-white/[0.06]"
+                  }`}
+                  onMouseDown={(ev) => {
+                    ev.preventDefault();
+                    pickMention(name);
+                  }}
+                  onMouseEnter={() => setMentionHighlight(idx)}
+                >
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-sky-500/25 to-violet-500/20 text-[11px] font-semibold uppercase text-sky-100/90">
+                    {name.slice(0, 2)}
+                  </span>
+                  <span className="min-w-0 truncate font-medium">{name}</span>
+                  <AtSign className="ml-auto h-3.5 w-3.5 shrink-0 opacity-40" aria-hidden />
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+      {mentionPickerNames.length > 0 && (
         <div>
           <p className="text-[12px] text-zinc-500 mb-1.5">Who asked for this (tap to add @mention)</p>
           <div className="flex flex-wrap gap-1.5">
-            {suggested.map((name) => (
+            {mentionPickerNames.map((name) => (
               <button
                 key={name}
                 type="button"

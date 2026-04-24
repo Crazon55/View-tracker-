@@ -35,6 +35,83 @@ async def health():
     return {"status": "ok"}
 
 
+def _workboard_collect_string_fields(
+    client, table: str, fields: tuple[str, ...], page_size: int = 1000
+) -> set[str]:
+    """Paginate through a table and collect non-empty trimmed strings from given columns."""
+    out: set[str] = set()
+    cols = ",".join(fields)
+    offset = 0
+    while True:
+        rows = (
+            client.table(table)
+            .select(cols)
+            .range(offset, offset + page_size - 1)
+            .execute()
+            .data
+        ) or []
+        for row in rows:
+            for f in fields:
+                v = row.get(f)
+                if isinstance(v, str):
+                    s = v.strip()
+                    if s:
+                        out.add(s)
+        if len(rows) < page_size:
+            break
+        offset += page_size
+    return out
+
+
+@app.get("/api/v1/workboard/mention-candidates")
+async def workboard_mention_candidates():
+    """
+    Display names for @mentions on the weekly workboard.
+    Aggregates distinct non-empty values from tracker/content usage and directory tables
+    (not a live "who is online" list).
+    """
+    from app.database.client import get_supabase_client
+
+    client = get_supabase_client()
+    names: set[str] = set()
+
+    try:
+        names |= _workboard_collect_string_fields(
+            client,
+            "tracker_ideas",
+            (
+                "created_by",
+                "base_edit_by",
+                "pintu_set_by",
+                "posted_by",
+                "killed_by",
+            ),
+        )
+    except Exception:
+        pass
+
+    try:
+        names |= _workboard_collect_string_fields(client, "content_entries", ("created_by",))
+    except Exception:
+        pass
+
+    try:
+        names |= _workboard_collect_string_fields(client, "user_roles", ("name",))
+    except Exception:
+        pass
+
+    try:
+        for row in get_cs_repository().get_all() or []:
+            n = row.get("name")
+            if isinstance(n, str) and n.strip():
+                names.add(n.strip())
+    except Exception:
+        pass
+
+    ordered = sorted(names, key=lambda s: s.lower())
+    return {"success": True, "data": {"names": ordered}}
+
+
 def _last_monday() -> str:
     """Get last Monday's date as YYYY-MM-DD."""
     today = datetime.now(timezone.utc).date()
