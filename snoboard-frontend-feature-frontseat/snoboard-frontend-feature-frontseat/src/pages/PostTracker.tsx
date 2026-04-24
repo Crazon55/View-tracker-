@@ -331,6 +331,33 @@ function IdeaCard({idea,niches,onClick}: {idea:any;niches:any[];onClick:()=>void
       {/* Info row */}
       <div style={{marginTop:5,display:"flex",flexDirection:"column",gap:2}}>
         {idea.tags?.includes("comp_research")&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:99,background:"rgba(212,118,42,0.15)",color:"#F0A050",fontWeight:600,alignSelf:"flex-start"}}>COMP RESEARCH</span>}
+        {(idea.comp_link || idea.canva_link) && (
+          <div
+            style={{display:"flex",flexWrap:"wrap",gap:8,alignItems:"center"}}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {idea.comp_link && (
+              <a
+                href={idea.comp_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{fontSize:10,color:"#4A7FD4",fontWeight:500}}
+              >
+                {idea.source === "competitor" ? "Comp" : "Ref"} ↗
+              </a>
+            )}
+            {idea.canva_link && (
+              <a
+                href={idea.canva_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{fontSize:10,color:"#7BB0FF",fontWeight:500}}
+              >
+                Canva ↗
+              </a>
+            )}
+          </div>
+        )}
         {idea.created_by&&<span style={{fontSize:10,color:"#52525b"}}>by {idea.created_by}</span>}
         {idea.main_page_hook&&<span style={{fontSize:10,color:"#71717a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{idea.main_page_hook}</span>}
         {idea.content_bucket&&<span style={{fontSize:9,color:"#3f3f46"}}>{idea.content_bucket}</span>}
