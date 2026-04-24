@@ -16,7 +16,6 @@ import {
   rollupPercent,
   newId,
   normalizeAssignments,
-  WORKBOARD_MENTION_PEOPLE,
   mentionFromName,
   workboardMentionSubtitle,
 } from "@/lib/workboardTypes";
@@ -104,39 +103,13 @@ function TagField({
 
   const mentionPickerPeople = useMemo(() => {
     const self = workboardSelfMention(user)?.toLowerCase() ?? "";
-    const byKey = new Map<string, WorkboardMentionPerson>();
-
-    const consider = (p: WorkboardMentionPerson) => {
-      const disp = (p.display || "").trim();
-      if (!disp) return;
-      const tag = mentionFromName(disp).toLowerCase();
-      if (!tag || tag === self) return;
-      const key = disp.toLowerCase();
-      const prev = byKey.get(key);
-      if (!prev) {
-        byKey.set(key, p);
-        return;
-      }
-      const rank = (x: WorkboardMentionPerson) => (x.role_id || x.email ? 1 : 0);
-      if (rank(p) > rank(prev)) byKey.set(key, p);
-      else if (rank(p) === rank(prev)) {
-        byKey.set(key, {
-          display: disp,
-          role_id: p.role_id || prev.role_id,
-          email: p.email || prev.email,
-        });
-      }
-    };
-
-    for (const name of WORKBOARD_MENTION_PEOPLE) {
-      const d = name.trim().replace(/^@/, "");
-      if (d) consider({ display: d, role_id: null, email: null });
-    }
-    for (const p of apiPeople) consider(p);
-
-    return [...byKey.values()].sort((a, b) =>
-      a.display.toLowerCase().localeCompare(b.display.toLowerCase()),
-    );
+    return apiPeople
+      .filter((p) => p.role_id || p.email || p.is_content_strategist)
+      .filter((p) => {
+        const tag = mentionFromName(p.display).toLowerCase();
+        return tag && tag !== self;
+      })
+      .sort((a, b) => a.display.toLowerCase().localeCompare(b.display.toLowerCase()));
   }, [user, apiPeople]);
 
   const mentionMenu = useMemo(() => {
@@ -154,7 +127,9 @@ function TagField({
       if (!q) return true;
       const disp = p.display.toLowerCase();
       const em = (p.email || "").toLowerCase();
-      const sub = (workboardMentionSubtitle(p.role_id, p.email) || "").toLowerCase();
+      const sub = (
+        workboardMentionSubtitle(p.role_id, p.email, { isContentStrategist: p.is_content_strategist }) || ""
+      ).toLowerCase();
       return disp.includes(q) || em.includes(q) || sub.includes(q);
     });
   }, [mentionMenu, mentionPickerPeople]);
@@ -279,7 +254,9 @@ function TagField({
               </li>
             ) : (
               mentionFiltered.map((person, idx) => {
-                const sub = workboardMentionSubtitle(person.role_id, person.email);
+                const sub = workboardMentionSubtitle(person.role_id, person.email, {
+                  isContentStrategist: person.is_content_strategist,
+                });
                 const rowKey = `${person.display}|${person.email ?? ""}|${person.role_id ?? ""}`;
                 return (
                   <li key={rowKey} role="presentation">
@@ -315,7 +292,6 @@ function TagField({
           </ul>
         ) : null}
       </div>
-      <p className="text-[11px] text-zinc-600">Type @ — menu opens above the field. Roles show when set in user roster.</p>
     </div>
   );
 }
