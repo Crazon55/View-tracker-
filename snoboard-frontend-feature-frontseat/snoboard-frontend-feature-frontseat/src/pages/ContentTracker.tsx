@@ -310,8 +310,53 @@ function IdeaCard({idea,niches,onClick}: {idea:any;niches:any[];onClick:()=>void
         {idea.created_by&&<span style={{fontSize:10,color:"#52525b"}}>by {idea.created_by}</span>}
         {hv>0&&<span style={{fontSize:10,color:"#52525b"}}>{hv} hook{hv>1?"s":""}</span>}
         {idea.music_ref&&<span style={{fontSize:10,color:"#3f3f46",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>♪ {idea.music_ref}</span>}
-        {idea.yt_url&&<span style={{fontSize:10,color:"#4A7FD4",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>YT ↗</span>}
-        {idea.frame_link&&<span style={{fontSize:10,color:"#F0A050",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>Frame ↗</span>}
+        {(idea.comp_link || idea.yt_url || idea.frame_link || idea.kalakar_link) && (
+          <div
+            style={{display:"flex",flexWrap:"wrap",gap:8,alignItems:"center"}}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {idea.comp_link && (
+              <a
+                href={idea.comp_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{fontSize:10,color:"#4A7FD4",fontWeight:500}}
+              >
+                {idea.source === "competitor" ? "Comp" : "Ref"} ↗
+              </a>
+            )}
+            {idea.yt_url && (
+              <a
+                href={idea.yt_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{fontSize:10,color:"#4A7FD4",fontWeight:500}}
+              >
+                YT ↗
+              </a>
+            )}
+            {idea.frame_link && (
+              <a
+                href={idea.frame_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{fontSize:10,color:"#F0A050",fontWeight:500}}
+              >
+                Frame ↗
+              </a>
+            )}
+            {idea.kalakar_link && (
+              <a
+                href={idea.kalakar_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{fontSize:10,color:"#7BB0FF",fontWeight:500}}
+              >
+                Kalakar ↗
+              </a>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
