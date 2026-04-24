@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   getTrackerNiches, createTrackerNiche, updateTrackerNiche, deleteTrackerNiche,
   getTrackerIdeas, createTrackerIdea, updateTrackerIdea, deleteTrackerIdea,
@@ -620,6 +621,8 @@ function AnalyticsView({ideas,niches,nicheFilter,pageFilter,dateFrom,dateTo,setD
 
 export default function PostTracker(){
   const { user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   // ---- Data fetching via react-query ----
@@ -768,8 +771,41 @@ export default function PostTracker(){
   }
   function deleteIdea(id: string){
     deleteIdeaMut.mutate(id);
-    setDetailIdea(null);
+    closeDetail();
   }
+
+  function setIdeaInUrl(ideaId: string | null){
+    const sp = new URLSearchParams(location.search);
+    if(ideaId) sp.set("idea", ideaId);
+    else sp.delete("idea");
+    const nextSearch = sp.toString();
+    navigate(
+      { pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : "" },
+      { replace: true }
+    );
+  }
+
+  function openDetail(idea: any, opts?: { pushUrl?: boolean }){
+    setDetailIdea(idea);
+    setDetailNicheIds(idea.nicheIds||[]);
+    setScheduleDate({});
+    if(opts?.pushUrl !== false) setIdeaInUrl(idea.id);
+  }
+
+  function closeDetail(){
+    setDetailIdea(null);
+    setIdeaInUrl(null);
+  }
+
+  // Deep-link: /post-tracker?idea=<id> opens the idea modal
+  useEffect(()=>{
+    const sp = new URLSearchParams(location.search);
+    const id = sp.get("idea");
+    if(!id) return;
+    if(detailIdea?.id === id) return;
+    const found = ideas.find((i: any) => i.id === id);
+    if(found) openDetail(found, { pushUrl: false });
+  },[location.search, ideas, detailIdea?.id]);
 
   function togglePage(iid: string, page: string, bv: any, date: string){
     const idea = ideas.find(i => i.id === iid);
@@ -833,7 +869,7 @@ export default function PostTracker(){
   };
 
   const counts: Record<string,number>={};STAGES.forEach(s=>{counts[s]=filteredIdeas.filter(i=>i.stage===s).length;});
-  function openDetail(idea: any){setDetailIdea(idea);setDetailNicheIds(idea.nicheIds||[]);setScheduleDate({});}
+  // openDetail / closeDetail are defined above to keep URL in sync
 
   // ---- Loading spinner ----
   if(isLoading){
@@ -1006,7 +1042,7 @@ export default function PostTracker(){
       <Modal open={!!cd} onClose={()=>{
         if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
         if(nicheSaveTimer.current){clearTimeout(nicheSaveTimer.current);nicheSaveTimer.current=null;if(cd)updateIdeaMut.mutate({id:cd.id,data:{niche_ids:nicheSaveRef.current}});}
-        setDetailIdea(null);
+        closeDetail();
       }} title={cd?.title||""} wide>
         {cd&&(()=>{const pp=(cd.postings||[]).map((p: any)=>p.page);return(
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
