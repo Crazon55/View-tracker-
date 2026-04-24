@@ -244,6 +244,7 @@ export type WorkboardMentionPerson = {
   display: string;
   role_id: string | null;
   email: string | null;
+  is_content_strategist?: boolean;
 };
 
 export const getWorkboardMentionCandidates = () =>

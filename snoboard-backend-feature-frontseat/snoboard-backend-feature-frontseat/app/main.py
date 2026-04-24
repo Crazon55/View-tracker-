@@ -35,35 +35,86 @@ async def health():
     return {"status": "ok"}
 
 
-def _workboard_collect_string_fields(
-    client, table: str, fields: tuple[str, ...], page_size: int = 1000
-) -> set[str]:
-    """Paginate through a table and collect non-empty trimmed strings from given columns."""
-    out: set[str] = set()
-    cols = ",".join(fields)
-    offset = 0
-    while True:
-        rows = (
-            client.table(table)
-            .select(cols)
-            .range(offset, offset + page_size - 1)
-            .execute()
-            .data
-        ) or []
-        for row in rows:
-            for f in fields:
-                v = row.get(f)
-                if isinstance(v, str):
-                    s = v.strip()
-                    if s:
-                        out.add(s)
-        if len(rows) < page_size:
-            break
-        offset += page_size
-    return out
-
-
 _WORKBOARD_MENTION_SKIP: frozenset[str] = frozenset({"", "tracker", "comp research"})
+
+
+def _workboard_mention_richness(p: dict) -> int:
+    r = 0
+    if p.get("role_id"):
+        r += 100
+    if p.get("email"):
+        r += 50
+    if p.get("is_content_strategist"):
+        r += 10
+    r += len((p.get("display") or "").strip())
+    return r
+
+
+def _workboard_dedupe_mention_people(people: list[dict]) -> list[dict]:
+    """
+    One row per person: prefer roster (role/email). Drop shorter bare names when a
+    roster row is clearly the same person (same email, full-name extension, or same first name).
+    """
+    if not people:
+        return []
+
+    def roster_backed(p: dict) -> bool:
+        return bool(p.get("role_id") or p.get("email"))
+
+    # One winner per email
+    by_email: dict[str, dict] = {}
+    rest: list[dict] = []
+    for p in people:
+        em = (p.get("email") or "").strip().lower()
+        if em:
+            cur = by_email.get(em)
+            if not cur or _workboard_mention_richness(p) > _workboard_mention_richness(cur):
+                by_email[em] = p
+        else:
+            rest.append(p)
+
+    pool: list[dict] = list(by_email.values())
+
+    def dominated_by_pool(p: dict, others: list[dict]) -> bool:
+        d = (p.get("display") or "").strip().lower()
+        if not d:
+            return True
+        p_roster = roster_backed(p)
+        d_first = d.split()[0] if d.split() else d
+        for q in others:
+            if q is p:
+                continue
+            qd = (q.get("display") or "").strip().lower()
+            if not qd:
+                continue
+            q_roster = roster_backed(q)
+            if not q_roster:
+                continue
+            if qd == d or qd.startswith(d + " "):
+                if not p_roster or _workboard_mention_richness(q) >= _workboard_mention_richness(p):
+                    return True
+            q_first = qd.split()[0] if qd.split() else qd
+            if d_first == q_first and len(qd) > len(d) and not p_roster:
+                return True
+        return False
+
+    for p in rest:
+        if not dominated_by_pool(p, pool):
+            pool.append(p)
+
+    pool.sort(key=lambda x: -_workboard_mention_richness(x))
+    kept: list[dict] = []
+    for p in pool:
+        if dominated_by_pool(p, kept):
+            continue
+        kept.append(p)
+
+    return kept
+
+
+def _workboard_mention_list_eligible(p: dict) -> bool:
+    """Dropdown only: roster (role or email), or tagged content strategist."""
+    return bool(p.get("role_id") or p.get("email") or p.get("is_content_strategist"))
 
 
 def _workboard_paginate_table(
@@ -104,7 +155,13 @@ async def workboard_mention_candidates():
         low = d.lower()
         if low in _WORKBOARD_MENTION_SKIP:
             return
-        row = {"display": d, "role_id": role_id, "email": email, "source": source}
+        row = {
+            "display": d,
+            "role_id": role_id,
+            "email": email,
+            "source": source,
+            "is_content_strategist": source == "content_strategist",
+        }
         existing = by_display_lower.get(low)
         if existing is None:
             by_display_lower[low] = row
@@ -118,6 +175,8 @@ async def workboard_mention_candidates():
                 existing["role_id"] = role_id
             if email and not existing.get("email"):
                 existing["email"] = email
+            if source == "content_strategist":
+                existing["is_content_strategist"] = True
 
     try:
         for ur in _workboard_paginate_table(client, "user_roles", "name,email,role"):
@@ -139,39 +198,21 @@ async def workboard_mention_candidates():
     except Exception:
         pass
 
-    activity_names: set[str] = set()
-    try:
-        activity_names |= _workboard_collect_string_fields(
-            client,
-            "tracker_ideas",
-            (
-                "created_by",
-                "base_edit_by",
-                "pintu_set_by",
-                "posted_by",
-                "killed_by",
-            ),
-        )
-    except Exception:
-        pass
-
-    try:
-        activity_names |= _workboard_collect_string_fields(client, "content_entries", ("created_by",))
-    except Exception:
-        pass
-
-    for s in activity_names:
-        add_person(s, None, None, "activity")
+    # Do not merge tracker/content free-text creators — they duplicate roster rows
+    # (e.g. "Deepak" vs "Deepak Chandwani") without role/email.
 
     people: list[dict] = [
         {
             "display": row["display"],
             "role_id": row.get("role_id"),
             "email": row.get("email"),
+            "is_content_strategist": bool(row.get("is_content_strategist")),
         }
         for row in by_display_lower.values()
     ]
 
+    people = _workboard_dedupe_mention_people(people)
+    people = [p for p in people if _workboard_mention_list_eligible(p)]
     people.sort(key=lambda p: (p["display"] or "").lower())
     return {"success": True, "data": {"people": people}}
 

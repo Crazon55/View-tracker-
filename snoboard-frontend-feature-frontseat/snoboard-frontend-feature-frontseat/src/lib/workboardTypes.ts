@@ -29,12 +29,15 @@ export function workboardRoleLabel(roleId: string | null | undefined): string | 
 export function workboardMentionSubtitle(
   roleId: string | null | undefined,
   email: string | null | undefined,
+  opts?: { isContentStrategist?: boolean },
 ): string | null {
   const parts: string[] = [];
   const rl = workboardRoleLabel(roleId);
   if (rl) parts.push(rl);
   if (email?.trim()) parts.push(email.trim());
-  return parts.length ? parts.join(" · ") : null;
+  if (parts.length) return parts.join(" · ");
+  if (opts?.isContentStrategist) return "Content strategist";
+  return null;
 }
 
 /**
