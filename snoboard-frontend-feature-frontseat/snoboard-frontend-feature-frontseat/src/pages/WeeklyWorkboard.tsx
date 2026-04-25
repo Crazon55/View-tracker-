@@ -798,14 +798,12 @@ export default function WeeklyWorkboard() {
 
       <div className="pl-[70px] pr-6 pt-8 pb-12 max-w-[min(100%,1520px)] mx-auto">
         <header className={`${BENTO_SURFACE} p-6 mb-8`}>
-          <p className="text-sm text-violet-400 font-medium mb-1 tracking-wide">Weekly workboard</p>
-          <h1 className="text-3xl font-semibold tracking-tight text-white">Studio &amp; ops</h1>
+          <h1 className="text-3xl font-semibold tracking-tight text-white">Bandwidth tracker &amp; ops</h1>
           <p className="text-[15px] text-zinc-400 mt-3 max-w-2xl leading-relaxed">
             Plan by role, split into steps, and log blockers. Add{" "}
             <span className="text-zinc-200">@name</span> / <span className="text-zinc-200">#ticket</span>{" "}
             <span className="text-zinc-300">inside each step</span> so asks stay with the work. Saves on this device.
           </p>
-          {user?.email && <p className="text-xs text-zinc-600 mt-3">{user.email}</p>}
         </header>
 
         <div className="flex flex-wrap items-center gap-3 mb-8">

@@ -1,0 +1,15 @@
+---
+description: After making code changes in this repo, commit and push to GitHub
+alwaysApply: true
+---
+
+# Push updates to GitHub
+
+When you complete a task that modifies project files (code, config, assets used by the app):
+
+1. Run `git status` and review changes.
+2. Stage the relevant files (exclude accidental junk like `*.tsbuildinfo` unless the user wants them).
+3. Commit with a clear message describing what changed and why.
+4. Push to `origin` on the current branch (usually `main`): `git push origin <branch>`.
+
+Do this in the same session as the edits unless the user explicitly says not to commit or the environment blocks git. If push fails, report the error and retry once with a reasonable fix (e.g. auth).
