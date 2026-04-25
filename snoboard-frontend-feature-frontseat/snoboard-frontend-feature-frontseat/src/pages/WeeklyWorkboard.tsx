@@ -625,7 +625,7 @@ export default function WeeklyWorkboard() {
           "radial-gradient(ellipse 130% 90% at 50% -20%, rgba(109, 40, 217, 0.28), transparent 52%), radial-gradient(ellipse 90% 70% at 100% 0%, rgba(124, 58, 237, 0.12), transparent 42%), radial-gradient(ellipse 70% 50% at 0% 100%, rgba(91, 33, 182, 0.1), transparent 45%)",
       }}
     >
-      <div className="pl-[70px] pr-6 pt-8 pb-12 max-w-[1200px] mx-auto">
+      <div className="pl-[70px] pr-6 pt-8 pb-12 max-w-[min(100%,1520px)] mx-auto">
         <header className={`${BENTO_SURFACE} p-6 mb-8`}>
           <p className="text-sm text-violet-400 font-medium mb-1 tracking-wide">Weekly workboard</p>
           <h1 className="text-3xl font-semibold tracking-tight text-white">Studio &amp; ops</h1>
@@ -1214,20 +1214,22 @@ function ListView({
   removeInterrupt: (assignmentId: string, intId: string) => void;
   updateInterrupt: (assignmentId: string, intId: string, patch: Partial<WorkboardInterrupt>) => void;
 }) {
+  /** Start collapsed so the bento grid fits on screen; expand a card to edit. */
   const [listExpanded, setListExpanded] = useState<Record<string, boolean>>({});
-  const listIsOpen = (id: string) => listExpanded[id] !== false;
+  const listIsOpen = (id: string) => listExpanded[id] === true;
   const toggleListCard = (id: string) => {
-    setListExpanded((p) => {
-      const open = p[id] !== false;
-      return { ...p, [id]: !open };
-    });
+    setListExpanded((p) => ({ ...p, [id]: !p[id] }));
   };
 
   const missingRoles = WORKBOARD_ROLES.filter((r) => !weekAssignments.some((a) => a.role_id === r.id));
 
   return (
     <div className="space-y-4">
-      {weekAssignments.map((a) => {
+      <div
+        className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4"
+        style={{ gridAutoRows: "minmax(0, auto)" }}
+      >
+        {weekAssignments.map((a, cardIdx) => {
         const open = listIsOpen(a.id);
         const { headline, dueLine } = listCardMainSummary(a);
         const flatChunks = flattenAssignmentChunks(a);
@@ -1235,25 +1237,32 @@ function ListView({
         const listIntPct = interruptRollupPercent(a.interrupts);
         const listIntDone = a.interrupts.filter((i) => i.status === "completed").length;
         return (
-          <div key={a.id} className={cn(BENTO_SURFACE, "overflow-hidden")}>
-            <div className="flex items-stretch gap-0">
+          <div
+            key={a.id}
+            className={cn(
+              BENTO_SURFACE,
+              "overflow-hidden flex flex-col min-h-0 min-w-0",
+              cardIdx === 0 && "xl:col-span-2 xl:min-h-[200px]",
+            )}
+          >
+            <div className="flex items-stretch gap-0 shrink-0">
               <button
                 type="button"
                 onClick={() => toggleListCard(a.id)}
-                className="flex flex-1 items-start gap-3 p-4 text-left hover:bg-violet-500/[0.06] transition-colors min-w-0"
+                className="flex flex-1 items-start gap-2 sm:gap-3 p-3 sm:p-4 text-left hover:bg-violet-500/[0.06] transition-colors min-w-0"
               >
                 {open ? (
-                  <ChevronDown className="w-5 h-5 text-zinc-500 shrink-0 mt-0.5" />
+                  <ChevronDown className="w-4 h-4 sm:w-5 sm:h-5 text-zinc-500 shrink-0 mt-0.5" />
                 ) : (
-                  <ChevronRightIcon className="w-5 h-5 text-zinc-500 shrink-0 mt-0.5" />
+                  <ChevronRightIcon className="w-4 h-4 sm:w-5 sm:h-5 text-zinc-500 shrink-0 mt-0.5" />
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="text-xs font-medium text-violet-300/90">{roleLabel(a.role_id)}</div>
-                  <div className="text-[15px] font-medium text-white mt-1 break-words">
+                  <div className="text-sm sm:text-[15px] font-medium text-white mt-0.5 sm:mt-1 break-words line-clamp-3">
                     {headline}
                   </div>
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-zinc-500">
-                    {dueLine && <span>{dueLine}</span>}
+                  <div className="flex flex-wrap items-center gap-x-2 sm:gap-x-3 gap-y-0.5 sm:gap-y-1 mt-1.5 sm:mt-2 text-[11px] sm:text-xs text-zinc-500">
+                    {dueLine && <span className="truncate max-w-full">{dueLine}</span>}
                     <span className="text-zinc-400">
                       Steps {pct}% ({flatChunks.filter((c) => c.status === "completed").length}/{flatChunks.length || 0})
                     </span>
@@ -1263,23 +1272,23 @@ function ListView({
                       </span>
                     )}
                   </div>
-                  <div className="mt-2 max-w-md space-y-1">
+                  <div className="mt-1.5 sm:mt-2 w-full max-w-md space-y-1">
                     <ProgressBar pct={pct} />
                     {a.interrupts.length > 0 && <ProgressBar pct={listIntPct} variant="orange" />}
                   </div>
                   {!open && allAssignmentTags(a).length > 0 && (
-                    <div className="mt-2">
-                      <TagChipsRow tags={allAssignmentTags(a)} />
+                    <div className="mt-1.5 sm:mt-2">
+                      <TagChipsRow tags={allAssignmentTags(a)} max={4} />
                     </div>
                   )}
                   {!open && <BlockingLines a={a} />}
                 </div>
               </button>
-              <div className="flex items-start p-3 shrink-0">
+              <div className="flex items-start p-2 sm:p-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => removeAssignment(a.id)}
-                  className="p-2 rounded-xl text-zinc-500 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+                  className="p-1.5 sm:p-2 rounded-xl text-zinc-500 hover:text-red-300 hover:bg-red-500/10 transition-colors"
                   title="Remove assignment"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -1287,7 +1296,7 @@ function ListView({
               </div>
             </div>
             {open && (
-              <div className="border-t border-white/10 px-4 pb-4 pt-3 bg-black/35 backdrop-blur-xl">
+              <div className="border-t border-white/10 min-h-0 max-h-[min(72vh,780px)] overflow-y-auto overscroll-y-contain px-3 pb-3 pt-2 sm:px-4 sm:pb-4 sm:pt-3 bg-black/40 backdrop-blur-xl">
                 <AssignmentEditor
                   a={a}
                   embedBelowListHeader
@@ -1308,6 +1317,7 @@ function ListView({
           </div>
         );
       })}
+      </div>
 
       {missingRoles.length > 0 && (
         <div className={cn(BENTO_SURFACE, "border-dashed p-5")}>
