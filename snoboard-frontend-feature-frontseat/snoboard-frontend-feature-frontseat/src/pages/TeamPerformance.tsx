@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence, useMotionValue, useTransform, animate, useAnimationControls } from "framer-motion";
 import { getSixDayMonth, getTeamsPerformance, getTrackerIdeas, getTrackerNiches } from "@/services/api";
@@ -19,9 +19,6 @@ import {
   TrendingUp,
   Star,
   Loader2,
-  Zap,
-  CheckCircle2,
-  Skull,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -72,6 +69,29 @@ const TEAM_SKIN: Record<
 
 function teamSkin(key: string) {
   return TEAM_SKIN[key] ?? TEAM_SKIN.garfields;
+}
+
+/** Apple-style: fade + rise when scrolled into view. Do not use on the top hero scoreboard. */
+function ScrollReveal({
+  children,
+  className,
+  delay = 0,
+}: {
+  children: ReactNode;
+  className?: string;
+  delay?: number;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 32 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.12, margin: "0px 0px -48px 0px" }}
+      transition={{ duration: 0.65, delay, ease: [0.22, 1, 0.36, 1] }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  );
 }
 
 /* ============================== easter-egg sounds ============================== */
@@ -195,9 +215,6 @@ export default function TeamPerformance() {
   const teams = data.teams ?? [];
   const leaderKey = data.leader_key ?? null;
   const people = data.people ?? [];
-  const margin6d = data.leader_margin_views_6d ?? 0;
-  const marginTotal = data.leader_margin_views_total ?? 0;
-
   // order teams in fixed slot order so the hero scoreboard is stable
   const teamA = teams.find((t: any) => t.key === "garfields");
   const teamB = teams.find((t: any) => t.key === "goofies");
@@ -216,57 +233,63 @@ export default function TeamPerformance() {
 
       <div className="relative max-w-6xl mx-auto">
         {/* ============================== header ============================== */}
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Swords className="w-5 h-5 text-amber-400" />
-              <span className="text-[11px] uppercase tracking-[0.25em] text-amber-400 font-bold">
-                The arena · last {data.window_days ?? 6} days
-              </span>
+        <ScrollReveal>
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Swords className="w-5 h-5 text-amber-400" />
+                <span className="text-[11px] uppercase tracking-[0.25em] text-amber-400 font-bold">
+                  The arena · last {data.window_days ?? 6} days
+                </span>
+              </div>
+              <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight leading-none">
+                Leader<span className="text-amber-400">board</span>
+              </h1>
+              <p className="text-sm text-zinc-400 mt-2 max-w-2xl">
+                Garfields vs Goofies — same stats as below, in a calmer read.
+              </p>
             </div>
-            <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight leading-none">
-              Leader<span className="text-amber-400">board</span>
-            </h1>
-            <p className="text-sm text-zinc-400 mt-2 max-w-2xl">
-              Garfields vs Goofies. Most views wins. Ideas that ship, views that pop, creators on a streak — it&apos;s all here.
-            </p>
+            {data._source === "client" && (
+              <p className="text-[11px] text-amber-400/90 border border-amber-500/25 rounded-lg px-3 py-2 bg-amber-500/5 max-w-xs">
+                Showing client-computed stats — redeploy the API for live aggregates.
+              </p>
+            )}
           </div>
-          {data._source === "client" && (
-            <p className="text-[11px] text-amber-400/90 border border-amber-500/25 rounded-lg px-3 py-2 bg-amber-500/5 max-w-xs">
-              Showing client-computed stats — redeploy the API for live aggregates.
-            </p>
-          )}
-        </div>
+        </ScrollReveal>
 
-        {/* ============================== HERO SCOREBOARD ============================== */}
+        {/* ============================== HERO SCOREBOARD (no scroll-reveal: hero stays immediate) ============================== */}
         {orderedTeams.length === 2 && (
           <HeroScoreboard
             teamA={orderedTeams[0]}
             teamB={orderedTeams[1]}
             leaderKey={leaderKey}
-            margin6d={margin6d}
-            marginTotal={marginTotal}
             totalViews6d={totalViews6d}
             totalViewsAll={totalViewsAll}
           />
         )}
 
         {/* ============================== HALL OF FAME ============================== */}
-        <HallOfFame
-          topCreator={data.top_creator_6d}
-          topIdea6d={data.top_idea_6d}
-          topIdeaAll={data.top_idea_overall}
-        />
+        <ScrollReveal delay={0.05}>
+          <HallOfFame
+            topCreator={data.top_creator_6d}
+            topIdea6d={data.top_idea_6d}
+            topIdeaAll={data.top_idea_overall}
+          />
+        </ScrollReveal>
 
         {/* ============================== TEAM CARDS ============================== */}
-        <div className="grid gap-5 md:grid-cols-2 mt-8">
-          {orderedTeams.map((team: any) => (
-            <TeamCard key={team.key} team={team} isLeader={leaderKey === team.key} />
-          ))}
-        </div>
+        <ScrollReveal delay={0.08} className="mt-8">
+          <div className="grid gap-5 md:grid-cols-2">
+            {orderedTeams.map((team: any) => (
+              <TeamCard key={team.key} team={team} isLeader={leaderKey === team.key} />
+            ))}
+          </div>
+        </ScrollReveal>
 
         {/* ============================== PEOPLE LEADERBOARD ============================== */}
-        <PeopleLeaderboard people={people} windowDays={data.window_days ?? 6} />
+        <ScrollReveal delay={0.1}>
+          <PeopleLeaderboard people={people} windowDays={data.window_days ?? 6} />
+        </ScrollReveal>
       </div>
     </div>
   );
@@ -278,15 +301,12 @@ function HeroScoreboard({
   teamA,
   teamB,
   leaderKey,
-  margin6d,
   totalViews6d,
   totalViewsAll,
 }: {
   teamA: any;
   teamB: any;
   leaderKey: string | null;
-  margin6d: number;
-  marginTotal: number;
   totalViews6d: number;
   totalViewsAll: number;
 }) {
@@ -299,40 +319,14 @@ function HeroScoreboard({
     <div className="relative rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900 via-zinc-950 to-zinc-900 p-5 sm:p-8 overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white/[0.03] to-transparent pointer-events-none" />
 
-      {/* leader banner */}
-      <div className="flex items-center justify-center mb-6">
-        <AnimatePresence mode="wait">
-          {tie ? (
-            <motion.div
-              key="tie"
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-300 text-sm font-bold"
-            >
-              <Sparkles className="w-4 h-4 text-zinc-400" /> Dead even. Go make some hits.
-            </motion.div>
-          ) : (
-            <motion.div
-              key={leaderKey ?? "none"}
-              initial={{ opacity: 0, y: -10, scale: 0.9 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0 }}
-              className={`inline-flex items-center gap-2 px-5 py-2 rounded-full bg-gradient-to-r ${
-                teamSkin(leaderKey ?? "").grad
-              } text-zinc-900 text-sm font-black uppercase tracking-wide shadow-lg`}
-            >
-              <motion.span
-                animate={{ rotate: [0, -15, 15, -10, 10, 0] }}
-                transition={{ duration: 1.5, repeat: Infinity, repeatDelay: 2 }}
-              >
-                <Crown className="w-4 h-4" />
-              </motion.span>
-              {leaderKey === teamA.key ? teamA.label : teamB.label} lead by {formatViews(margin6d)} views this month
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+      {tie && (
+        <div className="flex items-center justify-center mb-4">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-zinc-800/80 border border-zinc-700/80 text-zinc-400 text-xs font-medium">
+            <Sparkles className="w-3.5 h-3.5 text-zinc-500" />
+            Tied on month views — go make some hits
+          </div>
+        </div>
+      )}
 
       {/* score row */}
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 sm:gap-6">
@@ -664,125 +658,141 @@ function IdeaTrophyCard({
 
 /* ============================== team card ============================== */
 
+function TeamCardLineProgress({
+  label,
+  icon,
+  posted,
+  total,
+  barClass,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  posted: number;
+  total: number;
+  barClass: string;
+}) {
+  const p = total > 0 ? Math.min(100, (posted / total) * 100) : 0;
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2 text-[11px] text-zinc-400">
+        <span className="inline-flex items-center gap-1.5 min-w-0">
+          {icon}
+          <span className="uppercase tracking-wide font-semibold text-zinc-500">{label}</span>
+        </span>
+        <span className="tabular-nums text-zinc-500 shrink-0">
+          <span className="text-zinc-200 font-bold">{posted ?? 0}</span> / {total ?? 0}
+        </span>
+      </div>
+      <div className="mt-1.5 h-1.5 rounded-full bg-zinc-800/90 overflow-hidden border border-white/[0.04]">
+        <div className={`h-full rounded-full ${barClass}`} style={{ width: `${p}%` }} />
+      </div>
+    </div>
+  );
+}
+
 function TeamCard({ team, isLeader }: { team: any; isLeader: boolean }) {
   const skin = teamSkin(team.key);
+  const cr = team.top_creator_6d;
+  const idea = team.top_idea_6d;
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4 }}
+    <div
       className={`relative rounded-3xl border ${
-        isLeader ? `border-amber-500/40 shadow-lg ${skin.glow}` : "border-zinc-800"
-      } bg-zinc-900/80 overflow-hidden`}
+        isLeader ? `border-amber-500/35 shadow-lg ${skin.glow}` : "border-white/[0.08]"
+      } bg-zinc-950/40 backdrop-blur-xl overflow-hidden`}
     >
-      <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${skin.grad}`} />
+      <div className={`absolute inset-x-0 top-0 h-px bg-gradient-to-r ${skin.grad} opacity-90`} />
 
-      <div className="px-5 py-4 flex items-start justify-between gap-3">
-        <div>
+      <div className="px-5 pt-4 pb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-3xl" aria-hidden>
+            <span className="text-3xl shrink-0" aria-hidden>
               {team.emoji}
             </span>
-            <h2 className="text-xl font-black text-white">{team.label}</h2>
+            <h2 className="text-xl font-black text-white truncate">{team.label}</h2>
             {isLeader && (
-              <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/30 gap-1">
+              <Badge className="bg-amber-500/15 text-amber-200 border-amber-500/25 gap-1 shrink-0">
                 <Trophy className="w-3 h-3" /> Leading
               </Badge>
             )}
           </div>
           <p className="text-[11px] text-zinc-500 mt-1">
-            {team.member_count} people · {team.account_count} account
-            {team.account_count !== 1 ? "s" : ""}
+            {team.member_count} people · {team.account_count} account{team.account_count !== 1 ? "s" : ""}
           </p>
         </div>
-        <div className="text-right">
+        <div className="text-right shrink-0">
           <p className="text-[10px] uppercase tracking-wider text-zinc-500">Views · 6d</p>
-          <p className="text-2xl font-black text-white tabular-nums">
-            {formatViews(team.views_6d)}
-          </p>
+          <p className="text-3xl font-black text-white tabular-nums leading-none">{formatViews(team.views_6d)}</p>
         </div>
       </div>
 
-      <div className="p-5 pt-0 space-y-4">
-        {/* views row */}
-        <div className="grid grid-cols-3 gap-2">
-          <StatBlock
-            label="Views · 6d"
-            value={formatViews(team.views_6d)}
-            icon={<Flame className="w-3 h-3 text-orange-400" />}
-          />
-          <StatBlock
-            label="Views · all"
-            value={formatViews(team.views_total)}
-            icon={<TrendingUp className="w-3 h-3 text-emerald-400" />}
-          />
-          <StatBlock
-            label="Ship rate"
-            value={formatPct(team.posted_rate)}
-            icon={<Rocket className="w-3 h-3 text-violet-400" />}
-          />
-        </div>
+      <div className="px-5 pb-4 flex flex-wrap items-baseline gap-x-5 gap-y-1 text-[13px]">
+        <span className="inline-flex items-baseline gap-2">
+          <span className="text-[10px] uppercase tracking-wider text-zinc-500">All-time</span>
+          <span className="font-bold text-white tabular-nums">{formatViews(team.views_total)}</span>
+        </span>
+        <span className="text-zinc-700 hidden sm:inline" aria-hidden>
+          ·
+        </span>
+        <span className="inline-flex items-baseline gap-2">
+          <span className="text-[10px] uppercase tracking-wider text-zinc-500">Ship</span>
+          <span className="font-bold text-white tabular-nums">{formatPct(team.posted_rate)}</span>
+        </span>
+      </div>
 
-        {/* top creator / top idea mini */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <MiniHighlight
-            label="Top creator · 6d"
-            title={team.top_creator_6d?.name}
-            subtitle={
-              team.top_creator_6d
-                ? `${formatViews(team.top_creator_6d.views)} · ${team.top_creator_6d.ideas} idea${team.top_creator_6d.ideas === 1 ? "" : "s"}`
-                : "—"
-            }
-            icon={<Crown className="w-3.5 h-3.5 text-amber-400" />}
-          />
-          <MiniHighlight
-            label="Top idea · 6d"
-            title={team.top_idea_6d?.title}
-            subtitle={team.top_idea_6d ? `${formatViews(team.top_idea_6d.views)} views` : "—"}
-            icon={<Zap className="w-3.5 h-3.5 text-yellow-400" />}
-          />
-        </div>
-
-        {/* ideas counts */}
-        <div>
-          <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-2 font-semibold">
-            Ideas pipeline
-          </p>
-          <div className="grid grid-cols-4 gap-2 text-center">
-            <PipelinePill label="Total" value={team.ideas_total} tone="white" />
-            <PipelinePill
-              label="Posted"
-              value={team.ideas_posted}
-              tone="emerald"
-              icon={<CheckCircle2 className="w-3 h-3" />}
-            />
-            <PipelinePill label="WIP" value={team.ideas_in_progress ?? 0} tone="violet" />
-            <PipelinePill
-              label="Killed"
-              value={team.ideas_killed ?? 0}
-              tone="zinc"
-              icon={<Skull className="w-3 h-3" />}
-            />
+      <div className="px-5 pb-5 space-y-5">
+        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] backdrop-blur-sm p-4 space-y-4">
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase tracking-[0.18em] text-zinc-500 mb-1.5">Top creator · 6d</p>
+            <p className="text-sm font-bold text-white truncate">{cr?.name ?? "—"}</p>
+            {cr ? (
+              <p className="text-[12px] text-zinc-400 mt-0.5">
+                {formatViews(cr.views)} · {cr.ideas} idea{cr.ideas === 1 ? "" : "s"}
+              </p>
+            ) : (
+              <p className="text-[12px] text-zinc-500 mt-0.5">—</p>
+            )}
           </div>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            <TypePill
+          <div className="h-px bg-zinc-800/80" />
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase tracking-[0.18em] text-zinc-500 mb-1.5">Top idea · 6d</p>
+            <p className="text-sm font-bold text-white line-clamp-2 leading-snug">{idea?.title ?? "—"}</p>
+            {idea ? (
+              <p className="text-[12px] text-zinc-400 mt-0.5">{formatViews(idea.views)} views</p>
+            ) : (
+              <p className="text-[12px] text-zinc-500 mt-0.5">—</p>
+            )}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 mb-2">Ideas pipeline</p>
+          <p className="text-[13px] text-zinc-300 leading-relaxed">
+            <span className="font-black text-white tabular-nums">{team.ideas_total}</span> total
+            <span className="text-zinc-600"> · </span>
+            <span className="text-emerald-400/95 font-bold tabular-nums">{team.ideas_posted}</span> posted
+            <span className="text-zinc-600"> · </span>
+            <span className="text-violet-300/95 font-bold tabular-nums">{team.ideas_in_progress ?? 0}</span> WIP
+            <span className="text-zinc-600"> · </span>
+            <span className="text-zinc-500 font-bold tabular-nums">{team.ideas_killed ?? 0}</span> killed
+          </p>
+          <div className="mt-4 space-y-3">
+            <TeamCardLineProgress
               label="Reels"
-              icon={<Film className="w-3 h-3" />}
+              icon={<Film className="w-3.5 h-3.5 text-violet-400/90" />}
               posted={team.reel_posted}
               total={team.reel_total}
-              accent="purple"
+              barClass="bg-gradient-to-r from-violet-500 to-fuchsia-500"
             />
-            <TypePill
+            <TeamCardLineProgress
               label="Posts"
-              icon={<ImageIcon className="w-3 h-3" />}
+              icon={<ImageIcon className="w-3.5 h-3.5 text-emerald-400/90" />}
               posted={team.post_posted}
               total={team.post_total}
-              accent="emerald"
+              barClass="bg-gradient-to-r from-emerald-500 to-emerald-400/90"
             />
           </div>
         </div>
 
-        {/* people chips */}
         <div>
           <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-2 flex items-center gap-1.5 font-semibold">
             <Users className="w-3.5 h-3.5" /> Squad
@@ -799,14 +809,13 @@ function TeamCard({ team, isLeader }: { team: any; isLeader: boolean }) {
           </ul>
         </div>
 
-        {/* handles */}
         {team.accounts?.length > 0 && (
           <details className="group">
-            <summary className="cursor-pointer text-[10px] uppercase tracking-wider text-zinc-500 hover:text-zinc-300 flex items-center gap-1.5 font-semibold">
+            <summary className="cursor-pointer text-[10px] uppercase tracking-wider text-zinc-500 hover:text-zinc-300 flex items-center gap-1.5 font-semibold list-none">
               <AtSign className="w-3.5 h-3.5" /> Accounts ({team.account_count})
               <span className="ml-auto text-zinc-600 group-open:rotate-90 transition-transform">›</span>
             </summary>
-            <div className="mt-2 rounded-lg border border-zinc-800 bg-zinc-950/50 p-2 max-h-28 overflow-y-auto">
+            <div className="mt-2 rounded-lg border border-zinc-800/80 bg-zinc-950/40 backdrop-blur-sm p-2 max-h-28 overflow-y-auto">
               <ul className="flex flex-wrap gap-1.5">
                 {team.accounts.map((a: { handle: string }) => (
                   <li key={a.handle} className={`text-[11px] font-mono ${skin.text}`}>
@@ -818,106 +827,6 @@ function TeamCard({ team, isLeader }: { team: any; isLeader: boolean }) {
           </details>
         )}
       </div>
-    </motion.div>
-  );
-}
-
-function StatBlock({
-  label,
-  value,
-  icon,
-}: {
-  label: string;
-  value: string;
-  icon?: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-xl bg-zinc-800/40 border border-zinc-700/60 px-3 py-2">
-      <p className="text-[10px] uppercase tracking-wider text-zinc-500 flex items-center gap-1 font-semibold">
-        {icon} {label}
-      </p>
-      <p className="text-lg font-black text-white tabular-nums leading-tight">{value}</p>
-    </div>
-  );
-}
-
-function MiniHighlight({
-  label,
-  title,
-  subtitle,
-  icon,
-}: {
-  label: string;
-  title?: string | null;
-  subtitle?: string;
-  icon?: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-xl bg-zinc-800/30 border border-zinc-700/60 px-3 py-2.5 min-w-0">
-      <p className="text-[10px] uppercase tracking-wider text-zinc-500 flex items-center gap-1 font-semibold">
-        {icon} {label}
-      </p>
-      <p className="text-sm font-bold text-white truncate">{title || "—"}</p>
-      <p className="text-[11px] text-zinc-400 truncate">{subtitle}</p>
-    </div>
-  );
-}
-
-function PipelinePill({
-  label,
-  value,
-  tone,
-  icon,
-}: {
-  label: string;
-  value: number;
-  tone: "white" | "emerald" | "violet" | "zinc";
-  icon?: React.ReactNode;
-}) {
-  const cls =
-    tone === "emerald"
-      ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400"
-      : tone === "violet"
-        ? "bg-violet-500/10 border-violet-500/25 text-violet-300"
-        : tone === "zinc"
-          ? "bg-zinc-800/50 border-zinc-700/80 text-zinc-400"
-          : "bg-zinc-800/50 border-zinc-700/80 text-white";
-  return (
-    <div className={`rounded-lg border py-2 ${cls}`}>
-      <p className="text-[9px] uppercase font-semibold flex items-center justify-center gap-0.5">
-        {icon} {label}
-      </p>
-      <p className="text-lg font-black tabular-nums">{value ?? 0}</p>
-    </div>
-  );
-}
-
-function TypePill({
-  label,
-  icon,
-  posted,
-  total,
-  accent,
-}: {
-  label: string;
-  icon: React.ReactNode;
-  posted: number;
-  total: number;
-  accent: "purple" | "emerald";
-}) {
-  const colors =
-    accent === "purple"
-      ? "border-purple-500/25 bg-purple-500/5 text-purple-300"
-      : "border-emerald-500/25 bg-emerald-500/5 text-emerald-300";
-  return (
-    <div className={`rounded-lg border px-3 py-2 ${colors}`}>
-      <p className="text-[10px] uppercase font-bold flex items-center gap-1 mb-1">
-        {icon} {label}
-      </p>
-      <p className="text-xs text-zinc-300 tabular-nums">
-        <span className="text-white font-black text-base">{posted ?? 0}</span>
-        <span className="text-zinc-500"> / {total ?? 0} posted</span>
-      </p>
     </div>
   );
 }
