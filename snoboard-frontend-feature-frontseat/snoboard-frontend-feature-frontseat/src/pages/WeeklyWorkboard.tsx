@@ -26,9 +26,97 @@ import {
 import type { WorkboardMentionPerson } from "@/services/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { LayoutGrid, List, ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Plus, Trash2, Link2, AtSign, User } from "lucide-react";
+import { LayoutGrid, List, ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Plus, Trash2, Link2, AtSign, User, UserCircle2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const STORAGE_KEY = "fsboard-weekly-workboard-v1";
+
+const MY_WORKBOARD_ROLE_STORAGE = "fsboard-workboard-my-role-v1";
+
+/** One-time (and re-openable) picker labels — map to workboard `role_id` columns. */
+const WORKBOARD_SELF_PICK: { id: WorkboardRoleId; label: string }[] = [
+  { id: "ai_dev", label: "AI Developer" },
+  { id: "graphic_designer", label: "Graphic Designer" },
+  { id: "video_editor", label: "TCO / Video Editor" },
+  { id: "content_creator", label: "TCO Content Writer / Creator" },
+  { id: "ops_manager", label: "Ops Manager" },
+  { id: "boss_man", label: "Manager / Boss Man" },
+];
+
+function normalizeWorkboardEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
+function myWorkboardRoleKey(email: string) {
+  return `${MY_WORKBOARD_ROLE_STORAGE}:${normalizeWorkboardEmail(email)}`;
+}
+
+type PersistedWorkboardV1 = {
+  version: 1;
+  assignments: MainAssignment[];
+  self_role?: { email: string; role_id: WorkboardRoleId };
+};
+
+function readPersistedWorkboardBlob(): PersistedWorkboardV1 | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw);
+    if (p?.version === 1 && Array.isArray(p.assignments)) {
+      return p as PersistedWorkboardV1;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+/** Read from dedicated key, then from embedded `self_role` in the workboard JSON (same bucket as assignments). */
+function readMyWorkboardRoleFromSources(email: string | undefined): WorkboardRoleId | null {
+  if (!email || typeof window === "undefined") return null;
+  const e = normalizeWorkboardEmail(email);
+  try {
+    const direct = localStorage.getItem(myWorkboardRoleKey(e));
+    if (direct && WORKBOARD_ROLES.some((r) => r.id === direct)) {
+      return direct as WorkboardRoleId;
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const blob = readPersistedWorkboardBlob();
+    const sr = blob?.self_role;
+    if (sr && normalizeWorkboardEmail(sr.email) === e && WORKBOARD_ROLES.some((r) => r.id === sr.role_id)) {
+      return sr.role_id;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function writeMyWorkboardRolePersistent(email: string, id: WorkboardRoleId, currentAssignments: MainAssignment[]) {
+  if (typeof window === "undefined") return;
+  const e = normalizeWorkboardEmail(email);
+  try {
+    localStorage.setItem(myWorkboardRoleKey(e), id);
+    const next: PersistedWorkboardV1 = {
+      version: 1,
+      assignments: normalizeAssignments(currentAssignments),
+      self_role: { email: e, role_id: id },
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    /* ignore */
+  }
+}
 
 /** Greeting-pill glass (App top bar): minimal tint, heavy blur — not gray slabs */
 const BENTO_SURFACE =
@@ -50,7 +138,14 @@ function loadStore(): MainAssignment[] {
 }
 
 function saveStore(assignments: MainAssignment[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, assignments }));
+  try {
+    const existing = readPersistedWorkboardBlob();
+    const self_role = existing?.self_role;
+    const payload: PersistedWorkboardV1 = { version: 1, assignments, ...(self_role ? { self_role } : {}) };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    /* ignore */
+  }
 }
 
 function roleLabel(id: WorkboardRoleId) {
@@ -403,6 +498,31 @@ export default function WeeklyWorkboard() {
   const [weekStart, setWeekStart] = useState(() => getMondayISO());
   const [view, setView] = useState<"list" | "gallery">("list");
   const [assignments, setAssignments] = useState<MainAssignment[]>(() => loadStore());
+  const [myWorkboardRole, setMyWorkboardRole] = useState<WorkboardRoleId | null>(null);
+  const [myRoleDialogOpen, setMyRoleDialogOpen] = useState(false);
+  const [myRoleDialogForced, setMyRoleDialogForced] = useState(false);
+
+  useEffect(() => {
+    if (!user?.email) return;
+    const saved = readMyWorkboardRoleFromSources(user.email);
+    if (saved) {
+      setMyWorkboardRole(saved);
+      setMyRoleDialogOpen(false);
+      setMyRoleDialogForced(false);
+    } else {
+      setMyWorkboardRole(null);
+      setMyRoleDialogForced(true);
+      setMyRoleDialogOpen(true);
+    }
+  }, [user?.email]);
+
+  const applyMyWorkboardRole = (id: WorkboardRoleId) => {
+    if (!user?.email) return;
+    writeMyWorkboardRolePersistent(user.email, id, assignments);
+    setMyWorkboardRole(id);
+    setMyRoleDialogForced(false);
+    setMyRoleDialogOpen(false);
+  };
 
   useEffect(() => {
     saveStore(assignments);
@@ -625,6 +745,57 @@ export default function WeeklyWorkboard() {
           "radial-gradient(ellipse 130% 90% at 50% -20%, rgba(109, 40, 217, 0.28), transparent 52%), radial-gradient(ellipse 90% 70% at 100% 0%, rgba(124, 58, 237, 0.12), transparent 42%), radial-gradient(ellipse 70% 50% at 0% 100%, rgba(91, 33, 182, 0.1), transparent 45%)",
       }}
     >
+      <Dialog
+        open={myRoleDialogOpen}
+        onOpenChange={(o) => {
+          if (o) {
+            setMyRoleDialogOpen(true);
+            return;
+          }
+          if (myRoleDialogForced) return;
+          setMyRoleDialogOpen(false);
+        }}
+      >
+        <DialogContent
+          className={cn(
+            "sm:max-w-md border border-white/10 bg-zinc-950/98 text-zinc-100 backdrop-blur-2xl",
+            myRoleDialogForced && "[&>button]:hidden",
+          )}
+          onPointerDownOutside={(e) => {
+            if (myRoleDialogForced) e.preventDefault();
+          }}
+          onEscapeKeyDown={(e) => {
+            if (myRoleDialogForced) e.preventDefault();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle className="text-white">Which workboard card is yours?</DialogTitle>
+            <DialogDescription className="text-zinc-400 text-[15px] leading-relaxed">
+              We use this to enlarge your role column (like a bento “hero” tile). This is stored for your account on this
+              device and we won’t ask again. To change it later, use <span className="text-zinc-300">My card</span> in the
+              toolbar.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2 pt-1">
+            {WORKBOARD_SELF_PICK.map((row) => (
+              <button
+                key={row.id}
+                type="button"
+                onClick={() => applyMyWorkboardRole(row.id)}
+                className={cn(
+                  "w-full text-left rounded-xl border px-4 py-3 text-sm font-medium transition-colors",
+                  myWorkboardRole === row.id
+                    ? "border-violet-500/60 bg-violet-500/20 text-white"
+                    : "border-white/10 bg-white/[0.04] text-zinc-200 hover:border-violet-500/35 hover:bg-violet-500/10",
+                )}
+              >
+                {row.label}
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <div className="pl-[70px] pr-6 pt-8 pb-12 max-w-[min(100%,1520px)] mx-auto">
         <header className={`${BENTO_SURFACE} p-6 mb-8`}>
           <p className="text-sm text-violet-400 font-medium mb-1 tracking-wide">Weekly workboard</p>
@@ -695,11 +866,35 @@ export default function WeeklyWorkboard() {
               Gallery
             </button>
           </div>
+          {user?.email && (
+            <div className={`${BENTO_SURFACE} p-1 flex items-center`}>
+              <button
+                type="button"
+                onClick={() => {
+                  setMyRoleDialogForced(false);
+                  setMyRoleDialogOpen(true);
+                }}
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-xl text-zinc-300 hover:text-white hover:bg-violet-500/10 transition-colors"
+                title="Change which bento card is yours"
+              >
+                <UserCircle2 className="w-4 h-4 text-violet-300/80" />
+                <span className="hidden sm:inline max-w-[200px] truncate">
+                  My card:{" "}
+                  {myWorkboardRole
+                    ? WORKBOARD_SELF_PICK.find((p) => p.id === myWorkboardRole)?.label ||
+                      roleLabel(myWorkboardRole)
+                    : "Set role"}
+                </span>
+                <span className="sm:hidden">My card</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {view === "gallery" ? (
           <GalleryView
             byRole={byRole}
+            myWorkboardRole={myWorkboardRole}
             addAssignment={addAssignment}
             removeAssignment={removeAssignment}
             patchAssignment={patchAssignment}
@@ -716,6 +911,7 @@ export default function WeeklyWorkboard() {
         ) : (
           <ListView
             weekAssignments={weekAssignments}
+            myWorkboardRole={myWorkboardRole}
             addAssignment={addAssignment}
             removeAssignment={removeAssignment}
             patchAssignment={patchAssignment}
@@ -1187,6 +1383,7 @@ function AssignmentEditor({
 
 function ListView({
   weekAssignments,
+  myWorkboardRole,
   addAssignment,
   removeAssignment,
   patchAssignment,
@@ -1201,6 +1398,7 @@ function ListView({
   updateInterrupt,
 }: {
   weekAssignments: MainAssignment[];
+  myWorkboardRole: WorkboardRoleId | null;
   addAssignment: (role_id: WorkboardRoleId) => void;
   removeAssignment: (id: string) => void;
   patchAssignment: (id: string, patch: Partial<MainAssignment>) => void;
@@ -1229,20 +1427,21 @@ function ListView({
         className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4"
         style={{ gridAutoRows: "minmax(0, auto)" }}
       >
-        {weekAssignments.map((a, cardIdx) => {
+        {weekAssignments.map((a) => {
         const open = listIsOpen(a.id);
         const { headline, dueLine } = listCardMainSummary(a);
         const flatChunks = flattenAssignmentChunks(a);
         const pct = assignmentRollupPercent(a);
         const listIntPct = interruptRollupPercent(a.interrupts);
         const listIntDone = a.interrupts.filter((i) => i.status === "completed").length;
+        const isMyCard = myWorkboardRole !== null && a.role_id === myWorkboardRole;
         return (
           <div
             key={a.id}
             className={cn(
               BENTO_SURFACE,
               "overflow-hidden flex flex-col min-h-0 min-w-0",
-              cardIdx === 0 && "xl:col-span-2 xl:min-h-[200px]",
+              isMyCard && "xl:col-span-2 xl:min-h-[200px] ring-2 ring-violet-500/45 shadow-[0_0_50px_-14px_rgba(124,58,237,0.45)]",
             )}
           >
             <div className="flex items-stretch gap-0 shrink-0">
@@ -1257,7 +1456,14 @@ function ListView({
                   <ChevronRightIcon className="w-4 h-4 sm:w-5 sm:h-5 text-zinc-500 shrink-0 mt-0.5" />
                 )}
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium text-violet-300/90">{roleLabel(a.role_id)}</div>
+                  <div className="text-xs font-medium text-violet-300/90 flex items-center flex-wrap gap-2">
+                    {roleLabel(a.role_id)}
+                    {isMyCard && (
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-200/90 px-1.5 py-0.5 rounded-md bg-violet-500/25 border border-violet-400/30">
+                        You
+                      </span>
+                    )}
+                  </div>
                   <div className="text-sm sm:text-[15px] font-medium text-white mt-0.5 sm:mt-1 break-words line-clamp-3">
                     {headline}
                   </div>
@@ -1342,6 +1548,7 @@ function ListView({
 
 function GalleryView({
   byRole,
+  myWorkboardRole,
   addAssignment,
   removeAssignment,
   patchAssignment,
@@ -1356,6 +1563,7 @@ function GalleryView({
   updateInterrupt,
 }: {
   byRole: Map<WorkboardRoleId, MainAssignment>;
+  myWorkboardRole: WorkboardRoleId | null;
   addAssignment: (role_id: WorkboardRoleId) => void;
   removeAssignment: (id: string) => void;
   patchAssignment: (id: string, patch: Partial<MainAssignment>) => void;
@@ -1373,8 +1581,9 @@ function GalleryView({
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-      {WORKBOARD_ROLES.map((r, roleIdx) => {
+      {WORKBOARD_ROLES.map((r) => {
         const a = byRole.get(r.id);
+        const isFeaturedSlot = myWorkboardRole !== null && r.id === myWorkboardRole;
         if (!a) {
           return (
             <button
@@ -1385,7 +1594,7 @@ function GalleryView({
                 BENTO_SURFACE,
                 "border-2 border-dashed min-h-[160px] flex flex-col justify-center p-6 text-left",
                 "hover:border-violet-400/50 hover:bg-violet-500/[0.08] hover:shadow-[0_0_40px_-12px_rgba(124,58,237,0.35)] transition-colors",
-                roleIdx === 0 && "xl:col-span-2 xl:min-h-[200px]",
+                isFeaturedSlot && "xl:col-span-2 xl:min-h-[200px] ring-2 ring-violet-500/30",
               )}
             >
               <span className="text-sm font-medium text-zinc-200">{r.label}</span>
@@ -1406,12 +1615,19 @@ function GalleryView({
             className={cn(
               BENTO_SURFACE,
               "overflow-hidden flex flex-col min-h-0",
-              roleIdx === 0 && "xl:col-span-2 xl:min-h-[300px]",
+              isFeaturedSlot && "xl:col-span-2 xl:min-h-[300px] ring-2 ring-violet-500/45 shadow-[0_0_50px_-14px_rgba(124,58,237,0.4)]",
             )}
           >
             <div className="p-4 flex-1 flex flex-col min-h-0">
               <div className="flex items-center justify-between gap-2 mb-2">
-                <span className="text-xs font-medium text-violet-300/90">{roleShort(r.id)}</span>
+                <span className="text-xs font-medium text-violet-300/90 flex items-center flex-wrap gap-1.5">
+                  {roleShort(r.id)}
+                  {isFeaturedSlot && (
+                    <span className="text-[9px] font-bold uppercase text-violet-200/95 px-1.5 py-0.5 rounded bg-violet-500/30 border border-violet-400/35">
+                      You
+                    </span>
+                  )}
+                </span>
                 {dueLine && <span className="text-[11px] text-zinc-500 text-right line-clamp-1">{dueLine}</span>}
               </div>
               <p className="text-[11px] font-medium text-zinc-500 mb-1">Assigned</p>
