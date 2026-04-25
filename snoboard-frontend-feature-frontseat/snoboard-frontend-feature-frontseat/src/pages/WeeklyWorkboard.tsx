@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { getWorkboardMentionCandidates } from "@/services/api";
 import {
@@ -121,6 +122,28 @@ function writeMyWorkboardRolePersistent(email: string, id: WorkboardRoleId, curr
 /** Greeting-pill glass (App top bar): minimal tint, heavy blur — not gray slabs */
 const BENTO_SURFACE =
   "rounded-2xl border border-white/10 bg-white/5 backdrop-blur-2xl shadow-[0_8px_40px_rgba(0,0,0,0.55),0_0_100px_-40px_rgba(124,58,237,0.18)]";
+
+function ScrollReveal({
+  children,
+  className,
+  delay = 0,
+}: {
+  children: ReactNode;
+  className?: string;
+  delay?: number;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 28 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.12, margin: "0px 0px -40px 0px" }}
+      transition={{ duration: 0.65, delay, ease: [0.22, 1, 0.36, 1] }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  );
+}
 
 const GLASS_INPUT =
   "border border-white/10 bg-white/[0.03] backdrop-blur-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-violet-500/35 focus:border-violet-500/25";
@@ -797,15 +820,27 @@ export default function WeeklyWorkboard() {
       </Dialog>
 
       <div className="pl-[70px] pr-6 pt-8 pb-12 max-w-[min(100%,1520px)] mx-auto">
-        <header className={`${BENTO_SURFACE} p-6 mb-8`}>
-          <h1 className="text-3xl font-semibold tracking-tight text-white">Bandwidth tracker &amp; ops</h1>
-          <p className="text-[15px] text-zinc-400 mt-3 max-w-2xl leading-relaxed">
-            Plan by role, split into steps, and log blockers. Add{" "}
-            <span className="text-zinc-200">@name</span> / <span className="text-zinc-200">#ticket</span>{" "}
-            <span className="text-zinc-300">inside each step</span> so asks stay with the work. Saves on this device.
-          </p>
-        </header>
+        <ScrollReveal>
+          <header className={`${BENTO_SURFACE} p-6 mb-8`}>
+            <h1 className="text-3xl font-semibold tracking-tight text-white">Bandwidth tracker &amp; ops</h1>
+            <p className="text-sm text-zinc-400 mt-2 max-w-xl leading-relaxed">
+              Plan by role, split work into steps, and log what&apos;s blocking. Same detail — easier to scan.
+            </p>
+            <ul className="mt-4 flex flex-wrap gap-2 text-[13px]">
+              <li className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3.5 py-1.5 text-zinc-300">
+                <span className="text-violet-200/90">@name</span>
+                <span className="text-zinc-600 mx-1">·</span>
+                <span className="text-violet-200/90">#ticket</span>
+                <span className="text-zinc-500"> on steps so asks stay with the work</span>
+              </li>
+              <li className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3.5 py-1.5 text-zinc-400">
+                Saves on this device only
+              </li>
+            </ul>
+          </header>
+        </ScrollReveal>
 
+        <ScrollReveal delay={0.05}>
         <div className="flex flex-wrap items-center gap-3 mb-8">
           <div
             className={`flex items-center gap-0.5 ${BENTO_SURFACE} p-1`}
@@ -888,7 +923,9 @@ export default function WeeklyWorkboard() {
             </div>
           )}
         </div>
+        </ScrollReveal>
 
+        <ScrollReveal delay={0.08}>
         {view === "gallery" ? (
           <GalleryView
             byRole={byRole}
@@ -924,6 +961,7 @@ export default function WeeklyWorkboard() {
             updateInterrupt={updateInterrupt}
           />
         )}
+        </ScrollReveal>
       </div>
     </div>
   );
