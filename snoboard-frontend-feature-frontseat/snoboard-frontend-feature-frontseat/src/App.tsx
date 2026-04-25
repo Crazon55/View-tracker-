@@ -32,6 +32,7 @@ import TeamPerformance from "./pages/TeamPerformance";
 import WeeklyWorkboard from "./pages/WeeklyWorkboard";
 import RoleSelect from "./pages/RoleSelect";
 import NotFound from "./pages/NotFound";
+import { MonthlyWrapRoot, MonthlyWrapOpenButton } from "./components/MonthlyWrapHost";
 
 const queryClient = new QueryClient();
 
@@ -340,44 +341,43 @@ function AppLayout() {
     location.pathname.startsWith("/post-ips/") ||
     location.pathname.startsWith("/page/");
 
-  if (isFullScreen) {
-    return (
-      <div className="relative">
-        <HamburgerMenu />
-        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl px-4 py-2 shadow-lg">
-          <AnimalPicker userId={user?.id} />
-          <p className="text-sm text-zinc-400">
-            {getGreeting()}, <span className="text-white font-medium">{getFirstName(user)}</span>
-          </p>
-          <button
-            onClick={signOut}
-            className="h-7 w-7 rounded-lg hover:bg-white/10 flex items-center justify-center transition-colors"
-            title="Sign out"
-          >
-            <LogOut className="w-3.5 h-3.5 text-zinc-400 hover:text-red-400" />
-          </button>
-        </div>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/content-tracker" element={<ContentTracker />} />
-          <Route path="/post-tracker" element={<PostTracker />} />
-          <Route path="/ideas" element={<IdeaEngine />} />
-          <Route path="/competitor-ideas" element={<CompetitorIdeas />} />
-          <Route path="/page/:pageId" element={<PageDetail />} />
-          <Route path="/post-ips" element={<PostIPsView />} />
-          <Route path="/post-ips/:pageId" element={<PageDetail />} />
-          <Route path="/pipeline" element={<PipelineView />} />
-          <Route path="/stage1-tracker" element={<Stage1Tracker />} />
-          <Route path="/competitor-research" element={<CompetitorResearch />} />
-          <Route path="/six-day-tracker" element={<SixDayTracker />} />
-          <Route path="/team-performance" element={<TeamPerformance />} />
-          <Route path="/workboard" element={<WeeklyWorkboard />} />
-        </Routes>
-      </div>
-    );
-  }
-
   return (
+    <MonthlyWrapRoot>
+      {isFullScreen ? (
+        <div className="relative">
+          <HamburgerMenu />
+          <div className="fixed top-5 right-5 z-50 flex items-center gap-2 sm:gap-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl px-3 sm:px-4 py-2 shadow-lg max-w-[min(100vw-1rem,420px)] flex-wrap justify-end">
+            <MonthlyWrapOpenButton className="shrink-0" />
+            <AnimalPicker userId={user?.id} />
+            <p className="text-sm text-zinc-400">
+              {getGreeting()}, <span className="text-white font-medium">{getFirstName(user)}</span>
+            </p>
+            <button
+              onClick={signOut}
+              className="h-7 w-7 rounded-lg hover:bg-white/10 flex items-center justify-center transition-colors shrink-0"
+              title="Sign out"
+            >
+              <LogOut className="w-3.5 h-3.5 text-zinc-400 hover:text-red-400" />
+            </button>
+          </div>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/content-tracker" element={<ContentTracker />} />
+            <Route path="/post-tracker" element={<PostTracker />} />
+            <Route path="/ideas" element={<IdeaEngine />} />
+            <Route path="/competitor-ideas" element={<CompetitorIdeas />} />
+            <Route path="/page/:pageId" element={<PageDetail />} />
+            <Route path="/post-ips" element={<PostIPsView />} />
+            <Route path="/post-ips/:pageId" element={<PageDetail />} />
+            <Route path="/pipeline" element={<PipelineView />} />
+            <Route path="/stage1-tracker" element={<Stage1Tracker />} />
+            <Route path="/competitor-research" element={<CompetitorResearch />} />
+            <Route path="/six-day-tracker" element={<SixDayTracker />} />
+            <Route path="/team-performance" element={<TeamPerformance />} />
+            <Route path="/workboard" element={<WeeklyWorkboard />} />
+          </Routes>
+        </div>
+      ) : (
     <div className="flex min-h-screen bg-zinc-950">
       {/* Sidebar */}
       <aside className="w-60 shrink-0 border-r border-zinc-800 bg-zinc-950 flex flex-col">
@@ -422,6 +422,9 @@ function AppLayout() {
         </nav>
 
         <div className="px-3 py-4 border-t border-zinc-800">
+          <div className="px-3 mb-2">
+            <MonthlyWrapOpenButton className="w-full justify-center" />
+          </div>
           <div className="flex items-center gap-2 px-3 mb-1">
             <AnimalPicker userId={user?.id} />
             <p className="text-sm text-zinc-400 truncate">
@@ -451,6 +454,8 @@ function AppLayout() {
         </Routes>
       </main>
     </div>
+      )}
+    </MonthlyWrapRoot>
   );
 }
 
