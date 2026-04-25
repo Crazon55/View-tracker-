@@ -391,7 +391,7 @@ function TagField({
           <ul
             id={`${mentionListId}-listbox`}
             role="listbox"
-            className="absolute z-50 left-0 right-0 bottom-full mb-1.5 max-h-[min(320px,50vh)] overflow-y-auto rounded-xl border border-white/10 bg-black/45 py-1.5 shadow-[0_-20px_50px_rgba(0,0,0,0.65),0_0_40px_-10px_rgba(124,58,237,0.12)] backdrop-blur-2xl"
+            className="absolute z-[200] left-0 right-0 bottom-full mb-1.5 max-h-[min(320px,50vh)] overflow-y-auto rounded-xl border border-zinc-700/90 bg-zinc-950/95 py-1.5 shadow-[0_-24px_60px_rgba(0,0,0,0.85),0_0_48px_-12px_rgba(109,40,217,0.2)] backdrop-blur-xl backdrop-saturate-150 [isolation:isolate]"
           >
             <li className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500" role="presentation">
               People
@@ -414,8 +414,8 @@ function TagField({
                       aria-selected={idx === mentionHighlight}
                       className={`mx-1 flex w-[calc(100%-0.5rem)] items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors ${
                         idx === mentionHighlight
-                          ? "bg-violet-500/20 text-white"
-                          : "text-zinc-200 hover:bg-white/[0.06]"
+                          ? "bg-violet-500/30 text-white"
+                          : "text-zinc-100 hover:bg-white/10"
                       }`}
                       onMouseDown={(ev) => {
                         ev.preventDefault();
@@ -429,7 +429,7 @@ function TagField({
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[13px] font-medium leading-tight">{person.display}</span>
                         {sub ? (
-                          <span className="mt-0.5 block truncate text-[11px] leading-tight text-zinc-500">{sub}</span>
+                          <span className="mt-0.5 block truncate text-[11px] leading-tight text-zinc-400">{sub}</span>
                         ) : null}
                       </span>
                     </button>
