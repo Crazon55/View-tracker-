@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { motion, AnimatePresence, useMotionValue, useTransform, animate, useAnimationControls } from "framer-motion";
+import {
+  motion,
+  AnimatePresence,
+  useInView,
+  useMotionValue,
+  useTransform,
+  animate,
+  useAnimationControls,
+} from "framer-motion";
 import { getSixDayMonth, getTeamsPerformance, getTrackerIdeas, getTrackerNiches } from "@/services/api";
 import { buildTeamPerformanceFromTracker } from "@/lib/teamPerformanceCompute";
 import {
@@ -71,7 +79,10 @@ function teamSkin(key: string) {
   return TEAM_SKIN[key] ?? TEAM_SKIN.garfields;
 }
 
-/** Apple-style: fade + rise when scrolled into view. Do not use on the top hero scoreboard. */
+/**
+ * Fade + rise when a section enters the viewport; eases back when it leaves
+ * (scroll up or down). Do not use on the top hero scoreboard.
+ */
 function ScrollReveal({
   children,
   className,
@@ -81,12 +92,25 @@ function ScrollReveal({
   className?: string;
   delay?: number;
 }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const inView = useInView(ref, {
+    once: false,
+    amount: 0.12,
+    margin: "0px 0px -12% 0px",
+  });
   return (
     <motion.div
-      initial={{ opacity: 0, y: 32 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.12, margin: "0px 0px -48px 0px" }}
-      transition={{ duration: 0.65, delay, ease: [0.22, 1, 0.36, 1] }}
+      ref={ref}
+      animate={
+        inView
+          ? { opacity: 1, y: 0 }
+          : { opacity: 0, y: 28 }
+      }
+      transition={{
+        duration: 0.55,
+        delay: inView ? delay : 0,
+        ease: [0.22, 1, 0.36, 1],
+      }}
       className={className}
     >
       {children}
@@ -725,15 +749,8 @@ function TeamCard({ team, isLeader }: { team: any; isLeader: boolean }) {
         </div>
       </div>
 
-      <div className="px-5 pb-4 flex flex-wrap items-baseline gap-x-5 gap-y-1 text-[13px]">
-        <span className="inline-flex items-baseline gap-2">
-          <span className="text-[10px] uppercase tracking-wider text-zinc-500">All-time</span>
-          <span className="font-bold text-white tabular-nums">{formatViews(team.views_total)}</span>
-        </span>
-        <span className="text-zinc-700 hidden sm:inline" aria-hidden>
-          ·
-        </span>
-        <span className="inline-flex items-baseline gap-2">
+      <div className="px-5 pb-4">
+        <span className="inline-flex items-baseline gap-2 text-[13px]">
           <span className="text-[10px] uppercase tracking-wider text-zinc-500">Ship</span>
           <span className="font-bold text-white tabular-nums">{formatPct(team.posted_rate)}</span>
         </span>
