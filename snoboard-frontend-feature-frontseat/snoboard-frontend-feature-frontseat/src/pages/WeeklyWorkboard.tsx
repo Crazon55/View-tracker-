@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { motion } from "framer-motion";
+import { motion, useInView } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { getWorkboardMentionCandidates } from "@/services/api";
 import {
@@ -132,12 +132,21 @@ function ScrollReveal({
   className?: string;
   delay?: number;
 }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const inView = useInView(ref, {
+    once: false,
+    amount: 0.12,
+    margin: "0px 0px -12% 0px",
+  });
   return (
     <motion.div
-      initial={{ opacity: 0, y: 28 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.12, margin: "0px 0px -40px 0px" }}
-      transition={{ duration: 0.65, delay, ease: [0.22, 1, 0.36, 1] }}
+      ref={ref}
+      animate={inView ? { opacity: 1, y: 0 } : { opacity: 0, y: 24 }}
+      transition={{
+        duration: 0.55,
+        delay: inView ? delay : 0,
+        ease: [0.22, 1, 0.36, 1],
+      }}
       className={className}
     >
       {children}
