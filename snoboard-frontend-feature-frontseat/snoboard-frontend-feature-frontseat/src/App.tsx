@@ -258,7 +258,7 @@ const navItems: NavItem[] = [
   { to: "/stage1-tracker", label: "Stage 1 Tracker", icon: BarChart3 },
   { to: "/six-day-tracker", label: "6-Day Tracker", icon: Radio },
   { to: "/team-performance", label: "Teams", icon: Trophy },
-  { to: "/workboard", label: "Studio workboard", icon: LayoutGrid },
+  { to: "/workboard", label: "Bandwidth tracker workboard", icon: LayoutGrid },
   { to: "/competitor-research", label: "Competitor Research", icon: Telescope },
   { to: "/growth", label: "Growth", icon: TrendingUp },
   { to: "/pages", label: "IP's", icon: Users },
