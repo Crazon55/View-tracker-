@@ -407,9 +407,9 @@
     </div>
     <p class="note">
       <strong>Rollout (app):</strong> Public calendar (autoplay + nav chip) is off until
-      <strong>May 1, 2026, 5pm in each user’s local time</strong> (<code>WRAP_FEATURE_LIVE_AT_MS</code> in
-      <code>src/lib/monthlyWrap.ts</code>). After that: each month from <strong>5pm on the 1st</strong>
-      (local) through the <strong>3rd</strong>, the report is the
+      <strong>May 1, 2026, 5pm IST</strong> (<code>Asia/Kolkata</code>,
+      <code>WRAP_FEATURE_LIVE_AT_MS</code> in <code>src/lib/monthlyWrap.ts</code>). After that: each month
+      from <strong>5pm IST on the 1st</strong> through the <strong>3rd</strong> (IST), the report is the
       <strong>previous month</strong>. The nav chip can stay
       <strong>3 days after the user’s first open</strong>. In dev, <code>?wrap=1</code> still opens the
       real UI without waiting.

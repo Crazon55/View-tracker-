@@ -1,7 +1,7 @@
 /**
  * "Monthly wrap" — end-of-month recap (Spotify Wrapped–style) for the tracker.
- * Rollout: **5pm local** on the **1st** of each month, with **2nd–3rd** as full days (same 3-day window).
- * Report = **previous** calendar month (e.g. 1–3 Apr → March wrap).
+ * Rollout: **5:00pm IST (Asia/Kolkata)** on the **1st** of each month, with **2nd–3rd** full days in IST
+ * (3 calendar days in that zone). Report = **previous** calendar month in IST.
  */
 
 const TEAM_ORDER = ["garfields", "goofies"] as const;
@@ -28,25 +28,50 @@ const TEAM_META: Record<
 const MS_PER_DAY = 86_400_000;
 const TAB_RETENTION_DAYS = 3;
 
-/** Local hour (0–23) when the wrap window opens on the 1st of each month (~5pm). */
+/** Hour (0–23) in IST when the window opens on the 1st (5:00pm IST). */
 export const ROLLOUT_START_HOUR = 17;
 
+/** All rollout calendar logic uses this zone (5pm 1st = 5pm here). */
+export const ROLLOUT_TIMEZONE = "Asia/Kolkata" as const;
+
 /**
- * When the *calendar* wrap first goes live: **May 1, 2026, 5pm in the user’s local timezone.**
+ * When the *calendar* wrap first goes live: **May 1, 2026, 5:00pm IST.**
  * Before this instant, `getActiveReportMonth` and the nav chip’s calendar logic stay inactive.
  * Dev/QA: use `?wrap=1` in development or `VITE_ALLOW_WRAP_TEST` + `?wrap=YYYY-MM` to preview.
  */
-export const WRAP_FEATURE_LIVE_AT_MS = +new Date(2026, 4, 1, ROLLOUT_START_HOUR, 0, 0, 0);
+export const WRAP_FEATURE_LIVE_AT_MS = +new Date("2026-05-01T17:00:00+05:30");
 
 /**
  * In-app copy: rollout window and nav chip. Shown on intro + outro.
- * (1st 5pm local through 3rd; chip 3 days after first open; schedule repeats monthly after go-live.)
+ * (1st 5pm IST through 3rd; chip 3 days after first open; repeats monthly after go-live.)
  */
 export const WRAP_ROLLOUT_EXPLAINER =
-  "Each month: unlocks 5pm on the 1st (your time), open through the 3rd. The “wrap” chip can stay 3 days after you first open it.";
+  "Each month: unlocks 5pm IST on the 1st, open through the 3rd (IST). The “wrap” chip can stay 3 days after you first open it.";
 
 function isWrapCalendarLive(now: Date): boolean {
   return now.getTime() >= WRAP_FEATURE_LIVE_AT_MS;
+}
+
+/** Calendar Y/M/D and hour in `ROLLOUT_TIMEZONE` (IST), `month` 1–12, `hour` 0–23. */
+export function getZonedRolloutCalendarParts(d: Date = new Date()): { y: number; m: number; d: number; h: number } {
+  const f = new Intl.DateTimeFormat("en-GB", {
+    timeZone: ROLLOUT_TIMEZONE,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    hour12: false,
+  });
+  const parts: Record<string, string> = {};
+  for (const x of f.formatToParts(d)) {
+    if (x.type !== "literal") parts[x.type] = x.value;
+  }
+  return {
+    y: Number(parts.year),
+    m: Number(parts.month),
+    d: Number(parts.day),
+    h: Number(parts.hour),
+  };
 }
 
 function pad2(n: number) {
@@ -55,21 +80,23 @@ function pad2(n: number) {
 
 /**
  * YYYY-MM for the report in the *calendar rollout* window (autoplay + tab chip), or null.
- * The report is always the **previous** calendar month. Window: **1st (from 5pm local)**
- * through **3rd** inclusive.
+ * The report is always the **previous** calendar month in IST. Window: **1st from 5pm IST**
+ * through **3rd** (IST) inclusive.
  */
 export function getActiveReportMonth(now: Date = new Date()): string | null {
   if (!isWrapCalendarLive(now)) return null;
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  const d = now.getDate();
-  const h = now.getHours();
+  const { y, m, d, h } = getZonedRolloutCalendarParts(now);
 
   if (d < 1 || d > 3) return null;
   if (d === 1 && h < ROLLOUT_START_HOUR) return null;
 
-  const prev = new Date(y, m, 0);
-  return `${prev.getFullYear()}-${pad2(prev.getMonth() + 1)}`;
+  let pr = m - 1;
+  let py = y;
+  if (pr < 1) {
+    pr = 12;
+    py -= 1;
+  }
+  return `${py}-${pad2(pr)}`;
 }
 
 /**
