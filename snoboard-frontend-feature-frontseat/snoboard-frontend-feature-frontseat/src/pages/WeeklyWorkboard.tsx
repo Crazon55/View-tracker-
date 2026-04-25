@@ -9,11 +9,15 @@ import {
   type MainAssignment,
   type WorkboardChunk,
   type WorkboardInterrupt,
+  type WorkboardPrimaryTask,
   type ChunkStatus,
   getMondayISO,
   addDaysISO,
   fmtWeekRange,
   rollupPercent,
+  assignmentRollupPercent,
+  flattenAssignmentChunks,
+  primaryTaskAllStepsDone,
   newId,
   normalizeAssignments,
   mentionFromName,
@@ -59,11 +63,22 @@ function roleShort(id: WorkboardRoleId) {
 
 const STATUS_OPTIONS: ChunkStatus[] = ["not_started", "in_progress", "completed"];
 
+function findChunkInAssignment(a: MainAssignment, chunkId: string): WorkboardChunk | undefined {
+  for (const pt of a.primary_tasks) {
+    const c = pt.chunks.find((x) => x.id === chunkId);
+    if (c) return c;
+  }
+  return undefined;
+}
+
 /** Human label for what an interrupt is blocking (main vs chunk title). */
 function blockTargetLabel(a: MainAssignment, kind: "main" | "chunk" | null, targetId: string | null): string {
   if (!kind || !targetId) return "";
-  if (kind === "main") return `main: ${a.title || "(untitled)"}`;
-  const ch = a.chunks.find((c) => c.id === targetId);
+  if (kind === "main") {
+    const pt = a.primary_tasks.find((p) => p.id === targetId);
+    return `main: ${pt?.title || "(untitled)"}`;
+  }
+  const ch = findChunkInAssignment(a, targetId);
   return ch?.title ? `chunk: ${ch.title}` : "a chunk";
 }
 
@@ -84,9 +99,32 @@ function isPersonMentionTag(t: string): boolean {
 function allAssignmentTags(a: MainAssignment): string[] {
   const set = new Set<string>();
   (a.tags || []).forEach((t) => t && set.add(t));
-  a.chunks.forEach((c) => (c.tags || []).forEach((t) => t && set.add(t)));
+  a.primary_tasks.forEach((pt) =>
+    pt.chunks.forEach((c) => (c.tags || []).forEach((t) => t && set.add(t))),
+  );
   a.interrupts.forEach((i) => (i.tags || []).forEach((t) => t && set.add(t)));
   return [...set];
+}
+
+/** List card title line + a single due line (range when multiple). */
+function listCardMainSummary(a: MainAssignment): { headline: string; dueLine: string } {
+  const pts = a.primary_tasks;
+  if (pts.length === 0) return { headline: "Add a main task", dueLine: "" };
+  if (pts.length === 1) {
+    return {
+      headline: pts[0].title || "Untitled main task",
+      dueLine: `Due ${pts[0].due_date}`,
+    };
+  }
+  const firstTwo = pts
+    .map((p) => p.title || "Untitled")
+    .slice(0, 2)
+    .join(" · ");
+  const more = pts.length > 2 ? ` +${pts.length - 2} more` : "";
+  const dates = [...pts].map((p) => p.due_date).sort();
+  const dueLine =
+    dates[0] === dates[dates.length - 1] ? `Due ${dates[0]}` : `Due ${dates[0]} – ${dates[dates.length - 1]}`;
+  return { headline: firstTwo + more, dueLine };
 }
 
 function TagField({
@@ -404,10 +442,17 @@ export default function WeeklyWorkboard() {
         id,
         role_id,
         week_start: weekStart,
-        title: "",
         description: "",
-        due_date: addDaysISO(weekStart, 4),
-        chunks: [],
+        primary_tasks: [
+          {
+            id: newId(),
+            title: "",
+            due_date: addDaysISO(weekStart, 4),
+            completed: false,
+            sort_order: 0,
+            chunks: [],
+          },
+        ],
         interrupts: [],
         tags: [],
       });
@@ -415,14 +460,64 @@ export default function WeeklyWorkboard() {
     [weekStart, upsertAssignment]
   );
 
+  const patchPrimaryTask = useCallback((assignmentId: string, taskId: string, patch: Partial<WorkboardPrimaryTask>) => {
+    setAssignments((prev) =>
+      prev.map((a) => {
+        if (a.id !== assignmentId) return a;
+        return {
+          ...a,
+          primary_tasks: a.primary_tasks.map((p) => (p.id === taskId ? { ...p, ...patch } : p)),
+        };
+      })
+    );
+  }, []);
+
+  const addPrimaryTask = useCallback((assignmentId: string) => {
+    setAssignments((prev) =>
+      prev.map((a) => {
+        if (a.id !== assignmentId) return a;
+        const n = a.primary_tasks.length;
+        return {
+          ...a,
+          primary_tasks: [
+            ...a.primary_tasks,
+            {
+              id: newId(),
+              title: "",
+              due_date: addDaysISO(a.week_start, 4),
+              completed: false,
+              sort_order: n,
+              chunks: [],
+            },
+          ],
+        };
+      })
+    );
+  }, []);
+
+  const removePrimaryTask = useCallback((assignmentId: string, taskId: string) => {
+    setAssignments((prev) =>
+      prev.map((a) => {
+        if (a.id !== assignmentId) return a;
+        if (a.primary_tasks.length <= 1) return a;
+        return { ...a, primary_tasks: a.primary_tasks.filter((p) => p.id !== taskId) };
+      })
+    );
+  }, []);
+
   const updateChunk = useCallback(
-    (assignmentId: string, chunkId: string, patch: Partial<WorkboardChunk>) => {
+    (assignmentId: string, primaryTaskId: string, chunkId: string, patch: Partial<WorkboardChunk>) => {
       setAssignments((prev) =>
         prev.map((a) => {
           if (a.id !== assignmentId) return a;
           return {
             ...a,
-            chunks: a.chunks.map((c) => (c.id === chunkId ? { ...c, ...patch } : c)),
+            primary_tasks: a.primary_tasks.map((pt) => {
+              if (pt.id !== primaryTaskId) return pt;
+              const nextChunks = pt.chunks.map((c) => (c.id === chunkId ? { ...c, ...patch } : c));
+              const allDone = nextChunks.length > 0 && nextChunks.every((c) => c.status === "completed");
+              return { ...pt, chunks: nextChunks, completed: allDone };
+            }),
           };
         })
       );
@@ -430,27 +525,42 @@ export default function WeeklyWorkboard() {
     []
   );
 
-  const addChunk = useCallback((assignmentId: string) => {
+  const addChunk = useCallback((assignmentId: string, primaryTaskId: string) => {
     setAssignments((prev) =>
       prev.map((a) => {
         if (a.id !== assignmentId) return a;
-        const n = a.chunks.length;
         return {
           ...a,
-          chunks: [
-            ...a.chunks,
-            { id: newId(), title: "", status: "not_started", sort_order: n, tags: [] },
-          ],
+          primary_tasks: a.primary_tasks.map((pt) => {
+            if (pt.id !== primaryTaskId) return pt;
+            const n = pt.chunks.length;
+            return {
+              ...pt,
+              completed: false,
+              chunks: [
+                ...pt.chunks,
+                { id: newId(), title: "", status: "not_started", sort_order: n, tags: [] },
+              ],
+            };
+          }),
         };
       })
     );
   }, []);
 
-  const removeChunk = useCallback((assignmentId: string, chunkId: string) => {
+  const removeChunk = useCallback((assignmentId: string, primaryTaskId: string, chunkId: string) => {
     setAssignments((prev) =>
       prev.map((a) => {
         if (a.id !== assignmentId) return a;
-        return { ...a, chunks: a.chunks.filter((c) => c.id !== chunkId) };
+        return {
+          ...a,
+          primary_tasks: a.primary_tasks.map((pt) => {
+            if (pt.id !== primaryTaskId) return pt;
+            const next = pt.chunks.filter((c) => c.id !== chunkId);
+            const allDone = next.length > 0 && next.every((c) => c.status === "completed");
+            return { ...pt, chunks: next, completed: allDone };
+          }),
+        };
       })
     );
   }, []);
@@ -593,6 +703,9 @@ export default function WeeklyWorkboard() {
             addAssignment={addAssignment}
             removeAssignment={removeAssignment}
             patchAssignment={patchAssignment}
+            patchPrimaryTask={patchPrimaryTask}
+            addPrimaryTask={addPrimaryTask}
+            removePrimaryTask={removePrimaryTask}
             addChunk={addChunk}
             removeChunk={removeChunk}
             updateChunk={updateChunk}
@@ -606,6 +719,9 @@ export default function WeeklyWorkboard() {
             addAssignment={addAssignment}
             removeAssignment={removeAssignment}
             patchAssignment={patchAssignment}
+            patchPrimaryTask={patchPrimaryTask}
+            addPrimaryTask={addPrimaryTask}
+            removePrimaryTask={removePrimaryTask}
             addChunk={addChunk}
             removeChunk={removeChunk}
             updateChunk={updateChunk}
@@ -745,6 +861,9 @@ function AssignmentEditor({
   embedBelowListHeader,
   removeAssignment,
   patchAssignment,
+  patchPrimaryTask,
+  addPrimaryTask,
+  removePrimaryTask,
   addChunk,
   removeChunk,
   updateChunk,
@@ -757,24 +876,37 @@ function AssignmentEditor({
   embedBelowListHeader?: boolean;
   removeAssignment: (id: string) => void;
   patchAssignment: (id: string, patch: Partial<MainAssignment>) => void;
-  addChunk: (assignmentId: string) => void;
-  removeChunk: (assignmentId: string, chunkId: string) => void;
-  updateChunk: (assignmentId: string, chunkId: string, patch: Partial<WorkboardChunk>) => void;
+  patchPrimaryTask: (assignmentId: string, taskId: string, patch: Partial<WorkboardPrimaryTask>) => void;
+  addPrimaryTask: (assignmentId: string) => void;
+  removePrimaryTask: (assignmentId: string, taskId: string) => void;
+  addChunk: (assignmentId: string, primaryTaskId: string) => void;
+  removeChunk: (assignmentId: string, primaryTaskId: string, chunkId: string) => void;
+  updateChunk: (assignmentId: string, primaryTaskId: string, chunkId: string, patch: Partial<WorkboardChunk>) => void;
   addInterrupt: (assignmentId: string) => void;
   removeInterrupt: (assignmentId: string, intId: string) => void;
   updateInterrupt: (assignmentId: string, intId: string, patch: Partial<WorkboardInterrupt>) => void;
 }) {
-  const pct = rollupPercent(a.chunks);
   const intPct = interruptRollupPercent(a.interrupts);
   const intDoneCount = a.interrupts.filter((i) => i.status === "completed").length;
   const blockOptions: { id: string; kind: "main" | "chunk"; label: string }[] = [
-    { id: a.id, kind: "main", label: `Main: ${a.title || "(untitled)"}` },
-    ...a.chunks.map((c) => ({ id: c.id, kind: "chunk" as const, label: `Chunk: ${c.title || "…"}` })),
+    ...a.primary_tasks.map((pt) => ({
+      id: pt.id,
+      kind: "main" as const,
+      label: `Main: ${pt.title || "(untitled)"}`,
+    })),
+    ...a.primary_tasks.flatMap((pt) =>
+      pt.chunks.map((c) => ({ id: c.id, kind: "chunk" as const, label: `Chunk: ${c.title || "…"}` })),
+    ),
   ];
 
   const shellClass = embedBelowListHeader
     ? `${compact ? "p-4" : "p-5"}`
     : `${BENTO_SURFACE} ${compact ? "p-4" : "p-6"}`;
+
+  const primarySorted = useMemo(
+    () => [...a.primary_tasks].sort((x, y) => (x.sort_order ?? 0) - (y.sort_order ?? 0)),
+    [a.primary_tasks],
+  );
 
   return (
     <div className={shellClass}>
@@ -782,15 +914,7 @@ function AssignmentEditor({
         <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
           <div>
             <span className="text-xs font-medium text-violet-300/90">{roleLabel(a.role_id)}</span>
-            <div className="flex items-center gap-2 mt-2">
-              <span className="text-xs text-zinc-500 w-24 shrink-0">Main task</span>
-              <input
-                value={a.title}
-                onChange={(e) => patchAssignment(a.id, { title: e.target.value })}
-                placeholder="What you’re shipping this week…"
-                className={cn("flex-1 min-w-[200px] rounded-xl px-3 py-2.5 text-sm", GLASS_INPUT)}
-              />
-            </div>
+            <p className="text-sm text-zinc-400 mt-1">Main tasks — add as many as you need for this week.</p>
           </div>
           <button
             type="button"
@@ -803,59 +927,156 @@ function AssignmentEditor({
         </div>
       )}
 
-      <div className={`grid gap-3 mb-4 ${embedBelowListHeader ? "sm:grid-cols-2" : "sm:grid-cols-2"}`}>
-        <div className={embedBelowListHeader ? "sm:col-span-2" : ""}>
-          <label className="text-xs font-medium text-zinc-500">
-            {embedBelowListHeader ? "Main task" : "Due date"}
-          </label>
-          {embedBelowListHeader ? (
-            <input
-              value={a.title}
-              onChange={(e) => patchAssignment(a.id, { title: e.target.value })}
-              placeholder="What you’re shipping this week…"
-              className={cn("mt-1.5 w-full rounded-xl px-3 py-2.5 text-sm", GLASS_INPUT)}
-            />
-          ) : (
-            <input
-              type="date"
-              value={a.due_date}
-              onChange={(e) => patchAssignment(a.id, { due_date: e.target.value })}
-              className={cn("mt-1.5 w-full rounded-xl px-3 py-2.5 text-sm", GLASS_INPUT)}
-            />
-          )}
-        </div>
-        {embedBelowListHeader ? (
-          <>
-            <div>
-              <label className="text-xs font-medium text-zinc-500">Due date</label>
-              <input
-                type="date"
-                value={a.due_date}
-                onChange={(e) => patchAssignment(a.id, { due_date: e.target.value })}
-                className={cn("mt-1.5 w-full rounded-xl px-3 py-2.5 text-sm", GLASS_INPUT)}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-zinc-500">Progress from steps</label>
-              <div className="mt-2">
-                <ProgressBar pct={pct} />
-                <p className="text-xs text-zinc-500 mt-1">
-                  {pct}% — {a.chunks.filter((c) => c.status === "completed").length}/{a.chunks.length || 0} chunks done
-                </p>
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Main tasks</h3>
+        <button
+          type="button"
+          onClick={() => addPrimaryTask(a.id)}
+          className="inline-flex items-center justify-center w-9 h-9 rounded-xl border border-violet-500/30 bg-violet-600/20 text-violet-200 hover:bg-violet-600/40 hover:text-white transition-colors"
+          title="Add main task"
+        >
+          <Plus className="w-5 h-5" />
+        </button>
+      </div>
+
+      <div className="space-y-5 mb-5">
+        {primarySorted.map((pt, idx) => {
+          const ptPct = rollupPercent(pt.chunks);
+          const lineDone = pt.completed || primaryTaskAllStepsDone(pt);
+          return (
+            <div
+              key={pt.id}
+              className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-3 sm:p-4 space-y-3 backdrop-blur-sm"
+            >
+              <div className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  className="mt-2.5 h-4 w-4 rounded border-white/20 bg-zinc-900 text-violet-500 focus:ring-violet-500/40"
+                  checked={lineDone}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      patchPrimaryTask(a.id, pt.id, { completed: true });
+                    } else {
+                      patchPrimaryTask(a.id, pt.id, { completed: false });
+                      if (primaryTaskAllStepsDone(pt) && pt.chunks.length) {
+                        const first = pt.chunks[0];
+                        updateChunk(a.id, pt.id, first.id, { status: "in_progress" });
+                      }
+                    }
+                  }}
+                  title="Mark this main task done"
+                />
+                <div className="flex-1 min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] text-zinc-500 shrink-0">Main task {idx + 1}</span>
+                    {a.primary_tasks.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removePrimaryTask(a.id, pt.id)}
+                        className="p-1 rounded-lg text-zinc-600 hover:text-red-400 ml-auto"
+                        title="Remove this main task"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    value={pt.title}
+                    onChange={(e) => patchPrimaryTask(a.id, pt.id, { title: e.target.value })}
+                    placeholder="What you’re shipping this week…"
+                    className={cn(
+                      "w-full rounded-xl px-3 py-2.5 text-sm",
+                      GLASS_INPUT,
+                      lineDone && "line-through decoration-wavy decoration-zinc-400/80 text-zinc-400",
+                    )}
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 pl-0 sm:pl-7">
+                <div>
+                  <label className="text-xs font-medium text-zinc-500">Due date</label>
+                  <input
+                    type="date"
+                    value={pt.due_date}
+                    onChange={(e) => patchPrimaryTask(a.id, pt.id, { due_date: e.target.value })}
+                    className={cn("mt-1.5 w-full rounded-xl px-3 py-2.5 text-sm", GLASS_INPUT)}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-zinc-500">Progress from steps</label>
+                  <div className="mt-2">
+                    <ProgressBar pct={ptPct} />
+                    <p className="text-xs text-zinc-500 mt-1">
+                      {ptPct}% — {pt.chunks.filter((c) => c.status === "completed").length}/{pt.chunks.length || 0} chunks
+                      done
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-medium text-zinc-400">Steps (this main task)</h4>
+                  <button
+                    type="button"
+                    onClick={() => addChunk(a.id, pt.id)}
+                    className="flex items-center gap-1 text-sm font-medium text-violet-400 hover:text-violet-300"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add step
+                  </button>
+                </div>
+                {pt.chunks.length === 0 ? (
+                  <p className="text-sm text-zinc-500 py-1">Split this deliverable into phases (design, build, review…).</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {pt.chunks.map((c) => (
+                      <li
+                        key={c.id}
+                        className="rounded-xl border border-white/10 bg-white/[0.03] p-3 space-y-2 backdrop-blur-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input
+                            value={c.title}
+                            onChange={(e) => updateChunk(a.id, pt.id, c.id, { title: e.target.value })}
+                            placeholder="Step name"
+                            className={cn("flex-1 min-w-[140px] rounded-lg px-2.5 py-1.5 text-sm", GLASS_INPUT)}
+                          />
+                          <ChunkStatusSelect
+                            value={c.status}
+                            onChange={(v) => updateChunk(a.id, pt.id, c.id, { status: v })}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeChunk(a.id, pt.id, c.id)}
+                            className="p-1.5 text-zinc-600 hover:text-red-400"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-medium text-zinc-500 flex items-center gap-1">
+                            <AtSign className="w-3 h-3 opacity-60" />
+                            Mentions for this step
+                          </label>
+                          <div className="mt-1">
+                            <TagField
+                              compact
+                              tags={c.tags || []}
+                              onChange={(tags) => updateChunk(a.id, pt.id, c.id, { tags })}
+                              placeholder="@who · #ticket — Enter"
+                            />
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
-          </>
-        ) : (
-          <>
-            <div>
-              <label className="text-xs font-medium text-zinc-500">Progress from steps</label>
-              <div className="mt-2">
-                <ProgressBar pct={pct} />
-                <p className="text-xs text-zinc-500 mt-1">{pct}% — {a.chunks.filter((c) => c.status === "completed").length}/{a.chunks.length || 0} chunks done</p>
-              </div>
-            </div>
-          </>
-        )}
+          );
+        })}
       </div>
 
       <div className="mb-5">
@@ -867,63 +1088,6 @@ function AssignmentEditor({
           placeholder="Context, links, expectations…"
           className={cn("mt-1.5 w-full rounded-xl px-3 py-2.5 text-sm resize-y", GLASS_INPUT)}
         />
-      </div>
-
-      <div className="mb-5">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-medium text-zinc-300">Steps (chunks)</h3>
-          <button
-            type="button"
-            onClick={() => addChunk(a.id)}
-            className="flex items-center gap-1 text-sm font-medium text-violet-400 hover:text-violet-300"
-          >
-            <Plus className="w-4 h-4" />
-            Add step
-          </button>
-        </div>
-        {a.chunks.length === 0 ? (
-          <p className="text-sm text-zinc-500 py-2">Split the work into phases (design, build, review…).</p>
-        ) : (
-          <ul className="space-y-2">
-            {a.chunks.map((c) => (
-              <li
-                key={c.id}
-                className="rounded-xl border border-white/10 bg-white/[0.03] p-3 space-y-2 backdrop-blur-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    value={c.title}
-                    onChange={(e) => updateChunk(a.id, c.id, { title: e.target.value })}
-                    placeholder="Step name"
-                    className={cn("flex-1 min-w-[140px] rounded-lg px-2.5 py-1.5 text-sm", GLASS_INPUT)}
-                  />
-                  <ChunkStatusSelect value={c.status} onChange={(v) => updateChunk(a.id, c.id, { status: v })} />
-                  <button
-                    type="button"
-                    onClick={() => removeChunk(a.id, c.id)}
-                    className="p-1.5 text-zinc-600 hover:text-red-400"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-                <div>
-                  <label className="text-[10px] font-medium text-zinc-500 flex items-center gap-1">
-                    <AtSign className="w-3 h-3 opacity-60" />
-                    Mentions for this step
-                  </label>
-                  <div className="mt-1">
-                    <TagField
-                      compact
-                      tags={c.tags || []}
-                      onChange={(tags) => updateChunk(a.id, c.id, { tags })}
-                      placeholder="@who · #ticket — Enter"
-                    />
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
       </div>
 
       <div>
@@ -1026,6 +1190,9 @@ function ListView({
   addAssignment,
   removeAssignment,
   patchAssignment,
+  patchPrimaryTask,
+  addPrimaryTask,
+  removePrimaryTask,
   addChunk,
   removeChunk,
   updateChunk,
@@ -1037,9 +1204,12 @@ function ListView({
   addAssignment: (role_id: WorkboardRoleId) => void;
   removeAssignment: (id: string) => void;
   patchAssignment: (id: string, patch: Partial<MainAssignment>) => void;
-  addChunk: (assignmentId: string) => void;
-  removeChunk: (assignmentId: string, chunkId: string) => void;
-  updateChunk: (assignmentId: string, chunkId: string, patch: Partial<WorkboardChunk>) => void;
+  patchPrimaryTask: (assignmentId: string, taskId: string, patch: Partial<WorkboardPrimaryTask>) => void;
+  addPrimaryTask: (assignmentId: string) => void;
+  removePrimaryTask: (assignmentId: string, taskId: string) => void;
+  addChunk: (assignmentId: string, primaryTaskId: string) => void;
+  removeChunk: (assignmentId: string, primaryTaskId: string, chunkId: string) => void;
+  updateChunk: (assignmentId: string, primaryTaskId: string, chunkId: string, patch: Partial<WorkboardChunk>) => void;
   addInterrupt: (assignmentId: string) => void;
   removeInterrupt: (assignmentId: string, intId: string) => void;
   updateInterrupt: (assignmentId: string, intId: string, patch: Partial<WorkboardInterrupt>) => void;
@@ -1059,7 +1229,9 @@ function ListView({
     <div className="space-y-4">
       {weekAssignments.map((a) => {
         const open = listIsOpen(a.id);
-        const pct = rollupPercent(a.chunks);
+        const { headline, dueLine } = listCardMainSummary(a);
+        const flatChunks = flattenAssignmentChunks(a);
+        const pct = assignmentRollupPercent(a);
         const listIntPct = interruptRollupPercent(a.interrupts);
         const listIntDone = a.interrupts.filter((i) => i.status === "completed").length;
         return (
@@ -1078,12 +1250,12 @@ function ListView({
                 <div className="flex-1 min-w-0">
                   <div className="text-xs font-medium text-violet-300/90">{roleLabel(a.role_id)}</div>
                   <div className="text-[15px] font-medium text-white mt-1 break-words">
-                    {a.title || "Untitled main task"}
+                    {headline}
                   </div>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-zinc-500">
-                    <span>Due {a.due_date}</span>
+                    {dueLine && <span>{dueLine}</span>}
                     <span className="text-zinc-400">
-                      Steps {pct}% ({a.chunks.filter((c) => c.status === "completed").length}/{a.chunks.length || 0})
+                      Steps {pct}% ({flatChunks.filter((c) => c.status === "completed").length}/{flatChunks.length || 0})
                     </span>
                     {a.interrupts.length > 0 && (
                       <span className="text-orange-300/90">
@@ -1121,6 +1293,9 @@ function ListView({
                   embedBelowListHeader
                   removeAssignment={removeAssignment}
                   patchAssignment={patchAssignment}
+                  patchPrimaryTask={patchPrimaryTask}
+                  addPrimaryTask={addPrimaryTask}
+                  removePrimaryTask={removePrimaryTask}
                   addChunk={addChunk}
                   removeChunk={removeChunk}
                   updateChunk={updateChunk}
@@ -1160,6 +1335,9 @@ function GalleryView({
   addAssignment,
   removeAssignment,
   patchAssignment,
+  patchPrimaryTask,
+  addPrimaryTask,
+  removePrimaryTask,
   addChunk,
   removeChunk,
   updateChunk,
@@ -1171,9 +1349,12 @@ function GalleryView({
   addAssignment: (role_id: WorkboardRoleId) => void;
   removeAssignment: (id: string) => void;
   patchAssignment: (id: string, patch: Partial<MainAssignment>) => void;
-  addChunk: (assignmentId: string) => void;
-  removeChunk: (assignmentId: string, chunkId: string) => void;
-  updateChunk: (assignmentId: string, chunkId: string, patch: Partial<WorkboardChunk>) => void;
+  patchPrimaryTask: (assignmentId: string, taskId: string, patch: Partial<WorkboardPrimaryTask>) => void;
+  addPrimaryTask: (assignmentId: string) => void;
+  removePrimaryTask: (assignmentId: string, taskId: string) => void;
+  addChunk: (assignmentId: string, primaryTaskId: string) => void;
+  removeChunk: (assignmentId: string, primaryTaskId: string, chunkId: string) => void;
+  updateChunk: (assignmentId: string, primaryTaskId: string, chunkId: string, patch: Partial<WorkboardChunk>) => void;
   addInterrupt: (assignmentId: string) => void;
   removeInterrupt: (assignmentId: string, intId: string) => void;
   updateInterrupt: (assignmentId: string, intId: string, patch: Partial<WorkboardInterrupt>) => void;
@@ -1202,11 +1383,13 @@ function GalleryView({
             </button>
           );
         }
-        const pct = rollupPercent(a.chunks);
+        const { headline, dueLine } = listCardMainSummary(a);
+        const flatC = flattenAssignmentChunks(a);
+        const pct = assignmentRollupPercent(a);
         const intPct = interruptRollupPercent(a.interrupts);
         const intDoneCount = a.interrupts.filter((i) => i.status === "completed").length;
         const open = expandId === a.id;
-        const doneChunks = a.chunks.filter((c) => c.status === "completed").length;
+        const doneChunks = flatC.filter((c) => c.status === "completed").length;
         return (
           <div
             key={a.id}
@@ -1219,17 +1402,17 @@ function GalleryView({
             <div className="p-4 flex-1 flex flex-col min-h-0">
               <div className="flex items-center justify-between gap-2 mb-2">
                 <span className="text-xs font-medium text-violet-300/90">{roleShort(r.id)}</span>
-                <span className="text-[11px] text-zinc-500">{a.due_date}</span>
+                {dueLine && <span className="text-[11px] text-zinc-500 text-right line-clamp-1">{dueLine}</span>}
               </div>
               <p className="text-[11px] font-medium text-zinc-500 mb-1">Assigned</p>
               <h2 className="text-sm font-medium text-white line-clamp-3 min-h-[2.75rem] leading-snug">
-                {a.title || "Untitled main task"}
+                {headline}
               </h2>
               <div className="mt-3">
                 <p className="text-[11px] font-medium text-zinc-500 mb-1">Progress</p>
                 <ProgressBar pct={pct} />
                 <p className="text-[11px] text-zinc-500 mt-1">
-                  {pct}% · {doneChunks}/{a.chunks.length || 0} chunks done
+                  {pct}% · {doneChunks}/{flatC.length || 0} chunks done
                   {a.interrupts.length > 0 ? ` · ${a.interrupts.length} interrupts` : ""}
                 </p>
                 {a.interrupts.length > 0 && (
@@ -1253,24 +1436,38 @@ function GalleryView({
                 </div>
               )}
 
-              {a.chunks.length > 0 && (
+              {a.primary_tasks.some((p) => p.chunks.length > 0) && (
                 <div className="mt-3 border-t border-white/[0.06] pt-2">
                   <p className="text-[11px] font-medium text-zinc-500 mb-1.5">Steps</p>
-                  <ul className="space-y-1 max-h-[88px] overflow-y-auto pr-0.5">
-                    {a.chunks.map((c) => (
-                      <li key={c.id} className="text-[11px] text-zinc-300 leading-tight">
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="truncate min-w-0">{c.title || "Untitled chunk"}</span>
-                          <span className="shrink-0 text-zinc-500 text-[10px]">{CHUNK_STATUS_LABEL[c.status]}</span>
-                        </div>
-                        {(c.tags || []).length > 0 && (
-                          <div className="mt-1 pl-0">
-                            <TagChipsRow tags={c.tags} max={4} />
+                  <div className="max-h-[88px] overflow-y-auto pr-0.5 space-y-2">
+                    {a.primary_tasks.map(
+                      (pt) =>
+                        pt.chunks.length > 0 && (
+                          <div key={pt.id}>
+                            <p className="text-[10px] text-violet-300/60 mb-0.5 truncate" title={pt.title}>
+                              {pt.title || "Main task"}
+                            </p>
+                            <ul className="space-y-1">
+                              {pt.chunks.map((c) => (
+                                <li key={c.id} className="text-[11px] text-zinc-300 leading-tight">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <span className="truncate min-w-0">{c.title || "Untitled chunk"}</span>
+                                    <span className="shrink-0 text-zinc-500 text-[10px]">
+                                      {CHUNK_STATUS_LABEL[c.status]}
+                                    </span>
+                                  </div>
+                                  {(c.tags || []).length > 0 && (
+                                    <div className="mt-1 pl-0">
+                                      <TagChipsRow tags={c.tags} max={4} />
+                                    </div>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
                           </div>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
+                        ),
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -1332,6 +1529,9 @@ function GalleryView({
                   compact
                   removeAssignment={removeAssignment}
                   patchAssignment={patchAssignment}
+                  patchPrimaryTask={patchPrimaryTask}
+                  addPrimaryTask={addPrimaryTask}
+                  removePrimaryTask={removePrimaryTask}
                   addChunk={addChunk}
                   removeChunk={removeChunk}
                   updateChunk={updateChunk}

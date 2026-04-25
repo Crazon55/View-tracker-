@@ -74,12 +74,23 @@ export type WorkboardChunk = {
   tags: string[];
 };
 
+/** A top-level “main task” for the week: its own title, due date, steps, and completion. */
+export type WorkboardPrimaryTask = {
+  id: string;
+  title: string;
+  due_date: string;
+  /** Manual completion; all steps being done also shows as completed in the UI. */
+  completed: boolean;
+  sort_order: number;
+  chunks: WorkboardChunk[];
+};
+
 export type WorkboardInterrupt = {
   id: string;
   title: string;
   status: ChunkStatus;
   note: string;
-  /** What this interrupt blocks: chunk id or main assignment id */
+  /** What this interrupt blocks: chunk id, or a primary-task id (kind main) */
   blocks_target_id: string | null;
   blocks_target_kind: "chunk" | "main" | null;
   /** Free-form tags, e.g. #13, raised-by-om, @koushik */
@@ -90,10 +101,9 @@ export type MainAssignment = {
   id: string;
   role_id: WorkboardRoleId;
   week_start: string;
-  title: string;
   description: string;
-  due_date: string;
-  chunks: WorkboardChunk[];
+  /** Shippable main lines; each has its own deadline and step list. */
+  primary_tasks: WorkboardPrimaryTask[];
   interrupts: WorkboardInterrupt[];
   tags: string[];
 };
@@ -136,35 +146,106 @@ export function rollupPercent(chunks: WorkboardChunk[]): number {
   return Math.round((done / chunks.length) * 100);
 }
 
+/** All step rows across every primary task (for tags, global rollup). */
+export function flattenAssignmentChunks(a: MainAssignment): WorkboardChunk[] {
+  return a.primary_tasks.flatMap((p) => p.chunks);
+}
+
+export function assignmentRollupPercent(a: MainAssignment): number {
+  return rollupPercent(flattenAssignmentChunks(a));
+}
+
 export function newId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-/** Ensure tags exist on rows loaded from older localStorage. */
+function normalizeChunk(c: WorkboardChunk): WorkboardChunk {
+  return {
+    ...c,
+    tags: Array.isArray(c.tags) ? c.tags : [],
+  };
+}
+
+/** True when all steps in the primary task are completed (0 steps = not “fully done” for this rule). */
+export function primaryTaskAllStepsDone(pt: WorkboardPrimaryTask): boolean {
+  if (pt.chunks.length === 0) return false;
+  return pt.chunks.every((c) => c.status === "completed");
+}
+
+/** @internal Legacy JSON may still have title/due_date/chunks on the root assignment. */
+type LegacyMainAssignment = MainAssignment & {
+  title?: string;
+  due_date?: string;
+  chunks?: WorkboardChunk[];
+};
+
+/** Ensure tags and primary_tasks exist; migrate old single main-line shape. */
 export function normalizeAssignments(list: MainAssignment[]): MainAssignment[] {
-  return list.map((a) => {
+  return (list as LegacyMainAssignment[]).map((a) => {
+    const weekStart = a.week_start || getMondayISO();
     let topTags = Array.isArray(a.tags) ? [...a.tags] : [];
-    const chunksRaw = a.chunks || [];
-    let chunks: WorkboardChunk[] = chunksRaw.map((c) => ({
-      ...c,
-      tags: Array.isArray(c.tags) ? c.tags : [],
-    }));
-    if (
-      chunks.length > 0 &&
-      topTags.length > 0 &&
-      chunks.every((c) => !c.tags.length)
-    ) {
-      chunks = chunks.map((c, i) => (i === 0 ? { ...c, tags: [...topTags] } : c));
-      topTags = [];
+    const legacy: LegacyMainAssignment = a;
+
+    let primary_tasks: WorkboardPrimaryTask[] = [];
+    if (Array.isArray(legacy.primary_tasks) && legacy.primary_tasks.length > 0) {
+      primary_tasks = legacy.primary_tasks.map((pt, order) => {
+        let ch = (pt.chunks || []).map((c) => normalizeChunk(c));
+        if (ch.length > 0 && topTags.length > 0 && ch.every((c) => !c.tags.length)) {
+          ch = ch.map((c, i) => (i === 0 ? { ...c, tags: [...topTags] } : c));
+          topTags = [];
+        }
+        return {
+          id: pt.id || newId(),
+          title: typeof pt.title === "string" ? pt.title : "",
+          due_date: typeof pt.due_date === "string" ? pt.due_date : addDaysISO(weekStart, 4),
+          completed: Boolean(pt.completed),
+          sort_order: typeof pt.sort_order === "number" ? pt.sort_order : order,
+          chunks: ch,
+        };
+      });
+    } else {
+      const legacyChunks = (legacy.chunks || []).map((c) => normalizeChunk(c));
+      let ch = legacyChunks;
+      if (ch.length > 0 && topTags.length > 0 && ch.every((c) => !c.tags.length)) {
+        ch = ch.map((c, i) => (i === 0 ? { ...c, tags: [...topTags] } : c));
+        topTags = [];
+      }
+      primary_tasks = [
+        {
+          id: newId(),
+          title: typeof legacy.title === "string" ? legacy.title : "",
+          due_date: typeof legacy.due_date === "string" ? legacy.due_date : addDaysISO(weekStart, 4),
+          completed: false,
+          sort_order: 0,
+          chunks: ch,
+        },
+      ];
     }
-    return {
-      ...a,
-      tags: topTags,
-      chunks,
-      interrupts: (a.interrupts || []).map((i) => ({
+
+    const firstId = primary_tasks[0]?.id;
+
+    const interrupts = (a.interrupts || []).map((i) => {
+      let blocks_target_id = i.blocks_target_id;
+      let blocks_target_kind = i.blocks_target_kind;
+      if (blocks_target_kind === "main" && blocks_target_id === a.id && firstId) {
+        blocks_target_id = firstId;
+      }
+      return {
         ...i,
         tags: Array.isArray(i.tags) ? i.tags : [],
-      })),
+        blocks_target_id,
+        blocks_target_kind,
+      };
+    });
+
+    return {
+      id: a.id,
+      role_id: a.role_id,
+      week_start: weekStart,
+      description: a.description || "",
+      primary_tasks,
+      interrupts,
+      tags: topTags,
     };
   });
 }
