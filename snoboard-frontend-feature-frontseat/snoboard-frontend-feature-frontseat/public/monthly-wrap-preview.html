@@ -47,17 +47,24 @@
         line-height: 1.5;
         margin: 0 0 1.5rem;
       }
+      /* Match in-app wrap: full-viewport layer (this block is the card only) */
       .frame {
         width: 100%;
-        max-width: 28rem;
-        border-radius: 1rem;
+        max-width: 100%;
+        min-height: 100dvh;
+        border-radius: 0;
         border: 1px solid var(--border);
+        border-left: none;
+        border-right: none;
         background: var(--card);
         backdrop-filter: blur(20px);
-        box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+        box-shadow: none;
         overflow: hidden;
+        display: flex;
+        flex-direction: column;
       }
       .head {
+        flex-shrink: 0;
         padding: 0.9rem 1rem 0.6rem;
         border-bottom: 1px solid rgba(39, 39, 42, 0.9);
         display: flex;
@@ -78,34 +85,44 @@
       .bar > i {
         display: block;
         height: 100%;
-        width: 11.11%;
+        width: 10%;
         background: linear-gradient(90deg, var(--violet), var(--fuchsia));
         border-radius: inherit;
-        transition: width 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+        transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
       }
       .body {
-        min-height: 16rem;
+        flex: 1;
+        min-height: 0;
         padding: 1.2rem 1.25rem;
         position: relative;
+        overflow: auto;
       }
-      .card {
-        position: absolute;
-        inset: 1.2rem 1.25rem;
+      /* Mirrors framer-motion in MonthlyWrapHost: initial / animate / exit */
+      .step-panel {
+        min-height: 15rem;
         display: flex;
         flex-direction: column;
         justify-content: center;
-        opacity: 0;
-        transform: translateX(2rem) rotate(0.5deg);
-        filter: blur(8px);
-        pointer-events: none;
-        transition: opacity 0.32s, transform 0.32s, filter 0.32s;
+        will-change: transform, opacity, filter;
+        transition:
+          opacity 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+          transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+          filter 0.35s cubic-bezier(0.22, 1, 0.36, 1);
       }
-      .card.is-active {
+      .step-panel.is-visible {
         opacity: 1;
-        transform: translateX(0) rotate(0);
+        transform: translateX(0);
         filter: blur(0);
-        pointer-events: auto;
-        z-index: 2;
+      }
+      .step-panel.is-exit {
+        opacity: 0;
+        transform: translateX(-30px);
+        filter: blur(6px);
+      }
+      .step-panel.is-pending-in {
+        opacity: 0;
+        transform: translateX(40px);
+        filter: blur(8px);
       }
       .kicker {
         font-size: 0.63rem;
@@ -206,6 +223,7 @@
         border: 1px solid rgba(139, 92, 246, 0.25);
       }
       .foot {
+        flex-shrink: 0;
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -246,8 +264,78 @@
         background: #6d28d9;
       }
       .center {
-        text-align: center;
+        display: flex;
+        flex-direction: column;
         align-items: center;
+        text-align: center;
+        width: 100%;
+      }
+      .wrap-hero {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        min-height: 15rem;
+        width: 100%;
+        gap: 0.35rem;
+      }
+      .wrap-hero .kicker {
+        margin-bottom: 0.35rem;
+      }
+      .wrap-hero .water-line {
+        justify-content: center;
+      }
+      .water-fill.xl,
+      .wrap-hero .water-fill {
+        font-size: 2.75rem;
+      }
+      @media (min-width: 400px) {
+        .water-fill.xl,
+        .wrap-hero .water-fill {
+          font-size: 3.25rem;
+        }
+      }
+      .leaderboard-wrap {
+        width: 100%;
+        max-width: 20rem;
+        margin: 0 auto;
+        text-align: center;
+      }
+      .leaderboard-wrap h2 {
+        text-align: center;
+        width: 100%;
+      }
+      .leaderboard-wrap ol {
+        text-align: left;
+      }
+      ol.leader-stagger li.row {
+        opacity: 0;
+        transform: translateY(16px);
+        filter: blur(5px);
+        animation: rowReveal 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+      }
+      ol.leader-stagger li.row:nth-child(1) {
+        animation-delay: 0.2s;
+      }
+      ol.leader-stagger li.row:nth-child(2) {
+        animation-delay: 0.48s;
+      }
+      ol.leader-stagger li.row:nth-child(3) {
+        animation-delay: 0.76s;
+      }
+      ol.leader-stagger li.row:nth-child(4) {
+        animation-delay: 1.04s;
+      }
+      ol.leader-stagger li.row:nth-child(5) {
+        animation-delay: 1.32s;
+      }
+      @keyframes rowReveal {
+        to {
+          opacity: 1;
+          transform: translateY(0);
+          filter: blur(0);
+        }
       }
       .emoji {
         font-size: 2.5rem;
@@ -262,25 +350,54 @@
         line-height: 1.5;
         text-align: center;
       }
+      .water-line {
+        display: flex;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 0.35rem 0.5rem;
+      }
+      .water-fill {
+        display: inline-block;
+        font-size: 2.25rem;
+        font-weight: 900;
+        font-variant-numeric: tabular-nums;
+        line-height: 1.1;
+        animation: waterClip 0.9s cubic-bezier(0.22, 0.12, 0.14, 1) forwards;
+        clip-path: inset(100% 0 0 0);
+      }
+      @keyframes waterClip {
+        to {
+          clip-path: inset(0 0 0 0);
+        }
+      }
+      .views-suffix {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #71717a;
+      }
     </style>
   </head>
   <body>
-    <h1>Static preview — tweak in browser</h1>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+    <h1>Motion preview (no login) — use Next or arrow keys</h1>
     <p class="lead">
-      Same story order and motion feel as the in-app <strong>Monthly wrap</strong>. Data below is
-      <strong>mock</strong> only. In production, totals come from the 6-day month API, highlights from
-      tracker ideas. Use <kbd style="color: #a78bfa">←</kbd> <kbd style="color: #a78bfa">→</kbd> or
-      buttons to step.
+      Transitions below match the app: <strong>0.35s</strong> ease, incoming from the right with
+      <strong>blur</strong>, outgoing exits left (same as Framer
+      <code>MonthlyWrapHost</code>). Data is mock. For <strong>live API data + same UI</strong>, run
+      <code style="color: #c4b5fd">npm run dev</code> → port is usually
+      <strong>8080</strong> → sign in →
+      <code style="color: #a78bfa">?wrap=1</code> on any route. Or open this file with
+      <strong>double-click</strong> (works offline; motion is identical).
     </p>
     <div class="frame" id="frame">
       <div class="head">
         <span>Monthly wrap</span>
-        <span id="count">1 / 9</span>
+        <span id="count">1 / 10</span>
       </div>
       <div class="head" style="border: none; padding-top: 0; display: block">
-        <div class="bar"><i id="bar" style="width: 11.11%"></i></div>
+        <div class="bar"><i id="bar" style="width: 10%"></i></div>
       </div>
-      <div class="body" id="stage" style="min-height: 18rem">
+      <div class="body" id="stage">
         <!-- cards injected by JS -->
       </div>
       <div class="foot">
@@ -289,11 +406,13 @@
       </div>
     </div>
     <p class="note">
-      <strong>Rollout (app):</strong> Reveal on the <strong>last day of the month</strong> plus
-      <strong>the 1st and 2nd</strong> of the next month (3 calendar days to catch everyone). Autoplay
-      modal once per user per report; nav chip “Apr wrap” stays
-      <strong>3 days after the user’s first open</strong>. Tweak <code>getActiveReportMonth</code> and
-      <code>TAB_RETENTION_DAYS</code> in <code>src/lib/monthlyWrap.ts</code> to tune.
+      <strong>Rollout (app):</strong> Public calendar (autoplay + nav chip) is off until
+      <strong>May 1, 2026, 5pm in each user’s local time</strong> (<code>WRAP_FEATURE_LIVE_AT_MS</code> in
+      <code>src/lib/monthlyWrap.ts</code>). After that: each month from <strong>5pm on the 1st</strong>
+      (local) through the <strong>3rd</strong>, the report is the
+      <strong>previous month</strong>. The nav chip can stay
+      <strong>3 days after the user’s first open</strong>. In dev, <code>?wrap=1</code> still opens the
+      real UI without waiting.
     </p>
 
     <script>
@@ -304,15 +423,13 @@
         {
           kicker: "The big number",
           cls: "vi",
-          title: "80.1M <span style=\"font-size:1.1rem;font-weight:600;color:#71717a\">views</span>",
-          desc: "Total 6-day tracker views recorded for the month (all cycles, all pages).",
+          bigNum: "80.1M",
           huge: true,
         },
         {
           kicker: "Top page",
           cls: "am",
           h: "laughfactory_india",
-          name: "Laugh Factory India",
           v: "24.1M",
         },
         {
@@ -335,19 +452,21 @@
           kicker: "Most ideas created",
           cls: "sk",
           person: { name: "Pulkit", n: 42 },
-          sub: "New ideas in the tracker with <code>created_at</code> in this month.",
         },
         {
           kicker: "Most shipped & proven",
           cls: "vi",
           person: { name: "Swati", n: 18 },
-          sub: "Moves into proven / posted / scheduled this month (by <code>updated_at</code> — best effort).",
         },
         {
           kicker: "Most ideas killed",
           cls: "sk",
           person: { name: "Deepak", n: 7 },
-          sub: "Ideas set to <strong>kill</strong> this month.",
+        },
+        {
+          kicker: "Most posts",
+          cls: "em",
+          person: { name: "Kaavya", n: 31 },
         },
         {
           outro: true,
@@ -369,34 +488,54 @@
           );
         if (s.list) {
           return (
-            `<p class="kicker ${s.cls}">${s.kicker}</p><h2>Leaderboard</h2><ol>` +
+            `<div class="leaderboard-wrap">` +
+            `<p class="kicker ${s.cls}">${s.kicker}</p><h2>Leaderboard</h2><ol class="leader-stagger">` +
             s.list
               .map(
                 (r, j) =>
                   `<li class="row"><span class="rank">${j + 1}</span><span class="handle">@${r.h}</span><span class="num">${r.v}</span></li>`,
               )
               .join("") +
-            `</ol>`
+            `</ol></div>`
           );
         }
         if (s.team) {
           return (
-            `<p class="kicker ${s.cls}">${s.kicker}</p><h2 style="font-size:1.4rem">${s.team.emoji} ${s.team.name}</h2>
-            <p class="desc" style="margin-top:.4rem">~${(s.team.n).toFixed(1)}M team views in the 6-day tracker (mock).</p>
-            <p class="kicker" style="margin-top:0.8rem;letter-spacing:0.12em">Squad</p>
-            <div class="pills">${s.team.members.map((m) => `<span class="pill">${m}</span>`).join("")}</div>`
+            `<div class="wrap-hero" style="min-height: 16.5rem">` +
+            `<p class="kicker ${s.cls}">${s.kicker}</p>` +
+            `<h2 style="font-size:1.4rem; margin:0.35rem 0 0.25rem">${s.team.emoji} ${s.team.name}</h2>` +
+            `<p class="desc" style="margin:0.5rem 0 0; max-width: 22rem; line-height:1.4">` +
+            `Leader by combined views on your tracked pages — ~${(s.team.n).toFixed(1)}M this month (mock).</p>` +
+            `<p class="kicker" style="margin:1rem 0 0.35rem; letter-spacing:0.12em">Squad</p>` +
+            `<div class="pills" style="justify-content:center">` +
+            s.team.members.map((m) => `<span class="pill">${m}</span>`).join("") +
+            `</div></div>`
           );
         }
         if (s.person) {
           return (
-            `<p class="kicker ${s.cls}">${s.kicker}</p><h2>${s.person.name}</h2><p class="huge">${s.person.n}</p><p class="sub">${s.sub || ""}</p>`
+            `<div class="wrap-hero">` +
+            `<p class="kicker ${s.cls}">${s.kicker}</p>` +
+            `<h2 style="font-size:1.75rem; margin:0.4rem 0 0.25rem; font-weight:800">${s.person.name}</h2>` +
+            `<div class="water-line" style="margin-top:0.5rem">` +
+            `<span class="water-fill xl" style="font-size:2.6rem">${s.person.n}</span></div></div>`
           );
         }
         if (s.h) {
           return (
-            `<p class="kicker ${s.cls}">${s.kicker}</p><h2>@${s.h}</h2>` +
-            (s.name ? '<p class="sub">' + s.name + "</p>" : "") +
-            `<p class="huge">${s.v} <span style="font-size:1rem;font-weight:600;color:#71717a">views</span></p>`
+            `<div class="wrap-hero">` +
+            `<p class="kicker ${s.cls}">${s.kicker}</p>` +
+            `<h2 style="font-size:1.65rem; margin:0.45rem 0; word-break:break-all; max-width:100%">@${s.h}</h2>` +
+            `<div class="water-line" style="margin-top:0.15rem">` +
+            `<span class="water-fill xl">${s.v}</span><span class="views-suffix">views</span></div></div>`
+          );
+        }
+        if (s.huge && s.bigNum) {
+          return (
+            `<div class="wrap-hero" style="gap:0.5rem">` +
+            `<p class="kicker ${s.cls}">${s.kicker}</p>` +
+            `<div class="water-line" style="margin-top:0.1rem">` +
+            `<span class="water-fill xl">${s.bigNum}</span><span class="views-suffix">views</span></div></div>`
           );
         }
         return (
@@ -404,49 +543,105 @@
         );
       }
 
+      const MOTION_MS = 350;
+
       function syncChrome() {
-        bar.style.width = ((i + 1) / 9) * 100 + "%";
-        count.textContent = i + 1 + " / 9";
+        bar.style.width = ((i + 1) / 10) * 100 + "%";
+        count.textContent = i + 1 + " / 10";
         prev.disabled = i === 0;
-        next.style.display = i >= 8 ? "none" : "inline-flex";
+        next.style.display = i >= 9 ? "none" : "inline-flex";
       }
 
-      function paint() {
-        const inner = buildInner(steps[i]);
-        stage.innerHTML = `<div class="card is-active" style="position:relative;inset:0;opacity:1;transform:none;filter:none;pointer-events:auto">${inner}</div>`;
+      function maybePreviewConfetti() {
+        if (typeof confetti !== "function") return;
+        if (i === 1) {
+          setTimeout(() => {
+            confetti({
+              particleCount: 130,
+              spread: 78,
+              origin: { y: 0.62, x: 0.5 },
+              colors: ["#a78bfa", "#c084fc", "#e879f9", "#fbbf24", "#34d399"],
+            });
+            setTimeout(
+              () =>
+                confetti({
+                  particleCount: 65,
+                  spread: 105,
+                  origin: { y: 0.62, x: 0.5 },
+                  startVelocity: 22,
+                }),
+              130,
+            );
+          }, 100);
+        } else if (i === 2) {
+          setTimeout(() => {
+            confetti({ particleCount: 72, spread: 72, origin: { y: 0.58, x: 0.5 } });
+          }, 150);
+        }
+      }
+
+      function wireDone() {
         const doneBtn = document.getElementById("doneBtn");
-        if (doneBtn)
-          doneBtn.addEventListener("click", () => {
-            i = 0;
-            paint();
-            syncChrome();
+        if (doneBtn) {
+          doneBtn.addEventListener(
+            "click",
+            () => {
+              goTo(0, false);
+            },
+            { once: true },
+          );
+        }
+      }
+
+      /**
+       * @param {number} nextIndex
+       * @param {boolean} animate - false = jump (e.g. reset)
+       */
+      function goTo(nextIndex, animate) {
+        if (nextIndex < 0 || nextIndex > 9) return;
+        const el = document.getElementById("stepPanel");
+        if (!animate || !el) {
+          i = nextIndex;
+          stage.innerHTML = `<div class="step-panel is-pending-in" id="stepPanel">${buildInner(steps[i])}</div>`;
+          const p = document.getElementById("stepPanel");
+          void p.offsetWidth;
+          requestAnimationFrame(() => {
+            p.classList.remove("is-pending-in");
+            p.classList.add("is-visible");
+            maybePreviewConfetti();
           });
-        syncChrome();
+          wireDone();
+          syncChrome();
+          return;
+        }
+        el.classList.remove("is-visible");
+        el.classList.add("is-exit");
+        window.setTimeout(() => {
+          i = nextIndex;
+          stage.innerHTML = `<div class="step-panel is-pending-in" id="stepPanel">${buildInner(steps[i])}</div>`;
+          const p = document.getElementById("stepPanel");
+          void p.offsetWidth;
+          requestAnimationFrame(() => {
+            p.classList.remove("is-pending-in");
+            p.classList.add("is-visible");
+            maybePreviewConfetti();
+          });
+          wireDone();
+          syncChrome();
+        }, MOTION_MS);
       }
 
       next.addEventListener("click", () => {
-        if (i < 8) {
-          i++;
-          paint();
-        }
+        if (i < 9) goTo(i + 1, true);
       });
       prev.addEventListener("click", () => {
-        if (i > 0) {
-          i--;
-          paint();
-        }
+        if (i > 0) goTo(i - 1, true);
       });
       window.addEventListener("keydown", (e) => {
-        if (e.key === "ArrowRight" && i < 8) {
-          i++;
-          paint();
-        }
-        if (e.key === "ArrowLeft" && i > 0) {
-          i--;
-          paint();
-        }
+        if (e.key === "ArrowRight" && i < 9) goTo(i + 1, true);
+        if (e.key === "ArrowLeft" && i > 0) goTo(i - 1, true);
       });
-      paint();
+      goTo(0, false);
     </script>
   </body>
 </html>
