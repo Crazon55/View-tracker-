@@ -540,8 +540,27 @@ export default function WeeklyWorkboard() {
     staleTime: 10_000,
   });
 
+  const mergeByRole = useCallback((baseRows: MainAssignment[], incoming: MainAssignment[]) => {
+    const m = new Map<string, MainAssignment>();
+    baseRows.forEach((a) => m.set(a.role_id, a));
+    incoming.forEach((a) => m.set(a.role_id, a));
+    return normalizeAssignments(Array.from(m.values()) as any);
+  }, []);
+
   const saveMut = useMutation({
-    mutationFn: (rows: MainAssignment[]) => saveWorkboardWeek(weekStart, rows),
+    mutationFn: async (rows: MainAssignment[]) => {
+      // Merge with latest server state so one person's save doesn't wipe others.
+      let serverRows: MainAssignment[] = [];
+      try {
+        const cur = await getWorkboardWeek(weekStart);
+        const raw = Array.isArray(cur.assignments) ? cur.assignments : [];
+        serverRows = normalizeAssignments(raw as any);
+      } catch {
+        serverRows = [];
+      }
+      const merged = mergeByRole(serverRows, rows);
+      return saveWorkboardWeek(weekStart, merged);
+    },
   });
 
   useEffect(() => {
@@ -602,6 +621,9 @@ export default function WeeklyWorkboard() {
     const t = setTimeout(() => {
       // Avoid pushing empty initial state while query is still loading
       if (workboardQ.isLoading) return;
+      // If we haven't loaded the server data yet, don't overwrite it with empty.
+      const serverLen = Array.isArray(workboardQ.data?.assignments) ? workboardQ.data!.assignments.length : 0;
+      if (assignments.length === 0 && serverLen > 0) return;
       saveMut.mutate(assignments);
     }, 600);
     return () => clearTimeout(t);
