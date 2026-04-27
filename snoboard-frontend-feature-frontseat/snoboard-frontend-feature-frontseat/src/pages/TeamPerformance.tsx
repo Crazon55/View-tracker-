@@ -270,27 +270,9 @@ export default function TeamPerformance() {
     refetchOnWindowFocus: false,
   });
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-zinc-950 pt-24 pb-16 flex items-center justify-center text-zinc-500 gap-2">
-        <Loader2 className="w-5 h-5 animate-spin text-violet-500" />
-        Warming up the arena…
-      </div>
-    );
-  }
-  if (isError || !data) {
-    const msg = error instanceof Error ? error.message : "Unknown error";
-    return (
-      <div className="min-h-screen bg-zinc-950 pt-24 pb-16 px-6 text-center space-y-3 max-w-lg mx-auto">
-        <p className="text-red-400 text-sm">Could not load the leaderboard.</p>
-        <p className="text-zinc-500 text-xs break-words">{msg}</p>
-      </div>
-    );
-  }
-
-  const teams = data.teams ?? [];
-  const leaderKey = data.leader_key ?? null;
-  const people = data.people ?? [];
+  const teams = data?.teams ?? [];
+  const leaderKey = data?.leader_key ?? null;
+  const people = data?.people ?? [];
   // order teams in fixed slot order so the hero scoreboard is stable
   const teamA = teams.find((t: any) => t.key === "garfields");
   const teamB = teams.find((t: any) => t.key === "goofies");
@@ -365,6 +347,25 @@ export default function TeamPerformance() {
     }, 1000);
     return () => window.clearInterval(t);
   }, [resetOpen, breathMode]);
+
+  // Render states AFTER hooks (avoids hook-order crashes)
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-zinc-950 pt-24 pb-16 flex items-center justify-center text-zinc-500 gap-2">
+        <Loader2 className="w-5 h-5 animate-spin text-violet-500" />
+        Warming up the arena…
+      </div>
+    );
+  }
+  if (isError || !data) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    return (
+      <div className="min-h-screen bg-zinc-950 pt-24 pb-16 px-6 text-center space-y-3 max-w-lg mx-auto">
+        <p className="text-red-400 text-sm">Could not load the leaderboard.</p>
+        <p className="text-zinc-500 text-xs break-words">{msg}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-zinc-950 pt-20 pb-20 px-4 sm:px-6 overflow-hidden relative">
