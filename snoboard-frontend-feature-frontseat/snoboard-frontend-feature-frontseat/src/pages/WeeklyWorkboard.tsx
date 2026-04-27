@@ -1733,7 +1733,7 @@ function ListView({
               </div>
             </div>
             {open && (
-              <div className="border-t border-white/10 min-h-0 max-h-[min(72vh,780px)] overflow-y-auto overscroll-y-contain px-3 pb-3 pt-2 sm:px-4 sm:pb-4 sm:pt-3 bg-black/40 backdrop-blur-xl">
+              <div className="border-t border-white/10 px-3 pb-3 pt-2 sm:px-4 sm:pb-4 sm:pt-3 bg-black/40 backdrop-blur-xl">
                 <AssignmentEditor
                   a={a}
                   embedBelowListHeader
