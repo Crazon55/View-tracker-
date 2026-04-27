@@ -570,7 +570,20 @@ export default function WeeklyWorkboard() {
     // Hydrate from server; fall back to local if server not ready.
     if (workboardQ.data?.week_start === weekStart) {
       const rows = Array.isArray(workboardQ.data.assignments) ? workboardQ.data.assignments : [];
-      setAssignments(normalizeAssignments(rows as any));
+      const serverRows = normalizeAssignments(rows as any);
+      const localWeek = loadStore().filter((a) => a.week_start === weekStart);
+
+      // If the server has no data yet but this device has local tasks for the week,
+      // publish the local version so the team can see it.
+      if (serverRows.length === 0 && localWeek.length > 0) {
+        const localNormalized = normalizeAssignments(localWeek as any);
+        setAssignments(localNormalized);
+        // Fire-and-forget publish (the debounced save also covers it, but this is immediate)
+        saveMut.mutate(localNormalized);
+        return;
+      }
+
+      setAssignments(serverRows);
       return;
     }
     if (workboardQ.isError) {
