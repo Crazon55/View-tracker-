@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { motion, useInView } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
-import { getWorkboardMentionCandidates } from "@/services/api";
+import { getWorkboardMentionCandidates, getWorkboardWeek, saveWorkboardWeek } from "@/services/api";
 import {
   WORKBOARD_ROLES,
   CHUNK_STATUS_LABEL,
@@ -529,10 +529,20 @@ export default function WeeklyWorkboard() {
   const { user } = useAuth();
   const [weekStart, setWeekStart] = useState(() => getMondayISO());
   const [view, setView] = useState<"list" | "gallery">("list");
-  const [assignments, setAssignments] = useState<MainAssignment[]>(() => loadStore());
+  const [assignments, setAssignments] = useState<MainAssignment[]>([]);
   const [myWorkboardRole, setMyWorkboardRole] = useState<WorkboardRoleId | null>(null);
   const [myRoleDialogOpen, setMyRoleDialogOpen] = useState(false);
   const [myRoleDialogForced, setMyRoleDialogForced] = useState(false);
+
+  const workboardQ = useQuery({
+    queryKey: ["weekly-workboard", weekStart],
+    queryFn: () => getWorkboardWeek(weekStart),
+    staleTime: 10_000,
+  });
+
+  const saveMut = useMutation({
+    mutationFn: (rows: MainAssignment[]) => saveWorkboardWeek(weekStart, rows),
+  });
 
   useEffect(() => {
     if (!user?.email) return;
@@ -557,13 +567,34 @@ export default function WeeklyWorkboard() {
   };
 
   useEffect(() => {
-    saveStore(assignments);
-  }, [assignments]);
+    // Hydrate from server; fall back to local if server not ready.
+    if (workboardQ.data?.week_start === weekStart) {
+      const rows = Array.isArray(workboardQ.data.assignments) ? workboardQ.data.assignments : [];
+      setAssignments(normalizeAssignments(rows as any));
+      return;
+    }
+    if (workboardQ.isError) {
+      setAssignments(loadStore().filter((a) => a.week_start === weekStart));
+    }
+  }, [workboardQ.data?.week_start, workboardQ.data?.assignments, workboardQ.isError, weekStart]);
 
-  const weekAssignments = useMemo(
-    () => assignments.filter((a) => a.week_start === weekStart),
-    [assignments, weekStart]
-  );
+  // Persist locally (offline fallback) and to server (shared).
+  useEffect(() => {
+    if (!weekStart) return;
+    // Merge into local store blob (keeps other weeks)
+    const existing = loadStore().filter((a) => a.week_start !== weekStart);
+    saveStore([...existing, ...assignments]);
+
+    // Debounced save to server
+    const t = setTimeout(() => {
+      // Avoid pushing empty initial state while query is still loading
+      if (workboardQ.isLoading) return;
+      saveMut.mutate(assignments);
+    }, 600);
+    return () => clearTimeout(t);
+  }, [assignments, weekStart]);
+
+  const weekAssignments = assignments;
 
   const byRole = useMemo(() => {
     const m = new Map<WorkboardRoleId, MainAssignment>();
@@ -843,7 +874,7 @@ export default function WeeklyWorkboard() {
                 <span className="text-zinc-500"> on steps so asks stay with the work</span>
               </li>
               <li className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3.5 py-1.5 text-zinc-400">
-                Saves on this device only
+                Shared for the team
               </li>
             </ul>
           </header>

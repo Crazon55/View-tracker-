@@ -10,6 +10,7 @@ from app.database.repositories.reels import get_reel_repository
 from app.database.repositories.dashboard_views import get_dashboard_views_repository
 from app.database.repositories.content_strategists import get_cs_repository
 from app.database.repositories.ideas import get_idea_repository
+from app.database.client import get_supabase_client
 from app.schemas.request import (
     PageCreate, PageUpdate, PostCreate, PostUpdate,
     ReelCreate, ReelUpdate, ScrapeRequest,
@@ -215,6 +216,52 @@ async def workboard_mention_candidates():
     people = [p for p in people if _workboard_mention_list_eligible(p)]
     people.sort(key=lambda p: (p["display"] or "").lower())
     return {"success": True, "data": {"people": people}}
+
+
+@app.get("/api/v1/workboard")
+async def workboard_week(week_start: str):
+    """
+    Shared weekly workboard payload.
+
+    week_start: YYYY-MM-DD (Monday).
+    """
+    client = get_supabase_client()
+    try:
+        row = (
+            client.table("weekly_workboard")
+            .select("week_start,assignments,updated_at")
+            .eq("week_start", week_start)
+            .limit(1)
+            .execute()
+            .data
+        )
+        if not row:
+            return {"success": True, "data": {"week_start": week_start, "assignments": []}}
+        r0 = row[0]
+        return {"success": True, "data": {"week_start": r0.get("week_start"), "assignments": r0.get("assignments") or []}}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load workboard: {str(e)}")
+
+
+@app.put("/api/v1/workboard")
+async def workboard_week_upsert(request: Request, week_start: str):
+    """
+    Upsert shared weekly workboard payload.
+
+    Body: { assignments: [...] }
+    """
+    client = get_supabase_client()
+    body = await request.json()
+    assignments = body.get("assignments")
+    if assignments is None or not isinstance(assignments, list):
+        raise HTTPException(status_code=400, detail="assignments must be a list")
+    try:
+        payload = {"week_start": week_start, "assignments": assignments, "updated_at": datetime.now(timezone.utc).isoformat()}
+        out = client.table("weekly_workboard").upsert(payload).execute().data
+        row = out[0] if isinstance(out, list) and out else payload
+        return {"success": True, "data": {"week_start": row.get("week_start", week_start), "assignments": row.get("assignments", assignments)}}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save workboard: {str(e)}")
 
 
 def _last_monday() -> str:
