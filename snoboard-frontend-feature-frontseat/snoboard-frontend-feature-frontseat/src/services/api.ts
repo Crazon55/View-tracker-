@@ -250,6 +250,18 @@ export type WorkboardMentionPerson = {
 export const getWorkboardMentionCandidates = () =>
   fetchApi<{ people: WorkboardMentionPerson[] }>("/api/v1/workboard/mention-candidates");
 
+// Weekly workboard — shared board persistence
+export type WorkboardWeek = { week_start: string; assignments: any[] };
+
+export const getWorkboardWeek = (weekStart: string) =>
+  fetchApi<WorkboardWeek>(`/api/v1/workboard?week_start=${encodeURIComponent(weekStart)}`);
+
+export const saveWorkboardWeek = (weekStart: string, assignments: any[]) =>
+  fetchApi<WorkboardWeek>(`/api/v1/workboard?week_start=${encodeURIComponent(weekStart)}`, {
+    method: "PUT",
+    body: JSON.stringify({ assignments }),
+  });
+
 // Deadlines
 export const getDeadlines = (role?: string) =>
   fetchApi<any[]>(role ? `/api/v1/deadlines/${encodeURIComponent(role)}` : "/api/v1/deadlines");
