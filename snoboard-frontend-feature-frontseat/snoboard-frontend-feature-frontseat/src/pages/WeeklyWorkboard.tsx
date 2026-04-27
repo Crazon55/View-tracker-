@@ -1326,11 +1326,15 @@ function AssignmentEditor({
 
   const [openMainTasks, setOpenMainTasks] = useState<Record<string, boolean>>({});
   useEffect(() => {
-    // Keep existing open/closed state, but ensure at least the first task is open.
     setOpenMainTasks((prev) => {
       const next: Record<string, boolean> = { ...prev };
-      primarySorted.forEach((pt, idx) => {
-        if (next[pt.id] === undefined) next[pt.id] = idx === 0;
+      const isFirstHydrate = Object.keys(prev).length === 0;
+      const newlyAdded = primarySorted.filter((pt) => next[pt.id] === undefined);
+      primarySorted.forEach((pt) => {
+        if (next[pt.id] === undefined) {
+          // Default: collapsed on load. If user just added a task in-session, auto-open it.
+          next[pt.id] = isFirstHydrate ? false : newlyAdded.some((x) => x.id === pt.id);
+        }
       });
       // Drop removed ids
       Object.keys(next).forEach((id) => {
@@ -1377,7 +1381,7 @@ function AssignmentEditor({
           const lineDone = pt.completed || primaryTaskAllStepsDone(pt);
           const stepsTotal = pt.chunks.length;
           const stepsDone = pt.chunks.filter((c) => c.status === "completed").length;
-          const isOpen = openMainTasks[pt.id] !== false;
+          const isOpen = openMainTasks[pt.id] === true;
           return (
             <div
               key={pt.id}
@@ -1385,7 +1389,12 @@ function AssignmentEditor({
             >
               <button
                 type="button"
-                onClick={() => setOpenMainTasks((p) => ({ ...p, [pt.id]: !(p[pt.id] !== false) }))}
+                onClick={() =>
+                  setOpenMainTasks((p) => {
+                    const cur = p[pt.id] ?? false;
+                    return { ...p, [pt.id]: !cur };
+                  })
+                }
                 className="w-full flex items-start gap-2 text-left"
               >
                 <span className="mt-0.5 text-zinc-500 shrink-0">
