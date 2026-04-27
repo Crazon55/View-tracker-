@@ -578,7 +578,7 @@ export default function WeeklyWorkboard() {
   const { user } = useAuth();
   const [weekStart, setWeekStart] = useState(() => getMondayISO());
   const [view, setView] = useState<"list" | "gallery">("list");
-  const [dateFilter, setDateFilter] = useState<"week" | "today">("week");
+  const [dateFilter, setDateFilter] = useState<"week" | "today">("today");
   const [roleFilter, setRoleFilter] = useState<WorkboardRoleId | "all">("all");
   const [assignments, setAssignments] = useState<MainAssignment[]>([]);
   const lastSaveOkAtRef = useRef<number | null>(null);
@@ -1056,12 +1056,12 @@ export default function WeeklyWorkboard() {
               <select
                 value={roleFilter}
                 onChange={(e) => setRoleFilter(e.target.value as any)}
-                className="h-10 rounded-xl bg-transparent px-3 text-sm text-zinc-200 outline-none"
+                className="h-10 rounded-xl bg-zinc-950 px-3 text-sm text-white outline-none border border-white/10 focus:border-violet-500/40"
                 title="Filter by role"
               >
-                <option value="all">All roles</option>
+                <option value="all" className="bg-zinc-950 text-white">All roles</option>
                 {WORKBOARD_ROLES.map((r) => (
-                  <option key={r.id} value={r.id}>
+                  <option key={r.id} value={r.id} className="bg-zinc-950 text-white">
                     {r.label}
                   </option>
                 ))}
