@@ -578,6 +578,8 @@ export default function WeeklyWorkboard() {
   const { user } = useAuth();
   const [weekStart, setWeekStart] = useState(() => getMondayISO());
   const [view, setView] = useState<"list" | "gallery">("list");
+  const [dateFilter, setDateFilter] = useState<"week" | "today">("week");
+  const [roleFilter, setRoleFilter] = useState<WorkboardRoleId | "all">("all");
   const [assignments, setAssignments] = useState<MainAssignment[]>([]);
   const lastSaveOkAtRef = useRef<number | null>(null);
   const [myWorkboardRole, setMyWorkboardRole] = useState<WorkboardRoleId | null>(null);
@@ -685,7 +687,19 @@ export default function WeeklyWorkboard() {
     return () => clearTimeout(t);
   }, [assignments, weekStart]);
 
-  const weekAssignments = assignments;
+  const weekAssignments = useMemo(() => {
+    const today = todayISO();
+    return assignments
+      .filter((a) => (roleFilter === "all" ? true : a.role_id === roleFilter))
+      .map((a) => {
+        if (dateFilter !== "today") return a;
+        return {
+          ...a,
+          primary_tasks: a.primary_tasks.filter((pt) => String(pt.due_date || "").slice(0, 10) === today),
+        };
+      })
+      .filter((a) => dateFilter !== "today" || a.primary_tasks.length > 0 || a.interrupts.length > 0);
+  }, [assignments, dateFilter, roleFilter]);
 
   const byRole = useMemo(() => {
     const m = new Map<WorkboardRoleId, MainAssignment>();
@@ -1011,6 +1025,47 @@ export default function WeeklyWorkboard() {
               >
                 This week
               </button>
+            </div>
+
+            <div className={`inline-flex ${BENTO_SURFACE} p-1`}>
+              <button
+                type="button"
+                onClick={() => setDateFilter("week")}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-colors ${
+                  dateFilter === "week"
+                    ? "bg-violet-600 text-white shadow-lg shadow-violet-600/35"
+                    : "text-zinc-400 hover:text-white hover:bg-violet-500/10"
+                }`}
+              >
+                This week
+              </button>
+              <button
+                type="button"
+                onClick={() => setDateFilter("today")}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-colors ${
+                  dateFilter === "today"
+                    ? "bg-violet-600 text-white shadow-lg shadow-violet-600/35"
+                    : "text-zinc-400 hover:text-white hover:bg-violet-500/10"
+                }`}
+              >
+                Today
+              </button>
+            </div>
+
+            <div className={cn(BENTO_SURFACE, "p-1")}>
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value as any)}
+                className="h-10 rounded-xl bg-transparent px-3 text-sm text-zinc-200 outline-none"
+                title="Filter by role"
+              >
+                <option value="all">All roles</option>
+                {WORKBOARD_ROLES.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className={`inline-flex ${BENTO_SURFACE} p-1`}>

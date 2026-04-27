@@ -575,7 +575,7 @@ export default function TeamPerformance() {
       <button
         type="button"
         onClick={() => setResetOpen(true)}
-        className="fixed bottom-6 right-6 z-20 rounded-2xl border border-violet-500/25 bg-zinc-950/70 backdrop-blur-xl px-4 py-3 text-sm font-black text-white shadow-lg shadow-violet-500/10 hover:bg-zinc-900/70 transition-colors flex items-center gap-2"
+        className="fixed bottom-24 right-6 z-[60] rounded-2xl border border-violet-500/25 bg-zinc-950/70 backdrop-blur-xl px-4 py-3 text-sm font-black text-white shadow-lg shadow-violet-500/10 hover:bg-zinc-900/70 transition-colors flex items-center gap-2"
         title="Reset"
       >
         <Wind className="w-4 h-4 text-violet-300" />
