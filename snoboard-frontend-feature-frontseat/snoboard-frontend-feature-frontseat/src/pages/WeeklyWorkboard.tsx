@@ -521,10 +521,48 @@ function BlockingLines({ a }: { a: MainAssignment }) {
       {lines.map((line, i) => (
         <li key={i} className="text-[12px] text-orange-200/85 leading-snug flex gap-2">
           <span className="text-orange-400/50 shrink-0 mt-0.5">○</span>
-          <span>{line}</span>
+          <DragScrollText text={line} className="text-orange-200/85" />
         </li>
       ))}
     </ul>
+  );
+}
+
+function DragScrollText({ text, className }: { text: string; className?: string }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const dragging = useRef(false);
+  const startX = useRef(0);
+  const startScrollLeft = useRef(0);
+
+  return (
+    <div
+      ref={ref}
+      className={cn("min-w-0 flex-1 overflow-x-auto whitespace-nowrap select-none cursor-grab", className)}
+      title={text}
+      style={{ WebkitOverflowScrolling: "touch", scrollbarWidth: "none" as any }}
+      onMouseDown={(e) => {
+        if (!ref.current) return;
+        dragging.current = true;
+        startX.current = e.clientX;
+        startScrollLeft.current = ref.current.scrollLeft;
+        ref.current.style.cursor = "grabbing";
+      }}
+      onMouseMove={(e) => {
+        if (!dragging.current || !ref.current) return;
+        const dx = e.clientX - startX.current;
+        ref.current.scrollLeft = startScrollLeft.current - dx;
+      }}
+      onMouseUp={() => {
+        dragging.current = false;
+        if (ref.current) ref.current.style.cursor = "grab";
+      }}
+      onMouseLeave={() => {
+        dragging.current = false;
+        if (ref.current) ref.current.style.cursor = "grab";
+      }}
+    >
+      {text}
+    </div>
   );
 }
 
@@ -1873,7 +1911,7 @@ function GalleryView({
               {a.primary_tasks.some((p) => p.chunks.length > 0) && (
                 <div className="mt-3 border-t border-white/[0.06] pt-2">
                   <p className="text-[11px] font-medium text-zinc-500 mb-1.5">Steps</p>
-                  <div className="max-h-[88px] overflow-y-auto pr-0.5 space-y-2">
+                  <div className="pr-0.5 space-y-2">
                     {a.primary_tasks.map(
                       (pt) =>
                         pt.chunks.length > 0 && (
@@ -1885,7 +1923,7 @@ function GalleryView({
                               {pt.chunks.map((c) => (
                                 <li key={c.id} className="text-[11px] text-zinc-300 leading-tight">
                                   <div className="flex items-start justify-between gap-2">
-                                    <span className="truncate min-w-0">{c.title || "Untitled chunk"}</span>
+                                    <DragScrollText text={c.title || "Untitled chunk"} className="text-zinc-300 text-[11px]" />
                                     <span className="shrink-0 text-zinc-500 text-[10px]">
                                       {CHUNK_STATUS_LABEL[c.status]}
                                     </span>
@@ -1911,7 +1949,7 @@ function GalleryView({
                   Blocking
                 </p>
                 {a.interrupts.some((it) => it.blocks_target_id && it.blocks_target_kind) ? (
-                  <div className="max-h-[72px] overflow-y-auto">
+                  <div>
                     <BlockingLines a={a} />
                   </div>
                 ) : (
@@ -1922,12 +1960,12 @@ function GalleryView({
               {a.interrupts.length > 0 && (
                 <div className="mt-3 border-t border-white/[0.06] pt-2 flex-1 min-h-0">
                   <p className="text-[11px] font-medium text-orange-300/90 mb-1.5">Extra work</p>
-                  <ul className="space-y-2 max-h-[96px] overflow-y-auto">
+                  <ul className="space-y-2">
                     {a.interrupts.map((it) => (
                       <li key={it.id} className="text-[11px] text-zinc-400 leading-snug">
                         <div className="flex gap-1.5">
                           <span className="text-amber-500/60 shrink-0">+</span>
-                          <span className="line-clamp-2 min-w-0">{it.title || "Untitled"}</span>
+                          <DragScrollText text={it.title || "Untitled"} className="text-zinc-400 text-[11px]" />
                         </div>
                         {(it.tags || []).length > 0 && (
                           <div className="mt-1 ml-4">
@@ -1957,7 +1995,7 @@ function GalleryView({
               </button>
             </div>
             {open && (
-              <div className="border-t border-white/10 p-4 bg-black/45 backdrop-blur-2xl max-h-[70vh] overflow-y-auto">
+              <div className="border-t border-white/10 p-4 bg-black/45 backdrop-blur-2xl">
                 <AssignmentEditor
                   a={a}
                   compact
