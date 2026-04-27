@@ -733,6 +733,15 @@ export default function WeeklyWorkboard() {
 
   const updateChunk = useCallback(
     (assignmentId: string, primaryTaskId: string, chunkId: string, patch: Partial<WorkboardChunk>) => {
+      const enriched: Partial<WorkboardChunk> = { ...patch };
+      if ("status" in patch) {
+        if (patch.status === "completed") {
+          const d = new Date();
+          enriched.completed_at = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        } else {
+          enriched.completed_at = undefined;
+        }
+      }
       setAssignments((prev) =>
         prev.map((a) => {
           if (a.id !== assignmentId) return a;
@@ -740,7 +749,7 @@ export default function WeeklyWorkboard() {
             ...a,
             primary_tasks: a.primary_tasks.map((pt) => {
               if (pt.id !== primaryTaskId) return pt;
-              const nextChunks = pt.chunks.map((c) => (c.id === chunkId ? { ...c, ...patch } : c));
+              const nextChunks = pt.chunks.map((c) => (c.id === chunkId ? { ...c, ...enriched } : c));
               const allDone = nextChunks.length > 0 && nextChunks.every((c) => c.status === "completed");
               return { ...pt, chunks: nextChunks, completed: allDone };
             }),
@@ -1054,6 +1063,32 @@ function interruptRollupPercent(interrupts: WorkboardInterrupt[]): number {
   if (!interrupts.length) return 0;
   const done = interrupts.filter((i) => i.status === "completed").length;
   return Math.round((done / interrupts.length) * 100);
+}
+
+function MiniRing({ pct, size = 48 }: { pct: number; size?: number }) {
+  const stroke = 5;
+  const r = (size - stroke) / 2;
+  const circ = 2 * Math.PI * r;
+  const arc = (pct / 100) * circ;
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: "rotate(-90deg)" }} aria-hidden>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={stroke} />
+        {pct > 0 && (
+          <circle
+            cx={size / 2} cy={size / 2} r={r} fill="none"
+            stroke={pct === 100 ? "#a78bfa" : "#8b5cf6"}
+            strokeWidth={stroke}
+            strokeDasharray={`${arc} ${circ - arc}`}
+            strokeLinecap="round"
+          />
+        )}
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="text-[10px] font-bold text-white leading-none">{pct}%</span>
+      </div>
+    </div>
+  );
 }
 
 function ProgressBar({ pct, variant = "violet" }: { pct: number; variant?: "violet" | "orange" }) {
@@ -1500,6 +1535,11 @@ function AssignmentEditor({
   );
 }
 
+function todayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function ListView({
   weekAssignments,
   myWorkboardRole,
@@ -1554,6 +1594,11 @@ function ListView({
         const listIntPct = interruptRollupPercent(a.interrupts);
         const listIntDone = a.interrupts.filter((i) => i.status === "completed").length;
         const isMyCard = myWorkboardRole !== null && a.role_id === myWorkboardRole;
+        const today = todayISO();
+        const chunksDone = flatChunks.filter((c) => c.status === "completed").length;
+        const chunksActive = flatChunks.filter((c) => c.status === "in_progress").length;
+        const chunksLeft = flatChunks.filter((c) => c.status === "not_started").length;
+        const doneToday = flatChunks.filter((c) => c.completed_at === today).length;
         return (
           <div
             key={a.id}
@@ -1586,20 +1631,43 @@ function ListView({
                   <div className="text-sm sm:text-[15px] font-medium text-white mt-0.5 sm:mt-1 break-words line-clamp-3">
                     {headline}
                   </div>
-                  <div className="flex flex-wrap items-center gap-x-2 sm:gap-x-3 gap-y-0.5 sm:gap-y-1 mt-1.5 sm:mt-2 text-[11px] sm:text-xs text-zinc-500">
-                    {dueLine && <span className="truncate max-w-full">{dueLine}</span>}
-                    <span className="text-zinc-400">
-                      Steps {pct}% ({flatChunks.filter((c) => c.status === "completed").length}/{flatChunks.length || 0})
-                    </span>
-                    {a.interrupts.length > 0 && (
-                      <span className="text-orange-300/90">
-                        Extra {listIntPct}% ({listIntDone}/{a.interrupts.length})
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-1.5 sm:mt-2 w-full max-w-md space-y-1">
-                    <ProgressBar pct={pct} />
-                    {a.interrupts.length > 0 && <ProgressBar pct={listIntPct} variant="orange" />}
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <div className="flex-1 min-w-0 space-y-1.5">
+                      {dueLine && (
+                        <span className="block text-[11px] text-zinc-500 truncate">{dueLine}</span>
+                      )}
+                      <div className="flex flex-wrap gap-1.5">
+                        {doneToday > 0 && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-200 border border-emerald-500/30">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />{doneToday} today
+                          </span>
+                        )}
+                        {chunksDone > 0 && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-violet-500/15 text-violet-200 border border-violet-500/20">
+                            <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />{chunksDone} done
+                          </span>
+                        )}
+                        {chunksActive > 0 && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/15 text-amber-200 border border-amber-500/20">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />{chunksActive} active
+                          </span>
+                        )}
+                        {chunksLeft > 0 && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-white/[0.05] text-zinc-400 border border-white/[0.08]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-zinc-600 inline-block" />{chunksLeft} left
+                          </span>
+                        )}
+                        {flatChunks.length === 0 && (
+                          <span className="text-[11px] text-zinc-600">No steps yet</span>
+                        )}
+                        {a.interrupts.length > 0 && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-500/10 text-orange-300/80 border border-orange-500/15">
+                            <span className="w-1.5 h-1.5 rounded-full bg-orange-400 inline-block" />{listIntDone}/{a.interrupts.length} extras
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <MiniRing pct={pct} />
                   </div>
                   {!open && allAssignmentTags(a).length > 0 && (
                     <div className="mt-1.5 sm:mt-2">
@@ -1728,6 +1796,7 @@ function GalleryView({
         const intDoneCount = a.interrupts.filter((i) => i.status === "completed").length;
         const open = expandId === a.id;
         const doneChunks = flatC.filter((c) => c.status === "completed").length;
+        const galleryDoneToday = flatC.filter((c) => c.completed_at === todayISO()).length;
         return (
           <div
             key={a.id}
@@ -1753,22 +1822,36 @@ function GalleryView({
               <h2 className="text-sm font-medium text-white line-clamp-3 min-h-[2.75rem] leading-snug">
                 {headline}
               </h2>
-              <div className="mt-3">
-                <p className="text-[11px] font-medium text-zinc-500 mb-1">Progress</p>
-                <ProgressBar pct={pct} />
-                <p className="text-[11px] text-zinc-500 mt-1">
-                  {pct}% · {doneChunks}/{flatC.length || 0} chunks done
-                  {a.interrupts.length > 0 ? ` · ${a.interrupts.length} interrupts` : ""}
-                </p>
-                {a.interrupts.length > 0 && (
-                  <div className="mt-2">
-                    <p className="text-[11px] font-medium text-orange-300/80 mb-1">Extra work progress</p>
-                    <ProgressBar pct={intPct} variant="orange" />
-                    <p className="text-[11px] text-zinc-500 mt-1">
-                      {intPct}% · {intDoneCount}/{a.interrupts.length} cleared
-                    </p>
+              <div className="mt-3 flex items-start gap-3">
+                <MiniRing pct={pct} size={52} />
+                <div className="flex-1 min-w-0 space-y-1.5 pt-0.5">
+                  <div className="flex flex-wrap gap-1">
+                    {galleryDoneToday > 0 && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-200 border border-emerald-500/30">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />{galleryDoneToday} today
+                      </span>
+                    )}
+                    {doneChunks > 0 && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-violet-500/15 text-violet-200 border border-violet-500/20">
+                        <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />{doneChunks} done
+                      </span>
+                    )}
+                    {(() => { const active = flatC.filter(c => c.status === "in_progress").length; return active > 0 ? (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/15 text-amber-200 border border-amber-500/20">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />{active} active
+                      </span>
+                    ) : null; })()}
+                    {flatC.length === 0 && <span className="text-[10px] text-zinc-600">No steps</span>}
                   </div>
-                )}
+                  {a.interrupts.length > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex-1 h-1 rounded-full overflow-hidden bg-white/[0.05]">
+                        <div className="h-full bg-orange-500/70 rounded-full transition-all" style={{ width: `${intPct}%` }} />
+                      </div>
+                      <span className="text-[10px] text-orange-300/70 shrink-0">{intDoneCount}/{a.interrupts.length} extras</span>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {allAssignmentTags(a).length > 0 && (

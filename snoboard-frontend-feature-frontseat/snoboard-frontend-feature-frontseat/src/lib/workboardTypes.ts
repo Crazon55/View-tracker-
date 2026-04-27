@@ -72,6 +72,8 @@ export type WorkboardChunk = {
   sort_order: number;
   /** @mentions / #tickets for this step */
   tags: string[];
+  /** ISO date (YYYY-MM-DD) when this chunk was marked completed; cleared on unmark */
+  completed_at?: string;
 };
 
 /** A top-level “main task” for the week: its own title, due date, steps, and completion. */
