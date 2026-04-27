@@ -1285,6 +1285,25 @@ function AssignmentEditor({
   const autoGrow220 = useAutoGrowTextArea(220);
   const intPct = interruptRollupPercent(a.interrupts);
   const intDoneCount = a.interrupts.filter((i) => i.status === "completed").length;
+  const intTotal = a.interrupts.length;
+  const [extrasOpen, setExtrasOpen] = useState(true);
+  const [openExtras, setOpenExtras] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    // Default all existing items to open; preserve user toggles.
+    setOpenExtras((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const it of a.interrupts) {
+        if (next[it.id] === undefined) {
+          next[it.id] = true;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    // If there are no items, keep the section open so the empty-state message is visible.
+    if (a.interrupts.length === 0) setExtrasOpen(true);
+  }, [a.interrupts]);
   const blockOptions: { id: string; kind: "main" | "chunk"; label: string }[] = [
     ...a.primary_tasks.map((pt) => ({
       id: pt.id,
@@ -1562,101 +1581,153 @@ function AssignmentEditor({
       </div>
 
       <div>
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
-            <Link2 className="w-4 h-4 text-orange-300/70" />
-            Extra work &amp; blockers
-          </h3>
+        <div className="flex items-center justify-between mb-2 gap-2">
           <button
             type="button"
-            onClick={() => addInterrupt(a.id)}
+            onClick={() => setExtrasOpen((v) => !v)}
+            className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white transition-colors"
+          >
+            {extrasOpen ? <ChevronDown className="w-4 h-4 text-zinc-500" /> : <ChevronRightIcon className="w-4 h-4 text-zinc-500" />}
+            <span className="flex items-center gap-2">
+              <Link2 className="w-4 h-4 text-orange-300/70" />
+              Extra work &amp; blockers
+              {intTotal > 0 && (
+                <span className="text-[11px] text-zinc-500">
+                  · {intDoneCount}/{intTotal} done
+                </span>
+              )}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { addInterrupt(a.id); setExtrasOpen(true); }}
             className="flex items-center gap-1 text-sm font-medium text-orange-300/90 hover:text-orange-200"
           >
             <Plus className="w-4 h-4" />
             Add item
           </button>
         </div>
-        {a.interrupts.length > 0 && (
-          <div className="mb-3 space-y-1">
-            <div className="flex items-center justify-between text-[11px] text-zinc-500">
-              <span>Extra work progress</span>
-              <span>
-                {intPct}% · {intDoneCount}/{a.interrupts.length} done
-              </span>
-            </div>
-            <ProgressBar pct={intPct} variant="orange" />
-          </div>
-        )}
-        {a.interrupts.length === 0 ? (
-          <p className="text-sm text-zinc-500 py-2">Urgent asks, bugs, or interrupts — say what they blocked.</p>
+        {!extrasOpen ? (
+          <p className="text-sm text-zinc-500 py-2">
+            {intTotal === 0 ? "No extra work yet." : "Collapsed — expand to view and edit blockers."}
+          </p>
         ) : (
-          <ul className="space-y-3">
-            {a.interrupts.map((it) => (
-              <li
-                key={it.id}
-                className="rounded-xl border border-orange-500/20 bg-orange-500/[0.06] backdrop-blur-md p-3 space-y-2 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]"
-              >
-                <div className="flex flex-wrap gap-2 items-center">
-                  <textarea
-                    value={it.title}
-                    onChange={(e) => updateInterrupt(a.id, it.id, { title: e.target.value })}
-                    placeholder="What came up?"
-                    rows={1}
-                    ref={autoGrow220}
-                    onInput={(e) => autoGrow220(e.currentTarget)}
-                    className="flex-1 min-w-[160px] rounded-lg border border-white/10 bg-white/[0.03] backdrop-blur-sm px-2.5 py-1.5 text-sm text-zinc-100 placeholder:text-zinc-500 resize-none overflow-y-auto focus:outline-none focus:ring-2 focus:ring-orange-500/30"
-                    style={{ scrollbarGutter: "stable" as any }}
-                  />
-                  <ChunkStatusSelect
-                    value={it.status}
-                    onChange={(v) => updateInterrupt(a.id, it.id, { status: v })}
-                    accent="orange"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeInterrupt(a.id, it.id)}
-                    className="p-1.5 text-zinc-600 hover:text-red-400"
+          <>
+            {a.interrupts.length > 0 && (
+              <div className="mb-3 space-y-1">
+                <div className="flex items-center justify-between text-[11px] text-zinc-500">
+                  <span>Extra work progress</span>
+                  <span>
+                    {intPct}% · {intDoneCount}/{a.interrupts.length} done
+                  </span>
+                </div>
+                <ProgressBar pct={intPct} variant="orange" />
+              </div>
+            )}
+            {a.interrupts.length === 0 ? (
+              <p className="text-sm text-zinc-500 py-2">Urgent asks, bugs, or interrupts — say what they blocked.</p>
+            ) : (
+              <ul className="space-y-3">
+                {a.interrupts.map((it) => (
+                  <li
+                    key={it.id}
+                    className="rounded-xl border border-orange-500/20 bg-orange-500/[0.06] backdrop-blur-md p-3 space-y-2 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-2 items-center text-xs">
-                  <span className="text-zinc-500">Blocks:</span>
-                  <InterruptBlocksSelect
-                    blockOptions={blockOptions}
-                    targetKind={it.blocks_target_kind}
-                    targetId={it.blocks_target_id}
-                    onChange={(kind, id) => {
-                      updateInterrupt(a.id, it.id, {
-                        blocks_target_kind: kind,
-                        blocks_target_id: id,
-                      });
-                    }}
-                  />
-                </div>
-                <textarea
-                  value={it.note}
-                  onChange={(e) => updateInterrupt(a.id, it.id, { note: e.target.value })}
-                  placeholder="Note: e.g. spent 4h here today; main chunk slipped…"
-                  rows={2}
-                  ref={autoGrow220}
-                  onInput={(e) => autoGrow220(e.currentTarget)}
-                  className="w-full rounded-lg border border-white/10 bg-white/[0.03] backdrop-blur-sm px-2.5 py-1.5 text-sm text-zinc-100 resize-none max-h-[220px] overflow-y-auto focus:outline-none focus:ring-2 focus:ring-orange-500/30"
-                  style={{ scrollbarGutter: "stable" as any }}
-                />
-                <div className="pt-1">
-                  <label className="text-xs font-medium text-zinc-500">Mentions for this item</label>
-                  <div className="mt-1">
-                    <TagField
-                      tags={it.tags || []}
-                      onChange={(tags) => updateInterrupt(a.id, it.id, { tags })}
-                      placeholder="@who asked · #ticket — Enter"
-                    />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setOpenExtras((p) => {
+                      const cur = p[it.id] ?? true;
+                      return { ...p, [it.id]: !cur };
+                    })
+                  }
+                  className="w-full flex items-start gap-2 text-left"
+                >
+                  <span className="mt-0.5 text-zinc-500 shrink-0">
+                    {(openExtras[it.id] !== false) ? <ChevronDown className="w-4 h-4" /> : <ChevronRightIcon className="w-4 h-4" />}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[11px] text-orange-300/80 shrink-0">Extra</span>
+                      <span className="text-[11px] text-zinc-600">·</span>
+                      <span className="text-[11px] text-zinc-400">{CHUNK_STATUS_LABEL[it.status]}</span>
+                      <div className="ml-auto text-[11px] text-zinc-500 line-clamp-1">
+                        {it.blocks_target_id && it.blocks_target_kind ? `Blocks: ${blockTargetLabel(a, it.blocks_target_kind, it.blocks_target_id)}` : "Blocks: —"}
+                      </div>
+                    </div>
+                    <div className="mt-1 text-sm font-medium text-white/90 line-clamp-2">
+                      {it.title?.trim() ? it.title.trim() : "Untitled extra work"}
+                    </div>
                   </div>
-                </div>
-              </li>
-            ))}
-          </ul>
+                </button>
+
+                {(openExtras[it.id] !== false) && (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-2 items-center">
+                      <textarea
+                        value={it.title}
+                        onChange={(e) => updateInterrupt(a.id, it.id, { title: e.target.value })}
+                        placeholder="What came up?"
+                        rows={1}
+                        ref={autoGrow220}
+                        onInput={(e) => autoGrow220(e.currentTarget)}
+                        className="flex-1 min-w-[160px] rounded-lg border border-white/10 bg-white/[0.03] backdrop-blur-sm px-2.5 py-1.5 text-sm text-zinc-100 placeholder:text-zinc-500 resize-none overflow-y-auto focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+                        style={{ scrollbarGutter: "stable" as any }}
+                      />
+                      <ChunkStatusSelect
+                        value={it.status}
+                        onChange={(v) => updateInterrupt(a.id, it.id, { status: v })}
+                        accent="orange"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeInterrupt(a.id, it.id)}
+                        className="p-1.5 text-zinc-600 hover:text-red-400"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-2 items-center text-xs">
+                      <span className="text-zinc-500">Blocks:</span>
+                      <InterruptBlocksSelect
+                        blockOptions={blockOptions}
+                        targetKind={it.blocks_target_kind}
+                        targetId={it.blocks_target_id}
+                        onChange={(kind, id) => {
+                          updateInterrupt(a.id, it.id, {
+                            blocks_target_kind: kind,
+                            blocks_target_id: id,
+                          });
+                        }}
+                      />
+                    </div>
+                    <textarea
+                      value={it.note}
+                      onChange={(e) => updateInterrupt(a.id, it.id, { note: e.target.value })}
+                      placeholder="Note: e.g. spent 4h here today; main chunk slipped…"
+                      rows={2}
+                      ref={autoGrow220}
+                      onInput={(e) => autoGrow220(e.currentTarget)}
+                      className="w-full rounded-lg border border-white/10 bg-white/[0.03] backdrop-blur-sm px-2.5 py-1.5 text-sm text-zinc-100 resize-none max-h-[220px] overflow-y-auto focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+                      style={{ scrollbarGutter: "stable" as any }}
+                    />
+                    <div className="pt-1">
+                      <label className="text-xs font-medium text-zinc-500">Mentions for this item</label>
+                      <div className="mt-1">
+                        <TagField
+                          tags={it.tags || []}
+                          onChange={(tags) => updateInterrupt(a.id, it.id, { tags })}
+                          placeholder="@who asked · #ticket — Enter"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
         )}
       </div>
     </div>
