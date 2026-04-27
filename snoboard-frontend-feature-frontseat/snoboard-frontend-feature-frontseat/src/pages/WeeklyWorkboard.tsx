@@ -135,7 +135,7 @@ function ScrollReveal({
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
   const inView = useInView(ref, {
-    once: false,
+    once: true,
     amount: 0.12,
     margin: "0px 0px -12% 0px",
   });
@@ -1605,7 +1605,7 @@ function ListView({
             className={cn(
               BENTO_SURFACE,
               "overflow-hidden flex flex-col min-h-0 min-w-0",
-              isMyCard && "xl:col-span-2 xl:min-h-[200px] ring-2 ring-violet-500/45 shadow-[0_0_50px_-14px_rgba(124,58,237,0.45)]",
+              isMyCard && "ring-2 ring-violet-500/45 shadow-[0_0_50px_-14px_rgba(124,58,237,0.45)]",
             )}
           >
             <div className="flex items-stretch gap-0 shrink-0">
@@ -1674,7 +1674,6 @@ function ListView({
                       <TagChipsRow tags={allAssignmentTags(a)} max={4} />
                     </div>
                   )}
-                  {!open && <BlockingLines a={a} />}
                 </div>
               </button>
               <div className="flex items-start p-2 sm:p-3 shrink-0">
@@ -1781,7 +1780,7 @@ function GalleryView({
                 BENTO_SURFACE,
                 "border-2 border-dashed min-h-[160px] flex flex-col justify-center p-6 text-left",
                 "hover:border-violet-400/50 hover:bg-violet-500/[0.08] hover:shadow-[0_0_40px_-12px_rgba(124,58,237,0.35)] transition-colors",
-                isFeaturedSlot && "xl:col-span-2 xl:min-h-[200px] ring-2 ring-violet-500/30",
+                isFeaturedSlot && "ring-2 ring-violet-500/30",
               )}
             >
               <span className="text-sm font-medium text-zinc-200">{r.label}</span>
@@ -1803,7 +1802,7 @@ function GalleryView({
             className={cn(
               BENTO_SURFACE,
               "overflow-hidden flex flex-col min-h-0",
-              isFeaturedSlot && "xl:col-span-2 xl:min-h-[300px] ring-2 ring-violet-500/45 shadow-[0_0_50px_-14px_rgba(124,58,237,0.4)]",
+              isFeaturedSlot && "ring-2 ring-violet-500/45 shadow-[0_0_50px_-14px_rgba(124,58,237,0.4)]",
             )}
           >
             <div className="p-4 flex-1 flex flex-col min-h-0">
