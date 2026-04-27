@@ -29,6 +29,7 @@ import ContentTracker from "./pages/ContentTracker";
 import PostTracker from "./pages/PostTracker";
 import SixDayTracker from "./pages/SixDayTracker";
 import TeamPerformance from "./pages/TeamPerformance";
+import ErrorBoundary from "./components/ErrorBoundary";
 import WeeklyWorkboard from "./pages/WeeklyWorkboard";
 import RoleSelect from "./pages/RoleSelect";
 import NotFound from "./pages/NotFound";
@@ -373,7 +374,14 @@ function AppLayout() {
             <Route path="/stage1-tracker" element={<Stage1Tracker />} />
             <Route path="/competitor-research" element={<CompetitorResearch />} />
             <Route path="/six-day-tracker" element={<SixDayTracker />} />
-            <Route path="/team-performance" element={<TeamPerformance />} />
+            <Route
+              path="/team-performance"
+              element={
+                <ErrorBoundary title="Team performance crashed">
+                  <TeamPerformance />
+                </ErrorBoundary>
+              }
+            />
             <Route path="/workboard" element={<WeeklyWorkboard />} />
           </Routes>
         </div>
