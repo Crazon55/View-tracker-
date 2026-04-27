@@ -259,9 +259,9 @@ export default function TeamPerformance() {
   const [streakOpen, setStreakOpen] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState<string>("");
   const [breathMode, setBreathMode] = useState<"idle" | "breathing" | "done" | "touchgrass">("idle");
-  const [breathLeft, setBreathLeft] = useState(60);
+  const [breathLeft, setBreathLeft] = useState(120);
   const [grassLeft, setGrassLeft] = useState(300);
-  const [resetIntent, setResetIntent] = useState<"idle" | "touchgrass">("idle");
+  const [resetIntent, setResetIntent] = useState<"breathing" | "touchgrass">("breathing");
 
   const streakIdeasQ = useQuery({
     queryKey: ["teams-performance-streak-ideas"],
@@ -308,18 +308,21 @@ export default function TeamPerformance() {
   useEffect(() => {
     if (!resetOpen) {
       setBreathMode("idle");
-      setBreathLeft(60);
+      setBreathLeft(120);
       setGrassLeft(300);
       return;
     }
-    setBreathMode(resetIntent === "touchgrass" ? "touchgrass" : "idle");
-    setBreathLeft(60);
-    setGrassLeft(300);
+    if (resetIntent === "touchgrass") {
+      setBreathMode("touchgrass");
+      setGrassLeft(300);
+    } else {
+      setBreathMode("breathing");
+      setBreathLeft(120);
+    }
   }, [resetOpen, resetIntent]);
 
   useEffect(() => {
     if (!resetOpen || breathMode !== "breathing") return;
-    setBreathLeft(60);
     const t = window.setInterval(() => {
       setBreathLeft((s) => {
         if (s <= 1) {
@@ -335,7 +338,6 @@ export default function TeamPerformance() {
 
   useEffect(() => {
     if (!resetOpen || breathMode !== "touchgrass") return;
-    setGrassLeft(300);
     const t = window.setInterval(() => {
       setGrassLeft((s) => {
         if (s <= 1) {
@@ -576,12 +578,15 @@ export default function TeamPerformance() {
       <div className="fixed bottom-24 right-6 z-[60] flex items-center gap-2">
         <button
           type="button"
-          onClick={() => setResetOpen(true)}
+          onClick={() => {
+            setResetIntent("breathing");
+            setResetOpen(true);
+          }}
           className="rounded-2xl border border-violet-500/25 bg-zinc-950/70 backdrop-blur-xl px-4 py-3 text-sm font-black text-white shadow-lg shadow-violet-500/10 hover:bg-zinc-900/70 transition-colors flex items-center gap-2"
-          title="Reset"
+          title="Stress reliever"
         >
           <Wind className="w-4 h-4 text-violet-300" />
-          Reset
+          Stress reliever
         </button>
         <button
           type="button"
@@ -601,14 +606,28 @@ export default function TeamPerformance() {
         <DialogContent className="max-w-md rounded-3xl border border-zinc-800 bg-zinc-950/90 backdrop-blur-xl text-zinc-200">
           <DialogHeader>
             <DialogTitle className="text-white flex items-center gap-2">
-              <Wind className="w-5 h-5 text-violet-300" /> Reset
+              {breathMode === "touchgrass" ? (
+                <>
+                  <Leaf className="w-5 h-5 text-emerald-300" /> Touch grass
+                </>
+              ) : (
+                <>
+                  <Wind className="w-5 h-5 text-violet-300" /> Stress reliever
+                </>
+              )}
             </DialogTitle>
-            <DialogDescription className="text-zinc-500">Quick reset. No clutter. Just breathe.</DialogDescription>
+            <DialogDescription className="text-zinc-500">
+              {breathMode === "touchgrass"
+                ? "Stand up. Look away. Come back fresh."
+                : "Breathe in and out. Two minutes."}
+            </DialogDescription>
           </DialogHeader>
 
           <div className="mt-2 rounded-2xl border border-white/10 bg-white/[0.03] p-4 overflow-hidden">
             <div className="flex items-center justify-between text-[11px] text-zinc-500 font-semibold">
-              <span className="uppercase tracking-[0.2em]">Breathing</span>
+              <span className="uppercase tracking-[0.2em]">
+                {breathMode === "touchgrass" ? "Touch grass" : "Breathing"}
+              </span>
               <span className="tabular-nums">
                 {breathMode === "breathing" ? `${breathLeft}s` : breathMode === "touchgrass" ? `${grassLeft}s` : "—"}
               </span>
@@ -639,7 +658,7 @@ export default function TeamPerformance() {
             </div>
 
             <div className="mt-4 text-center">
-              {breathMode === "idle" && <p className="text-sm text-zinc-400">One minute. In… hold… out.</p>}
+              {breathMode === "idle" && <p className="text-sm text-zinc-400">Starting…</p>}
               {breathMode === "breathing" && (
                 <p className="text-sm text-zinc-300">
                   In… hold… out… <span className="text-zinc-500">(you’ve got this)</span>
@@ -651,15 +670,6 @@ export default function TeamPerformance() {
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2 justify-end">
-            {breathMode === "idle" && (
-              <button
-                type="button"
-                onClick={() => setBreathMode("breathing")}
-                className="inline-flex items-center gap-2 rounded-xl border border-violet-500/25 bg-violet-500/10 hover:bg-violet-500/15 text-violet-100 px-3 py-2 text-sm font-bold transition-colors"
-              >
-                Start 60s
-              </button>
-            )}
             {breathMode === "done" && (
               <button
                 type="button"
@@ -670,7 +680,7 @@ export default function TeamPerformance() {
                 Touch grass (5m)
               </button>
             )}
-            {breathMode !== "idle" && breathMode !== "done" && (
+            {breathMode !== "done" && (
               <button
                 type="button"
                 onClick={() => setBreathMode("done")}
