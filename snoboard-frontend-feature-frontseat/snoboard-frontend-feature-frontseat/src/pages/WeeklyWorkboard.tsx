@@ -1386,24 +1386,27 @@ function AssignmentEditor({
                         key={c.id}
                         className="rounded-xl border border-white/10 bg-white/[0.03] p-3 space-y-2 backdrop-blur-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]"
                       >
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="space-y-2">
                           <input
                             value={c.title}
                             onChange={(e) => updateChunk(a.id, pt.id, c.id, { title: e.target.value })}
                             placeholder="Step name"
-                            className={cn("flex-1 min-w-[140px] rounded-lg px-2.5 py-1.5 text-sm", GLASS_INPUT)}
+                            className={cn("w-full rounded-lg px-2.5 py-1.5 text-sm", GLASS_INPUT)}
                           />
-                          <ChunkStatusSelect
-                            value={c.status}
-                            onChange={(v) => updateChunk(a.id, pt.id, c.id, { status: v })}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeChunk(a.id, pt.id, c.id)}
-                            className="p-1.5 text-zinc-600 hover:text-red-400"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <ChunkStatusSelect
+                              value={c.status}
+                              onChange={(v) => updateChunk(a.id, pt.id, c.id, { status: v })}
+                            />
+                            <div className="flex-1" />
+                            <button
+                              type="button"
+                              onClick={() => removeChunk(a.id, pt.id, c.id)}
+                              className="p-1.5 text-zinc-600 hover:text-red-400"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                         <div>
                           <label className="text-[10px] font-medium text-zinc-500 flex items-center gap-1">
@@ -1582,9 +1585,7 @@ function ListView({
 
   return (
     <div className="space-y-4">
-      <div
-        className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4 items-start"
-      >
+      <div className="columns-1 sm:columns-2 xl:columns-3 gap-3 sm:gap-4">
         {weekAssignments.map((a) => {
         const open = listIsOpen(a.id);
         const { headline, dueLine } = listCardMainSummary(a);
@@ -1603,7 +1604,7 @@ function ListView({
             key={a.id}
             className={cn(
               BENTO_SURFACE,
-              "overflow-hidden flex flex-col min-h-0 min-w-0",
+              "overflow-hidden flex flex-col min-h-0 min-w-0 break-inside-avoid mb-3 sm:mb-4",
               isMyCard && "ring-2 ring-violet-500/45 shadow-[0_0_50px_-14px_rgba(124,58,237,0.45)]",
             )}
           >
@@ -1711,7 +1712,7 @@ function ListView({
       </div>
 
       {missingRoles.length > 0 && (
-        <div className={cn(BENTO_SURFACE, "border-dashed p-5")}>
+        <div className={cn(BENTO_SURFACE, "border-dashed p-5 break-inside-avoid")}>
           <p className="text-sm text-zinc-500 mb-3">Add a card for someone’s role this week:</p>
           <div className="flex flex-wrap gap-2">
             {missingRoles.map((r) => (
