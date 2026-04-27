@@ -155,6 +155,16 @@ function ScrollReveal({
   );
 }
 
+function useAutoGrowTextArea(maxHeightPx: number = 320) {
+  return useCallback((el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    // Reset then grow to fit content
+    el.style.height = "0px";
+    const next = Math.min(el.scrollHeight, maxHeightPx);
+    el.style.height = `${next}px`;
+  }, [maxHeightPx]);
+}
+
 const GLASS_INPUT =
   "border border-white/10 bg-white/[0.03] backdrop-blur-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-violet-500/35 focus:border-violet-500/25";
 
@@ -1272,6 +1282,7 @@ function AssignmentEditor({
   removeInterrupt: (assignmentId: string, intId: string) => void;
   updateInterrupt: (assignmentId: string, intId: string, patch: Partial<WorkboardInterrupt>) => void;
 }) {
+  const autoGrow220 = useAutoGrowTextArea(220);
   const intPct = interruptRollupPercent(a.interrupts);
   const intDoneCount = a.interrupts.filter((i) => i.status === "completed").length;
   const blockOptions: { id: string; kind: "main" | "chunk"; label: string }[] = [
@@ -1366,15 +1377,19 @@ function AssignmentEditor({
                       </button>
                     )}
                   </div>
-                  <input
+                  <textarea
                     value={pt.title}
                     onChange={(e) => patchPrimaryTask(a.id, pt.id, { title: e.target.value })}
                     placeholder="What you’re shipping this week…"
+                    rows={1}
+                    ref={autoGrow220}
+                    onInput={(e) => autoGrow220(e.currentTarget)}
                     className={cn(
-                      "w-full rounded-xl px-3 py-2.5 text-sm",
-                      GLASS_INPUT,
+                      "w-full rounded-xl px-3 py-2.5 text-sm resize-none",
+                      GLASS_TEXTAREA,
                       lineDone && "line-through decoration-wavy decoration-zinc-400/80 text-zinc-400",
                     )}
+                    style={{ scrollbarGutter: "stable" as any }}
                   />
                 </div>
               </div>
@@ -1423,11 +1438,15 @@ function AssignmentEditor({
                         className="rounded-xl border border-white/10 bg-white/[0.03] p-3 space-y-2 backdrop-blur-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]"
                       >
                         <div className="space-y-2">
-                          <input
+                          <textarea
                             value={c.title}
                             onChange={(e) => updateChunk(a.id, pt.id, c.id, { title: e.target.value })}
                             placeholder="Step name"
-                            className={cn("w-full rounded-lg px-2.5 py-1.5 text-sm", GLASS_INPUT)}
+                            rows={1}
+                            ref={autoGrow220}
+                            onInput={(e) => autoGrow220(e.currentTarget)}
+                            className={cn("w-full rounded-lg px-2.5 py-1.5 text-sm resize-none", GLASS_TEXTAREA)}
+                            style={{ scrollbarGutter: "stable" as any }}
                           />
                           <div className="flex items-center gap-2">
                             <ChunkStatusSelect
@@ -1474,8 +1493,10 @@ function AssignmentEditor({
           value={a.description}
           onChange={(e) => patchAssignment(a.id, { description: e.target.value })}
           rows={compact ? 2 : 3}
+          ref={autoGrow220}
+          onInput={(e) => autoGrow220(e.currentTarget)}
           placeholder="Context, links, expectations…"
-          className={cn("mt-1.5 w-full rounded-xl px-3 py-2.5 text-sm resize-y max-h-[220px]", GLASS_TEXTAREA)}
+          className={cn("mt-1.5 w-full rounded-xl px-3 py-2.5 text-sm resize-none max-h-[220px]", GLASS_TEXTAREA)}
           style={{ scrollbarGutter: "stable" as any }}
         />
       </div>
@@ -1516,11 +1537,15 @@ function AssignmentEditor({
                 className="rounded-xl border border-orange-500/20 bg-orange-500/[0.06] backdrop-blur-md p-3 space-y-2 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]"
               >
                 <div className="flex flex-wrap gap-2 items-center">
-                  <input
+                  <textarea
                     value={it.title}
                     onChange={(e) => updateInterrupt(a.id, it.id, { title: e.target.value })}
                     placeholder="What came up?"
-                    className="flex-1 min-w-[160px] rounded-lg border border-white/10 bg-white/[0.03] backdrop-blur-sm px-2.5 py-1.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+                    rows={1}
+                    ref={autoGrow220}
+                    onInput={(e) => autoGrow220(e.currentTarget)}
+                    className="flex-1 min-w-[160px] rounded-lg border border-white/10 bg-white/[0.03] backdrop-blur-sm px-2.5 py-1.5 text-sm text-zinc-100 placeholder:text-zinc-500 resize-none overflow-y-auto focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+                    style={{ scrollbarGutter: "stable" as any }}
                   />
                   <ChunkStatusSelect
                     value={it.status}
@@ -1554,7 +1579,9 @@ function AssignmentEditor({
                   onChange={(e) => updateInterrupt(a.id, it.id, { note: e.target.value })}
                   placeholder="Note: e.g. spent 4h here today; main chunk slipped…"
                   rows={2}
-                  className="w-full rounded-lg border border-white/10 bg-white/[0.03] backdrop-blur-sm px-2.5 py-1.5 text-sm text-zinc-100 resize-y max-h-[220px] overflow-y-auto focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+                  ref={autoGrow220}
+                  onInput={(e) => autoGrow220(e.currentTarget)}
+                  className="w-full rounded-lg border border-white/10 bg-white/[0.03] backdrop-blur-sm px-2.5 py-1.5 text-sm text-zinc-100 resize-none max-h-[220px] overflow-y-auto focus:outline-none focus:ring-2 focus:ring-orange-500/30"
                   style={{ scrollbarGutter: "stable" as any }}
                 />
                 <div className="pt-1">
