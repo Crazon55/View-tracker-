@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { motion, useInView } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { getWorkboardMentionCandidates, getWorkboardWeek, saveWorkboardWeek } from "@/services/api";
+import { toast } from "sonner";
 import {
   WORKBOARD_ROLES,
   CHUNK_STATUS_LABEL,
@@ -530,6 +531,7 @@ export default function WeeklyWorkboard() {
   const [weekStart, setWeekStart] = useState(() => getMondayISO());
   const [view, setView] = useState<"list" | "gallery">("list");
   const [assignments, setAssignments] = useState<MainAssignment[]>([]);
+  const lastSaveOkAtRef = useRef<number | null>(null);
   const [myWorkboardRole, setMyWorkboardRole] = useState<WorkboardRoleId | null>(null);
   const [myRoleDialogOpen, setMyRoleDialogOpen] = useState(false);
   const [myRoleDialogForced, setMyRoleDialogForced] = useState(false);
@@ -560,6 +562,12 @@ export default function WeeklyWorkboard() {
       }
       const merged = mergeByRole(serverRows, rows);
       return saveWorkboardWeek(weekStart, merged);
+    },
+    onSuccess: () => {
+      lastSaveOkAtRef.current = Date.now();
+    },
+    onError: () => {
+      toast.error("Could not save workboard (shared).");
     },
   });
 
