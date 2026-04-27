@@ -158,6 +158,9 @@ function ScrollReveal({
 const GLASS_INPUT =
   "border border-white/10 bg-white/[0.03] backdrop-blur-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-violet-500/35 focus:border-violet-500/25";
 
+const GLASS_TEXTAREA =
+  "border border-white/10 bg-white/[0.03] backdrop-blur-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-violet-500/35 focus:border-violet-500/25 leading-relaxed overflow-y-auto";
+
 function loadStore(): MainAssignment[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -351,13 +354,11 @@ function TagField({
             return (
               <span
                 key={t}
-                className={`inline-flex items-center gap-0.5 pl-2.5 pr-1 py-0.5 rounded-full max-w-full border ${
-                  compact ? "text-[11px]" : "text-[12px]"
-                } ${
-                  person
+                className={`inline-flex items-center gap-0.5 pl-2.5 pr-1 py-0.5 rounded-full max-w-full border ${compact ? "text-[11px]" : "text-[12px]"
+                  } ${person
                     ? "bg-violet-500/15 text-violet-100 border-violet-400/30"
                     : "bg-white/[0.06] text-zinc-200 border-white/10"
-                }`}
+                  }`}
               >
                 {person ? <AtSign className="w-3 h-3 shrink-0 opacity-70" /> : null}
                 <span className="truncate max-w-[200px]" title={t}>
@@ -366,9 +367,8 @@ function TagField({
                 <button
                   type="button"
                   onClick={() => onChange(tags.filter((x) => x !== t))}
-                  className={`shrink-0 px-1 rounded-full text-sm leading-none opacity-60 hover:opacity-100 ${
-                    person ? "hover:bg-violet-500/25" : "hover:bg-white/10"
-                  }`}
+                  className={`shrink-0 px-1 rounded-full text-sm leading-none opacity-60 hover:opacity-100 ${person ? "hover:bg-violet-500/25" : "hover:bg-white/10"
+                    }`}
                   aria-label={`Remove ${t}`}
                 >
                   ×
@@ -447,11 +447,10 @@ function TagField({
                       type="button"
                       role="option"
                       aria-selected={idx === mentionHighlight}
-                      className={`mx-1 flex w-[calc(100%-0.5rem)] items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors ${
-                        idx === mentionHighlight
+                      className={`mx-1 flex w-[calc(100%-0.5rem)] items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors ${idx === mentionHighlight
                           ? "bg-violet-500/30 text-white"
                           : "text-zinc-100 hover:bg-white/10"
-                      }`}
+                        }`}
                       onMouseDown={(ev) => {
                         ev.preventDefault();
                         pickMention(person);
@@ -490,11 +489,10 @@ function TagChipsRow({ tags, max = 6 }: { tags: string[]; max?: number }) {
         return (
           <span
             key={t}
-            className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] max-w-[170px] truncate border ${
-              person
+            className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] max-w-[170px] truncate border ${person
                 ? "bg-violet-500/12 text-violet-100/95 border-violet-400/25"
                 : "bg-white/[0.06] text-zinc-300 border-white/10"
-            }`}
+              }`}
             title={t}
           >
             {person ? <AtSign className="w-2.5 h-2.5 shrink-0 opacity-60" /> : null}
@@ -973,126 +971,124 @@ export default function WeeklyWorkboard() {
         </ScrollReveal>
 
         <ScrollReveal delay={0.05}>
-        <div className="flex flex-wrap items-center gap-3 mb-8">
-          <div
-            className={`flex items-center gap-0.5 ${BENTO_SURFACE} p-1`}
-          >
-            <button
-              type="button"
-              onClick={() => setWeekStart((w) => addDaysISO(w, -7))}
-              className="p-2.5 rounded-xl text-zinc-400 hover:text-white hover:bg-violet-500/15 transition-colors"
-              aria-label="Previous week"
+          <div className="flex flex-wrap items-center gap-3 mb-8">
+            <div
+              className={`flex items-center gap-0.5 ${BENTO_SURFACE} p-1`}
             >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="px-4 text-sm font-medium text-white min-w-[200px] text-center tabular-nums">
-              {fmtWeekRange(weekStart)}
-            </span>
-            <button
-              type="button"
-              onClick={() => setWeekStart((w) => addDaysISO(w, 7))}
-              className="p-2.5 rounded-xl text-zinc-400 hover:text-white hover:bg-violet-500/15 transition-colors"
-              aria-label="Next week"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setWeekStart(getMondayISO())}
-              className="ml-0.5 mr-1 px-3 py-2 text-xs font-semibold rounded-xl border border-violet-500/35 bg-violet-600/25 text-white hover:bg-violet-600/45 transition-colors shadow-[0_0_24px_-6px_rgba(124,58,237,0.5)]"
-            >
-              This week
-            </button>
-          </div>
-
-          <div className={`inline-flex ${BENTO_SURFACE} p-1`}>
-            <button
-              type="button"
-              onClick={() => setView("list")}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-colors ${
-                view === "list"
-                  ? "bg-violet-600 text-white shadow-lg shadow-violet-600/35"
-                  : "text-zinc-400 hover:text-white hover:bg-violet-500/10"
-              }`}
-            >
-              <List className="w-4 h-4" />
-              List
-            </button>
-            <button
-              type="button"
-              onClick={() => setView("gallery")}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-colors ${
-                view === "gallery"
-                  ? "bg-violet-600 text-white shadow-lg shadow-violet-600/35"
-                  : "text-zinc-400 hover:text-white hover:bg-violet-500/10"
-              }`}
-            >
-              <LayoutGrid className="w-4 h-4" />
-              Gallery
-            </button>
-          </div>
-          {user?.email && (
-            <div className={`${BENTO_SURFACE} p-1 flex items-center`}>
               <button
                 type="button"
-                onClick={() => {
-                  setMyRoleDialogForced(false);
-                  setMyRoleDialogOpen(true);
-                }}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-xl text-zinc-300 hover:text-white hover:bg-violet-500/10 transition-colors"
-                title="Change which bento card is yours"
+                onClick={() => setWeekStart((w) => addDaysISO(w, -7))}
+                className="p-2.5 rounded-xl text-zinc-400 hover:text-white hover:bg-violet-500/15 transition-colors"
+                aria-label="Previous week"
               >
-                <UserCircle2 className="w-4 h-4 text-violet-300/80" />
-                <span className="hidden sm:inline max-w-[200px] truncate">
-                  My card:{" "}
-                  {myWorkboardRole
-                    ? WORKBOARD_SELF_PICK.find((p) => p.id === myWorkboardRole)?.label ||
-                      roleLabel(myWorkboardRole)
-                    : "Set role"}
-                </span>
-                <span className="sm:hidden">My card</span>
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="px-4 text-sm font-medium text-white min-w-[200px] text-center tabular-nums">
+                {fmtWeekRange(weekStart)}
+              </span>
+              <button
+                type="button"
+                onClick={() => setWeekStart((w) => addDaysISO(w, 7))}
+                className="p-2.5 rounded-xl text-zinc-400 hover:text-white hover:bg-violet-500/15 transition-colors"
+                aria-label="Next week"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setWeekStart(getMondayISO())}
+                className="ml-0.5 mr-1 px-3 py-2 text-xs font-semibold rounded-xl border border-violet-500/35 bg-violet-600/25 text-white hover:bg-violet-600/45 transition-colors shadow-[0_0_24px_-6px_rgba(124,58,237,0.5)]"
+              >
+                This week
               </button>
             </div>
-          )}
-        </div>
+
+            <div className={`inline-flex ${BENTO_SURFACE} p-1`}>
+              <button
+                type="button"
+                onClick={() => setView("list")}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-colors ${view === "list"
+                    ? "bg-violet-600 text-white shadow-lg shadow-violet-600/35"
+                    : "text-zinc-400 hover:text-white hover:bg-violet-500/10"
+                  }`}
+              >
+                <List className="w-4 h-4" />
+                List
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("gallery")}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-colors ${view === "gallery"
+                    ? "bg-violet-600 text-white shadow-lg shadow-violet-600/35"
+                    : "text-zinc-400 hover:text-white hover:bg-violet-500/10"
+                  }`}
+              >
+                <LayoutGrid className="w-4 h-4" />
+                Gallery
+              </button>
+            </div>
+            {user?.email && (
+              <div className={`${BENTO_SURFACE} p-1 flex items-center`}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMyRoleDialogForced(false);
+                    setMyRoleDialogOpen(true);
+                  }}
+                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-xl text-zinc-300 hover:text-white hover:bg-violet-500/10 transition-colors"
+                  title="Change which bento card is yours"
+                >
+                  <UserCircle2 className="w-4 h-4 text-violet-300/80" />
+                  <span className="hidden sm:inline max-w-[200px] truncate">
+                    My card:{" "}
+                    {myWorkboardRole
+                      ? WORKBOARD_SELF_PICK.find((p) => p.id === myWorkboardRole)?.label ||
+                      roleLabel(myWorkboardRole)
+                      : "Set role"}
+                  </span>
+                  <span className="sm:hidden">My card</span>
+                </button>
+              </div>
+            )}
+          </div>
         </ScrollReveal>
 
         <ScrollReveal delay={0.08}>
-        {view === "gallery" ? (
-          <GalleryView
-            byRole={byRole}
-            myWorkboardRole={myWorkboardRole}
-            addAssignment={addAssignment}
-            removeAssignment={removeAssignment}
-            patchAssignment={patchAssignment}
-            patchPrimaryTask={patchPrimaryTask}
-            addPrimaryTask={addPrimaryTask}
-            removePrimaryTask={removePrimaryTask}
-            addChunk={addChunk}
-            removeChunk={removeChunk}
-            updateChunk={updateChunk}
-            addInterrupt={addInterrupt}
-            removeInterrupt={removeInterrupt}
-            updateInterrupt={updateInterrupt}
-          />
-        ) : (
-          <ListView
-            weekAssignments={weekAssignments}
-            myWorkboardRole={myWorkboardRole}
-            addAssignment={addAssignment}
-            removeAssignment={removeAssignment}
-            patchAssignment={patchAssignment}
-            patchPrimaryTask={patchPrimaryTask}
-            addPrimaryTask={addPrimaryTask}
-            removePrimaryTask={removePrimaryTask}
-            addChunk={addChunk}
-            removeChunk={removeChunk}
-            updateChunk={updateChunk}
-            addInterrupt={addInterrupt}
-            removeInterrupt={removeInterrupt}
-            updateInterrupt={updateInterrupt}
-          />
-        )}
+          {view === "gallery" ? (
+            <GalleryView
+              byRole={byRole}
+              myWorkboardRole={myWorkboardRole}
+              addAssignment={addAssignment}
+              removeAssignment={removeAssignment}
+              patchAssignment={patchAssignment}
+              patchPrimaryTask={patchPrimaryTask}
+              addPrimaryTask={addPrimaryTask}
+              removePrimaryTask={removePrimaryTask}
+              addChunk={addChunk}
+              removeChunk={removeChunk}
+              updateChunk={updateChunk}
+              addInterrupt={addInterrupt}
+              removeInterrupt={removeInterrupt}
+              updateInterrupt={updateInterrupt}
+            />
+          ) : (
+            <ListView
+              weekAssignments={weekAssignments}
+              myWorkboardRole={myWorkboardRole}
+              addAssignment={addAssignment}
+              removeAssignment={removeAssignment}
+              patchAssignment={patchAssignment}
+              patchPrimaryTask={patchPrimaryTask}
+              addPrimaryTask={addPrimaryTask}
+              removePrimaryTask={removePrimaryTask}
+              addChunk={addChunk}
+              removeChunk={removeChunk}
+              updateChunk={updateChunk}
+              addInterrupt={addInterrupt}
+              removeInterrupt={removeInterrupt}
+              updateInterrupt={updateInterrupt}
+            />
+          )}
         </ScrollReveal>
       </div>
     </div>
@@ -1479,7 +1475,8 @@ function AssignmentEditor({
           onChange={(e) => patchAssignment(a.id, { description: e.target.value })}
           rows={compact ? 2 : 3}
           placeholder="Context, links, expectations…"
-          className={cn("mt-1.5 w-full rounded-xl px-3 py-2.5 text-sm resize-y", GLASS_INPUT)}
+          className={cn("mt-1.5 w-full rounded-xl px-3 py-2.5 text-sm resize-y max-h-[220px]", GLASS_TEXTAREA)}
+          style={{ scrollbarGutter: "stable" as any }}
         />
       </div>
 
@@ -1557,7 +1554,8 @@ function AssignmentEditor({
                   onChange={(e) => updateInterrupt(a.id, it.id, { note: e.target.value })}
                   placeholder="Note: e.g. spent 4h here today; main chunk slipped…"
                   rows={2}
-                  className="w-full rounded-lg border border-white/10 bg-white/[0.03] backdrop-blur-sm px-2.5 py-1.5 text-sm text-zinc-100 resize-y focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+                  className="w-full rounded-lg border border-white/10 bg-white/[0.03] backdrop-blur-sm px-2.5 py-1.5 text-sm text-zinc-100 resize-y max-h-[220px] overflow-y-auto focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+                  style={{ scrollbarGutter: "stable" as any }}
                 />
                 <div className="pt-1">
                   <label className="text-xs font-medium text-zinc-500">Mentions for this item</label>
@@ -1632,128 +1630,128 @@ function ListView({
     <div className="space-y-4">
       <div className="columns-1 sm:columns-2 xl:columns-3 gap-3 sm:gap-4">
         {weekAssignments.map((a) => {
-        const open = listIsOpen(a.id);
-        const { headline, dueLine } = listCardMainSummary(a);
-        const flatChunks = flattenAssignmentChunks(a);
-        const pct = assignmentRollupPercent(a);
-        const listIntPct = interruptRollupPercent(a.interrupts);
-        const listIntDone = a.interrupts.filter((i) => i.status === "completed").length;
-        const isMyCard = myWorkboardRole !== null && a.role_id === myWorkboardRole;
-        const today = todayISO();
-        const chunksDone = flatChunks.filter((c) => c.status === "completed").length;
-        const chunksActive = flatChunks.filter((c) => c.status === "in_progress").length;
-        const chunksLeft = flatChunks.filter((c) => c.status === "not_started").length;
-        const doneToday = flatChunks.filter((c) => c.completed_at === today).length;
-        return (
-          <div
-            key={a.id}
-            className={cn(
-              BENTO_SURFACE,
-              "overflow-hidden flex flex-col min-h-0 min-w-0 break-inside-avoid mb-3 sm:mb-4",
-              isMyCard && "ring-2 ring-violet-500/45 shadow-[0_0_50px_-14px_rgba(124,58,237,0.45)]",
-            )}
-          >
-            <div className="flex items-stretch gap-0 shrink-0">
-              <button
-                type="button"
-                onClick={() => toggleListCard(a.id)}
-                className="flex flex-1 items-start gap-2 sm:gap-3 p-3 sm:p-4 text-left hover:bg-violet-500/[0.06] transition-colors min-w-0"
-              >
-                {open ? (
-                  <ChevronDown className="w-4 h-4 sm:w-5 sm:h-5 text-zinc-500 shrink-0 mt-0.5" />
-                ) : (
-                  <ChevronRightIcon className="w-4 h-4 sm:w-5 sm:h-5 text-zinc-500 shrink-0 mt-0.5" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium text-violet-300/90 flex items-center flex-wrap gap-2">
-                    {roleLabel(a.role_id)}
-                    {isMyCard && (
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-200/90 px-1.5 py-0.5 rounded-md bg-violet-500/25 border border-violet-400/30">
-                        You
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-sm sm:text-[15px] font-medium text-white mt-0.5 sm:mt-1 break-words line-clamp-3">
-                    {headline}
-                  </div>
-                  <div className="mt-2 flex items-center justify-between gap-3">
-                    <div className="flex-1 min-w-0 space-y-1.5">
-                      {dueLine && (
-                        <span className="block text-[11px] text-zinc-500 truncate">{dueLine}</span>
-                      )}
-                      <div className="flex flex-wrap gap-1.5">
-                        {doneToday > 0 && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-200 border border-emerald-500/30">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />{doneToday} today
-                          </span>
-                        )}
-                        {chunksDone > 0 && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-violet-500/15 text-violet-200 border border-violet-500/20">
-                            <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />{chunksDone} done
-                          </span>
-                        )}
-                        {chunksActive > 0 && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/15 text-amber-200 border border-amber-500/20">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />{chunksActive} active
-                          </span>
-                        )}
-                        {chunksLeft > 0 && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-white/[0.05] text-zinc-400 border border-white/[0.08]">
-                            <span className="w-1.5 h-1.5 rounded-full bg-zinc-600 inline-block" />{chunksLeft} left
-                          </span>
-                        )}
-                        {flatChunks.length === 0 && (
-                          <span className="text-[11px] text-zinc-600">No steps yet</span>
-                        )}
-                        {a.interrupts.length > 0 && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-500/10 text-orange-300/80 border border-orange-500/15">
-                            <span className="w-1.5 h-1.5 rounded-full bg-orange-400 inline-block" />{listIntDone}/{a.interrupts.length} extras
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <MiniRing pct={pct} />
-                  </div>
-                  {!open && allAssignmentTags(a).length > 0 && (
-                    <div className="mt-1.5 sm:mt-2">
-                      <TagChipsRow tags={allAssignmentTags(a)} max={4} />
-                    </div>
-                  )}
-                </div>
-              </button>
-              <div className="flex items-start p-2 sm:p-3 shrink-0">
+          const open = listIsOpen(a.id);
+          const { headline, dueLine } = listCardMainSummary(a);
+          const flatChunks = flattenAssignmentChunks(a);
+          const pct = assignmentRollupPercent(a);
+          const listIntPct = interruptRollupPercent(a.interrupts);
+          const listIntDone = a.interrupts.filter((i) => i.status === "completed").length;
+          const isMyCard = myWorkboardRole !== null && a.role_id === myWorkboardRole;
+          const today = todayISO();
+          const chunksDone = flatChunks.filter((c) => c.status === "completed").length;
+          const chunksActive = flatChunks.filter((c) => c.status === "in_progress").length;
+          const chunksLeft = flatChunks.filter((c) => c.status === "not_started").length;
+          const doneToday = flatChunks.filter((c) => c.completed_at === today).length;
+          return (
+            <div
+              key={a.id}
+              className={cn(
+                BENTO_SURFACE,
+                "overflow-hidden flex flex-col min-h-0 min-w-0 break-inside-avoid mb-3 sm:mb-4",
+                isMyCard && "ring-2 ring-violet-500/45 shadow-[0_0_50px_-14px_rgba(124,58,237,0.45)]",
+              )}
+            >
+              <div className="flex items-stretch gap-0 shrink-0">
                 <button
                   type="button"
-                  onClick={() => removeAssignment(a.id)}
-                  className="p-1.5 sm:p-2 rounded-xl text-zinc-500 hover:text-red-300 hover:bg-red-500/10 transition-colors"
-                  title="Remove assignment"
+                  onClick={() => toggleListCard(a.id)}
+                  className="flex flex-1 items-start gap-2 sm:gap-3 p-3 sm:p-4 text-left hover:bg-violet-500/[0.06] transition-colors min-w-0"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  {open ? (
+                    <ChevronDown className="w-4 h-4 sm:w-5 sm:h-5 text-zinc-500 shrink-0 mt-0.5" />
+                  ) : (
+                    <ChevronRightIcon className="w-4 h-4 sm:w-5 sm:h-5 text-zinc-500 shrink-0 mt-0.5" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium text-violet-300/90 flex items-center flex-wrap gap-2">
+                      {roleLabel(a.role_id)}
+                      {isMyCard && (
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-200/90 px-1.5 py-0.5 rounded-md bg-violet-500/25 border border-violet-400/30">
+                          You
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-sm sm:text-[15px] font-medium text-white mt-0.5 sm:mt-1 break-words line-clamp-3">
+                      {headline}
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-3">
+                      <div className="flex-1 min-w-0 space-y-1.5">
+                        {dueLine && (
+                          <span className="block text-[11px] text-zinc-500 truncate">{dueLine}</span>
+                        )}
+                        <div className="flex flex-wrap gap-1.5">
+                          {doneToday > 0 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-200 border border-emerald-500/30">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />{doneToday} today
+                            </span>
+                          )}
+                          {chunksDone > 0 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-violet-500/15 text-violet-200 border border-violet-500/20">
+                              <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />{chunksDone} done
+                            </span>
+                          )}
+                          {chunksActive > 0 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/15 text-amber-200 border border-amber-500/20">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />{chunksActive} active
+                            </span>
+                          )}
+                          {chunksLeft > 0 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-white/[0.05] text-zinc-400 border border-white/[0.08]">
+                              <span className="w-1.5 h-1.5 rounded-full bg-zinc-600 inline-block" />{chunksLeft} left
+                            </span>
+                          )}
+                          {flatChunks.length === 0 && (
+                            <span className="text-[11px] text-zinc-600">No steps yet</span>
+                          )}
+                          {a.interrupts.length > 0 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-500/10 text-orange-300/80 border border-orange-500/15">
+                              <span className="w-1.5 h-1.5 rounded-full bg-orange-400 inline-block" />{listIntDone}/{a.interrupts.length} extras
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <MiniRing pct={pct} />
+                    </div>
+                    {!open && allAssignmentTags(a).length > 0 && (
+                      <div className="mt-1.5 sm:mt-2">
+                        <TagChipsRow tags={allAssignmentTags(a)} max={4} />
+                      </div>
+                    )}
+                  </div>
                 </button>
+                <div className="flex items-start p-2 sm:p-3 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => removeAssignment(a.id)}
+                    className="p-1.5 sm:p-2 rounded-xl text-zinc-500 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+                    title="Remove assignment"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
+              {open && (
+              <div className="border-t border-white/10 px-3 pb-3 pt-2 sm:px-4 sm:pb-4 sm:pt-3 bg-black/40 backdrop-blur-xl max-h-[min(72vh,780px)] overflow-y-auto overscroll-y-contain">
+                  <AssignmentEditor
+                    a={a}
+                    embedBelowListHeader
+                    removeAssignment={removeAssignment}
+                    patchAssignment={patchAssignment}
+                    patchPrimaryTask={patchPrimaryTask}
+                    addPrimaryTask={addPrimaryTask}
+                    removePrimaryTask={removePrimaryTask}
+                    addChunk={addChunk}
+                    removeChunk={removeChunk}
+                    updateChunk={updateChunk}
+                    addInterrupt={addInterrupt}
+                    removeInterrupt={removeInterrupt}
+                    updateInterrupt={updateInterrupt}
+                  />
+                </div>
+              )}
             </div>
-            {open && (
-              <div className="border-t border-white/10 px-3 pb-3 pt-2 sm:px-4 sm:pb-4 sm:pt-3 bg-black/40 backdrop-blur-xl">
-                <AssignmentEditor
-                  a={a}
-                  embedBelowListHeader
-                  removeAssignment={removeAssignment}
-                  patchAssignment={patchAssignment}
-                  patchPrimaryTask={patchPrimaryTask}
-                  addPrimaryTask={addPrimaryTask}
-                  removePrimaryTask={removePrimaryTask}
-                  addChunk={addChunk}
-                  removeChunk={removeChunk}
-                  updateChunk={updateChunk}
-                  addInterrupt={addInterrupt}
-                  removeInterrupt={removeInterrupt}
-                  updateInterrupt={updateInterrupt}
-                />
-              </div>
-            )}
-          </div>
-        );
-      })}
+          );
+        })}
       </div>
 
       {missingRoles.length > 0 && (
@@ -1880,11 +1878,13 @@ function GalleryView({
                         <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />{doneChunks} done
                       </span>
                     )}
-                    {(() => { const active = flatC.filter(c => c.status === "in_progress").length; return active > 0 ? (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/15 text-amber-200 border border-amber-500/20">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />{active} active
-                      </span>
-                    ) : null; })()}
+                    {(() => {
+                      const active = flatC.filter(c => c.status === "in_progress").length; return active > 0 ? (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/15 text-amber-200 border border-amber-500/20">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />{active} active
+                        </span>
+                      ) : null;
+                    })()}
                     {flatC.length === 0 && <span className="text-[10px] text-zinc-600">No steps</span>}
                   </div>
                   {a.interrupts.length > 0 && (
@@ -1995,7 +1995,7 @@ function GalleryView({
               </button>
             </div>
             {open && (
-              <div className="border-t border-white/10 p-4 bg-black/45 backdrop-blur-2xl">
+              <div className="border-t border-white/10 p-4 bg-black/45 backdrop-blur-2xl max-h-[min(72vh,780px)] overflow-y-auto overscroll-y-contain">
                 <AssignmentEditor
                   a={a}
                   compact
