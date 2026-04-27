@@ -572,15 +572,29 @@ export default function TeamPerformance() {
       </div>
 
       {/* ============================== RESET (stress reliever) ============================== */}
-      <button
-        type="button"
-        onClick={() => setResetOpen(true)}
-        className="fixed bottom-24 right-6 z-[60] rounded-2xl border border-violet-500/25 bg-zinc-950/70 backdrop-blur-xl px-4 py-3 text-sm font-black text-white shadow-lg shadow-violet-500/10 hover:bg-zinc-900/70 transition-colors flex items-center gap-2"
-        title="Reset"
-      >
-        <Wind className="w-4 h-4 text-violet-300" />
-        Reset
-      </button>
+      <div className="fixed bottom-24 right-6 z-[60] flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setResetOpen(true)}
+          className="rounded-2xl border border-violet-500/25 bg-zinc-950/70 backdrop-blur-xl px-4 py-3 text-sm font-black text-white shadow-lg shadow-violet-500/10 hover:bg-zinc-900/70 transition-colors flex items-center gap-2"
+          title="Reset"
+        >
+          <Wind className="w-4 h-4 text-violet-300" />
+          Reset
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setResetOpen(true);
+            setBreathMode("touchgrass");
+          }}
+          className="rounded-2xl border border-emerald-500/20 bg-zinc-950/70 backdrop-blur-xl px-4 py-3 text-sm font-black text-white shadow-lg shadow-emerald-500/10 hover:bg-zinc-900/70 transition-colors flex items-center gap-2"
+          title="Touch grass"
+        >
+          <Leaf className="w-4 h-4 text-emerald-300" />
+          Touch grass
+        </button>
+      </div>
 
       <Dialog open={resetOpen} onOpenChange={setResetOpen}>
         <DialogContent className="max-w-md rounded-3xl border border-zinc-800 bg-zinc-950/90 backdrop-blur-xl text-zinc-200">
