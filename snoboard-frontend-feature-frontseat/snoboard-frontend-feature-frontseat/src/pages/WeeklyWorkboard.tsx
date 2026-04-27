@@ -1305,6 +1305,22 @@ function AssignmentEditor({
     [a.primary_tasks],
   );
 
+  const [openMainTasks, setOpenMainTasks] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    // Keep existing open/closed state, but ensure at least the first task is open.
+    setOpenMainTasks((prev) => {
+      const next: Record<string, boolean> = { ...prev };
+      primarySorted.forEach((pt, idx) => {
+        if (next[pt.id] === undefined) next[pt.id] = idx === 0;
+      });
+      // Drop removed ids
+      Object.keys(next).forEach((id) => {
+        if (!primarySorted.some((pt) => pt.id === id)) delete next[id];
+      });
+      return next;
+    });
+  }, [primarySorted]);
+
   return (
     <div className={shellClass}>
       {!embedBelowListHeader && (
@@ -1340,61 +1356,103 @@ function AssignmentEditor({
         {primarySorted.map((pt, idx) => {
           const ptPct = rollupPercent(pt.chunks);
           const lineDone = pt.completed || primaryTaskAllStepsDone(pt);
+          const stepsTotal = pt.chunks.length;
+          const stepsDone = pt.chunks.filter((c) => c.status === "completed").length;
+          const isOpen = openMainTasks[pt.id] !== false;
           return (
             <div
               key={pt.id}
               className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-3 sm:p-4 space-y-3 backdrop-blur-sm"
             >
-              <div className="flex items-start gap-2">
-                <input
-                  type="checkbox"
-                  className="mt-2.5 h-4 w-4 rounded border-white/20 bg-zinc-900 text-violet-500 focus:ring-violet-500/40"
-                  checked={lineDone}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      patchPrimaryTask(a.id, pt.id, { completed: true });
-                    } else {
-                      patchPrimaryTask(a.id, pt.id, { completed: false });
-                      if (primaryTaskAllStepsDone(pt) && pt.chunks.length) {
-                        const first = pt.chunks[0];
-                        updateChunk(a.id, pt.id, first.id, { status: "in_progress" });
-                      }
-                    }
-                  }}
-                  title="Mark this main task done"
-                />
-                <div className="flex-1 min-w-0 space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setOpenMainTasks((p) => ({ ...p, [pt.id]: !(p[pt.id] !== false) }))}
+                className="w-full flex items-start gap-2 text-left"
+              >
+                <span className="mt-0.5 text-zinc-500 shrink-0">
+                  {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRightIcon className="w-4 h-4" />}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[11px] text-zinc-500 shrink-0">Main task {idx + 1}</span>
-                    {a.primary_tasks.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removePrimaryTask(a.id, pt.id)}
-                        className="p-1 rounded-lg text-zinc-600 hover:text-red-400 ml-auto"
-                        title="Remove this main task"
+                    <span className="text-[11px] text-zinc-600">·</span>
+                    <span className="text-[11px] text-zinc-400">
+                      Steps {stepsDone}/{stepsTotal || 0}
+                    </span>
+                    {stepsTotal > 0 && (
+                      <span className="text-[11px] text-zinc-600">· {ptPct}%</span>
+                    )}
+                    <span className="ml-auto flex items-center gap-2">
+                      <span
+                        className={cn(
+                          "text-[10px] font-semibold px-2 py-0.5 rounded-full border",
+                          stepsTotal > 0 && stepsDone === stepsTotal
+                            ? "bg-emerald-500/10 text-emerald-200 border-emerald-500/20"
+                            : "bg-white/[0.05] text-zinc-300 border-white/10",
+                        )}
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                        {stepsTotal > 0 && stepsDone === stepsTotal ? "Done" : "In progress"}
+                      </span>
+                    </span>
                   </div>
-                  <textarea
-                    value={pt.title}
-                    onChange={(e) => patchPrimaryTask(a.id, pt.id, { title: e.target.value })}
-                    placeholder="What you’re shipping this week…"
-                    rows={1}
-                    ref={autoGrow220}
-                    onInput={(e) => autoGrow220(e.currentTarget)}
-                    className={cn(
-                      "w-full rounded-xl px-3 py-2.5 text-sm resize-none",
-                      GLASS_TEXTAREA,
-                      lineDone && "line-through decoration-wavy decoration-zinc-400/80 text-zinc-400",
-                    )}
-                    style={{ scrollbarGutter: "stable" as any }}
-                  />
+                  <div className="mt-1 text-sm font-medium text-white/90 line-clamp-2">
+                    {pt.title?.trim() ? pt.title.trim() : "Untitled main task"}
+                  </div>
                 </div>
-              </div>
+              </button>
 
-              <div className="grid gap-3 sm:grid-cols-2 pl-0 sm:pl-7">
+              {isOpen && (
+                <>
+                  <div className="flex items-start gap-2 pt-1">
+                    <input
+                      type="checkbox"
+                      className="mt-2.5 h-4 w-4 rounded border-white/20 bg-zinc-900 text-violet-500 focus:ring-violet-500/40"
+                      checked={lineDone}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          patchPrimaryTask(a.id, pt.id, { completed: true });
+                        } else {
+                          patchPrimaryTask(a.id, pt.id, { completed: false });
+                          if (primaryTaskAllStepsDone(pt) && pt.chunks.length) {
+                            const first = pt.chunks[0];
+                            updateChunk(a.id, pt.id, first.id, { status: "in_progress" });
+                          }
+                        }
+                      }}
+                      title="Mark this main task done"
+                    />
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-zinc-500">Title</span>
+                        {a.primary_tasks.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); removePrimaryTask(a.id, pt.id); }}
+                            className="p-1 rounded-lg text-zinc-600 hover:text-red-400 ml-auto"
+                            title="Remove this main task"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                      <textarea
+                        value={pt.title}
+                        onChange={(e) => patchPrimaryTask(a.id, pt.id, { title: e.target.value })}
+                        placeholder="What you’re shipping this week…"
+                        rows={1}
+                        ref={autoGrow220}
+                        onInput={(e) => autoGrow220(e.currentTarget)}
+                        className={cn(
+                          "w-full rounded-xl px-3 py-2.5 text-sm resize-none",
+                          GLASS_TEXTAREA,
+                          lineDone && "line-through decoration-wavy decoration-zinc-400/80 text-zinc-400",
+                        )}
+                        style={{ scrollbarGutter: "stable" as any }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2 pl-0 sm:pl-7">
                 <div>
                   <label className="text-xs font-medium text-zinc-500">Due date</label>
                   <input
@@ -1482,6 +1540,8 @@ function AssignmentEditor({
                   </ul>
                 )}
               </div>
+                </>
+              )}
             </div>
           );
         })}
