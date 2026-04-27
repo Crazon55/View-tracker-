@@ -260,7 +260,8 @@ export default function TeamPerformance() {
   const [selectedPerson, setSelectedPerson] = useState<string>("");
   const [breathMode, setBreathMode] = useState<"idle" | "breathing" | "done" | "touchgrass">("idle");
   const [breathLeft, setBreathLeft] = useState(60);
-  const [grassLeft, setGrassLeft] = useState(120);
+  const [grassLeft, setGrassLeft] = useState(300);
+  const [resetIntent, setResetIntent] = useState<"idle" | "touchgrass">("idle");
 
   const streakIdeasQ = useQuery({
     queryKey: ["teams-performance-streak-ideas"],
@@ -308,13 +309,13 @@ export default function TeamPerformance() {
     if (!resetOpen) {
       setBreathMode("idle");
       setBreathLeft(60);
-      setGrassLeft(120);
+      setGrassLeft(300);
       return;
     }
-    setBreathMode("idle");
+    setBreathMode(resetIntent === "touchgrass" ? "touchgrass" : "idle");
     setBreathLeft(60);
-    setGrassLeft(120);
-  }, [resetOpen]);
+    setGrassLeft(300);
+  }, [resetOpen, resetIntent]);
 
   useEffect(() => {
     if (!resetOpen || breathMode !== "breathing") return;
@@ -334,7 +335,7 @@ export default function TeamPerformance() {
 
   useEffect(() => {
     if (!resetOpen || breathMode !== "touchgrass") return;
-    setGrassLeft(120);
+    setGrassLeft(300);
     const t = window.setInterval(() => {
       setGrassLeft((s) => {
         if (s <= 1) {
@@ -585,8 +586,8 @@ export default function TeamPerformance() {
         <button
           type="button"
           onClick={() => {
+            setResetIntent("touchgrass");
             setResetOpen(true);
-            setBreathMode("touchgrass");
           }}
           className="rounded-2xl border border-emerald-500/20 bg-zinc-950/70 backdrop-blur-xl px-4 py-3 text-sm font-black text-white shadow-lg shadow-emerald-500/10 hover:bg-zinc-900/70 transition-colors flex items-center gap-2"
           title="Touch grass"
@@ -666,7 +667,7 @@ export default function TeamPerformance() {
                 className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-100 px-3 py-2 text-sm font-bold transition-colors"
               >
                 <Leaf className="w-4 h-4" />
-                Touch grass (2m)
+                Touch grass (5m)
               </button>
             )}
             {breathMode !== "idle" && breathMode !== "done" && (
