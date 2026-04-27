@@ -693,9 +693,14 @@ export default function WeeklyWorkboard() {
       .filter((a) => (roleFilter === "all" ? true : a.role_id === roleFilter))
       .map((a) => {
         if (dateFilter !== "today") return a;
+        const keep = a.primary_tasks.filter((pt) => {
+          const dueToday = String(pt.due_date || "").slice(0, 10) === today;
+          const completedSomethingToday = (pt.chunks || []).some((c) => c.completed_at === today);
+          return dueToday || completedSomethingToday;
+        });
         return {
           ...a,
-          primary_tasks: a.primary_tasks.filter((pt) => String(pt.due_date || "").slice(0, 10) === today),
+          primary_tasks: keep,
         };
       })
       .filter((a) => dateFilter !== "today" || a.primary_tasks.length > 0 || a.interrupts.length > 0);
