@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   motion,
   AnimatePresence,
@@ -10,7 +11,7 @@ import {
   useAnimationControls,
 } from "framer-motion";
 import { getSixDayMonth, getTeamsPerformance, getTrackerIdeas, getTrackerNiches } from "@/services/api";
-import { buildTeamPerformanceFromTracker } from "@/lib/teamPerformanceCompute";
+import { buildTeamPerformanceFromTracker, computeStreaksFromTrackerIdeas, type StreakDigest } from "@/lib/teamPerformanceCompute";
 import {
   Trophy,
   Flame,
@@ -27,10 +28,45 @@ import {
   TrendingUp,
   Star,
   Loader2,
+  ChevronDown,
+  ChevronRight,
+  Wind,
+  Leaf,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
 /* ============================== helpers ============================== */
+
+function normalizePersonKey(s: string) {
+  return String(s || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[._-]+/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+function guessDisplayNameFromEmail(email: string | undefined | null) {
+  if (!email) return "";
+  const raw = String(email).split("@")[0] || "";
+  const cleaned = raw.replace(/[._-]+/g, " ").trim();
+  return cleaned
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function streakCountFromTail(days: boolean[]) {
+  let c = 0;
+  for (let i = days.length - 1; i >= 0; i--) {
+    if (!days[i]) break;
+    c++;
+  }
+  return c;
+}
 
 function formatViews(n: number | undefined | null): string {
   const v = Number(n || 0);
@@ -211,9 +247,25 @@ async function fetchPerf(): Promise<PerfData> {
 /* ============================== page ============================== */
 
 export default function TeamPerformance() {
+  const { user } = useAuth();
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["teams-performance"],
     queryFn: fetchPerf,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+  const [showDetails, setShowDetails] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [streakOpen, setStreakOpen] = useState(false);
+  const [selectedPerson, setSelectedPerson] = useState<string>("");
+  const [breathMode, setBreathMode] = useState<"idle" | "breathing" | "done" | "touchgrass">("idle");
+  const [breathLeft, setBreathLeft] = useState(60);
+  const [grassLeft, setGrassLeft] = useState(120);
+
+  const streakIdeasQ = useQuery({
+    queryKey: ["teams-performance-streak-ideas"],
+    queryFn: () => getTrackerIdeas(),
+    enabled: streakOpen,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
@@ -247,6 +299,73 @@ export default function TeamPerformance() {
   const totalViews6d = teams.reduce((s: number, t: any) => s + (t.views_6d || 0), 0);
   const totalViewsAll = teams.reduce((s: number, t: any) => s + (t.views_total || 0), 0);
 
+  useEffect(() => {
+    if (selectedPerson) return;
+    const byEmail = guessDisplayNameFromEmail(user?.email);
+    const targetKey = normalizePersonKey(byEmail);
+    const found =
+      people.find((p: any) => normalizePersonKey(p?.name) === targetKey)?.name ??
+      people.find((p: any) => normalizePersonKey(p?.name).includes(targetKey) && targetKey.length >= 3)?.name ??
+      people[0]?.name ??
+      "";
+    if (found) setSelectedPerson(found);
+  }, [people, selectedPerson, user?.email]);
+
+  const streaks: StreakDigest | null = useMemo(() => {
+    const ideas = streakIdeasQ.data;
+    if (!Array.isArray(ideas) || ideas.length === 0) return null;
+    return computeStreaksFromTrackerIdeas(ideas, 7);
+  }, [streakIdeasQ.data]);
+
+  const selectedStreak =
+    selectedPerson && streaks?.by_person?.[selectedPerson] ? streaks.by_person[selectedPerson] : null;
+  const ideaNow = selectedStreak ? streakCountFromTail(selectedStreak.idea.last7) : 0;
+  const postNow = selectedStreak ? streakCountFromTail(selectedStreak.posting.last7) : 0;
+
+  useEffect(() => {
+    if (!resetOpen) {
+      setBreathMode("idle");
+      setBreathLeft(60);
+      setGrassLeft(120);
+      return;
+    }
+    setBreathMode("idle");
+    setBreathLeft(60);
+    setGrassLeft(120);
+  }, [resetOpen]);
+
+  useEffect(() => {
+    if (!resetOpen || breathMode !== "breathing") return;
+    setBreathLeft(60);
+    const t = window.setInterval(() => {
+      setBreathLeft((s) => {
+        if (s <= 1) {
+          window.clearInterval(t);
+          setBreathMode("done");
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(t);
+  }, [resetOpen, breathMode]);
+
+  useEffect(() => {
+    if (!resetOpen || breathMode !== "touchgrass") return;
+    setGrassLeft(120);
+    const t = window.setInterval(() => {
+      setGrassLeft((s) => {
+        if (s <= 1) {
+          window.clearInterval(t);
+          setBreathMode("done");
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(t);
+  }, [resetOpen, breathMode]);
+
   return (
     <div className="min-h-screen bg-zinc-950 pt-20 pb-20 px-4 sm:px-6 overflow-hidden relative">
       {/* bg decor */}
@@ -273,11 +392,113 @@ export default function TeamPerformance() {
                 Garfields vs Goofies — same stats as below, in a calmer read.
               </p>
             </div>
-            {data._source === "client" && (
-              <p className="text-[11px] text-amber-400/90 border border-amber-500/25 rounded-lg px-3 py-2 bg-amber-500/5 max-w-xs">
-                Showing client-computed stats — redeploy the API for live aggregates.
-              </p>
-            )}
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              <Popover open={streakOpen} onOpenChange={setStreakOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className={cn(
+                      "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-[11px] font-black",
+                      "border-white/10 bg-white/[0.04] hover:bg-white/[0.07] text-zinc-200 transition-colors",
+                    )}
+                    title="Streaks"
+                  >
+                    <Flame className="w-4 h-4 text-orange-400" />
+                    <span className="text-zinc-300">{selectedPerson || "Streaks"}</span>
+                    <span className="text-zinc-600">·</span>
+                    <span className="text-violet-200">Ideas {ideaNow}</span>
+                    <span className="text-zinc-600">·</span>
+                    <span className="text-orange-200">Posts {postNow}</span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="end"
+                  className="w-[340px] rounded-2xl border border-zinc-800 bg-zinc-950/90 backdrop-blur-xl p-4 text-zinc-200"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400">Streaks</p>
+                      <p className="text-[11px] text-zinc-500 mt-1">Last 7 days. Click a name to switch.</p>
+                    </div>
+                    <div className="text-[11px] text-zinc-500 tabular-nums">
+                      {streakIdeasQ.isFetching ? "Updating…" : ""}
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
+                    {(people || []).map((p: any) => (
+                      <button
+                        key={p.name}
+                        type="button"
+                        onClick={() => setSelectedPerson(p.name)}
+                        className={cn(
+                          "text-xs font-semibold px-2.5 py-1 rounded-lg border transition-colors",
+                          selectedPerson === p.name
+                            ? "bg-amber-500/15 text-amber-200 border-amber-500/25"
+                            : "bg-white/[0.03] text-zinc-200 border-white/10 hover:bg-white/[0.06]",
+                        )}
+                      >
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+
+                  {!streaks ? (
+                    <div className="mt-4 text-sm text-zinc-500">
+                      {streakIdeasQ.isLoading ? "Loading…" : "No streak data yet."}
+                    </div>
+                  ) : (
+                    <div className="mt-4 space-y-4">
+                      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-bold text-violet-200 flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-violet-300" /> Idea-making
+                          </p>
+                          <p className="text-xs text-zinc-400 tabular-nums">Current: {ideaNow}</p>
+                        </div>
+                        <div className="mt-2 flex gap-1">
+                          {(selectedStreak?.idea.last7 ?? Array(7).fill(false)).map((ok, i) => (
+                            <span
+                              key={i}
+                              className={cn(
+                                "h-2.5 w-2.5 rounded-full border",
+                                ok ? "bg-violet-500/70 border-violet-400/40" : "bg-zinc-900 border-white/10",
+                              )}
+                            />
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-bold text-orange-200 flex items-center gap-2">
+                            <Rocket className="w-4 h-4 text-orange-300" /> Posting
+                          </p>
+                          <p className="text-xs text-zinc-400 tabular-nums">Current: {postNow}</p>
+                        </div>
+                        <div className="mt-2 flex gap-1">
+                          {(selectedStreak?.posting.last7 ?? Array(7).fill(false)).map((ok, i) => (
+                            <span
+                              key={i}
+                              className={cn(
+                                "h-2.5 w-2.5 rounded-full border",
+                                ok ? "bg-orange-500/70 border-orange-400/40" : "bg-zinc-900 border-white/10",
+                              )}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </PopoverContent>
+              </Popover>
+
+              {data._source === "client" && (
+                <p className="text-[11px] text-amber-400/90 border border-amber-500/25 rounded-lg px-3 py-2 bg-amber-500/5 max-w-xs">
+                  Showing client-computed stats — redeploy the API for live aggregates.
+                </p>
+              )}
+            </div>
           </div>
         </ScrollReveal>
 
@@ -301,20 +522,157 @@ export default function TeamPerformance() {
           />
         </ScrollReveal>
 
-        {/* ============================== TEAM CARDS ============================== */}
-        <ScrollReveal delay={0.08} className="mt-8">
-          <div className="grid gap-5 md:grid-cols-2">
-            {orderedTeams.map((team: any) => (
-              <TeamCard key={team.key} team={team} isLeader={leaderKey === team.key} />
-            ))}
+        {/* ============================== DETAILS TOGGLE ============================== */}
+        <div className="mt-6 sticky top-16 z-10">
+          <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/70 backdrop-blur-xl px-4 py-3 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-zinc-300">Keep it clean</p>
+              <p className="text-[11px] text-zinc-500 truncate">
+                Toggle extra sections (team breakdown + creator board)
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowDetails((v) => !v)}
+              className="shrink-0 inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] hover:bg-white/[0.07] text-zinc-200 px-3 py-2 text-xs font-bold transition-colors"
+            >
+              {showDetails ? (
+                <>
+                  <ChevronDown className="w-4 h-4 text-zinc-400" />
+                  Hide details
+                </>
+              ) : (
+                <>
+                  <ChevronRight className="w-4 h-4 text-zinc-400" />
+                  Show details
+                </>
+              )}
+            </button>
           </div>
-        </ScrollReveal>
+        </div>
 
-        {/* ============================== PEOPLE LEADERBOARD ============================== */}
-        <ScrollReveal delay={0.1}>
-          <PeopleLeaderboard people={people} windowDays={data.window_days ?? 6} />
-        </ScrollReveal>
+        {showDetails && (
+          <>
+            {/* ============================== TEAM CARDS ============================== */}
+            <ScrollReveal delay={0.08} className="mt-8">
+              <div className="grid gap-5 md:grid-cols-2">
+                {orderedTeams.map((team: any) => (
+                  <TeamCard key={team.key} team={team} isLeader={leaderKey === team.key} />
+                ))}
+              </div>
+            </ScrollReveal>
+
+            {/* ============================== PEOPLE LEADERBOARD ============================== */}
+            <ScrollReveal delay={0.1}>
+              <PeopleLeaderboard people={people} windowDays={data.window_days ?? 6} />
+            </ScrollReveal>
+          </>
+        )}
       </div>
+
+      {/* ============================== RESET (stress reliever) ============================== */}
+      <button
+        type="button"
+        onClick={() => setResetOpen(true)}
+        className="fixed bottom-6 right-6 z-20 rounded-2xl border border-violet-500/25 bg-zinc-950/70 backdrop-blur-xl px-4 py-3 text-sm font-black text-white shadow-lg shadow-violet-500/10 hover:bg-zinc-900/70 transition-colors flex items-center gap-2"
+        title="Reset"
+      >
+        <Wind className="w-4 h-4 text-violet-300" />
+        Reset
+      </button>
+
+      <Dialog open={resetOpen} onOpenChange={setResetOpen}>
+        <DialogContent className="max-w-md rounded-3xl border border-zinc-800 bg-zinc-950/90 backdrop-blur-xl text-zinc-200">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Wind className="w-5 h-5 text-violet-300" /> Reset
+            </DialogTitle>
+            <DialogDescription className="text-zinc-500">Quick reset. No clutter. Just breathe.</DialogDescription>
+          </DialogHeader>
+
+          <div className="mt-2 rounded-2xl border border-white/10 bg-white/[0.03] p-4 overflow-hidden">
+            <div className="flex items-center justify-between text-[11px] text-zinc-500 font-semibold">
+              <span className="uppercase tracking-[0.2em]">Breathing</span>
+              <span className="tabular-nums">
+                {breathMode === "breathing" ? `${breathLeft}s` : breathMode === "touchgrass" ? `${grassLeft}s` : "—"}
+              </span>
+            </div>
+
+            <div className="mt-4 flex items-center justify-center">
+              <motion.div
+                animate={
+                  breathMode === "breathing"
+                    ? { scale: [1, 1.25, 1.18, 1.35, 1], opacity: [0.9, 1, 0.95, 1, 0.9] }
+                    : breathMode === "touchgrass"
+                      ? { scale: [1, 1.15, 1], opacity: [0.9, 1, 0.9] }
+                      : { scale: 1, opacity: 0.95 }
+                }
+                transition={
+                  breathMode === "breathing"
+                    ? { duration: 12, repeat: Infinity, ease: "easeInOut" }
+                    : breathMode === "touchgrass"
+                      ? { duration: 4, repeat: Infinity, ease: "easeInOut" }
+                      : { duration: 0.2 }
+                }
+                className="relative w-32 h-32 rounded-full"
+              >
+                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-violet-500/35 via-fuchsia-500/20 to-orange-500/15 blur-xl" />
+                <div className="absolute inset-0 rounded-full bg-zinc-950 border border-white/10" />
+                <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.06),_transparent_60%)]" />
+              </motion.div>
+            </div>
+
+            <div className="mt-4 text-center">
+              {breathMode === "idle" && <p className="text-sm text-zinc-400">One minute. In… hold… out.</p>}
+              {breathMode === "breathing" && (
+                <p className="text-sm text-zinc-300">
+                  In… hold… out… <span className="text-zinc-500">(you’ve got this)</span>
+                </p>
+              )}
+              {breathMode === "touchgrass" && <p className="text-sm text-zinc-300">Touch grass time. Stand up. Look away.</p>}
+              {breathMode === "done" && <p className="text-sm text-emerald-200 font-semibold">Reset complete.</p>}
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2 justify-end">
+            {breathMode === "idle" && (
+              <button
+                type="button"
+                onClick={() => setBreathMode("breathing")}
+                className="inline-flex items-center gap-2 rounded-xl border border-violet-500/25 bg-violet-500/10 hover:bg-violet-500/15 text-violet-100 px-3 py-2 text-sm font-bold transition-colors"
+              >
+                Start 60s
+              </button>
+            )}
+            {breathMode === "done" && (
+              <button
+                type="button"
+                onClick={() => setBreathMode("touchgrass")}
+                className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-100 px-3 py-2 text-sm font-bold transition-colors"
+              >
+                <Leaf className="w-4 h-4" />
+                Touch grass (2m)
+              </button>
+            )}
+            {breathMode !== "idle" && breathMode !== "done" && (
+              <button
+                type="button"
+                onClick={() => setBreathMode("done")}
+                className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] hover:bg-white/[0.07] text-zinc-200 px-3 py-2 text-sm font-bold transition-colors"
+              >
+                Skip
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setResetOpen(false)}
+              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] hover:bg-white/[0.07] text-zinc-200 px-3 py-2 text-sm font-bold transition-colors"
+            >
+              Back to work
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

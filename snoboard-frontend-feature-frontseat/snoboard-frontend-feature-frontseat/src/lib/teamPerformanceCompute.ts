@@ -85,6 +85,107 @@ function normCreator(raw: any): string {
     .join(" ");
 }
 
+export type StreakSeries = { last7: boolean[] };
+export type StreakDigest = {
+  by_person: Record<
+    string,
+    {
+      idea: StreakSeries;
+      posting: StreakSeries;
+    }
+  >;
+  days: { iso: string }[];
+};
+
+function isoDateOnly(x: any): string | null {
+  if (!x) return null;
+  // handle already-ISO strings, timestamps, Date
+  if (x instanceof Date && !isNaN(x.getTime())) return x.toISOString().slice(0, 10);
+  const s = String(x).trim();
+  if (!s) return null;
+  // "YYYY-MM-DD..." is common; accept that directly
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
+function lastNDaysIso(n: number): string[] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const out: string[] = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    out.push(d.toISOString().slice(0, 10));
+  }
+  return out;
+}
+
+export function computeStreaksFromTrackerIdeas(ideas: any[], days: number = 7): StreakDigest {
+  const dayList = lastNDaysIso(days);
+  const dayIndex: Record<string, number> = {};
+  dayList.forEach((iso, idx) => (dayIndex[iso] = idx));
+
+  const byPerson: Record<string, { idea: boolean[]; posting: boolean[] }> = {};
+
+  function ensure(name: string) {
+    if (!byPerson[name]) byPerson[name] = { idea: Array(days).fill(false), posting: Array(days).fill(false) };
+    return byPerson[name];
+  }
+
+  for (const idea of ideas) {
+    const creator = normCreator(idea?.created_by);
+    if (!creator) continue;
+    const slot = ensure(creator);
+
+    // Idea-day: prefer created_at-like fields; else fall back to earliest posting date.
+    const createdIso =
+      isoDateOnly(idea?.created_at) ??
+      isoDateOnly(idea?.createdAt) ??
+      isoDateOnly(idea?.created_on) ??
+      isoDateOnly(idea?.createdOn);
+
+    let ideaDay = createdIso;
+    if (!ideaDay) {
+      const postings = Array.isArray((idea as any)?.tracker_postings) ? (idea as any).tracker_postings : [];
+      let earliest: string | null = null;
+      for (const p of postings) {
+        const di = isoDateOnly(p?.date);
+        if (!di) continue;
+        if (!earliest || di < earliest) earliest = di;
+      }
+      ideaDay = earliest;
+    }
+
+    if (ideaDay && dayIndex[ideaDay] !== undefined) {
+      slot.idea[dayIndex[ideaDay]] = true;
+    }
+
+    // Posting-day: any posting entry date in the window.
+    const postings = Array.isArray((idea as any)?.tracker_postings) ? (idea as any).tracker_postings : [];
+    for (const p of postings) {
+      const di = isoDateOnly(p?.date);
+      if (!di) continue;
+      const idx = dayIndex[di];
+      if (idx !== undefined) slot.posting[idx] = true;
+    }
+  }
+
+  const out: StreakDigest["by_person"] = {};
+  for (const name of Object.keys(byPerson)) {
+    out[name] = {
+      idea: { last7: byPerson[name].idea },
+      posting: { last7: byPerson[name].posting },
+    };
+  }
+
+  return {
+    by_person: out,
+    days: dayList.map((iso) => ({ iso })),
+  };
+}
+
 export function buildTeamPerformanceFromTracker(
   ideas: any[],
   niches: any[],
