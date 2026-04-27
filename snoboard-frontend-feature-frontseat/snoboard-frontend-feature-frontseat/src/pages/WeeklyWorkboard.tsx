@@ -241,7 +241,7 @@ function listCardMainSummary(a: MainAssignment): { headline: string; dueLine: st
   if (pts.length === 1) {
     return {
       headline: pts[0].title || "Untitled main task",
-      dueLine: `Due ${pts[0].due_date}`,
+      dueLine: `Due ${fmtDateDMY(pts[0].due_date)}`,
     };
   }
   const firstTwo = pts
@@ -251,7 +251,9 @@ function listCardMainSummary(a: MainAssignment): { headline: string; dueLine: st
   const more = pts.length > 2 ? ` +${pts.length - 2} more` : "";
   const dates = [...pts].map((p) => p.due_date).sort();
   const dueLine =
-    dates[0] === dates[dates.length - 1] ? `Due ${dates[0]}` : `Due ${dates[0]} – ${dates[dates.length - 1]}`;
+    dates[0] === dates[dates.length - 1]
+      ? `Due ${fmtDateDMY(dates[0])}`
+      : `Due ${fmtDateDMY(dates[0])} – ${fmtDateDMY(dates[dates.length - 1])}`;
   return { headline: firstTwo + more, dueLine };
 }
 
@@ -1536,6 +1538,11 @@ function AssignmentEditor({
       </div>
     </div>
   );
+}
+
+function fmtDateDMY(iso: string): string {
+  const p = iso.split("-");
+  return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : iso;
 }
 
 function todayISO() {
