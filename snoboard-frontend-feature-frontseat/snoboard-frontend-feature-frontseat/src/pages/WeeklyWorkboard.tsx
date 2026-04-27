@@ -1286,23 +1286,36 @@ function AssignmentEditor({
   const intPct = interruptRollupPercent(a.interrupts);
   const intDoneCount = a.interrupts.filter((i) => i.status === "completed").length;
   const intTotal = a.interrupts.length;
-  const [extrasOpen, setExtrasOpen] = useState(true);
+  const [extrasOpen, setExtrasOpen] = useState(false);
   const [openExtras, setOpenExtras] = useState<Record<string, boolean>>({});
   useEffect(() => {
-    // Default all existing items to open; preserve user toggles.
     setOpenExtras((prev) => {
-      let changed = false;
       const next = { ...prev };
+      const isFirstHydrate = Object.keys(prev).length === 0;
+      const newlyAdded = a.interrupts.filter((it) => next[it.id] === undefined);
+      let changed = false;
+
       for (const it of a.interrupts) {
         if (next[it.id] === undefined) {
-          next[it.id] = true;
+          // Default: collapsed on load. If user just added an item in-session, auto-open it.
+          next[it.id] = isFirstHydrate ? false : newlyAdded.some((x) => x.id === it.id);
           changed = true;
         }
       }
+
+      // Drop removed ids
+      for (const id of Object.keys(next)) {
+        if (!a.interrupts.some((it) => it.id === id)) {
+          delete next[id];
+          changed = true;
+        }
+      }
+
+      if (!isFirstHydrate && newlyAdded.length > 0) {
+        setExtrasOpen(true);
+      }
       return changed ? next : prev;
     });
-    // If there are no items, keep the section open so the empty-state message is visible.
-    if (a.interrupts.length === 0) setExtrasOpen(true);
   }, [a.interrupts]);
   const blockOptions: { id: string; kind: "main" | "chunk"; label: string }[] = [
     ...a.primary_tasks.map((pt) => ({
