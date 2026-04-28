@@ -33,9 +33,9 @@ import { AtSign, Layers, Loader2, Paperclip, Send, Ticket as TicketIcon, Trash2,
 
 type Column = { key: TicketStatus; title: string; hint: string };
 const COLUMNS: Column[] = [
-  { key: "not_started", title: "INCOMING ORDERS", hint: "New orders — waiting for pickup" },
-  { key: "in_progress", title: "ON THE PASS", hint: "Being worked on right now" },
-  { key: "resolved", title: "Served", hint: "Completed orders" },
+  { key: "not_started", title: "INCOMING TICKETS", hint: "New tickets — waiting for pickup" },
+  { key: "in_progress", title: "IN PROGRESS", hint: "Being worked on right now" },
+  { key: "resolved", title: "Finished", hint: "Completed tickets" },
 ];
 
 function isPersonMentionTag(t: string): boolean {
@@ -367,7 +367,7 @@ export default function Tickets() {
       return base;
     },
     onSuccess: async () => {
-      toast.success("Order placed");
+      toast.success("Ticket added");
       setTitle("");
       setDescription("");
       setUrgency("normal");
@@ -391,7 +391,7 @@ export default function Tickets() {
   const deleteMut = useMutation({
     mutationFn: async (id: string) => deleteTicket(id),
     onSuccess: async () => {
-      toast.success("Order removed");
+      toast.success("Ticket deleted");
       await qc.invalidateQueries({ queryKey: ["tickets"] });
     },
     onError: (e: any) => toast.error(e?.message || "Failed to delete ticket"),
@@ -662,8 +662,8 @@ export default function Tickets() {
               <TicketIcon className="w-5 h-5 text-amber-400" />
             </div>
             <div>
-              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">Kitchen Rail</h1>
-              <p className="text-xs text-zinc-500 mt-1">New order → hang on rail → take → serve.</p>
+              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">Bug Tickets</h1>
+              <p className="text-xs text-zinc-500 mt-1">Add ticket → incoming → in progress → finished.</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -678,7 +678,7 @@ export default function Tickets() {
                 textTransform: "uppercase",
               }}
             >
-              + New Order
+              + Add Ticket
             </Button>
             <Button
               variant="secondary"
@@ -696,9 +696,9 @@ export default function Tickets() {
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogContent className="bg-zinc-950 border-white/10 text-white max-w-2xl">
             <DialogHeader>
-              <DialogTitle className="text-white">New Order</DialogTitle>
+              <DialogTitle className="text-white">Add Ticket</DialogTitle>
               <DialogDescription className="text-zinc-500">
-                Log a support ticket. Tag with <span className="text-zinc-300">@name</span> or <span className="text-zinc-300">@phone</span>.
+                Log a bug ticket. Tag with <span className="text-zinc-300">@name</span> or <span className="text-zinc-300">@phone</span>.
               </DialogDescription>
             </DialogHeader>
 
@@ -784,7 +784,7 @@ export default function Tickets() {
                 className="bg-amber-600 hover:bg-amber-500 text-white"
               >
                 {createMut.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
-                Place Order
+                Add Ticket
               </Button>
             </div>
           </DialogContent>
@@ -896,7 +896,7 @@ export default function Tickets() {
                         }}
                         disabled={patchMut.isPending}
                       >
-                        Take Order
+                        Take Ticket
                       </Button>
                     )}
                     {selectedTicket.status !== "resolved" && (
@@ -910,7 +910,7 @@ export default function Tickets() {
                         }}
                         disabled={patchMut.isPending}
                       >
-                        Mark Served ✓
+                        Mark Finished ✓
                       </Button>
                     )}
                   </div>
@@ -1098,7 +1098,7 @@ export default function Tickets() {
                                     onClick={() => patchMut.mutate({ id: t.id, patch: { status: "in_progress" } })}
                                     disabled={patchMut.isPending}
                                   >
-                                    TAKE ORDER
+                                    TAKE TICKET
                                   </button>
                                 ) : (
                                   <button
@@ -1120,7 +1120,7 @@ export default function Tickets() {
                                     onClick={() => patchMut.mutate({ id: t.id, patch: { status: "resolved" } })}
                                     disabled={patchMut.isPending}
                                   >
-                                    SERVE ✓
+                                    FINISH ✓
                                   </button>
                                 )}
                               </div>
@@ -1150,9 +1150,9 @@ export default function Tickets() {
                       color: "#34d399",
                     }}
                   >
-                    Served
+                    Finished
                   </p>
-                  <p className="text-[11px] text-zinc-600 mt-0.5">Completed orders, filed away.</p>
+                  <p className="text-[11px] text-zinc-600 mt-0.5">Completed tickets, filed away.</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -1193,7 +1193,7 @@ export default function Tickets() {
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="text-[10px] font-black text-emerald-400 uppercase tracking-wider">SERVED ✓</p>
+                          <p className="text-[10px] font-black text-emerald-400 uppercase tracking-wider">FINISHED ✓</p>
                           <p className="text-xs text-zinc-500">#{t.ticket_number ?? "—"}</p>
                           <p className="text-sm font-bold text-white truncate mt-0.5">{t.title || "Order"}</p>
                         </div>
@@ -1253,7 +1253,7 @@ export default function Tickets() {
                         }}
                       >
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
-                          <span style={{ fontSize: 9, fontWeight: 900, color: "#059669", letterSpacing: "0.1em" }}>SERVED ✓</span>
+                          <span style={{ fontSize: 9, fontWeight: 900, color: "#059669", letterSpacing: "0.1em" }}>FINISHED ✓</span>
                           <span style={{ fontSize: 9, color: "#9ca3af" }}>#{t.ticket_number}</span>
                         </div>
                         <p style={{ fontSize: 12, fontWeight: 700, color: "#111827", marginBottom: 4 }}>{t.title || "Order"}</p>
