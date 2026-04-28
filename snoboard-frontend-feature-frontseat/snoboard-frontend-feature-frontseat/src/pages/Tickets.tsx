@@ -17,7 +17,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Layers, Loader2, Paperclip, Plus, Send, Ticket as TicketIcon } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Layers, Loader2, Paperclip, Send, Ticket as TicketIcon } from "lucide-react";
 
 type Column = { key: TicketStatus; title: string; hint: string };
 const COLUMNS: Column[] = [
@@ -79,6 +86,7 @@ export default function Tickets() {
   const [assignedTo, setAssignedTo] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [resolvedOpen, setResolvedOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const ticketsQ = useQuery<Ticket[]>({
     queryKey: ["tickets"],
@@ -180,6 +188,7 @@ export default function Tickets() {
       setTagsRaw("");
       setAssignedTo("");
       setFiles([]);
+      setCreateOpen(false);
       await qc.invalidateQueries({ queryKey: ["tickets"] });
     },
     onError: (e: any) => toast.error(e?.message || "Failed to create ticket"),
@@ -206,14 +215,14 @@ export default function Tickets() {
               </div>
               <div>
                 <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">Tickets</h1>
-                <p className="text-xs text-zinc-500 mt-1">Turn WhatsApp bug reports into a clean queue + attachments.</p>
+                <p className="text-xs text-zinc-500 mt-1">Chef-style slips: pick up → work → stack.</p>
               </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Badge className="bg-white/5 border-white/10 text-zinc-200">
-              {ticketsQ.data?.length || 0} total
-            </Badge>
+            <Button onClick={() => setCreateOpen(true)} className="bg-violet-600 hover:bg-violet-500 text-white">
+              New ticket
+            </Button>
             <Button
               variant="secondary"
               className={cn("bg-white/5 hover:bg-white/10 border border-white/10 text-white")}
@@ -226,102 +235,107 @@ export default function Tickets() {
           </div>
         </div>
 
-        {/* Create form */}
-        <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-xl p-4 sm:p-5">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <p className="text-sm font-bold text-white">Create a ticket</p>
-            <p className="text-[11px] text-zinc-500">
-              Format: tags like <span className="text-zinc-300">@12382407495800</span> (comma separated)
-            </p>
-          </div>
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogContent className="bg-zinc-950 border-white/10 text-white max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-white">New ticket</DialogTitle>
+              <DialogDescription className="text-zinc-500">
+                Paste in the WhatsApp format. Tag like <span className="text-zinc-300">@12382407495800</span>.
+              </DialogDescription>
+            </DialogHeader>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-            <div>
-              <p className="text-[11px] text-zinc-500 mb-1">Title (optional)</p>
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Team performance page blank"
-                className="bg-zinc-950/60 border-white/10 text-white placeholder:text-zinc-600"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <p className="text-[11px] text-zinc-500 mb-1">Urgency</p>
-                <select
-                  value={urgency}
-                  onChange={(e) => setUrgency(e.target.value as any)}
-                  className="w-full h-10 rounded-md bg-zinc-950/60 border border-white/10 text-white px-3 text-sm"
-                >
-                  <option value="low">Low</option>
-                  <option value="normal">Normal</option>
-                  <option value="urgent">Urgent</option>
-                </select>
-              </div>
-              <div>
-                <p className="text-[11px] text-zinc-500 mb-1">Assign to (email)</p>
+                <p className="text-[11px] text-zinc-500 mb-1">Ticket title (optional)</p>
                 <Input
-                  value={assignedTo}
-                  onChange={(e) => setAssignedTo(e.target.value)}
-                  placeholder="aditi@..."
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="(auto from first line if empty)"
                   className="bg-zinc-950/60 border-white/10 text-white placeholder:text-zinc-600"
                 />
               </div>
-            </div>
-            <div className="sm:col-span-2">
-              <p className="text-[11px] text-zinc-500 mb-1">Tags</p>
-              <Input
-                value={tagsRaw}
-                onChange={(e) => setTagsRaw(e.target.value)}
-                placeholder="@123..., urgent, ios"
-                className="bg-zinc-950/60 border-white/10 text-white placeholder:text-zinc-600"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <p className="text-[11px] text-zinc-500 mb-1">Problem description</p>
-              <Textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder={"1. Problem Description:\n2. Urgency:\n3. Screenshot attached"}
-                className="min-h-[120px] bg-zinc-950/60 border-white/10 text-white placeholder:text-zinc-600"
-              />
-            </div>
-
-            <div className="sm:col-span-2">
-              <p className="text-[11px] text-zinc-500 mb-1">Attachments (images/videos)</p>
-              <div className="flex items-center gap-3 flex-wrap">
-                <label className="inline-flex items-center gap-2 text-xs text-zinc-200 bg-white/5 border border-white/10 rounded-lg px-3 py-2 cursor-pointer hover:bg-white/10">
-                  <Paperclip className="w-4 h-4" />
-                  Add files
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*,video/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const next = Array.from(e.target.files || []);
-                      setFiles(next);
-                    }}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-[11px] text-zinc-500 mb-1">Urgency</p>
+                  <select
+                    value={urgency}
+                    onChange={(e) => setUrgency(e.target.value as any)}
+                    className="w-full h-10 rounded-md bg-zinc-950/60 border border-white/10 text-white px-3 text-sm"
+                  >
+                    <option value="low">Low</option>
+                    <option value="normal">Normal</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+                <div>
+                  <p className="text-[11px] text-zinc-500 mb-1">Assign to (email)</p>
+                  <Input
+                    value={assignedTo}
+                    onChange={(e) => setAssignedTo(e.target.value)}
+                    placeholder="aditi@..."
+                    className="bg-zinc-950/60 border-white/10 text-white placeholder:text-zinc-600"
                   />
-                </label>
-                <p className="text-xs text-zinc-500">
-                  {files.length === 0 ? "No files selected" : `${files.length} file${files.length === 1 ? "" : "s"} selected`}
-                </p>
+                </div>
+              </div>
+              <div className="sm:col-span-2">
+                <p className="text-[11px] text-zinc-500 mb-1">Tag</p>
+                <Input
+                  value={tagsRaw}
+                  onChange={(e) => setTagsRaw(e.target.value)}
+                  placeholder="@12382407495800"
+                  className="bg-zinc-950/60 border-white/10 text-white placeholder:text-zinc-600"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <p className="text-[11px] text-zinc-500 mb-1">Problem description</p>
+                <Textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder={"1. Problem Description:\n2. Urgency:\n3. Screenshot attached"}
+                  className="min-h-[160px] bg-zinc-950/60 border-white/10 text-white placeholder:text-zinc-600"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <p className="text-[11px] text-zinc-500 mb-1">Attachments (images/videos)</p>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <label className="inline-flex items-center gap-2 text-xs text-zinc-200 bg-white/5 border border-white/10 rounded-lg px-3 py-2 cursor-pointer hover:bg-white/10">
+                    <Paperclip className="w-4 h-4" />
+                    Add files
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*,video/*"
+                      className="hidden"
+                      onChange={(e) => setFiles(Array.from(e.target.files || []))}
+                    />
+                  </label>
+                  <p className="text-xs text-zinc-500">
+                    {files.length === 0 ? "No files selected" : `${files.length} file${files.length === 1 ? "" : "s"} selected`}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="mt-4 flex items-center justify-end">
-            <Button
-              onClick={() => createMut.mutate()}
-              disabled={!description.trim() || createMut.isPending}
-              className="bg-violet-600 hover:bg-violet-500 text-white"
-            >
-              {createMut.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
-              Create ticket
-            </Button>
-          </div>
-        </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                variant="secondary"
+                className={cn("bg-white/5 hover:bg-white/10 border border-white/10 text-white")}
+                onClick={() => setCreateOpen(false)}
+                disabled={createMut.isPending}
+              >
+                Close
+              </Button>
+              <Button
+                onClick={() => createMut.mutate()}
+                disabled={!description.trim() || createMut.isPending}
+                className="bg-violet-600 hover:bg-violet-500 text-white"
+              >
+                {createMut.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+                Create ticket
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Queue */}
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -339,34 +353,66 @@ export default function Tickets() {
                   <p className="text-xs text-zinc-600 px-2 py-6 text-center">Nothing here</p>
                 ) : (
                   byStatus[col.key].map((t) => (
-                    <div key={t.id} className="rounded-xl border border-white/10 bg-zinc-950/40 p-3">
+                    <div
+                      key={t.id}
+                      className={cn(
+                        "rounded-xl border border-white/10 bg-zinc-950/35 p-3 hover:border-white/20 transition-colors",
+                        "shadow-[0_10px_30px_rgba(0,0,0,0.35)]",
+                      )}
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="text-sm font-bold text-white truncate">
-                            {t.title || "Ticket"}
-                          </p>
-                          <p className="text-[11px] text-zinc-500 mt-0.5 truncate">
-                            #{t.ticket_number ?? "—"} · {t.reporter_email || "unknown"}{t.assigned_to_email ? ` → ${t.assigned_to_email}` : ""}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] font-black tracking-wide text-zinc-200">
+                              #{t.ticket_number ?? "—"}
+                            </span>
+                            {t.tags?.[0] ? (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-zinc-200">
+                                {t.tags[0]}
+                              </span>
+                            ) : null}
+                            <span className={cn("text-[10px] px-2 py-0.5 rounded-full border", urgencyPill(String(t.urgency || "normal")))}>
+                              {(t.urgency || "normal").toString().toUpperCase()}
+                            </span>
+                          </div>
+                          <p className="text-[13px] font-semibold text-white mt-1 truncate">
+                            {(t.title || "").trim() || "Problem"}
                           </p>
                         </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <span className={cn("text-[10px] px-2 py-1 rounded-full border", urgencyPill(String(t.urgency || "normal")))}>
-                            {(t.urgency || "normal").toString().toUpperCase()}
-                          </span>
+
+                        <div className="shrink-0 flex items-center gap-2">
+                          {col.key === "not_started" ? (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className="h-7 px-3 text-xs bg-white/5 hover:bg-white/10 border border-white/10 text-white"
+                              onClick={() => patchMut.mutate({ id: t.id, patch: { status: "in_progress" } })}
+                              disabled={patchMut.isPending}
+                            >
+                              Take
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className="h-7 px-3 text-xs bg-white/5 hover:bg-white/10 border border-white/10 text-white"
+                              onClick={() => patchMut.mutate({ id: t.id, patch: { status: "resolved" } })}
+                              disabled={patchMut.isPending}
+                            >
+                              Stack
+                            </Button>
+                          )}
                         </div>
                       </div>
 
-                      <p className="text-xs text-zinc-300 mt-2 line-clamp-3 whitespace-pre-wrap">
+                      <p className="text-[12px] text-zinc-300 mt-2 line-clamp-2 whitespace-pre-wrap">
                         {t.description}
                       </p>
 
                       <div className="flex items-center gap-2 mt-3 flex-wrap">
-                        <span className={cn("text-[10px] px-2 py-1 rounded-full border", statusBadge(String(t.status || "not_started")))}>
-                          {(t.status || "not_started").toString().replace("_", " ").toUpperCase()}
-                        </span>
                         {!!t.tags?.length && (
                           <div className="flex items-center gap-1 flex-wrap">
-                            {t.tags.slice(0, 3).map((x) => (
+                            {t.tags.slice(1, 3).map((x) => (
                               <span key={x} className="text-[10px] px-2 py-1 rounded-full bg-white/5 border border-white/10 text-zinc-200">
                                 {x}
                               </span>
@@ -384,31 +430,6 @@ export default function Tickets() {
                             {t.attachments.length}
                           </span>
                         ) : null}
-
-                        <div className="ml-auto flex items-center gap-2">
-                          {col.key === "not_started" ? (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              className="h-7 px-2 text-xs bg-white/5 hover:bg-white/10 border border-white/10 text-white"
-                              onClick={() => patchMut.mutate({ id: t.id, patch: { status: "in_progress" } })}
-                              disabled={patchMut.isPending}
-                            >
-                              <Plus className="w-3.5 h-3.5 mr-1" />
-                              Start
-                            </Button>
-                          ) : (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              className="h-7 px-2 text-xs bg-white/5 hover:bg-white/10 border border-white/10 text-white"
-                              onClick={() => patchMut.mutate({ id: t.id, patch: { status: "resolved" } })}
-                              disabled={patchMut.isPending}
-                            >
-                              Resolve
-                            </Button>
-                          )}
-                        </div>
                       </div>
 
                       {t.attachments?.length ? (
@@ -467,11 +488,11 @@ export default function Tickets() {
                   <p className="text-xs text-zinc-600 px-2 py-6 text-center md:col-span-2 lg:col-span-3">No resolved tickets</p>
                 ) : (
                   byStatus.resolved.map((t) => (
-                    <div key={t.id} className="rounded-xl border border-white/10 bg-zinc-950/40 p-3">
+                    <div key={t.id} className="rounded-xl border border-white/10 bg-zinc-950/30 p-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="text-sm font-bold text-white truncate">{t.title || "Ticket"}</p>
-                          <p className="text-[11px] text-zinc-500 mt-0.5 truncate">#{t.ticket_number ?? "—"}</p>
+                          <p className="text-sm font-bold text-white truncate">#{t.ticket_number ?? "—"} · {t.title || "Ticket"}</p>
+                          <p className="text-[11px] text-zinc-500 mt-0.5 truncate">{t.tags?.[0] || ""}</p>
                         </div>
                         <Button
                           size="sm"
