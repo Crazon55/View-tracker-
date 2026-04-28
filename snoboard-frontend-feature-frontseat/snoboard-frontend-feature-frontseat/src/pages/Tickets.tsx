@@ -6,13 +6,16 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   createTicket,
   getTickets,
+  getWorkboardMentionCandidates,
   patchTicket,
   signTicketCloudinaryUpload,
   type Ticket,
   type TicketAttachment,
   type TicketStatus,
   type TicketUrgency,
+  type WorkboardMentionPerson,
 } from "@/services/api";
+import { mentionFromName, workboardMentionSubtitle } from "@/lib/workboardTypes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,7 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Layers, Loader2, Paperclip, Send, Ticket as TicketIcon } from "lucide-react";
+import { AtSign, Layers, Loader2, Paperclip, Send, Ticket as TicketIcon, User } from "lucide-react";
 
 type Column = { key: TicketStatus; title: string; hint: string };
 const COLUMNS: Column[] = [
@@ -33,14 +36,193 @@ const COLUMNS: Column[] = [
   { key: "resolved", title: "Resolved", hint: "Done (goes to stack)" },
 ];
 
-function normalizeTags(raw: string): string[] {
-  const s = (raw || "").trim();
-  if (!s) return [];
-  return s
-    .split(/[,\n]/g)
-    .map((x) => x.trim())
-    .filter(Boolean)
-    .map((x) => (x.startsWith("@") ? x : x));
+function isPersonMentionTag(t: string): boolean {
+  return t.startsWith("@") && t.length > 1;
+}
+
+function TagField({
+  tags,
+  onChange,
+  placeholder,
+}: {
+  tags: string[];
+  onChange: (next: string[]) => void;
+  placeholder?: string;
+}) {
+  const { user } = useAuth();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [draft, setDraft] = useState("");
+  const [mentionHighlight, setMentionHighlight] = useState(0);
+
+  const { data: mentionPayload } = useQuery({
+    queryKey: ["tickets-mention-candidates"],
+    queryFn: getWorkboardMentionCandidates,
+    staleTime: 5 * 60 * 1000,
+  });
+  const apiPeople: WorkboardMentionPerson[] = mentionPayload?.people ?? [];
+
+  const mentionPickerPeople = useMemo(() => {
+    return apiPeople
+      .filter((p) => p.role_id || p.email || p.is_content_strategist)
+      .sort((a, b) => a.display.toLowerCase().localeCompare(b.display.toLowerCase()));
+  }, [apiPeople]);
+
+  const mentionMenu = useMemo(() => {
+    const at = draft.lastIndexOf("@");
+    if (at === -1) return null;
+    const after = draft.slice(at + 1);
+    if (/\s/.test(after)) return null;
+    return { at, filter: after.toLowerCase() };
+  }, [draft]);
+
+  const mentionFiltered = useMemo(() => {
+    if (!mentionMenu) return [];
+    const q = mentionMenu.filter;
+    return mentionPickerPeople.filter((p) => {
+      if (!q) return true;
+      const disp = p.display.toLowerCase();
+      const em = (p.email || "").toLowerCase();
+      const sub = (workboardMentionSubtitle(p.role_id, p.email, { isContentStrategist: p.is_content_strategist }) || "").toLowerCase();
+      return disp.includes(q) || em.includes(q) || sub.includes(q);
+    });
+  }, [mentionMenu, mentionPickerPeople]);
+
+  useEffect(() => {
+    setMentionHighlight(0);
+  }, [mentionMenu?.at, mentionMenu?.filter, mentionFiltered.length]);
+
+  const pushTag = (raw: string) => {
+    let t = raw.trim();
+    if (!t) return;
+    if (!t.startsWith("@") && !t.startsWith("#")) t = t.includes(" ") ? t : mentionFromName(t);
+    if (tags.includes(t)) return;
+    onChange([...tags, t]);
+  };
+
+  const pickMention = (person: WorkboardMentionPerson) => {
+    if (!mentionMenu) return;
+    setDraft(draft.slice(0, mentionMenu.at));
+    pushTag(mentionFromName(person.display));
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
+  return (
+    <div className="space-y-2">
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {tags.map((t) => {
+            const person = isPersonMentionTag(t);
+            return (
+              <span
+                key={t}
+                className={cn(
+                  "inline-flex items-center gap-1 pl-2.5 pr-1 py-0.5 rounded-full max-w-full border text-[12px]",
+                  person ? "bg-violet-500/15 text-violet-100 border-violet-400/30" : "bg-white/[0.06] text-zinc-200 border-white/10",
+                )}
+              >
+                {person ? <AtSign className="w-3 h-3 shrink-0 opacity-70" /> : null}
+                <span className="truncate max-w-[240px]" title={t}>
+                  {person ? t.slice(1) : t}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onChange(tags.filter((x) => x !== t))}
+                  className={cn("shrink-0 px-1 rounded-full text-sm leading-none opacity-60 hover:opacity-100", person ? "hover:bg-violet-500/25" : "hover:bg-white/10")}
+                  aria-label={`Remove ${t}`}
+                >
+                  ×
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="relative">
+        <input
+          ref={inputRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (mentionMenu) {
+              if (mentionFiltered.length) {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setMentionHighlight((i) => (i + 1) % mentionFiltered.length);
+                  return;
+                }
+                if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setMentionHighlight((i) => (i - 1 + mentionFiltered.length) % mentionFiltered.length);
+                  return;
+                }
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  pickMention(mentionFiltered[mentionHighlight]!);
+                  return;
+                }
+              }
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setDraft(draft.slice(0, mentionMenu.at));
+                return;
+              }
+            }
+            if (e.key === "Enter") {
+              e.preventDefault();
+              if (mentionMenu && mentionFiltered.length === 0) return;
+              pushTag(draft);
+              setDraft("");
+            }
+          }}
+          placeholder={placeholder || "Type @ to mention people, press Enter…"}
+          className="w-full h-10 rounded-md bg-zinc-950/60 border border-white/10 text-white px-3 text-sm placeholder:text-zinc-600"
+          role="combobox"
+          aria-expanded={Boolean(mentionMenu)}
+          aria-autocomplete="list"
+        />
+
+        {mentionMenu ? (
+          <div className="absolute z-[200] left-0 right-0 bottom-full mb-1.5 max-h-[min(280px,50vh)] overflow-y-auto rounded-xl border border-zinc-700/90 bg-zinc-950/95 py-1.5 shadow-[0_-24px_60px_rgba(0,0,0,0.85),0_0_48px_-12px_rgba(109,40,217,0.2)] backdrop-blur-xl">
+            <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+              People
+            </div>
+            {mentionFiltered.length === 0 ? (
+              <div className="px-3 py-2.5 text-xs text-zinc-500">No matches — keep typing or press Esc</div>
+            ) : (
+              mentionFiltered.slice(0, 12).map((person, idx) => {
+                const sub = workboardMentionSubtitle(person.role_id, person.email, { isContentStrategist: person.is_content_strategist });
+                const rowKey = `${person.display}|${person.email ?? ""}|${person.role_id ?? ""}`;
+                return (
+                  <button
+                    key={rowKey}
+                    type="button"
+                    className={cn(
+                      "mx-1 flex w-[calc(100%-0.5rem)] items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors",
+                      idx === mentionHighlight ? "bg-violet-500/30 text-white" : "text-zinc-100 hover:bg-white/10",
+                    )}
+                    onMouseDown={(ev) => {
+                      ev.preventDefault();
+                      pickMention(person);
+                    }}
+                    onMouseEnter={() => setMentionHighlight(idx)}
+                  >
+                    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-violet-300/80">
+                      <User className="h-4 w-4" aria-hidden />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] font-medium leading-tight">{person.display}</span>
+                      {sub ? <span className="mt-0.5 block truncate text-[11px] leading-tight text-zinc-400">{sub}</span> : null}
+                    </span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 function urgencyPill(u: string) {
@@ -82,7 +264,7 @@ export default function Tickets() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [urgency, setUrgency] = useState<TicketUrgency>("normal");
-  const [tagsRaw, setTagsRaw] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
   const [assignedTo, setAssignedTo] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [resolvedOpen, setResolvedOpen] = useState(false);
@@ -137,7 +319,6 @@ export default function Tickets() {
 
   const createMut = useMutation({
     mutationFn: async () => {
-      const tags = normalizeTags(tagsRaw);
       const base = await createTicket({
         title: title.trim() || undefined,
         description,
@@ -185,7 +366,7 @@ export default function Tickets() {
       setTitle("");
       setDescription("");
       setUrgency("normal");
-      setTagsRaw("");
+      setTags([]);
       setAssignedTo("");
       setFiles([]);
       setCreateOpen(false);
@@ -278,13 +459,8 @@ export default function Tickets() {
                 </div>
               </div>
               <div className="sm:col-span-2">
-                <p className="text-[11px] text-zinc-500 mb-1">Tag</p>
-                <Input
-                  value={tagsRaw}
-                  onChange={(e) => setTagsRaw(e.target.value)}
-                  placeholder="@12382407495800"
-                  className="bg-zinc-950/60 border-white/10 text-white placeholder:text-zinc-600"
-                />
+                <p className="text-[11px] text-zinc-500 mb-1">Tag / Mention</p>
+                <TagField tags={tags} onChange={setTags} placeholder="@Aditi or @12382407495800" />
               </div>
               <div className="sm:col-span-2">
                 <p className="text-[11px] text-zinc-500 mb-1">Problem description</p>
