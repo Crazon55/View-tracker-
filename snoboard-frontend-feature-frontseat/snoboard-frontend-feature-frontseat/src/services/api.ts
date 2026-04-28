@@ -262,6 +262,87 @@ export const saveWorkboardWeek = (weekStart: string, assignments: any[]) =>
     body: JSON.stringify({ assignments }),
   });
 
+// Tickets (v1)
+export type TicketStatus = "not_started" | "in_progress" | "resolved";
+export type TicketUrgency = "low" | "normal" | "urgent";
+
+export type TicketAttachment = {
+  secure_url: string;
+  public_id: string;
+  resource_type: "image" | "video" | "raw" | "auto" | string;
+  bytes?: number;
+  format?: string;
+  original_filename?: string;
+  created_at?: string;
+  expires_at?: string;
+};
+
+export type Ticket = {
+  id: string;
+  ticket_number?: number;
+  title?: string;
+  description: string;
+  urgency: TicketUrgency | string;
+  status: TicketStatus | string;
+  tags: string[];
+  reporter_email?: string | null;
+  assigned_to_email?: string | null;
+  attachments: TicketAttachment[];
+  created_at?: string;
+  updated_at?: string;
+  resolved_at?: string | null;
+};
+
+export const getTickets = (filters?: {
+  status?: TicketStatus | string;
+  urgency?: TicketUrgency | string;
+  assigned_to_email?: string;
+  reporter_email?: string;
+}) => {
+  const qs = new URLSearchParams();
+  if (filters?.status) qs.set("status", filters.status);
+  if (filters?.urgency) qs.set("urgency", filters.urgency);
+  if (filters?.assigned_to_email) qs.set("assigned_to_email", filters.assigned_to_email);
+  if (filters?.reporter_email) qs.set("reporter_email", filters.reporter_email);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return fetchApi<Ticket[]>(`/api/v1/tickets${suffix}`);
+};
+
+export const getTicket = (id: string) => fetchApi<Ticket>(`/api/v1/tickets/${id}`);
+
+export const createTicket = (data: {
+  title?: string;
+  description: string;
+  urgency?: TicketUrgency | string;
+  status?: TicketStatus | string;
+  tags?: string[];
+  reporter_email?: string;
+  assigned_to_email?: string | null;
+  attachments?: TicketAttachment[];
+}) => fetchApi<Ticket>("/api/v1/tickets", { method: "POST", body: JSON.stringify(data) });
+
+export const patchTicket = (id: string, data: Partial<Pick<Ticket,
+  "title" | "description" | "urgency" | "status" | "tags" | "assigned_to_email" | "attachments" | "resolved_at"
+>>) => fetchApi<Ticket>(`/api/v1/tickets/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+
+export type CloudinarySignedUpload = {
+  cloud_name: string;
+  api_key: string;
+  timestamp: number;
+  signature: string;
+  upload_url: string;
+  folder: string;
+  tags: string;
+  context: string;
+  expires_at: string;
+};
+
+export const signTicketCloudinaryUpload = (data: {
+  ticket_id: string;
+  ticket_number: number | string;
+  uploader?: string;
+}) => fetchApi<CloudinarySignedUpload>("/api/v1/tickets/cloudinary-sign", { method: "POST", body: JSON.stringify(data) });
+
 // Deadlines
 export const getDeadlines = (role?: string) =>
   fetchApi<any[]>(role ? `/api/v1/deadlines/${encodeURIComponent(role)}` : "/api/v1/deadlines");

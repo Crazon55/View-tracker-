@@ -1,4 +1,6 @@
 """FastAPI app for Instagram View Tracker."""
+import os
+import hashlib
 from datetime import datetime, timezone, timedelta
 
 from fastapi import FastAPI, HTTPException, Request
@@ -3737,5 +3739,215 @@ async def six_day_page_data(page_id: str, month: str | None = None):
             "actual_views": actual_views,
             "drift": (actual_views - cycle_views_sum) if actual_views is not None else None,
             "top_content": page_top[:10],
+        },
+    }
+
+
+# --- Tickets (v1) -----------------------------------------------------------
+
+def _require_env(name: str) -> str:
+    v = (os.getenv(name) or "").strip()
+    if not v:
+        raise HTTPException(status_code=500, detail=f"Missing server env var: {name}")
+    return v
+
+
+def _cloudinary_signature(params: dict, api_secret: str) -> str:
+    """
+    Cloudinary signature: sha1("k1=v1&k2=v2...{api_secret}") for sorted keys.
+    Excludes file/api_key/resource_type/cloud_name.
+    """
+    signable = {
+        k: v
+        for k, v in params.items()
+        if v is not None and k not in {"file", "api_key", "resource_type", "cloud_name"}
+    }
+    pairs = [f"{k}={signable[k]}" for k in sorted(signable.keys())]
+    base = "&".join(pairs) + api_secret
+    return hashlib.sha1(base.encode("utf-8")).hexdigest()
+
+
+@app.post("/api/v1/tickets")
+async def create_ticket(request: Request):
+    client = get_supabase_client()
+    body = await request.json()
+    description = (body.get("description") or "").strip()
+    if not description:
+        raise HTTPException(status_code=400, detail="description is required")
+    urgency = (body.get("urgency") or "normal").strip().lower()
+    status = (body.get("status") or "not_started").strip().lower()
+    tags = body.get("tags") or []
+    if tags is None or not isinstance(tags, list):
+        raise HTTPException(status_code=400, detail="tags must be a list")
+
+    title = (body.get("title") or "").strip()
+    if not title:
+        title = description.splitlines()[0].strip()[:120] if description else "Ticket"
+
+    payload = {
+        "title": title,
+        "description": description,
+        "urgency": urgency,
+        "status": status,
+        "tags": tags,
+        "reporter_email": body.get("reporter_email"),
+        "assigned_to_email": body.get("assigned_to_email"),
+        "attachments": body.get("attachments") or [],
+    }
+    try:
+        out = client.table("tickets").insert(payload).execute().data or []
+        row = out[0] if out else payload
+        return {"success": True, "data": row}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create ticket: {str(e)}")
+
+
+@app.get("/api/v1/tickets")
+async def list_tickets(
+    status: str | None = None,
+    urgency: str | None = None,
+    assigned_to_email: str | None = None,
+    reporter_email: str | None = None,
+):
+    client = get_supabase_client()
+    try:
+        q = client.table("tickets").select("*").order("created_at", desc=True)
+        if status:
+            q = q.eq("status", status)
+        if urgency:
+            q = q.eq("urgency", urgency)
+        if assigned_to_email:
+            q = q.eq("assigned_to_email", assigned_to_email)
+        if reporter_email:
+            q = q.eq("reporter_email", reporter_email)
+        rows = q.execute().data or []
+        return {"success": True, "data": rows}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list tickets: {str(e)}")
+
+
+@app.get("/api/v1/tickets/{ticket_id}")
+async def get_ticket(ticket_id: str):
+    client = get_supabase_client()
+    try:
+        rows = (
+            client.table("tickets")
+            .select("*")
+            .eq("id", ticket_id)
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+        if not rows:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        return {"success": True, "data": rows[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load ticket: {str(e)}")
+
+
+@app.patch("/api/v1/tickets/{ticket_id}")
+async def patch_ticket(ticket_id: str, request: Request):
+    client = get_supabase_client()
+    body = await request.json()
+    allowed = {
+        "title",
+        "description",
+        "urgency",
+        "status",
+        "tags",
+        "assigned_to_email",
+        "attachments",
+        "resolved_at",
+    }
+    patch = {k: v for k, v in body.items() if k in allowed}
+    if "status" in patch:
+        st = (patch.get("status") or "").strip().lower()
+        patch["status"] = st
+        if st == "resolved" and not patch.get("resolved_at"):
+            patch["resolved_at"] = datetime.now(timezone.utc).isoformat()
+        if st != "resolved":
+            patch["resolved_at"] = None
+    try:
+        rows = (
+            client.table("tickets")
+            .update(patch)
+            .eq("id", ticket_id)
+            .execute()
+            .data
+            or []
+        )
+        if not rows:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        return {"success": True, "data": rows[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update ticket: {str(e)}")
+
+
+@app.post("/api/v1/tickets/cloudinary-sign")
+async def tickets_cloudinary_sign(request: Request):
+    """
+    Returns signed upload params for direct-from-browser uploads.
+
+    Body: { ticket_id, ticket_number, uploader, resource_type? }
+    """
+    cloud_name = _require_env("CLOUDINARY_CLOUD_NAME")
+    api_key = _require_env("CLOUDINARY_API_KEY")
+    api_secret = _require_env("CLOUDINARY_API_SECRET")
+
+    body = await request.json()
+    ticket_id = str(body.get("ticket_id") or "").strip()
+    ticket_number = str(body.get("ticket_number") or "").strip()
+    uploader = str(body.get("uploader") or "").strip()
+    if not ticket_id or not ticket_number:
+        raise HTTPException(status_code=400, detail="ticket_id and ticket_number are required")
+
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(days=7)
+    timestamp = int(now.timestamp())
+
+    folder = f"tickets/{ticket_number}"
+    tags = ",".join(
+        [
+            "tickets",
+            f"ticket_number_{ticket_number}",
+            f"ticket_id_{ticket_id}",
+        ]
+        + ([f"uploader_{uploader.split('@')[0]}"] if uploader else [])
+    )
+    context_parts = [
+        f"ticket_id={ticket_id}",
+        f"ticket_number={ticket_number}",
+        f"expires_at={expires_at.isoformat()}",
+    ]
+    if uploader:
+        context_parts.append(f"uploader={uploader}")
+    context = "|".join(context_parts)
+
+    params = {
+        "timestamp": timestamp,
+        "folder": folder,
+        "tags": tags,
+        "context": context,
+    }
+    signature = _cloudinary_signature(params, api_secret)
+
+    upload_url = f"https://api.cloudinary.com/v1_1/{cloud_name}/auto/upload"
+    return {
+        "success": True,
+        "data": {
+            "cloud_name": cloud_name,
+            "api_key": api_key,
+            "timestamp": timestamp,
+            "signature": signature,
+            "upload_url": upload_url,
+            "folder": folder,
+            "tags": tags,
+            "context": context,
+            "expires_at": expires_at.isoformat(),
         },
     }

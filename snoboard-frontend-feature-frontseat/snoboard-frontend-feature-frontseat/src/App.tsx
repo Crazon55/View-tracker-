@@ -3,9 +3,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
-import { getDeadlines, getSixDayConfig, getSixDayDeadlines } from "@/services/api";
+import { getDeadlines, getSixDayConfig, getSixDayDeadlines, getTickets } from "@/services/api";
 import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, BarChart3, Scissors, Telescope, ClipboardList, Trophy, LayoutGrid } from "lucide-react";
+import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, BarChart3, Scissors, Telescope, ClipboardList, Trophy, LayoutGrid, Ticket } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -31,6 +31,7 @@ import SixDayTracker from "./pages/SixDayTracker";
 import TeamPerformance from "./pages/TeamPerformance";
 import ErrorBoundary from "./components/ErrorBoundary";
 import WeeklyWorkboard from "./pages/WeeklyWorkboard";
+import Tickets from "./pages/Tickets";
 import RoleSelect from "./pages/RoleSelect";
 import NotFound from "./pages/NotFound";
 import { MonthlyWrapRoot, MonthlyWrapOpenButton } from "./components/MonthlyWrapHost";
@@ -261,6 +262,7 @@ const navItems: NavItem[] = [
   { to: "/six-day-tracker", label: "6-Day Tracker", icon: Radio },
   { to: "/team-performance", label: "Teams", icon: Trophy },
   { to: "/workboard", label: "Bandwidth tracker workboard", icon: LayoutGrid },
+  { to: "/tickets", label: "Tickets", icon: Ticket },
   { to: "/competitor-research", label: "Competitor Research", icon: Telescope },
   { to: "/growth", label: "Growth", icon: TrendingUp },
   { to: "/pages", label: "IP's", icon: Users },
@@ -271,6 +273,15 @@ function HamburgerMenu() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+
+  const { data: assignedTickets = [] } = useQuery<any[]>({
+    queryKey: ["tickets-assigned-badge", (user?.email || "").toLowerCase()],
+    queryFn: () => getTickets({ assigned_to_email: user?.email || "" }),
+    enabled: !!user?.email,
+    refetchInterval: 20_000,
+  });
+
+  const ticketsBadgeCount = assignedTickets.filter((t: any) => (t?.status || "") !== "resolved").length;
 
   return (
     <div className="fixed top-5 left-5 z-50">
@@ -304,7 +315,12 @@ function HamburgerMenu() {
                 className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors w-full text-left text-zinc-400 hover:text-white hover:bg-zinc-900"
               >
                 <Icon className="w-4 h-4" />
-                {label}
+                <span className="flex-1">{label}</span>
+                {label === "Tickets" && ticketsBadgeCount > 0 ? (
+                  <span className="min-w-[18px] h-[18px] px-1.5 rounded-full bg-violet-500/20 border border-violet-500/30 text-[10px] font-black text-violet-100 flex items-center justify-center">
+                    {ticketsBadgeCount}
+                  </span>
+                ) : null}
               </button>
             ))}
           </nav>
@@ -328,6 +344,15 @@ function AppLayout() {
   const location = useLocation();
   const { user, signOut } = useAuth();
 
+  const { data: assignedTicketsSidebar = [] } = useQuery<any[]>({
+    queryKey: ["tickets-assigned-badge-sidebar", (user?.email || "").toLowerCase()],
+    queryFn: () => getTickets({ assigned_to_email: user?.email || "" }),
+    enabled: !!user?.email,
+    refetchInterval: 20_000,
+  });
+
+  const ticketsBadgeCount = assignedTicketsSidebar.filter((t: any) => (t?.status || "") !== "resolved").length;
+
   const isFullScreen =
     location.pathname === "/" ||
     location.pathname === "/content-tracker" ||
@@ -339,6 +364,7 @@ function AppLayout() {
     location.pathname === "/six-day-tracker" ||
     location.pathname === "/team-performance" ||
     location.pathname === "/workboard" ||
+    location.pathname === "/tickets" ||
     location.pathname.startsWith("/post-ips/") ||
     location.pathname.startsWith("/page/");
 
@@ -383,6 +409,7 @@ function AppLayout() {
               }
             />
             <Route path="/workboard" element={<WeeklyWorkboard />} />
+            <Route path="/tickets" element={<Tickets />} />
           </Routes>
         </div>
       ) : (
@@ -423,7 +450,12 @@ function AppLayout() {
                 }
               >
                 <Icon className="w-4 h-4" />
-                {label}
+                <span className="flex-1">{label}</span>
+                {label === "Tickets" && ticketsBadgeCount > 0 ? (
+                  <span className="min-w-[18px] h-[18px] px-1.5 rounded-full bg-violet-500/20 border border-violet-500/30 text-[10px] font-black text-violet-100 flex items-center justify-center">
+                    {ticketsBadgeCount}
+                  </span>
+                ) : null}
               </NavLink>
             )
           ))}

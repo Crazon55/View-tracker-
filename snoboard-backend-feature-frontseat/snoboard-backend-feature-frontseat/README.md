@@ -180,6 +180,11 @@ TWITTER_ACTOR_ID=kaitoeasyapi/twitter-x-data-tweet-scraper-pay-per-result-cheape
 SUPABASE_URL=https://xxx.supabase.co
 SUPABASE_KEY=your_key
 REPORTS_DIR=reports/files/
+
+# Tickets uploads (Cloudinary) — backend only
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
 ```
 
 ---
