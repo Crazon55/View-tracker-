@@ -271,6 +271,8 @@ export default function Tickets() {
   const [files, setFiles] = useState<File[]>([]);
   const [resolvedOpen, setResolvedOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
 
   const ticketsQ = useQuery<Ticket[]>({
     queryKey: ["tickets"],
@@ -401,6 +403,12 @@ export default function Tickets() {
     patchMut.mutate({ id, patch: { status } });
   };
 
+  const allTickets = ticketsQ.data || [];
+  const selectedTicket = useMemo(
+    () => (selectedTicketId ? allTickets.find((t) => t.id === selectedTicketId) : undefined),
+    [allTickets, selectedTicketId],
+  );
+
   const cardTilt = (id: string) => {
     // stable pseudo-random tilt per ticket id (no deps)
     let h = 0;
@@ -421,37 +429,57 @@ export default function Tickets() {
         onDragStart={() => {
           dragIdRef.current = t.id;
         }}
-        className="relative w-[260px] max-w-[82vw] shrink-0 rounded-xl border border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.02] shadow-[0_18px_60px_rgba(0,0,0,0.55)]"
+        onClick={() => {
+          setSelectedTicketId(t.id);
+          setDetailOpen(true);
+        }}
+        className={cn(
+          "relative w-[260px] max-w-[82vw] shrink-0 rounded-xl",
+          // warm paper
+          "border border-amber-200/60 bg-gradient-to-b from-amber-50/95 to-amber-100/75",
+          "shadow-[0_18px_60px_rgba(0,0,0,0.55)]",
+        )}
       >
-        {/* perforated top edge */}
-        <div className="absolute inset-x-0 -top-[1px] h-[10px] overflow-hidden rounded-t-xl">
-          <div className="h-[10px] w-full opacity-60 [background:radial-gradient(circle_at_6px_6px,transparent_4px,rgba(255,255,255,0.10)_4.5px)] [background-size:12px_12px]" />
+        {/* hook + perforated edge */}
+        <div className="absolute left-1/2 -top-2 -translate-x-1/2 h-4 w-4 rounded-full border border-zinc-900/20 bg-amber-50 shadow-[0_10px_30px_rgba(0,0,0,0.25)]" />
+        <div className="absolute inset-x-0 -top-[1px] h-[10px] overflow-hidden rounded-t-xl opacity-70">
+          <div className="h-[10px] w-full [background:radial-gradient(circle_at_6px_6px,transparent_4px,rgba(24,24,27,0.12)_4.5px)] [background-size:12px_12px]" />
         </div>
 
         <div className="p-3">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-black tracking-wide text-zinc-100">
+                <span className="text-[10px] font-black tracking-wide text-zinc-900">
                   #{t.ticket_number ?? "—"}
                 </span>
                 {t.tags?.[0] ? (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-zinc-200">
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-900/5 border border-zinc-900/10 text-zinc-900">
                     {t.tags[0]}
                   </span>
                 ) : null}
-                <span className={cn("text-[10px] px-2 py-0.5 rounded-full border", urgencyPill(String(t.urgency || "normal")))}>
+                <span
+                  className={cn(
+                    "text-[10px] px-2 py-0.5 rounded-full border",
+                    // urgency pill but adapted to light paper
+                    (String(t.urgency || "normal").toLowerCase() === "urgent")
+                      ? "bg-red-500/10 text-red-900 border-red-500/25"
+                      : (String(t.urgency || "normal").toLowerCase() === "low")
+                        ? "bg-sky-500/10 text-sky-900 border-sky-500/20"
+                        : "bg-amber-500/10 text-amber-950 border-amber-500/20",
+                  )}
+                >
                   {(t.urgency || "normal").toString().toUpperCase()}
                 </span>
               </div>
-              <p className="text-[13px] font-semibold text-white mt-1 truncate">
+              <p className="text-[13px] font-black text-zinc-950 mt-1 truncate">
                 {(t.title || "").trim() || "Problem"}
               </p>
             </div>
             {actions}
           </div>
 
-          <p className="text-[12px] text-zinc-300 mt-2 line-clamp-3 whitespace-pre-wrap">
+          <p className="text-[12px] text-zinc-800 mt-2 line-clamp-3 whitespace-pre-wrap">
             {t.description}
           </p>
 
@@ -459,19 +487,19 @@ export default function Tickets() {
             {!!t.tags?.length && (
               <div className="flex items-center gap-1 flex-wrap">
                 {t.tags.slice(1, 3).map((x) => (
-                  <span key={x} className="text-[10px] px-2 py-1 rounded-full bg-white/5 border border-white/10 text-zinc-200">
+                  <span key={x} className="text-[10px] px-2 py-1 rounded-full bg-zinc-900/5 border border-zinc-900/10 text-zinc-800">
                     {x}
                   </span>
                 ))}
                 {t.tags.length > 3 ? (
-                  <span className="text-[10px] px-2 py-1 rounded-full bg-white/5 border border-white/10 text-zinc-400">
+                  <span className="text-[10px] px-2 py-1 rounded-full bg-zinc-900/5 border border-zinc-900/10 text-zinc-600">
                     +{t.tags.length - 3}
                   </span>
                 ) : null}
               </div>
             )}
             {t.attachments?.length ? (
-              <span className="text-[10px] px-2 py-1 rounded-full bg-white/5 border border-white/10 text-zinc-200 inline-flex items-center gap-1">
+              <span className="text-[10px] px-2 py-1 rounded-full bg-zinc-900/5 border border-zinc-900/10 text-zinc-800 inline-flex items-center gap-1">
                 <Paperclip className="w-3 h-3" />
                 {t.attachments.length}
               </span>
@@ -484,6 +512,11 @@ export default function Tickets() {
 
   return (
     <div className="min-h-screen bg-zinc-950 px-5 pt-20 pb-12">
+      {/* cozy vignette */}
+      <div className="pointer-events-none fixed inset-0 -z-10">
+        <div className="absolute inset-0 bg-[radial-gradient(900px_420px_at_15%_15%,rgba(245,158,11,0.10),transparent_60%),radial-gradient(720px_360px_at_80%_20%,rgba(168,85,247,0.10),transparent_55%),radial-gradient(900px_520px_at_50%_110%,rgba(0,0,0,0.65),transparent_65%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(0,0,0,0.35),rgba(0,0,0,0.75))]" />
+      </div>
       <div className="max-w-6xl mx-auto">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
@@ -610,6 +643,127 @@ export default function Tickets() {
           </DialogContent>
         </Dialog>
 
+        {/* Ticket detail */}
+        <Dialog
+          open={detailOpen}
+          onOpenChange={(open) => {
+            setDetailOpen(open);
+            if (!open) setSelectedTicketId(null);
+          }}
+        >
+          <DialogContent className="bg-zinc-950 border-white/10 text-white max-w-3xl">
+            <DialogHeader>
+              <DialogTitle className="text-white">
+                Ticket #{selectedTicket?.ticket_number ?? "—"} {selectedTicket?.title ? `· ${selectedTicket.title}` : ""}
+              </DialogTitle>
+              <DialogDescription className="text-zinc-500">
+                {selectedTicket?.assigned_to_email ? `Assigned to ${selectedTicket.assigned_to_email}` : "Unassigned"}
+              </DialogDescription>
+            </DialogHeader>
+
+            {!selectedTicket ? (
+              <p className="text-sm text-zinc-500">Loading…</p>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span
+                    className={cn(
+                      "text-[11px] px-2 py-1 rounded-full border",
+                      (String(selectedTicket.urgency || "normal").toLowerCase() === "urgent")
+                        ? "bg-red-500/10 text-red-200 border-red-500/25"
+                        : (String(selectedTicket.urgency || "normal").toLowerCase() === "low")
+                          ? "bg-sky-500/10 text-sky-200 border-sky-500/20"
+                          : "bg-amber-500/10 text-amber-200 border-amber-500/20",
+                    )}
+                  >
+                    {(selectedTicket.urgency || "normal").toString().toUpperCase()}
+                  </span>
+                  <span className={cn("text-[11px] px-2 py-1 rounded-full border", statusBadge(String(selectedTicket.status || "not_started")))}>
+                    {(selectedTicket.status || "not_started").toString().replace("_", " ").toUpperCase()}
+                  </span>
+                  {selectedTicket.tags?.map((t) => (
+                    <span key={t} className="text-[11px] px-2 py-1 rounded-full bg-white/5 border border-white/10 text-zinc-200 inline-flex items-center gap-1">
+                      {t.startsWith("@") ? <AtSign className="w-3 h-3 opacity-70" /> : null}
+                      <span>{t.startsWith("@") ? t.slice(1) : t}</span>
+                    </span>
+                  ))}
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Problem description</p>
+                  <p className="text-sm text-zinc-200 mt-2 whitespace-pre-wrap leading-relaxed">
+                    {selectedTicket.description}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Attachments</p>
+                  {selectedTicket.attachments?.length ? (
+                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {selectedTicket.attachments.map((a) => {
+                        const rt = String(a.resource_type || "");
+                        const isImg = rt === "image" || a.secure_url.match(/\.(png|jpg|jpeg|webp|gif)(\?|$)/i);
+                        const isVid = rt === "video" || a.secure_url.match(/\.(mp4|webm|mov)(\?|$)/i);
+                        return (
+                          <a
+                            key={a.public_id}
+                            href={a.secure_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="group block rounded-xl overflow-hidden border border-white/10 bg-black/30 hover:border-amber-300/30 transition-colors"
+                            title="Open in new tab"
+                          >
+                            <div className="px-3 py-2 text-[11px] text-zinc-400 border-b border-white/10 truncate">
+                              {a.original_filename || a.public_id}
+                            </div>
+                            <div className="aspect-video bg-zinc-900/40">
+                              {isImg ? (
+                                <img src={a.secure_url} alt={a.original_filename || "attachment"} className="h-full w-full object-cover" />
+                              ) : isVid ? (
+                                <video src={a.secure_url} className="h-full w-full object-cover" controls />
+                              ) : (
+                                <div className="h-full w-full flex items-center justify-center text-xs text-zinc-500">
+                                  {rt || "file"}
+                                </div>
+                              )}
+                            </div>
+                          </a>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-zinc-500 mt-2">No attachments</p>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <Button
+                    variant="secondary"
+                    className="bg-white/5 hover:bg-white/10 border border-white/10 text-white"
+                    onClick={() => setDetailOpen(false)}
+                  >
+                    Close
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="bg-white/5 hover:bg-white/10 border border-white/10 text-white"
+                    onClick={() => {
+                      if (!selectedTicket) return;
+                      if (!confirm(`Delete ticket #${selectedTicket.ticket_number ?? "—"}?`)) return;
+                      deleteMut.mutate(selectedTicket.id);
+                      setDetailOpen(false);
+                    }}
+                    disabled={deleteMut.isPending}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
         {/* Ticket rail */}
         <div className="mt-6 space-y-4">
           {COLUMNS.filter((c) => c.key !== "resolved").map((col) => (
@@ -624,7 +778,7 @@ export default function Tickets() {
 
               <div
                 className={cn(
-                  "relative px-4 py-4",
+                  "relative px-4 py-3",
                   "before:absolute before:left-0 before:right-0 before:top-0 before:h-px before:bg-white/5",
                 )}
                 onDragOver={(e) => e.preventDefault()}
@@ -636,12 +790,12 @@ export default function Tickets() {
                 }}
               >
                 {/* rail bar */}
-                <div className="absolute left-4 right-4 top-4 h-[2px] rounded-full bg-white/10" />
+                <div className="absolute left-4 right-4 top-3 h-[2px] rounded-full bg-white/12" />
 
                 {byStatus[col.key].length === 0 ? (
-                  <p className="text-xs text-zinc-600 px-2 py-10 text-center">Nothing here</p>
+                  <p className="text-xs text-zinc-600 px-2 py-8 text-center">Nothing here</p>
                 ) : (
-                  <motion.div layout className="mt-4 flex gap-3 overflow-x-auto pb-2 pr-2">
+                  <motion.div layout className="mt-5 flex gap-3 overflow-x-auto pb-2 pr-2">
                     <AnimatePresence initial={false}>
                       {byStatus[col.key].map((t) => (
                         <PaperTicket
@@ -651,9 +805,10 @@ export default function Tickets() {
                             <div className="flex items-center gap-2">
                               <button
                                 type="button"
-                                className="h-7 w-7 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-zinc-200 flex items-center justify-center"
+                                className="h-7 w-7 rounded-lg border border-zinc-900/10 bg-zinc-900/5 hover:bg-zinc-900/10 text-zinc-900 flex items-center justify-center"
                                 title="Delete"
-                                onClick={() => {
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   if (!confirm(`Delete ticket #${t.ticket_number ?? "—"}?`)) return;
                                   deleteMut.mutate(t.id);
                                 }}
@@ -665,8 +820,8 @@ export default function Tickets() {
                                 <Button
                                   size="sm"
                                   variant="secondary"
-                                  className="h-7 px-3 text-xs bg-white/5 hover:bg-white/10 border border-white/10 text-white"
-                                  onClick={() => patchMut.mutate({ id: t.id, patch: { status: "in_progress" } })}
+                                  className="h-7 px-3 text-xs bg-zinc-900/5 hover:bg-zinc-900/10 border border-zinc-900/10 text-zinc-900"
+                                  onClick={(e) => { e.stopPropagation(); patchMut.mutate({ id: t.id, patch: { status: "in_progress" } }); }}
                                   disabled={patchMut.isPending}
                                 >
                                   Take
@@ -675,8 +830,8 @@ export default function Tickets() {
                                 <Button
                                   size="sm"
                                   variant="secondary"
-                                  className="h-7 px-3 text-xs bg-white/5 hover:bg-white/10 border border-white/10 text-white"
-                                  onClick={() => patchMut.mutate({ id: t.id, patch: { status: "resolved" } })}
+                                  className="h-7 px-3 text-xs bg-zinc-900/5 hover:bg-zinc-900/10 border border-zinc-900/10 text-zinc-900"
+                                  onClick={(e) => { e.stopPropagation(); patchMut.mutate({ id: t.id, patch: { status: "resolved" } }); }}
                                   disabled={patchMut.isPending}
                                 >
                                   Stack
