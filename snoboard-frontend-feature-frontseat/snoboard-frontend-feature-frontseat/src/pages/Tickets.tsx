@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { AnimatePresence, motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   createTicket,
@@ -400,6 +401,87 @@ export default function Tickets() {
     patchMut.mutate({ id, patch: { status } });
   };
 
+  const cardTilt = (id: string) => {
+    // stable pseudo-random tilt per ticket id (no deps)
+    let h = 0;
+    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+    return ((h % 7) - 3) * 0.8; // -2.4..+2.4 degrees
+  };
+
+  const PaperTicket = ({ t, actions }: { t: Ticket; actions: ReactNode }) => {
+    const tilt = cardTilt(t.id);
+    return (
+      <motion.div
+        layout
+        initial={{ opacity: 0, y: 10, rotate: tilt }}
+        animate={{ opacity: 1, y: 0, rotate: tilt }}
+        exit={{ opacity: 0, y: 10, rotate: tilt }}
+        transition={{ type: "spring", stiffness: 420, damping: 32 }}
+        draggable
+        onDragStart={() => {
+          dragIdRef.current = t.id;
+        }}
+        className="relative w-[260px] max-w-[82vw] shrink-0 rounded-xl border border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.02] shadow-[0_18px_60px_rgba(0,0,0,0.55)]"
+      >
+        {/* perforated top edge */}
+        <div className="absolute inset-x-0 -top-[1px] h-[10px] overflow-hidden rounded-t-xl">
+          <div className="h-[10px] w-full opacity-60 [background:radial-gradient(circle_at_6px_6px,transparent_4px,rgba(255,255,255,0.10)_4.5px)] [background-size:12px_12px]" />
+        </div>
+
+        <div className="p-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-black tracking-wide text-zinc-100">
+                  #{t.ticket_number ?? "—"}
+                </span>
+                {t.tags?.[0] ? (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-zinc-200">
+                    {t.tags[0]}
+                  </span>
+                ) : null}
+                <span className={cn("text-[10px] px-2 py-0.5 rounded-full border", urgencyPill(String(t.urgency || "normal")))}>
+                  {(t.urgency || "normal").toString().toUpperCase()}
+                </span>
+              </div>
+              <p className="text-[13px] font-semibold text-white mt-1 truncate">
+                {(t.title || "").trim() || "Problem"}
+              </p>
+            </div>
+            {actions}
+          </div>
+
+          <p className="text-[12px] text-zinc-300 mt-2 line-clamp-3 whitespace-pre-wrap">
+            {t.description}
+          </p>
+
+          <div className="flex items-center gap-2 mt-3 flex-wrap">
+            {!!t.tags?.length && (
+              <div className="flex items-center gap-1 flex-wrap">
+                {t.tags.slice(1, 3).map((x) => (
+                  <span key={x} className="text-[10px] px-2 py-1 rounded-full bg-white/5 border border-white/10 text-zinc-200">
+                    {x}
+                  </span>
+                ))}
+                {t.tags.length > 3 ? (
+                  <span className="text-[10px] px-2 py-1 rounded-full bg-white/5 border border-white/10 text-zinc-400">
+                    +{t.tags.length - 3}
+                  </span>
+                ) : null}
+              </div>
+            )}
+            {t.attachments?.length ? (
+              <span className="text-[10px] px-2 py-1 rounded-full bg-white/5 border border-white/10 text-zinc-200 inline-flex items-center gap-1">
+                <Paperclip className="w-3 h-3" />
+                {t.attachments.length}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </motion.div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-zinc-950 px-5 pt-20 pb-12">
       <div className="max-w-6xl mx-auto">
@@ -528,8 +610,8 @@ export default function Tickets() {
           </DialogContent>
         </Dialog>
 
-        {/* Queue */}
-        <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Ticket rail */}
+        <div className="mt-6 space-y-4">
           {COLUMNS.filter((c) => c.key !== "resolved").map((col) => (
             <div key={col.key} className="rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl overflow-hidden">
               <div className="p-4 border-b border-white/10 flex items-center justify-between">
@@ -539,8 +621,12 @@ export default function Tickets() {
                 </div>
                 <Badge className="bg-white/5 border-white/10 text-zinc-200">{byStatus[col.key].length}</Badge>
               </div>
+
               <div
-                className="p-3 space-y-2 min-h-[140px]"
+                className={cn(
+                  "relative px-4 py-4",
+                  "before:absolute before:left-0 before:right-0 before:top-0 before:h-px before:bg-white/5",
+                )}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => {
                   const id = dragIdRef.current;
@@ -549,138 +635,66 @@ export default function Tickets() {
                   dragIdRef.current = null;
                 }}
               >
+                {/* rail bar */}
+                <div className="absolute left-4 right-4 top-4 h-[2px] rounded-full bg-white/10" />
+
                 {byStatus[col.key].length === 0 ? (
-                  <p className="text-xs text-zinc-600 px-2 py-6 text-center">Nothing here</p>
+                  <p className="text-xs text-zinc-600 px-2 py-10 text-center">Nothing here</p>
                 ) : (
-                  byStatus[col.key].map((t) => (
-                    <div
-                      key={t.id}
-                      draggable
-                      onDragStart={() => {
-                        dragIdRef.current = t.id;
-                      }}
-                      className={cn(
-                        "rounded-xl border border-white/10 bg-zinc-950/35 p-3 hover:border-white/20 transition-colors",
-                        "shadow-[0_10px_30px_rgba(0,0,0,0.35)]",
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-zinc-500 hover:text-zinc-300 cursor-grab active:cursor-grabbing">
-                              <GripVertical className="w-4 h-4" />
-                            </span>
-                            <span className="text-[10px] font-black tracking-wide text-zinc-200">
-                              #{t.ticket_number ?? "—"}
-                            </span>
-                            {t.tags?.[0] ? (
-                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-zinc-200">
-                                {t.tags[0]}
-                              </span>
-                            ) : null}
-                            <span className={cn("text-[10px] px-2 py-0.5 rounded-full border", urgencyPill(String(t.urgency || "normal")))}>
-                              {(t.urgency || "normal").toString().toUpperCase()}
-                            </span>
-                          </div>
-                          <p className="text-[13px] font-semibold text-white mt-1 truncate">
-                            {(t.title || "").trim() || "Problem"}
-                          </p>
-                        </div>
-
-                        <div className="shrink-0 flex items-center gap-2">
-                          <button
-                            type="button"
-                            className="h-7 w-7 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-zinc-200 flex items-center justify-center"
-                            title="Delete"
-                            onClick={() => {
-                              if (!confirm(`Delete ticket #${t.ticket_number ?? "—"}?`)) return;
-                              deleteMut.mutate(t.id);
-                            }}
-                            disabled={deleteMut.isPending}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                          {col.key === "not_started" ? (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              className="h-7 px-3 text-xs bg-white/5 hover:bg-white/10 border border-white/10 text-white"
-                              onClick={() => patchMut.mutate({ id: t.id, patch: { status: "in_progress" } })}
-                              disabled={patchMut.isPending}
-                            >
-                              Take
-                            </Button>
-                          ) : (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              className="h-7 px-3 text-xs bg-white/5 hover:bg-white/10 border border-white/10 text-white"
-                              onClick={() => patchMut.mutate({ id: t.id, patch: { status: "resolved" } })}
-                              disabled={patchMut.isPending}
-                            >
-                              Stack
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-
-                      <p className="text-[12px] text-zinc-300 mt-2 line-clamp-2 whitespace-pre-wrap">
-                        {t.description}
-                      </p>
-
-                      <div className="flex items-center gap-2 mt-3 flex-wrap">
-                        {!!t.tags?.length && (
-                          <div className="flex items-center gap-1 flex-wrap">
-                            {t.tags.slice(1, 3).map((x) => (
-                              <span key={x} className="text-[10px] px-2 py-1 rounded-full bg-white/5 border border-white/10 text-zinc-200">
-                                {x}
-                              </span>
-                            ))}
-                            {t.tags.length > 3 ? (
-                              <span className="text-[10px] px-2 py-1 rounded-full bg-white/5 border border-white/10 text-zinc-400">
-                                +{t.tags.length - 3}
-                              </span>
-                            ) : null}
-                          </div>
-                        )}
-                        {t.attachments?.length ? (
-                          <span className="text-[10px] px-2 py-1 rounded-full bg-white/5 border border-white/10 text-zinc-200 inline-flex items-center gap-1">
-                            <Paperclip className="w-3 h-3" />
-                            {t.attachments.length}
-                          </span>
-                        ) : null}
-                      </div>
-
-                      {t.attachments?.length ? (
-                        <div className="mt-3 grid grid-cols-2 gap-2">
-                          {t.attachments.slice(0, 4).map((a) => (
-                            <a
-                              key={a.public_id}
-                              href={a.secure_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="block rounded-lg overflow-hidden border border-white/10 bg-black/30 hover:border-violet-500/30 transition-colors"
-                              title="Open attachment"
-                            >
-                              <div className="px-2 py-1 text-[10px] text-zinc-400 border-b border-white/5 truncate">
-                                {a.original_filename || a.public_id}
-                              </div>
-                              <div className="aspect-video bg-zinc-900/40 flex items-center justify-center text-[10px] text-zinc-500">
-                                {(a.resource_type || "file").toString()}
-                              </div>
-                            </a>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  ))
+                  <motion.div layout className="mt-4 flex gap-3 overflow-x-auto pb-2 pr-2">
+                    <AnimatePresence initial={false}>
+                      {byStatus[col.key].map((t) => (
+                        <PaperTicket
+                          key={t.id}
+                          t={t}
+                          actions={
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                className="h-7 w-7 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-zinc-200 flex items-center justify-center"
+                                title="Delete"
+                                onClick={() => {
+                                  if (!confirm(`Delete ticket #${t.ticket_number ?? "—"}?`)) return;
+                                  deleteMut.mutate(t.id);
+                                }}
+                                disabled={deleteMut.isPending}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                              {col.key === "not_started" ? (
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  className="h-7 px-3 text-xs bg-white/5 hover:bg-white/10 border border-white/10 text-white"
+                                  onClick={() => patchMut.mutate({ id: t.id, patch: { status: "in_progress" } })}
+                                  disabled={patchMut.isPending}
+                                >
+                                  Take
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  className="h-7 px-3 text-xs bg-white/5 hover:bg-white/10 border border-white/10 text-white"
+                                  onClick={() => patchMut.mutate({ id: t.id, patch: { status: "resolved" } })}
+                                  disabled={patchMut.isPending}
+                                >
+                                  Stack
+                                </Button>
+                              )}
+                            </div>
+                          }
+                        />
+                      ))}
+                    </AnimatePresence>
+                  </motion.div>
                 )}
               </div>
             </div>
           ))}
 
           {/* Resolved stack */}
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl overflow-hidden lg:col-span-3">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl overflow-hidden">
             <div className="p-4 border-b border-white/10 flex items-center justify-between gap-3 flex-wrap">
               <div>
                 <p className="text-sm font-black text-white flex items-center gap-2">
@@ -760,12 +774,37 @@ export default function Tickets() {
               </div>
             ) : (
               <div className="p-6">
-                <div className="mx-auto max-w-2xl rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.06] p-5">
-                  <p className="text-sm font-bold text-emerald-100">Pile view</p>
-                  <p className="text-xs text-zinc-400 mt-1">
-                    Click <span className="text-white">Show</span> to expand the stack. This keeps the main queue clean.
-                  </p>
-                </div>
+                {byStatus.resolved.length === 0 ? (
+                  <p className="text-xs text-zinc-600 text-center py-6">No resolved tickets</p>
+                ) : (
+                  <div className="relative h-[150px]">
+                    {byStatus.resolved.slice(0, 5).map((t, idx) => (
+                      <motion.div
+                        key={t.id}
+                        layout
+                        initial={{ opacity: 0, y: 12, rotate: cardTilt(t.id) }}
+                        animate={{ opacity: 1, y: 0, rotate: cardTilt(t.id) }}
+                        style={{
+                          position: "absolute",
+                          left: 0,
+                          top: 0,
+                          transform: `translate(${idx * 12}px, ${idx * 8}px) rotate(${cardTilt(t.id)}deg)`,
+                          width: "min(420px, 92vw)",
+                        }}
+                        className="rounded-xl border border-white/10 bg-zinc-950/30 shadow-[0_24px_80px_rgba(0,0,0,0.65)]"
+                      >
+                        <div className="p-3">
+                          <p className="text-sm font-bold text-white truncate">#{t.ticket_number ?? "—"} · {t.title || "Ticket"}</p>
+                          <p className="text-[11px] text-zinc-500 mt-0.5 truncate">{t.tags?.[0] || ""}</p>
+                          <p className="text-xs text-zinc-300 mt-2 line-clamp-2 whitespace-pre-wrap">{t.description}</p>
+                        </div>
+                      </motion.div>
+                    ))}
+                    <div className="absolute right-0 bottom-0 text-[11px] text-zinc-500">
+                      {byStatus.resolved.length > 5 ? `+${byStatus.resolved.length - 5} more` : ""}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
