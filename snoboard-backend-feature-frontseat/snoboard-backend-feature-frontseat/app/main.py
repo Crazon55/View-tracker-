@@ -2371,6 +2371,15 @@ async def tracker_ideas_update(idea_id: str, request: Request):
         client.table("tracker_ideas").update(allowed).eq("id", idea_id).execute()
     except Exception as e:
         msg = str(e).lower()
+        # Some deployments may not have the reel-only kalakar_link column yet.
+        # If missing, drop it and retry so the API doesn't crash other updates.
+        if "kalakar_link" in msg and ("schema cache" in msg or "could not find" in msg or "column" in msg):
+            allowed.pop("kalakar_link", None)
+            try:
+                client.table("tracker_ideas").update(allowed).eq("id", idea_id).execute()
+                msg = ""  # handled
+            except Exception as e2:
+                msg = str(e2).lower()
         is_bw_err = any(k in msg for k in bw_keys) or "column" in msg or "schema cache" in msg
         if is_bw_err and user_explicit_bw:
             # Cache was wrong — bust it and raise so user sees the real issue.
@@ -2384,7 +2393,7 @@ async def tracker_ideas_update(idea_id: str, request: Request):
             )
         if is_bw_err:
             tracker_ideas_update._bw_cols_cache = False
-            lean = {k: v for k, v in allowed.items() if k not in bw_keys}
+            lean = {k: v for k, v in allowed.items() if k not in bw_keys and k != "kalakar_link"}
             if lean:
                 client.table("tracker_ideas").update(lean).eq("id", idea_id).execute()
         else:
