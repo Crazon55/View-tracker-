@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   createTicket,
+  deleteTicket,
   getTickets,
   getWorkboardMentionCandidates,
   patchTicket,
@@ -27,7 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { AtSign, Layers, Loader2, Paperclip, Send, Ticket as TicketIcon, User } from "lucide-react";
+import { AtSign, GripVertical, Layers, Loader2, Paperclip, Send, Ticket as TicketIcon, Trash2, User } from "lucide-react";
 
 type Column = { key: TicketStatus; title: string; hint: string };
 const COLUMNS: Column[] = [
@@ -383,7 +384,21 @@ export default function Tickets() {
     onError: (e: any) => toast.error(e?.message || "Failed to update ticket"),
   });
 
+  const deleteMut = useMutation({
+    mutationFn: async (id: string) => deleteTicket(id),
+    onSuccess: async () => {
+      toast.success("Ticket deleted");
+      await qc.invalidateQueries({ queryKey: ["tickets"] });
+    },
+    onError: (e: any) => toast.error(e?.message || "Failed to delete ticket"),
+  });
+
   const resolvedCount = byStatus.resolved.length;
+  const dragIdRef = useRef<string | null>(null);
+
+  const moveTicket = (id: string, status: TicketStatus) => {
+    patchMut.mutate({ id, patch: { status } });
+  };
 
   return (
     <div className="min-h-screen bg-zinc-950 px-5 pt-20 pb-12">
@@ -524,13 +539,26 @@ export default function Tickets() {
                 </div>
                 <Badge className="bg-white/5 border-white/10 text-zinc-200">{byStatus[col.key].length}</Badge>
               </div>
-              <div className="p-3 space-y-2">
+              <div
+                className="p-3 space-y-2 min-h-[140px]"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => {
+                  const id = dragIdRef.current;
+                  if (!id) return;
+                  moveTicket(id, col.key);
+                  dragIdRef.current = null;
+                }}
+              >
                 {byStatus[col.key].length === 0 ? (
                   <p className="text-xs text-zinc-600 px-2 py-6 text-center">Nothing here</p>
                 ) : (
                   byStatus[col.key].map((t) => (
                     <div
                       key={t.id}
+                      draggable
+                      onDragStart={() => {
+                        dragIdRef.current = t.id;
+                      }}
                       className={cn(
                         "rounded-xl border border-white/10 bg-zinc-950/35 p-3 hover:border-white/20 transition-colors",
                         "shadow-[0_10px_30px_rgba(0,0,0,0.35)]",
@@ -539,6 +567,9 @@ export default function Tickets() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-zinc-500 hover:text-zinc-300 cursor-grab active:cursor-grabbing">
+                              <GripVertical className="w-4 h-4" />
+                            </span>
                             <span className="text-[10px] font-black tracking-wide text-zinc-200">
                               #{t.ticket_number ?? "—"}
                             </span>
@@ -557,6 +588,18 @@ export default function Tickets() {
                         </div>
 
                         <div className="shrink-0 flex items-center gap-2">
+                          <button
+                            type="button"
+                            className="h-7 w-7 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-zinc-200 flex items-center justify-center"
+                            title="Delete"
+                            onClick={() => {
+                              if (!confirm(`Delete ticket #${t.ticket_number ?? "—"}?`)) return;
+                              deleteMut.mutate(t.id);
+                            }}
+                            disabled={deleteMut.isPending}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                           {col.key === "not_started" ? (
                             <Button
                               size="sm"
@@ -659,26 +702,56 @@ export default function Tickets() {
             </div>
 
             {resolvedOpen ? (
-              <div className="p-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+              <div
+                className="p-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 min-h-[110px]"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => {
+                  const id = dragIdRef.current;
+                  if (!id) return;
+                  moveTicket(id, "resolved");
+                  dragIdRef.current = null;
+                }}
+              >
                 {byStatus.resolved.length === 0 ? (
                   <p className="text-xs text-zinc-600 px-2 py-6 text-center md:col-span-2 lg:col-span-3">No resolved tickets</p>
                 ) : (
                   byStatus.resolved.map((t) => (
-                    <div key={t.id} className="rounded-xl border border-white/10 bg-zinc-950/30 p-3">
+                    <div
+                      key={t.id}
+                      draggable
+                      onDragStart={() => {
+                        dragIdRef.current = t.id;
+                      }}
+                      className="rounded-xl border border-white/10 bg-zinc-950/30 p-3"
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="text-sm font-bold text-white truncate">#{t.ticket_number ?? "—"} · {t.title || "Ticket"}</p>
                           <p className="text-[11px] text-zinc-500 mt-0.5 truncate">{t.tags?.[0] || ""}</p>
                         </div>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          className="h-7 px-2 text-xs bg-white/5 hover:bg-white/10 border border-white/10 text-white"
-                          onClick={() => patchMut.mutate({ id: t.id, patch: { status: "in_progress" } })}
-                          disabled={patchMut.isPending}
-                        >
-                          Reopen
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            className="h-7 w-7 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-zinc-200 flex items-center justify-center"
+                            title="Delete"
+                            onClick={() => {
+                              if (!confirm(`Delete ticket #${t.ticket_number ?? "—"}?`)) return;
+                              deleteMut.mutate(t.id);
+                            }}
+                            disabled={deleteMut.isPending}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="h-7 px-2 text-xs bg-white/5 hover:bg-white/10 border border-white/10 text-white"
+                            onClick={() => patchMut.mutate({ id: t.id, patch: { status: "in_progress" } })}
+                            disabled={patchMut.isPending}
+                          >
+                            Reopen
+                          </Button>
+                        </div>
                       </div>
                       <p className="text-xs text-zinc-300 mt-2 line-clamp-3 whitespace-pre-wrap">{t.description}</p>
                     </div>
