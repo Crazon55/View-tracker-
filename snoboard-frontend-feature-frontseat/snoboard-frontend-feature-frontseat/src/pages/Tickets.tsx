@@ -29,13 +29,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { AtSign, GripVertical, Layers, Loader2, Paperclip, Send, Ticket as TicketIcon, Trash2, User } from "lucide-react";
+import { AtSign, Layers, Loader2, Paperclip, Send, Ticket as TicketIcon, Trash2, User } from "lucide-react";
 
 type Column = { key: TicketStatus; title: string; hint: string };
 const COLUMNS: Column[] = [
-  { key: "not_started", title: "Not started", hint: "New tickets waiting for pickup" },
-  { key: "in_progress", title: "In progress", hint: "Currently being worked on" },
-  { key: "resolved", title: "Resolved", hint: "Done (goes to stack)" },
+  { key: "not_started", title: "INCOMING ORDERS", hint: "New orders — waiting for pickup" },
+  { key: "in_progress", title: "ON THE PASS", hint: "Being worked on right now" },
+  { key: "resolved", title: "Served", hint: "Completed orders" },
 ];
 
 function isPersonMentionTag(t: string): boolean {
@@ -259,6 +259,8 @@ async function uploadToCloudinary(file: File, signed: Awaited<ReturnType<typeof 
   return (await res.json()) as any;
 }
 
+const PAGE_BG = "#0c0b09";
+
 export default function Tickets() {
   const qc = useQueryClient();
   const { user } = useAuth();
@@ -304,7 +306,6 @@ export default function Tickets() {
       const wasAssigned = (pid?.assigned_to_email || "").toLowerCase();
       const nowStatus = String(t.status || "");
       const wasStatus = String(pid?.status || "");
-
       const relevant = nowAssigned === email || (t.reporter_email || "").toLowerCase() === email;
 
       if (pid) {
@@ -366,7 +367,7 @@ export default function Tickets() {
       return base;
     },
     onSuccess: async () => {
-      toast.success("Ticket created");
+      toast.success("Order placed");
       setTitle("");
       setDescription("");
       setUrgency("normal");
@@ -390,7 +391,7 @@ export default function Tickets() {
   const deleteMut = useMutation({
     mutationFn: async (id: string) => deleteTicket(id),
     onSuccess: async () => {
-      toast.success("Ticket deleted");
+      toast.success("Order removed");
       await qc.invalidateQueries({ queryKey: ["tickets"] });
     },
     onError: (e: any) => toast.error(e?.message || "Failed to delete ticket"),
@@ -410,133 +411,278 @@ export default function Tickets() {
   );
 
   const cardTilt = (id: string) => {
-    // stable pseudo-random tilt per ticket id (no deps)
     let h = 0;
     for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
-    return ((h % 7) - 3) * 0.8; // -2.4..+2.4 degrees
+    return ((h % 7) - 3) * 0.7;
   };
 
-  const PaperTicket = ({ t, actions }: { t: Ticket; actions: ReactNode }) => {
+  const ReceiptTicket = ({ t, actions }: { t: Ticket; actions: ReactNode }) => {
     const tilt = cardTilt(t.id);
+    const urgV = (t.urgency || "normal").toString().toLowerCase();
+    const urgStyle =
+      urgV === "urgent"
+        ? { borderColor: "#dc2626", color: "#991b1b", background: "#fef2f2", label: "!! URGENT !!" }
+        : urgV === "low"
+        ? { borderColor: "#0284c7", color: "#075985", background: "#f0f9ff", label: "LOW PRIORITY" }
+        : { borderColor: "#d1d5db", color: "#6b7280", background: "transparent", label: "NORMAL" };
+
     return (
       <motion.div
         layout
-        initial={{ opacity: 0, y: 10, rotate: tilt }}
+        initial={{ opacity: 0, y: -20, rotate: tilt }}
         animate={{ opacity: 1, y: 0, rotate: tilt }}
-        exit={{ opacity: 0, y: 10, rotate: tilt }}
-        transition={{ type: "spring", stiffness: 420, damping: 32 }}
+        exit={{ opacity: 0, y: -20, rotate: tilt }}
+        transition={{ type: "spring", stiffness: 300, damping: 28 }}
         draggable
-        onDragStart={() => {
-          dragIdRef.current = t.id;
-        }}
-        onClick={() => {
-          setSelectedTicketId(t.id);
-          setDetailOpen(true);
-        }}
-        className={cn(
-          "relative w-[260px] max-w-[82vw] shrink-0 rounded-xl",
-          // warm paper
-          "border border-amber-200/60 bg-gradient-to-b from-amber-50/95 to-amber-100/75",
-          "shadow-[0_18px_60px_rgba(0,0,0,0.55)]",
-        )}
+        onDragStart={() => { dragIdRef.current = t.id; }}
+        onClick={() => { setSelectedTicketId(t.id); setDetailOpen(true); }}
+        className="relative shrink-0 cursor-pointer select-none"
+        style={{ width: 188, transformOrigin: "top center" }}
       >
-        {/* hook + perforated edge */}
-        <div className="absolute left-1/2 -top-2 -translate-x-1/2 h-4 w-4 rounded-full border border-zinc-900/20 bg-amber-50 shadow-[0_10px_30px_rgba(0,0,0,0.25)]" />
-        <div className="absolute inset-x-0 -top-[1px] h-[10px] overflow-hidden rounded-t-xl opacity-70">
-          <div className="h-[10px] w-full [background:radial-gradient(circle_at_6px_6px,transparent_4px,rgba(24,24,27,0.12)_4.5px)] [background-size:12px_12px]" />
+        {/* Brass binder clip */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <div
+            style={{
+              width: 30,
+              height: 20,
+              background: "linear-gradient(to bottom, #e8c84a 0%, #c9a50e 45%, #e8c84a 100%)",
+              clipPath: "polygon(16% 0%, 84% 0%, 94% 100%, 6% 100%)",
+              boxShadow: "0 3px 8px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.4), inset 0 -1px 0 rgba(0,0,0,0.2)",
+              position: "relative",
+              zIndex: 10,
+            }}
+          />
+          {/* String from clip to paper */}
+          <div style={{ width: 2, height: 8, background: "rgba(90,70,10,0.35)" }} />
         </div>
 
-        <div className="p-3">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-black tracking-wide text-zinc-900">
-                  #{t.ticket_number ?? "—"}
-                </span>
-                {t.tags?.[0] ? (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-900/5 border border-zinc-900/10 text-zinc-900">
-                    {t.tags[0]}
-                  </span>
-                ) : null}
-                <span
-                  className={cn(
-                    "text-[10px] px-2 py-0.5 rounded-full border",
-                    // urgency pill but adapted to light paper
-                    (String(t.urgency || "normal").toLowerCase() === "urgent")
-                      ? "bg-red-500/10 text-red-900 border-red-500/25"
-                      : (String(t.urgency || "normal").toLowerCase() === "low")
-                        ? "bg-sky-500/10 text-sky-900 border-sky-500/20"
-                        : "bg-amber-500/10 text-amber-950 border-amber-500/20",
-                  )}
-                >
-                  {(t.urgency || "normal").toString().toUpperCase()}
-                </span>
+        {/* Thermal receipt paper */}
+        <div
+          style={{
+            background: "#fefdf4",
+            color: "#1c1c1c",
+            fontFamily: "'Courier New', Courier, monospace",
+            boxShadow: "0 24px_60px rgba(0,0,0,0.7), 0 8px 16px rgba(0,0,0,0.5)",
+            filter: "drop-shadow(0 16px 40px rgba(0,0,0,0.65))",
+          }}
+        >
+          {/* Perforated top edge */}
+          <div
+            style={{
+              height: 10,
+              backgroundImage: `radial-gradient(circle at 8px 0px, ${PAGE_BG} 5px, transparent 5px)`,
+              backgroundSize: "16px 100%",
+              backgroundRepeat: "repeat-x",
+            }}
+          />
+
+          <div style={{ padding: "8px 11px 10px" }}>
+            {/* Store name */}
+            <div style={{ textAlign: "center", marginBottom: 6 }}>
+              <div style={{ fontSize: 7, fontWeight: 900, letterSpacing: "0.28em", color: "#9ca3af", textTransform: "uppercase" }}>
+                FRONTSEAT MEDIA
               </div>
-              <p className="text-[13px] font-black text-zinc-950 mt-1 truncate">
-                {(t.title || "").trim() || "Problem"}
-              </p>
+              <div style={{ fontSize: 6, letterSpacing: "0.18em", color: "#d1d5db", textTransform: "uppercase", marginTop: 1 }}>
+                Support Kitchen
+              </div>
             </div>
-            {actions}
-          </div>
 
-          <p className="text-[12px] text-zinc-800 mt-2 line-clamp-3 whitespace-pre-wrap">
-            {t.description}
-          </p>
+            <div style={{ borderTop: "1px dashed #e5e7eb", margin: "5px 0" }} />
 
-          <div className="flex items-center gap-2 mt-3 flex-wrap">
-            {!!t.tags?.length && (
-              <div className="flex items-center gap-1 flex-wrap">
-                {t.tags.slice(1, 3).map((x) => (
-                  <span key={x} className="text-[10px] px-2 py-1 rounded-full bg-zinc-900/5 border border-zinc-900/10 text-zinc-800">
-                    {x}
-                  </span>
-                ))}
-                {t.tags.length > 3 ? (
-                  <span className="text-[10px] px-2 py-1 rounded-full bg-zinc-900/5 border border-zinc-900/10 text-zinc-600">
-                    +{t.tags.length - 3}
-                  </span>
-                ) : null}
+            {/* Order number */}
+            <div style={{ textAlign: "center", margin: "6px 0" }}>
+              <div style={{ fontSize: 7, letterSpacing: "0.2em", color: "#9ca3af", textTransform: "uppercase" }}>ORDER</div>
+              <div style={{ fontSize: 26, fontWeight: 900, letterSpacing: "-0.03em", lineHeight: 1, color: "#111827" }}>
+                #{String(t.ticket_number ?? 0).padStart(4, "0")}
               </div>
-            )}
-            {t.attachments?.length ? (
-              <span className="text-[10px] px-2 py-1 rounded-full bg-zinc-900/5 border border-zinc-900/10 text-zinc-800 inline-flex items-center gap-1">
-                <Paperclip className="w-3 h-3" />
-                {t.attachments.length}
-              </span>
+            </div>
+
+            <div style={{ borderTop: "1px dashed #e5e7eb", margin: "5px 0" }} />
+
+            {/* Urgency stamp */}
+            <div
+              style={{
+                textAlign: "center",
+                border: `1px solid ${urgStyle.borderColor}`,
+                borderRadius: 2,
+                padding: "2px 4px",
+                fontSize: 8,
+                fontWeight: 900,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+                marginBottom: 7,
+                color: urgStyle.color,
+                background: urgStyle.background,
+              }}
+            >
+              {urgStyle.label}
+            </div>
+
+            {/* Title */}
+            {(t.title || "").trim() ? (
+              <div style={{ fontSize: 11, fontWeight: 900, lineHeight: 1.3, marginBottom: 5, wordBreak: "break-word", color: "#111827" }}>
+                {t.title}
+              </div>
             ) : null}
+
+            {/* Description */}
+            <div
+              style={{
+                fontSize: 10,
+                color: "#4b5563",
+                lineHeight: 1.45,
+                display: "-webkit-box",
+                WebkitLineClamp: 5,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
+                wordBreak: "break-word",
+                whiteSpace: "pre-wrap",
+                marginBottom: 6,
+              }}
+            >
+              {t.description}
+            </div>
+
+            {/* Tags */}
+            {t.tags?.length > 0 && (
+              <>
+                <div style={{ borderTop: "1px dashed #e5e7eb", margin: "5px 0" }} />
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                  {t.tags.slice(0, 3).map((tag) => (
+                    <span
+                      key={tag}
+                      style={{
+                        fontSize: 8,
+                        color: "#6b7280",
+                        background: "#f3f4f6",
+                        border: "1px solid #e5e7eb",
+                        borderRadius: 2,
+                        padding: "1px 4px",
+                      }}
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                  {t.tags.length > 3 ? (
+                    <span style={{ fontSize: 8, color: "#9ca3af" }}>+{t.tags.length - 3}</span>
+                  ) : null}
+                </div>
+              </>
+            )}
+
+            {/* Attachments indicator */}
+            {t.attachments?.length ? (
+              <div style={{ fontSize: 8, color: "#9ca3af", marginTop: 4 }}>
+                📎 {t.attachments.length} attachment{t.attachments.length > 1 ? "s" : ""}
+              </div>
+            ) : null}
+
+            {/* Barcode */}
+            <div style={{ borderTop: "1px dashed #e5e7eb", margin: "8px 0 4px" }} />
+            <div style={{ textAlign: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 0.5, marginBottom: 2 }}>
+                {t.id
+                  .replace(/-/g, "")
+                  .slice(0, 14)
+                  .split("")
+                  .map((c, i) => {
+                    const w = [1, 2, 1, 3, 2, 1][parseInt(c, 16) % 6];
+                    return (
+                      <span
+                        key={i}
+                        style={{
+                          display: "inline-block",
+                          width: w,
+                          height: 18,
+                          background: "#374151",
+                          marginRight: 1,
+                          flexShrink: 0,
+                        }}
+                      />
+                    );
+                  })}
+              </div>
+              <div style={{ fontSize: 7, color: "#9ca3af", letterSpacing: "0.12em" }}>
+                {t.id.slice(0, 8).toUpperCase()}
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div
+              style={{ borderTop: "1px dashed #e5e7eb", marginTop: 8, paddingTop: 7 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {actions}
+            </div>
           </div>
+
+          {/* Perforated bottom edge */}
+          <div
+            style={{
+              height: 10,
+              backgroundImage: `radial-gradient(circle at 8px 10px, ${PAGE_BG} 5px, transparent 5px)`,
+              backgroundSize: "16px 100%",
+              backgroundRepeat: "repeat-x",
+            }}
+          />
         </div>
       </motion.div>
     );
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 px-5 pt-20 pb-12">
-      {/* cozy vignette */}
+    <div className="min-h-screen px-5 pt-20 pb-16" style={{ background: PAGE_BG }}>
+      {/* Kitchen atmosphere lighting */}
       <div className="pointer-events-none fixed inset-0 -z-10">
-        <div className="absolute inset-0 bg-[radial-gradient(900px_420px_at_15%_15%,rgba(245,158,11,0.10),transparent_60%),radial-gradient(720px_360px_at_80%_20%,rgba(168,85,247,0.10),transparent_55%),radial-gradient(900px_520px_at_50%_110%,rgba(0,0,0,0.65),transparent_65%)]" />
-        <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(0,0,0,0.35),rgba(0,0,0,0.75))]" />
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: `
+              radial-gradient(ellipse 1600px 280px at 50% -40px, rgba(245,158,11,0.16), transparent 70%),
+              radial-gradient(ellipse 700px 300px at 18% 5%, rgba(245,158,11,0.07), transparent 65%),
+              radial-gradient(ellipse 700px 300px at 82% 5%, rgba(245,158,11,0.07), transparent 65%),
+              linear-gradient(to bottom, #0e0d0b 0%, #0a0908 100%)
+            `,
+          }}
+        />
       </div>
-      <div className="max-w-6xl mx-auto">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
-                <TicketIcon className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">Tickets</h1>
-                <p className="text-xs text-zinc-500 mt-1">Chef-style slips: pick up → work → stack.</p>
-              </div>
+
+      <div className="max-w-[1400px] mx-auto">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 flex-wrap mb-10">
+          <div className="flex items-center gap-3">
+            <div
+              className="h-10 w-10 rounded-2xl flex items-center justify-center"
+              style={{
+                background: "rgba(245,158,11,0.1)",
+                border: "1px solid rgba(245,158,11,0.2)",
+              }}
+            >
+              <TicketIcon className="w-5 h-5 text-amber-400" />
+            </div>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">Kitchen Rail</h1>
+              <p className="text-xs text-zinc-500 mt-1">New order → hang on rail → take → serve.</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button onClick={() => setCreateOpen(true)} className="bg-violet-600 hover:bg-violet-500 text-white">
-              New ticket
+            <Button
+              onClick={() => setCreateOpen(true)}
+              style={{
+                background: "#d97706",
+                color: "white",
+                fontWeight: 900,
+                fontSize: 12,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+              }}
+            >
+              + New Order
             </Button>
             <Button
               variant="secondary"
-              className={cn("bg-white/5 hover:bg-white/10 border border-white/10 text-white")}
+              className="bg-white/5 hover:bg-white/10 border border-white/10 text-white"
               onClick={() => ticketsQ.refetch()}
               disabled={ticketsQ.isFetching}
             >
@@ -546,18 +692,19 @@ export default function Tickets() {
           </div>
         </div>
 
+        {/* Create dialog */}
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogContent className="bg-zinc-950 border-white/10 text-white max-w-2xl">
             <DialogHeader>
-              <DialogTitle className="text-white">New ticket</DialogTitle>
+              <DialogTitle className="text-white">New Order</DialogTitle>
               <DialogDescription className="text-zinc-500">
-                Paste in the WhatsApp format. Tag like <span className="text-zinc-300">@12382407495800</span>.
+                Log a support ticket. Tag with <span className="text-zinc-300">@name</span> or <span className="text-zinc-300">@phone</span>.
               </DialogDescription>
             </DialogHeader>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <p className="text-[11px] text-zinc-500 mb-1">Ticket title (optional)</p>
+                <p className="text-[11px] text-zinc-500 mb-1">Order title (optional)</p>
                 <Input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
@@ -625,7 +772,7 @@ export default function Tickets() {
             <div className="flex items-center justify-end gap-2 pt-2">
               <Button
                 variant="secondary"
-                className={cn("bg-white/5 hover:bg-white/10 border border-white/10 text-white")}
+                className="bg-white/5 hover:bg-white/10 border border-white/10 text-white"
                 onClick={() => setCreateOpen(false)}
                 disabled={createMut.isPending}
               >
@@ -634,10 +781,10 @@ export default function Tickets() {
               <Button
                 onClick={() => createMut.mutate()}
                 disabled={!description.trim() || createMut.isPending}
-                className="bg-violet-600 hover:bg-violet-500 text-white"
+                className="bg-amber-600 hover:bg-amber-500 text-white"
               >
                 {createMut.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
-                Create ticket
+                Place Order
               </Button>
             </div>
           </DialogContent>
@@ -654,7 +801,7 @@ export default function Tickets() {
           <DialogContent className="bg-zinc-950 border-white/10 text-white max-w-3xl">
             <DialogHeader>
               <DialogTitle className="text-white">
-                Ticket #{selectedTicket?.ticket_number ?? "—"} {selectedTicket?.title ? `· ${selectedTicket.title}` : ""}
+                Order #{selectedTicket?.ticket_number ?? "—"} {selectedTicket?.title ? `· ${selectedTicket.title}` : ""}
               </DialogTitle>
               <DialogDescription className="text-zinc-500">
                 {selectedTicket?.assigned_to_email ? `Assigned to ${selectedTicket.assigned_to_email}` : "Unassigned"}
@@ -736,133 +883,285 @@ export default function Tickets() {
                   )}
                 </div>
 
-                <div className="flex items-center justify-end gap-2 pt-1">
-                  <Button
-                    variant="secondary"
-                    className="bg-white/5 hover:bg-white/10 border border-white/10 text-white"
-                    onClick={() => setDetailOpen(false)}
-                  >
-                    Close
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    className="bg-white/5 hover:bg-white/10 border border-white/10 text-white"
-                    onClick={() => {
-                      if (!selectedTicket) return;
-                      if (!confirm(`Delete ticket #${selectedTicket.ticket_number ?? "—"}?`)) return;
-                      deleteMut.mutate(selectedTicket.id);
-                      setDetailOpen(false);
-                    }}
-                    disabled={deleteMut.isPending}
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Delete
-                  </Button>
+                <div className="flex items-center justify-between gap-2 pt-1 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    {selectedTicket.status !== "in_progress" && (
+                      <Button
+                        variant="secondary"
+                        className="bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-300 text-xs"
+                        onClick={() => {
+                          if (!selectedTicket) return;
+                          patchMut.mutate({ id: selectedTicket.id, patch: { status: "in_progress" } });
+                          setDetailOpen(false);
+                        }}
+                        disabled={patchMut.isPending}
+                      >
+                        Take Order
+                      </Button>
+                    )}
+                    {selectedTicket.status !== "resolved" && (
+                      <Button
+                        variant="secondary"
+                        className="bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-300 text-xs"
+                        onClick={() => {
+                          if (!selectedTicket) return;
+                          patchMut.mutate({ id: selectedTicket.id, patch: { status: "resolved" } });
+                          setDetailOpen(false);
+                        }}
+                        disabled={patchMut.isPending}
+                      >
+                        Mark Served ✓
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      className="bg-white/5 hover:bg-white/10 border border-white/10 text-white"
+                      onClick={() => setDetailOpen(false)}
+                    >
+                      Close
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      className="bg-white/5 hover:bg-red-500/10 border border-white/10 hover:border-red-500/20 text-zinc-400 hover:text-red-400"
+                      onClick={() => {
+                        if (!selectedTicket) return;
+                        if (!confirm(`Delete order #${selectedTicket.ticket_number ?? "—"}?`)) return;
+                        deleteMut.mutate(selectedTicket.id);
+                        setDetailOpen(false);
+                      }}
+                      disabled={deleteMut.isPending}
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}
           </DialogContent>
         </Dialog>
 
-        {/* Ticket rail */}
-        <div className="mt-6 space-y-4">
+        {/* Kitchen rail sections */}
+        <div className="space-y-12">
           {COLUMNS.filter((c) => c.key !== "resolved").map((col) => (
-            <div key={col.key} className="rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl overflow-hidden">
-              <div className="p-4 border-b border-white/10 flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-black text-white">{col.title}</p>
-                  <p className="text-[11px] text-zinc-500 mt-0.5">{col.hint}</p>
-                </div>
-                <Badge className="bg-white/5 border-white/10 text-zinc-200">{byStatus[col.key].length}</Badge>
+            <div key={col.key}>
+              {/* Section label */}
+              <div className="flex items-center gap-3 mb-5 px-1">
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 900,
+                    letterSpacing: "0.3em",
+                    textTransform: "uppercase",
+                    color: col.key === "not_started" ? "#fbbf24" : "#fb923c",
+                  }}
+                >
+                  {col.title}
+                </span>
+                <span className="text-zinc-700 text-xs">—</span>
+                <span className="text-xs text-zinc-600">{col.hint}</span>
+                <span className="ml-auto">
+                  <Badge
+                    style={{
+                      background: col.key === "not_started" ? "rgba(251,191,36,0.1)" : "rgba(251,146,60,0.1)",
+                      border: `1px solid ${col.key === "not_started" ? "rgba(251,191,36,0.25)" : "rgba(251,146,60,0.25)"}`,
+                      color: col.key === "not_started" ? "#fbbf24" : "#fb923c",
+                      fontSize: 11,
+                      fontWeight: 900,
+                    }}
+                  >
+                    {byStatus[col.key].length}
+                  </Badge>
+                </span>
               </div>
 
-              <div
-                className={cn(
-                  "relative px-4 py-3",
-                  "before:absolute before:left-0 before:right-0 before:top-0 before:h-px before:bg-white/5",
-                )}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => {
-                  const id = dragIdRef.current;
-                  if (!id) return;
-                  moveTicket(id, col.key);
-                  dragIdRef.current = null;
-                }}
-              >
-                {/* rail bar */}
-                <div className="absolute left-4 right-4 top-3 h-[2px] rounded-full bg-white/12" />
+              {/* Rail assembly */}
+              <div className="relative">
+                {/* Left wall bracket */}
+                <div className="absolute left-0 top-0 z-10 flex flex-col items-center" style={{ width: 18 }}>
+                  <div
+                    style={{
+                      width: 14,
+                      height: 28,
+                      background: "linear-gradient(to right, #374151, #6b7280, #374151)",
+                      borderRadius: "3px 3px 2px 2px",
+                      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.12), 2px 0 8px rgba(0,0,0,0.4)",
+                    }}
+                  />
+                </div>
+                {/* Right wall bracket */}
+                <div className="absolute right-0 top-0 z-10 flex flex-col items-center" style={{ width: 18 }}>
+                  <div
+                    style={{
+                      width: 14,
+                      height: 28,
+                      background: "linear-gradient(to right, #374151, #6b7280, #374151)",
+                      borderRadius: "3px 3px 2px 2px",
+                      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.12), -2px 0 8px rgba(0,0,0,0.4)",
+                    }}
+                  />
+                </div>
 
-                {byStatus[col.key].length === 0 ? (
-                  <p className="text-xs text-zinc-600 px-2 py-8 text-center">Nothing here</p>
-                ) : (
-                  <motion.div layout className="mt-5 flex gap-3 overflow-x-auto pb-2 pr-2">
-                    <AnimatePresence initial={false}>
-                      {byStatus[col.key].map((t) => (
-                        <PaperTicket
-                          key={t.id}
-                          t={t}
-                          actions={
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                className="h-7 w-7 rounded-lg border border-zinc-900/10 bg-zinc-900/5 hover:bg-zinc-900/10 text-zinc-900 flex items-center justify-center"
-                                title="Delete"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (!confirm(`Delete ticket #${t.ticket_number ?? "—"}?`)) return;
-                                  deleteMut.mutate(t.id);
-                                }}
-                                disabled={deleteMut.isPending}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                              {col.key === "not_started" ? (
-                                <Button
-                                  size="sm"
-                                  variant="secondary"
-                                  className="h-7 px-3 text-xs bg-zinc-900/5 hover:bg-zinc-900/10 border border-zinc-900/10 text-zinc-900"
-                                  onClick={(e) => { e.stopPropagation(); patchMut.mutate({ id: t.id, patch: { status: "in_progress" } }); }}
-                                  disabled={patchMut.isPending}
+                {/* Steel rail rod */}
+                <div
+                  style={{
+                    height: 14,
+                    borderRadius: 7,
+                    background:
+                      "linear-gradient(to bottom, #c8ced6 0%, #e2e8f0 22%, #94a3b8 50%, #e2e8f0 78%, #c8ced6 100%)",
+                    boxShadow:
+                      "0 8px 20px rgba(0,0,0,0.85), 0 3px 6px rgba(0,0,0,0.6), inset 0 2px 0 rgba(255,255,255,0.55), inset 0 -2px 0 rgba(0,0,0,0.18)",
+                    margin: "0 4px",
+                  }}
+                />
+
+                {/* Drop zone + hanging tickets */}
+                <div
+                  className="min-h-[220px] pb-8 pt-1"
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    const id = dragIdRef.current;
+                    if (!id) return;
+                    moveTicket(id, col.key);
+                    dragIdRef.current = null;
+                  }}
+                >
+                  {byStatus[col.key].length === 0 ? (
+                    <div className="flex items-center justify-center h-[200px]">
+                      <p
+                        style={{
+                          fontSize: 11,
+                          color: "#3f3f46",
+                          border: "2px dashed #27272a",
+                          borderRadius: 12,
+                          padding: "20px 40px",
+                          fontFamily: "'Courier New', Courier, monospace",
+                          letterSpacing: "0.05em",
+                        }}
+                      >
+                        No orders — drop or create one
+                      </p>
+                    </div>
+                  ) : (
+                    <motion.div layout className="flex gap-6 overflow-x-auto pb-4 pt-2 px-6" style={{ scrollbarWidth: "thin" }}>
+                      <AnimatePresence initial={false}>
+                        {byStatus[col.key].map((t) => (
+                          <ReceiptTicket
+                            key={t.id}
+                            t={t}
+                            actions={
+                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                <button
+                                  type="button"
+                                  style={{
+                                    height: 24,
+                                    width: 24,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    border: "1px solid #e5e7eb",
+                                    borderRadius: 3,
+                                    background: "transparent",
+                                    cursor: "pointer",
+                                    color: "#9ca3af",
+                                    flexShrink: 0,
+                                    fontFamily: "'Courier New', Courier, monospace",
+                                  }}
+                                  title="Delete order"
+                                  onClick={() => {
+                                    if (!confirm(`Delete #${t.ticket_number}?`)) return;
+                                    deleteMut.mutate(t.id);
+                                  }}
+                                  disabled={deleteMut.isPending}
                                 >
-                                  Take
-                                </Button>
-                              ) : (
-                                <Button
-                                  size="sm"
-                                  variant="secondary"
-                                  className="h-7 px-3 text-xs bg-zinc-900/5 hover:bg-zinc-900/10 border border-zinc-900/10 text-zinc-900"
-                                  onClick={(e) => { e.stopPropagation(); patchMut.mutate({ id: t.id, patch: { status: "resolved" } }); }}
-                                  disabled={patchMut.isPending}
-                                >
-                                  Stack
-                                </Button>
-                              )}
-                            </div>
-                          }
-                        />
-                      ))}
-                    </AnimatePresence>
-                  </motion.div>
-                )}
+                                  <Trash2 style={{ width: 11, height: 11 }} />
+                                </button>
+                                {col.key === "not_started" ? (
+                                  <button
+                                    type="button"
+                                    style={{
+                                      flex: 1,
+                                      height: 24,
+                                      fontSize: 8,
+                                      fontWeight: 900,
+                                      letterSpacing: "0.12em",
+                                      textTransform: "uppercase",
+                                      border: "1px solid #92400e",
+                                      borderRadius: 3,
+                                      background: "#fef3c7",
+                                      color: "#92400e",
+                                      cursor: "pointer",
+                                      fontFamily: "'Courier New', Courier, monospace",
+                                    }}
+                                    onClick={() => patchMut.mutate({ id: t.id, patch: { status: "in_progress" } })}
+                                    disabled={patchMut.isPending}
+                                  >
+                                    TAKE ORDER
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    style={{
+                                      flex: 1,
+                                      height: 24,
+                                      fontSize: 8,
+                                      fontWeight: 900,
+                                      letterSpacing: "0.12em",
+                                      textTransform: "uppercase",
+                                      border: "1px solid #065f46",
+                                      borderRadius: 3,
+                                      background: "#d1fae5",
+                                      color: "#065f46",
+                                      cursor: "pointer",
+                                      fontFamily: "'Courier New', Courier, monospace",
+                                    }}
+                                    onClick={() => patchMut.mutate({ id: t.id, patch: { status: "resolved" } })}
+                                    disabled={patchMut.isPending}
+                                  >
+                                    SERVE ✓
+                                  </button>
+                                )}
+                              </div>
+                            }
+                          />
+                        ))}
+                      </AnimatePresence>
+                    </motion.div>
+                  )}
+                </div>
               </div>
             </div>
           ))}
 
-          {/* Resolved stack */}
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl overflow-hidden">
+          {/* Served / Spike pile */}
+          <div className="rounded-2xl border border-white/10 bg-white/[0.02] backdrop-blur-xl overflow-hidden">
             <div className="p-4 border-b border-white/10 flex items-center justify-between gap-3 flex-wrap">
-              <div>
-                <p className="text-sm font-black text-white flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-emerald-300" />
-                  Resolved stack
-                </p>
-                <p className="text-[11px] text-zinc-500 mt-0.5">Collapsed pile of completed tickets.</p>
+              <div className="flex items-center gap-3">
+                <Layers className="w-4 h-4 text-emerald-400" />
+                <div>
+                  <p
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 900,
+                      letterSpacing: "0.28em",
+                      textTransform: "uppercase",
+                      color: "#34d399",
+                    }}
+                  >
+                    Served
+                  </p>
+                  <p className="text-[11px] text-zinc-600 mt-0.5">Completed orders, filed away.</p>
+                </div>
               </div>
               <div className="flex items-center gap-2">
-                <Badge className="bg-emerald-500/10 border-emerald-500/20 text-emerald-200">{resolvedCount}</Badge>
+                <Badge className="bg-emerald-500/10 border-emerald-500/20 text-emerald-300 text-xs font-black">
+                  {resolvedCount}
+                </Badge>
                 <Button
                   variant="secondary"
-                  className="bg-white/5 hover:bg-white/10 border border-white/10 text-white"
+                  className="bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs"
                   onClick={() => setResolvedOpen((v) => !v)}
                 >
                   {resolvedOpen ? "Hide" : "Show"}
@@ -872,7 +1171,7 @@ export default function Tickets() {
 
             {resolvedOpen ? (
               <div
-                className="p-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 min-h-[110px]"
+                className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 min-h-[110px]"
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => {
                   const id = dragIdRef.current;
@@ -882,29 +1181,30 @@ export default function Tickets() {
                 }}
               >
                 {byStatus.resolved.length === 0 ? (
-                  <p className="text-xs text-zinc-600 px-2 py-6 text-center md:col-span-2 lg:col-span-3">No resolved tickets</p>
+                  <p className="text-xs text-zinc-700 text-center py-6 md:col-span-2 lg:col-span-3 xl:col-span-4">No completed orders</p>
                 ) : (
                   byStatus.resolved.map((t) => (
                     <div
                       key={t.id}
                       draggable
-                      onDragStart={() => {
-                        dragIdRef.current = t.id;
-                      }}
-                      className="rounded-xl border border-white/10 bg-zinc-950/30 p-3"
+                      onDragStart={() => { dragIdRef.current = t.id; }}
+                      className="rounded-xl border border-white/10 bg-zinc-950/40 p-3 cursor-pointer hover:bg-zinc-950/60 transition-colors"
+                      onClick={() => { setSelectedTicketId(t.id); setDetailOpen(true); }}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="text-sm font-bold text-white truncate">#{t.ticket_number ?? "—"} · {t.title || "Ticket"}</p>
-                          <p className="text-[11px] text-zinc-500 mt-0.5 truncate">{t.tags?.[0] || ""}</p>
+                          <p className="text-[10px] font-black text-emerald-400 uppercase tracking-wider">SERVED ✓</p>
+                          <p className="text-xs text-zinc-500">#{t.ticket_number ?? "—"}</p>
+                          <p className="text-sm font-bold text-white truncate mt-0.5">{t.title || "Order"}</p>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 shrink-0">
                           <button
                             type="button"
-                            className="h-7 w-7 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-zinc-200 flex items-center justify-center"
+                            className="h-7 w-7 rounded-lg border border-white/10 bg-white/5 hover:bg-red-500/10 text-zinc-400 hover:text-red-400 flex items-center justify-center transition-colors"
                             title="Delete"
-                            onClick={() => {
-                              if (!confirm(`Delete ticket #${t.ticket_number ?? "—"}?`)) return;
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!confirm(`Delete #${t.ticket_number}?`)) return;
                               deleteMut.mutate(t.id);
                             }}
                             disabled={deleteMut.isPending}
@@ -915,14 +1215,14 @@ export default function Tickets() {
                             size="sm"
                             variant="secondary"
                             className="h-7 px-2 text-xs bg-white/5 hover:bg-white/10 border border-white/10 text-white"
-                            onClick={() => patchMut.mutate({ id: t.id, patch: { status: "in_progress" } })}
+                            onClick={(e) => { e.stopPropagation(); patchMut.mutate({ id: t.id, patch: { status: "in_progress" } }); }}
                             disabled={patchMut.isPending}
                           >
                             Reopen
                           </Button>
                         </div>
                       </div>
-                      <p className="text-xs text-zinc-300 mt-2 line-clamp-3 whitespace-pre-wrap">{t.description}</p>
+                      <p className="text-xs text-zinc-500 mt-1.5 line-clamp-2 whitespace-pre-wrap">{t.description}</p>
                     </div>
                   ))
                 )}
@@ -930,7 +1230,7 @@ export default function Tickets() {
             ) : (
               <div className="p-6">
                 {byStatus.resolved.length === 0 ? (
-                  <p className="text-xs text-zinc-600 text-center py-6">No resolved tickets</p>
+                  <p className="text-xs text-zinc-700 text-center py-6">No completed orders</p>
                 ) : (
                   <div className="relative h-[150px]">
                     {byStatus.resolved.slice(0, 5).map((t, idx) => (
@@ -943,19 +1243,36 @@ export default function Tickets() {
                           position: "absolute",
                           left: 0,
                           top: 0,
-                          transform: `translate(${idx * 12}px, ${idx * 8}px) rotate(${cardTilt(t.id)}deg)`,
-                          width: "min(420px, 92vw)",
+                          transform: `translate(${idx * 14}px, ${idx * 7}px) rotate(${cardTilt(t.id)}deg)`,
+                          width: "min(380px, 88vw)",
+                          background: "#fefdf4",
+                          fontFamily: "'Courier New', Courier, monospace",
+                          boxShadow: "0 8px 24px rgba(0,0,0,0.6)",
+                          borderRadius: 6,
+                          padding: "10px 12px",
                         }}
-                        className="rounded-xl border border-white/10 bg-zinc-950/30 shadow-[0_24px_80px_rgba(0,0,0,0.65)]"
                       >
-                        <div className="p-3">
-                          <p className="text-sm font-bold text-white truncate">#{t.ticket_number ?? "—"} · {t.title || "Ticket"}</p>
-                          <p className="text-[11px] text-zinc-500 mt-0.5 truncate">{t.tags?.[0] || ""}</p>
-                          <p className="text-xs text-zinc-300 mt-2 line-clamp-2 whitespace-pre-wrap">{t.description}</p>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                          <span style={{ fontSize: 9, fontWeight: 900, color: "#059669", letterSpacing: "0.1em" }}>SERVED ✓</span>
+                          <span style={{ fontSize: 9, color: "#9ca3af" }}>#{t.ticket_number}</span>
                         </div>
+                        <p style={{ fontSize: 12, fontWeight: 700, color: "#111827", marginBottom: 4 }}>{t.title || "Order"}</p>
+                        <p
+                          style={{
+                            fontSize: 10,
+                            color: "#6b7280",
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                            whiteSpace: "pre-wrap",
+                          }}
+                        >
+                          {t.description}
+                        </p>
                       </motion.div>
                     ))}
-                    <div className="absolute right-0 bottom-0 text-[11px] text-zinc-500">
+                    <div className="absolute right-0 bottom-0 text-[11px] text-zinc-600">
                       {byStatus.resolved.length > 5 ? `+${byStatus.resolved.length - 5} more` : ""}
                     </div>
                   </div>
@@ -968,4 +1285,3 @@ export default function Tickets() {
     </div>
   );
 }
-
