@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Paperclip, Plus, Send, Stack, Ticket as TicketIcon } from "lucide-react";
+import { Layers, Loader2, Paperclip, Plus, Send, Ticket as TicketIcon } from "lucide-react";
 
 type Column = { key: TicketStatus; title: string; hint: string };
 const COLUMNS: Column[] = [
@@ -444,7 +444,7 @@ export default function Tickets() {
             <div className="p-4 border-b border-white/10 flex items-center justify-between gap-3 flex-wrap">
               <div>
                 <p className="text-sm font-black text-white flex items-center gap-2">
-                  <Stack className="w-4 h-4 text-emerald-300" />
+                  <Layers className="w-4 h-4 text-emerald-300" />
                   Resolved stack
                 </p>
                 <p className="text-[11px] text-zinc-500 mt-0.5">Collapsed pile of completed tickets.</p>
