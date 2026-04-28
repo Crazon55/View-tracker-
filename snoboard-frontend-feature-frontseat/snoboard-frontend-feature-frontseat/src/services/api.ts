@@ -325,6 +325,8 @@ export const patchTicket = (id: string, data: Partial<Pick<Ticket,
   "title" | "description" | "urgency" | "status" | "tags" | "assigned_to_email" | "attachments" | "resolved_at"
 >>) => fetchApi<Ticket>(`/api/v1/tickets/${id}`, { method: "PATCH", body: JSON.stringify(data) });
 
+export const deleteTicket = (id: string) => fetchApi<Ticket>(`/api/v1/tickets/${id}`, { method: "DELETE" });
+
 export type CloudinarySignedUpload = {
   cloud_name: string;
   api_key: string;

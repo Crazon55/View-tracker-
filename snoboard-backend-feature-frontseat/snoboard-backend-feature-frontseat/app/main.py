@@ -3897,6 +3897,27 @@ async def patch_ticket(ticket_id: str, request: Request):
         raise HTTPException(status_code=500, detail=f"Failed to update ticket: {str(e)}")
 
 
+@app.delete("/api/v1/tickets/{ticket_id}")
+async def delete_ticket(ticket_id: str):
+    client = get_supabase_client()
+    try:
+        rows = (
+            client.table("tickets")
+            .delete()
+            .eq("id", ticket_id)
+            .execute()
+            .data
+            or []
+        )
+        if not rows:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        return {"success": True, "data": rows[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete ticket: {str(e)}")
+
+
 @app.post("/api/v1/tickets/cloudinary-sign")
 async def tickets_cloudinary_sign(request: Request):
     """
