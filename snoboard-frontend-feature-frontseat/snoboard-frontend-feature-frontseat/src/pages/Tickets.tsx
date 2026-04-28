@@ -261,6 +261,30 @@ async function uploadToCloudinary(file: File, signed: Awaited<ReturnType<typeof 
 
 const PAGE_BG = "#09090b";
 
+function playNotificationChime() {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const gain = ctx.createGain();
+    gain.connect(ctx.destination);
+
+    const notes = [880, 1108]; // A5 → C#6 — ascending two-tone ding
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.14);
+      osc.connect(gain);
+      gain.gain.setValueAtTime(0.25, ctx.currentTime + i * 0.14);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.14 + 0.4);
+      osc.start(ctx.currentTime + i * 0.14);
+      osc.stop(ctx.currentTime + i * 0.14 + 0.4);
+    });
+  } catch {
+    // audio unavailable — silent fail
+  }
+}
+
 export default function Tickets() {
   const qc = useQueryClient();
   const { user } = useAuth();
@@ -318,6 +342,7 @@ export default function Tickets() {
     const prev = prevRef.current;
 
     const ping = (title: string, body: string) => {
+      playNotificationChime();
       toast(body, { description: title });
       if ("Notification" in window && Notification.permission === "granted") {
         new Notification(title, { body, icon: "/favicon.ico" });
