@@ -259,7 +259,7 @@ async function uploadToCloudinary(file: File, signed: Awaited<ReturnType<typeof 
   return (await res.json()) as any;
 }
 
-const PAGE_BG = "#0c0b09";
+const PAGE_BG = "#09090b";
 
 export default function Tickets() {
   const qc = useQueryClient();
@@ -639,10 +639,10 @@ export default function Tickets() {
             position: "absolute",
             inset: 0,
             background: `
-              radial-gradient(ellipse 1600px 280px at 50% -40px, rgba(245,158,11,0.16), transparent 70%),
-              radial-gradient(ellipse 700px 300px at 18% 5%, rgba(245,158,11,0.07), transparent 65%),
-              radial-gradient(ellipse 700px 300px at 82% 5%, rgba(245,158,11,0.07), transparent 65%),
-              linear-gradient(to bottom, #0e0d0b 0%, #0a0908 100%)
+              radial-gradient(ellipse 900px 420px at 15% 15%, rgba(124,58,237,0.10), transparent 60%),
+              radial-gradient(ellipse 720px 360px at 80% 20%, rgba(168,85,247,0.10), transparent 55%),
+              radial-gradient(ellipse 900px 520px at 50% 110%, rgba(0,0,0,0.65), transparent 65%),
+              linear-gradient(to bottom, rgba(0,0,0,0.35), rgba(0,0,0,0.75))
             `,
           }}
         />
@@ -655,11 +655,11 @@ export default function Tickets() {
             <div
               className="h-10 w-10 rounded-2xl flex items-center justify-center"
               style={{
-                background: "rgba(245,158,11,0.1)",
-                border: "1px solid rgba(245,158,11,0.2)",
+                background: "rgba(124,58,237,0.1)",
+                border: "1px solid rgba(124,58,237,0.2)",
               }}
             >
-              <TicketIcon className="w-5 h-5 text-amber-400" />
+              <TicketIcon className="w-5 h-5 text-violet-400" />
             </div>
             <div>
               <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">Bug Tickets</h1>
@@ -669,14 +669,7 @@ export default function Tickets() {
           <div className="flex items-center gap-2">
             <Button
               onClick={() => setCreateOpen(true)}
-              style={{
-                background: "#d97706",
-                color: "white",
-                fontWeight: 900,
-                fontSize: 12,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-              }}
+              className="bg-violet-600 hover:bg-violet-500 text-white font-black text-xs uppercase tracking-wide"
             >
               + Add Ticket
             </Button>
@@ -704,7 +697,7 @@ export default function Tickets() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <p className="text-[11px] text-zinc-500 mb-1">Order title (optional)</p>
+                <p className="text-[11px] text-zinc-500 mb-1">Ticket title (optional)</p>
                 <Input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
@@ -888,7 +881,7 @@ export default function Tickets() {
                     {selectedTicket.status !== "in_progress" && (
                       <Button
                         variant="secondary"
-                        className="bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-300 text-xs"
+                        className="bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 text-violet-300 text-xs"
                         onClick={() => {
                           if (!selectedTicket) return;
                           patchMut.mutate({ id: selectedTicket.id, patch: { status: "in_progress" } });
@@ -927,7 +920,7 @@ export default function Tickets() {
                       className="bg-white/5 hover:bg-red-500/10 border border-white/10 hover:border-red-500/20 text-zinc-400 hover:text-red-400"
                       onClick={() => {
                         if (!selectedTicket) return;
-                        if (!confirm(`Delete order #${selectedTicket.ticket_number ?? "—"}?`)) return;
+                        if (!confirm(`Delete ticket #${selectedTicket.ticket_number ?? "—"}?`)) return;
                         deleteMut.mutate(selectedTicket.id);
                         setDetailOpen(false);
                       }}
@@ -949,29 +942,13 @@ export default function Tickets() {
             <div key={col.key}>
               {/* Section label */}
               <div className="flex items-center gap-3 mb-5 px-1">
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 900,
-                    letterSpacing: "0.3em",
-                    textTransform: "uppercase",
-                    color: col.key === "not_started" ? "#fbbf24" : "#fb923c",
-                  }}
-                >
+                <span className="text-xs font-black uppercase tracking-[0.25em] text-violet-400">
                   {col.title}
                 </span>
                 <span className="text-zinc-700 text-xs">—</span>
                 <span className="text-xs text-zinc-600">{col.hint}</span>
                 <span className="ml-auto">
-                  <Badge
-                    style={{
-                      background: col.key === "not_started" ? "rgba(251,191,36,0.1)" : "rgba(251,146,60,0.1)",
-                      border: `1px solid ${col.key === "not_started" ? "rgba(251,191,36,0.25)" : "rgba(251,146,60,0.25)"}`,
-                      color: col.key === "not_started" ? "#fbbf24" : "#fb923c",
-                      fontSize: 11,
-                      fontWeight: 900,
-                    }}
-                  >
+                  <Badge className="bg-white/5 border-white/10 text-zinc-200 text-xs font-black">
                     {byStatus[col.key].length}
                   </Badge>
                 </span>
@@ -1041,7 +1018,7 @@ export default function Tickets() {
                           letterSpacing: "0.05em",
                         }}
                       >
-                        No orders — drop or create one
+                        No tickets — drop or create one
                       </p>
                     </div>
                   ) : (
@@ -1088,10 +1065,10 @@ export default function Tickets() {
                                       fontWeight: 900,
                                       letterSpacing: "0.12em",
                                       textTransform: "uppercase",
-                                      border: "1px solid #92400e",
+                                      border: "1px solid #6d28d9",
                                       borderRadius: 3,
-                                      background: "#fef3c7",
-                                      color: "#92400e",
+                                      background: "#ede9fe",
+                                      color: "#4c1d95",
                                       cursor: "pointer",
                                       fontFamily: "'Courier New', Courier, monospace",
                                     }}
