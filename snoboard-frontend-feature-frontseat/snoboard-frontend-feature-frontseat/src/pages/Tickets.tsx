@@ -269,7 +269,6 @@ export default function Tickets() {
   const [description, setDescription] = useState("");
   const [urgency, setUrgency] = useState<TicketUrgency>("normal");
   const [tags, setTags] = useState<string[]>([]);
-  const [assignedTo, setAssignedTo] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [resolvedOpen, setResolvedOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -282,7 +281,25 @@ export default function Tickets() {
     refetchInterval: 20_000,
   });
 
-  const prevRef = useRef<Record<string, { status?: string; assigned_to_email?: string | null; updated_at?: string }>>({});
+  const prevRef = useRef<Record<string, { status?: string; assigned_to_email?: string | null; updated_at?: string; tags?: string[] }>>({});
+
+  const { data: mentionPayload } = useQuery({
+    queryKey: ["tickets-mention-candidates"],
+    queryFn: getWorkboardMentionCandidates,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const myMentionTag = useMemo(() => {
+    const me = mentionPayload?.people?.find(
+      (p) => (p.email || "").toLowerCase() === (user?.email || "").toLowerCase(),
+    );
+    return me ? mentionFromName(me.display) : null;
+  }, [mentionPayload, user?.email]);
+
+  useEffect(() => {
+    if (!("Notification" in window)) return;
+    if (Notification.permission === "default") Notification.requestPermission();
+  }, []);
 
   const byStatus = useMemo(() => {
     const rows = ticketsQ.data || [];
@@ -300,6 +317,13 @@ export default function Tickets() {
     const rows = ticketsQ.data || [];
     const prev = prevRef.current;
 
+    const ping = (title: string, body: string) => {
+      toast(body, { description: title });
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification(title, { body, icon: "/favicon.ico" });
+      }
+    };
+
     for (const t of rows) {
       const pid = prev[t.id];
       const nowAssigned = (t.assigned_to_email || "").toLowerCase();
@@ -308,19 +332,28 @@ export default function Tickets() {
       const wasStatus = String(pid?.status || "");
       const relevant = nowAssigned === email || (t.reporter_email || "").toLowerCase() === email;
 
-      if (pid) {
+      const nowMentioned = myMentionTag ? (t.tags || []).includes(myMentionTag) : false;
+      const wasMentioned = myMentionTag ? (pid?.tags || []).includes(myMentionTag) : false;
+      const justMentioned = nowMentioned && (!pid || !wasMentioned);
+
+      if (justMentioned) {
+        ping(
+          "Bug Tickets — You were mentioned",
+          `#${t.ticket_number ?? "—"}: ${t.title || t.description.slice(0, 60)}`,
+        );
+      } else if (pid) {
         if (nowAssigned === email && wasAssigned !== email) {
-          toast(`Ticket #${t.ticket_number ?? "—"} assigned to you`);
+          ping("Bug Tickets — Assigned to you", `Ticket #${t.ticket_number ?? "—"} was assigned to you`);
         } else if (relevant && nowStatus !== wasStatus && nowStatus === "resolved") {
-          toast.success(`Ticket #${t.ticket_number ?? "—"} resolved`);
+          ping("Bug Tickets — Resolved", `Ticket #${t.ticket_number ?? "—"} was marked finished`);
         }
       }
     }
 
     prevRef.current = Object.fromEntries(
-      rows.map((t) => [t.id, { status: t.status, assigned_to_email: t.assigned_to_email, updated_at: t.updated_at }]),
+      rows.map((t) => [t.id, { status: t.status, assigned_to_email: t.assigned_to_email, updated_at: t.updated_at, tags: t.tags }]),
     );
-  }, [ticketsQ.data, user?.email]);
+  }, [ticketsQ.data, user?.email, myMentionTag]);
 
   const createMut = useMutation({
     mutationFn: async () => {
@@ -331,7 +364,7 @@ export default function Tickets() {
         status: "not_started",
         tags,
         reporter_email: user?.email || undefined,
-        assigned_to_email: assignedTo.trim() || null,
+        assigned_to_email: null,
         attachments: [],
       });
 
@@ -372,7 +405,6 @@ export default function Tickets() {
       setDescription("");
       setUrgency("normal");
       setTags([]);
-      setAssignedTo("");
       setFiles([]);
       setCreateOpen(false);
       await qc.invalidateQueries({ queryKey: ["tickets"] });
@@ -705,28 +737,17 @@ export default function Tickets() {
                   className="bg-zinc-950/60 border-white/10 text-white placeholder:text-zinc-600"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="text-[11px] text-zinc-500 mb-1">Urgency</p>
-                  <select
-                    value={urgency}
-                    onChange={(e) => setUrgency(e.target.value as any)}
-                    className="w-full h-10 rounded-md bg-zinc-950/60 border border-white/10 text-white px-3 text-sm"
-                  >
-                    <option value="low">Low</option>
-                    <option value="normal">Normal</option>
-                    <option value="urgent">Urgent</option>
-                  </select>
-                </div>
-                <div>
-                  <p className="text-[11px] text-zinc-500 mb-1">Assign to (email)</p>
-                  <Input
-                    value={assignedTo}
-                    onChange={(e) => setAssignedTo(e.target.value)}
-                    placeholder="aditi@..."
-                    className="bg-zinc-950/60 border-white/10 text-white placeholder:text-zinc-600"
-                  />
-                </div>
+              <div>
+                <p className="text-[11px] text-zinc-500 mb-1">Urgency</p>
+                <select
+                  value={urgency}
+                  onChange={(e) => setUrgency(e.target.value as any)}
+                  className="w-full h-10 rounded-md bg-zinc-950/60 border border-white/10 text-white px-3 text-sm"
+                >
+                  <option value="low">Low</option>
+                  <option value="normal">Normal</option>
+                  <option value="urgent">Urgent</option>
+                </select>
               </div>
               <div className="sm:col-span-2">
                 <p className="text-[11px] text-zinc-500 mb-1">Tag / Mention</p>
