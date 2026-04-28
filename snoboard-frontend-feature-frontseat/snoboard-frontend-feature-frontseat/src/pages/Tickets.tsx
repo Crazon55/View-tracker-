@@ -367,10 +367,24 @@ export default function Tickets() {
           `#${t.ticket_number ?? "—"}: ${t.title || t.description.slice(0, 60)}`,
         );
       } else if (pid) {
+        const isReporter = (t.reporter_email || "").toLowerCase() === email;
+
         if (nowAssigned === email && wasAssigned !== email) {
           ping("Bug Tickets — Assigned to you", `Ticket #${t.ticket_number ?? "—"} was assigned to you`);
-        } else if (relevant && nowStatus !== wasStatus && nowStatus === "resolved") {
-          ping("Bug Tickets — Resolved", `Ticket #${t.ticket_number ?? "—"} was marked finished`);
+        }
+
+        if (isReporter && nowStatus !== wasStatus) {
+          if (nowStatus === "in_progress") {
+            ping(
+              "Bug Tickets — Ticket Accepted",
+              `#${t.ticket_number ?? "—"}: ${t.title || "Your ticket"} is now being worked on`,
+            );
+          } else if (nowStatus === "resolved") {
+            ping(
+              "Bug Tickets — Ticket Finished ✓",
+              `#${t.ticket_number ?? "—"}: ${t.title || "Your ticket"} was marked finished`,
+            );
+          }
         }
       }
     }
@@ -475,6 +489,7 @@ export default function Tickets() {
 
   const ReceiptTicket = ({ t, actions }: { t: Ticket; actions: ReactNode }) => {
     const tilt = cardTilt(t.id);
+    const isMyTicket = !!(user?.email && (t.assigned_to_email || "").toLowerCase() === user.email.toLowerCase());
     const urgV = (t.urgency || "normal").toString().toLowerCase();
     const urgStyle =
       urgV === "urgent"
@@ -502,9 +517,13 @@ export default function Tickets() {
             style={{
               width: 30,
               height: 20,
-              background: "linear-gradient(to bottom, #e8c84a 0%, #c9a50e 45%, #e8c84a 100%)",
+              background: isMyTicket
+                ? "linear-gradient(to bottom, #a78bfa 0%, #7c3aed 45%, #a78bfa 100%)"
+                : "linear-gradient(to bottom, #e8c84a 0%, #c9a50e 45%, #e8c84a 100%)",
               clipPath: "polygon(16% 0%, 84% 0%, 94% 100%, 6% 100%)",
-              boxShadow: "0 3px 8px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.4), inset 0 -1px 0 rgba(0,0,0,0.2)",
+              boxShadow: isMyTicket
+                ? "0 3px 8px rgba(124,58,237,0.5), inset 0 1px 0 rgba(255,255,255,0.4)"
+                : "0 3px 8px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.4), inset 0 -1px 0 rgba(0,0,0,0.2)",
               position: "relative",
               zIndex: 10,
             }}
@@ -633,6 +652,32 @@ export default function Tickets() {
                 📎 {t.attachments.length} attachment{t.attachments.length > 1 ? "s" : ""}
               </div>
             ) : null}
+
+            {/* Reporter + Assignee */}
+            <div style={{ borderTop: "1px dashed #e5e7eb", margin: "6px 0 4px" }} />
+            {t.reporter_email ? (
+              <div style={{ fontSize: 8, color: "#9ca3af", marginBottom: 2, display: "flex", gap: 4 }}>
+                <span style={{ fontWeight: 700, color: "#6b7280" }}>FROM</span>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+                  {t.reporter_email}
+                </span>
+              </div>
+            ) : null}
+            {t.assigned_to_email ? (
+              <div style={{ fontSize: 8, display: "flex", gap: 4, alignItems: "center" }}>
+                <span style={{ fontWeight: 700, color: isMyTicket ? "#7c3aed" : "#6b7280" }}>
+                  {isMyTicket ? "YOU ▶" : "WORKING"}
+                </span>
+                <span style={{
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1,
+                  color: isMyTicket ? "#7c3aed" : "#9ca3af",
+                }}>
+                  {isMyTicket ? "on this ticket" : t.assigned_to_email}
+                </span>
+              </div>
+            ) : (
+              <div style={{ fontSize: 8, color: "#d1d5db" }}>WAITING FOR PICKUP</div>
+            )}
 
             {/* Barcode */}
             <div style={{ borderTop: "1px dashed #e5e7eb", margin: "8px 0 4px" }} />
@@ -930,7 +975,7 @@ export default function Tickets() {
                         className="bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 text-violet-300 text-xs"
                         onClick={() => {
                           if (!selectedTicket) return;
-                          patchMut.mutate({ id: selectedTicket.id, patch: { status: "in_progress" } });
+                          patchMut.mutate({ id: selectedTicket.id, patch: { status: "in_progress", assigned_to_email: user?.email || null } });
                           setDetailOpen(false);
                         }}
                         disabled={patchMut.isPending}
@@ -1118,7 +1163,7 @@ export default function Tickets() {
                                       cursor: "pointer",
                                       fontFamily: "'Courier New', Courier, monospace",
                                     }}
-                                    onClick={() => patchMut.mutate({ id: t.id, patch: { status: "in_progress" } })}
+                                    onClick={() => patchMut.mutate({ id: t.id, patch: { status: "in_progress", assigned_to_email: user?.email || null } })}
                                     disabled={patchMut.isPending}
                                   >
                                     TAKE TICKET
