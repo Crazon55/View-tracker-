@@ -586,6 +586,7 @@ export default function WeeklyWorkboard() {
   const [myWorkboardRole, setMyWorkboardRole] = useState<WorkboardRoleId | null>(null);
   const [myRoleDialogOpen, setMyRoleDialogOpen] = useState(false);
   const [myRoleDialogForced, setMyRoleDialogForced] = useState(false);
+  const hydratedWeekStartRef = useRef<string | null>(null);
 
   const workboardQ = useQuery({
     queryKey: ["weekly-workboard", weekStart],
@@ -656,22 +657,32 @@ export default function WeeklyWorkboard() {
       if (serverRows.length === 0 && localWeek.length > 0) {
         const localNormalized = normalizeAssignments(localWeek as any);
         setAssignments(localNormalized);
+        hydratedWeekStartRef.current = weekStart;
         // Fire-and-forget publish (the debounced save also covers it, but this is immediate)
         saveMut.mutate(localNormalized);
         return;
       }
 
       setAssignments(serverRows);
+      hydratedWeekStartRef.current = weekStart;
       return;
     }
     if (workboardQ.isError) {
       setAssignments(loadStore().filter((a) => a.week_start === weekStart));
+      hydratedWeekStartRef.current = weekStart;
     }
   }, [workboardQ.data?.week_start, workboardQ.data?.assignments, workboardQ.isError, weekStart]);
 
   // Persist locally (offline fallback) and to server (shared).
   useEffect(() => {
     if (!weekStart) return;
+    // Critical: avoid saving previous week data into the next week while the
+    // new week is still hydrating (this is what made data "disappear" on week switch).
+    if (hydratedWeekStartRef.current !== weekStart) return;
+
+    // Extra guard: only persist if this assignment list belongs to the active week.
+    if (assignments.some((a) => a.week_start !== weekStart)) return;
+
     // Merge into local store blob (keeps other weeks)
     const existing = loadStore().filter((a) => a.week_start !== weekStart);
     saveStore([...existing, ...assignments]);
@@ -1143,7 +1154,8 @@ export default function WeeklyWorkboard() {
               updateInterrupt={updateInterrupt}
             />
           ) : (
-            <ListView
+            <WeekGridListView
+              weekStart={weekStart}
               weekAssignments={weekAssignments}
               myWorkboardRole={myWorkboardRole}
               addAssignment={addAssignment}
@@ -1827,7 +1839,8 @@ function todayISO() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function ListView({
+function WeekGridListView({
+  weekStart,
   weekAssignments,
   myWorkboardRole,
   addAssignment,
@@ -1843,6 +1856,7 @@ function ListView({
   removeInterrupt,
   updateInterrupt,
 }: {
+  weekStart: string;
   weekAssignments: MainAssignment[];
   myWorkboardRole: WorkboardRoleId | null;
   addAssignment: (role_id: WorkboardRoleId) => void;
@@ -1858,146 +1872,26 @@ function ListView({
   removeInterrupt: (assignmentId: string, intId: string) => void;
   updateInterrupt: (assignmentId: string, intId: string, patch: Partial<WorkboardInterrupt>) => void;
 }) {
-  /** Start collapsed so the bento grid fits on screen; expand a card to edit. */
-  const [listExpanded, setListExpanded] = useState<Record<string, boolean>>({});
-  const listIsOpen = (id: string) => listExpanded[id] === true;
-  const toggleListCard = (id: string) => {
-    setListExpanded((p) => ({ ...p, [id]: !p[id] }));
-  };
+  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDaysISO(weekStart, i)), [weekStart]);
+  const dayLabel = (iso: string) => new Date(iso + "T12:00:00").toLocaleDateString("en-US", { weekday: "short" });
+  const daySub = (iso: string) => new Date(iso + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+  const byRole = useMemo(() => {
+    const m = new Map<WorkboardRoleId, MainAssignment>();
+    weekAssignments.forEach((a) => m.set(a.role_id, a));
+    return m;
+  }, [weekAssignments]);
+
+  const [openRole, setOpenRole] = useState<Record<string, boolean>>({});
+  const isOpen = (rid: string) => openRole[rid] === true;
 
   const missingRoles = WORKBOARD_ROLES.filter((r) => !weekAssignments.some((a) => a.role_id === r.id));
 
   return (
-    <div className="space-y-4">
-      <div className="columns-1 sm:columns-2 xl:columns-3 gap-3 sm:gap-4">
-        {weekAssignments.map((a) => {
-          const open = listIsOpen(a.id);
-          const { headline, dueLine } = listCardMainSummary(a);
-          const flatChunks = flattenAssignmentChunks(a);
-          const pct = assignmentRollupPercent(a);
-          const listIntPct = interruptRollupPercent(a.interrupts);
-          const listIntDone = a.interrupts.filter((i) => i.status === "completed").length;
-          const isMyCard = myWorkboardRole !== null && a.role_id === myWorkboardRole;
-          const today = todayISO();
-          const chunksDone = flatChunks.filter((c) => c.status === "completed").length;
-          const chunksActive = flatChunks.filter((c) => c.status === "in_progress").length;
-          const chunksLeft = flatChunks.filter((c) => c.status === "not_started").length;
-          const doneToday = flatChunks.filter((c) => c.completed_at === today).length;
-          return (
-            <div
-              key={a.id}
-              className={cn(
-                BENTO_SURFACE,
-                "overflow-hidden flex flex-col min-h-0 min-w-0 break-inside-avoid mb-3 sm:mb-4",
-                isMyCard && "ring-2 ring-violet-500/45 shadow-[0_0_50px_-14px_rgba(124,58,237,0.45)]",
-              )}
-            >
-              <div className="flex items-stretch gap-0 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => toggleListCard(a.id)}
-                  className="flex flex-1 items-start gap-2 sm:gap-3 p-3 sm:p-4 text-left hover:bg-violet-500/[0.06] transition-colors min-w-0"
-                >
-                  {open ? (
-                    <ChevronDown className="w-4 h-4 sm:w-5 sm:h-5 text-zinc-500 shrink-0 mt-0.5" />
-                  ) : (
-                    <ChevronRightIcon className="w-4 h-4 sm:w-5 sm:h-5 text-zinc-500 shrink-0 mt-0.5" />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium text-violet-300/90 flex items-center flex-wrap gap-2">
-                      {roleLabel(a.role_id)}
-                      {isMyCard && (
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-200/90 px-1.5 py-0.5 rounded-md bg-violet-500/25 border border-violet-400/30">
-                          You
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-sm sm:text-[15px] font-medium text-white mt-0.5 sm:mt-1 break-words line-clamp-3">
-                      {headline}
-                    </div>
-                    <div className="mt-2 flex items-center justify-between gap-3">
-                      <div className="flex-1 min-w-0 space-y-1.5">
-                        {dueLine && (
-                          <span className="block text-[11px] text-zinc-500 truncate">{dueLine}</span>
-                        )}
-                        <div className="flex flex-wrap gap-1.5">
-                          {doneToday > 0 && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-200 border border-emerald-500/30">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />{doneToday} today
-                            </span>
-                          )}
-                          {chunksDone > 0 && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-violet-500/15 text-violet-200 border border-violet-500/20">
-                              <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />{chunksDone} done
-                            </span>
-                          )}
-                          {chunksActive > 0 && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/15 text-amber-200 border border-amber-500/20">
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />{chunksActive} active
-                            </span>
-                          )}
-                          {chunksLeft > 0 && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-white/[0.05] text-zinc-400 border border-white/[0.08]">
-                              <span className="w-1.5 h-1.5 rounded-full bg-zinc-600 inline-block" />{chunksLeft} left
-                            </span>
-                          )}
-                          {flatChunks.length === 0 && (
-                            <span className="text-[11px] text-zinc-600">No steps yet</span>
-                          )}
-                          {a.interrupts.length > 0 && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-500/10 text-orange-300/80 border border-orange-500/15">
-                              <span className="w-1.5 h-1.5 rounded-full bg-orange-400 inline-block" />{listIntDone}/{a.interrupts.length} extras
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <MiniRing pct={pct} />
-                    </div>
-                    {!open && allAssignmentTags(a).length > 0 && (
-                      <div className="mt-1.5 sm:mt-2">
-                        <TagChipsRow tags={allAssignmentTags(a)} max={4} />
-                      </div>
-                    )}
-                  </div>
-                </button>
-                <div className="flex items-start p-2 sm:p-3 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => removeAssignment(a.id)}
-                    className="p-1.5 sm:p-2 rounded-xl text-zinc-500 hover:text-red-300 hover:bg-red-500/10 transition-colors"
-                    title="Remove assignment"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-              {open && (
-              <div className="border-t border-white/10 px-3 pb-3 pt-2 sm:px-4 sm:pb-4 sm:pt-3 bg-black/40 backdrop-blur-xl max-h-[min(72vh,780px)] overflow-y-auto overscroll-y-contain">
-                  <AssignmentEditor
-                    a={a}
-                    embedBelowListHeader
-                    removeAssignment={removeAssignment}
-                    patchAssignment={patchAssignment}
-                    patchPrimaryTask={patchPrimaryTask}
-                    addPrimaryTask={addPrimaryTask}
-                    removePrimaryTask={removePrimaryTask}
-                    addChunk={addChunk}
-                    removeChunk={removeChunk}
-                    updateChunk={updateChunk}
-                    addInterrupt={addInterrupt}
-                    removeInterrupt={removeInterrupt}
-                    updateInterrupt={updateInterrupt}
-                  />
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
+    <div className="space-y-5">
       {missingRoles.length > 0 && (
-        <div className={cn(BENTO_SURFACE, "border-dashed p-5 break-inside-avoid")}>
-          <p className="text-sm text-zinc-500 mb-3">Add a card for someone’s role this week:</p>
+        <div className={cn(BENTO_SURFACE, "border-dashed p-5")}>
+          <p className="text-sm text-zinc-500 mb-3">Add a department card:</p>
           <div className="flex flex-wrap gap-2">
             {missingRoles.map((r) => (
               <button
@@ -2012,6 +1906,126 @@ function ListView({
           </div>
         </div>
       )}
+
+      <div className={cn(BENTO_SURFACE, "p-4")}>
+        <div className="text-sm font-semibold text-white tabular-nums">{fmtWeekRange(weekStart)}</div>
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
+          {days.map((dIso) => (
+            <div key={dIso} className="rounded-2xl border border-white/10 bg-black/35 backdrop-blur-xl p-3 min-h-[220px]">
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div>
+                  <div className="text-[11px] font-black text-white">{dayLabel(dIso)}</div>
+                  <div className="text-[11px] text-zinc-500">{daySub(dIso)}</div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {WORKBOARD_ROLES.map((r) => {
+                  const a = byRole.get(r.id);
+                  if (!a) return null;
+                  const tasksToday = (a.primary_tasks || []).filter((pt) => String(pt.due_date || "").slice(0, 10) === dIso);
+                  if (tasksToday.length === 0) return null;
+                  const open = isOpen(`${dIso}:${r.id}`);
+                  return (
+                    <div key={`${dIso}:${r.id}`} className="rounded-xl border border-white/10 bg-white/[0.03]">
+                      <button
+                        type="button"
+                        onClick={() => setOpenRole((p) => ({ ...p, [`${dIso}:${r.id}`]: !open }))}
+                        className="w-full px-3 py-2 text-left flex items-start gap-2 hover:bg-white/[0.04] transition-colors"
+                      >
+                        <span className="mt-0.5 text-zinc-500 shrink-0">
+                          {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRightIcon className="w-4 h-4" />}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[10px] font-semibold uppercase tracking-wider text-violet-300/90">
+                            {roleShort(r.id)}
+                          </div>
+                          <div className="text-[12px] text-zinc-300">
+                            {tasksToday.length} main task{tasksToday.length === 1 ? "" : "s"}
+                          </div>
+                        </div>
+                      </button>
+
+                      {open && (
+                        <div className="px-3 pb-3">
+                          {tasksToday.map((pt) => (
+                            <div key={pt.id} className="mt-2 rounded-lg border border-white/10 bg-black/30 p-2">
+                              <div className="text-[12px] font-semibold text-white">
+                                {pt.title?.trim() ? pt.title.trim() : "Untitled main task"}
+                              </div>
+                              {pt.chunks?.length ? (
+                                <ul className="mt-2 space-y-1.5">
+                                  {pt.chunks.map((c) => (
+                                    <li key={c.id} className="flex items-start justify-between gap-2">
+                                      <span className="text-[11px] text-zinc-300 min-w-0 truncate">{c.title || "Untitled step"}</span>
+                                      <span className="text-[10px] text-zinc-500 shrink-0">{CHUNK_STATUS_LABEL[c.status]}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <div className="mt-1.5 text-[11px] text-zinc-600">No steps yet</div>
+                              )}
+                            </div>
+                          ))}
+
+                          <div className="mt-3">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                // Jump into full editor for that department (role).
+                                setOpenRole((p) => ({ ...p, [`editor:${a.id}`]: true }));
+                              }}
+                              className="text-[11px] text-violet-300 hover:text-violet-200"
+                            >
+                              Edit department card →
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {/* If nothing due this day, mimic Notion "To-do" placeholder */}
+                {WORKBOARD_ROLES.every((r) => {
+                  const a = byRole.get(r.id);
+                  if (!a) return true;
+                  return !(a.primary_tasks || []).some((pt) => String(pt.due_date || "").slice(0, 10) === dIso);
+                }) && <div className="text-[11px] text-zinc-600 py-2">To-do</div>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Hidden editors (opened by per-role edit buttons) */}
+      <div className="hidden">
+        {weekAssignments.map((a) => (
+          <Dialog key={a.id} open={openRole[`editor:${a.id}`] === true} onOpenChange={(o) => setOpenRole((p) => ({ ...p, [`editor:${a.id}`]: o }))}>
+            <DialogContent className="max-w-3xl border border-white/10 bg-zinc-950/95 text-zinc-100 backdrop-blur-2xl">
+              <DialogHeader>
+                <DialogTitle className="text-white">{roleLabel(a.role_id)}</DialogTitle>
+                <DialogDescription className="text-zinc-400">
+                  Edit main tasks, steps, and blockers for this department.
+                </DialogDescription>
+              </DialogHeader>
+              <AssignmentEditor
+                a={a}
+                removeAssignment={removeAssignment}
+                patchAssignment={patchAssignment}
+                patchPrimaryTask={patchPrimaryTask}
+                addPrimaryTask={addPrimaryTask}
+                removePrimaryTask={removePrimaryTask}
+                addChunk={addChunk}
+                removeChunk={removeChunk}
+                updateChunk={updateChunk}
+                addInterrupt={addInterrupt}
+                removeInterrupt={removeInterrupt}
+                updateInterrupt={updateInterrupt}
+              />
+            </DialogContent>
+          </Dialog>
+        ))}
+      </div>
     </div>
   );
 }
