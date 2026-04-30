@@ -630,13 +630,13 @@ export default function WeeklyWorkboard() {
   const { user } = useAuth();
   const [weekStart, setWeekStart] = useState(() => getMondayISO());
   const [view, setView] = useState<"list" | "gallery">("list");
+  const [dateFilter, setDateFilter] = useState<"week" | "today">("today");
   const [roleFilter, setRoleFilter] = useState<WorkboardRoleId | "all">("all");
   const [assignments, setAssignments] = useState<MainAssignment[]>([]);
   const lastSaveOkAtRef = useRef<number | null>(null);
   const [myWorkboardRole, setMyWorkboardRole] = useState<WorkboardRoleId | null>(null);
   const [myRoleDialogOpen, setMyRoleDialogOpen] = useState(false);
   const [myRoleDialogForced, setMyRoleDialogForced] = useState(false);
-  const [addRolePick, setAddRolePick] = useState<WorkboardRoleId>("ops_manager");
 
   const workboardQ = useQuery({
     queryKey: ["weekly-workboard", weekStart],
@@ -750,9 +750,23 @@ export default function WeeklyWorkboard() {
   }, [assignments, weekStart]);
 
   const weekAssignments = useMemo(() => {
-    // Always keep full week data; the week grid is the canonical layout.
-    return assignments;
-  }, [assignments]);
+    const today = todayISO();
+    return assignments
+      .filter((a) => (roleFilter === "all" ? true : a.role_id === roleFilter))
+      .map((a) => {
+        if (dateFilter !== "today") return a;
+        const keep = a.primary_tasks.filter((pt) => {
+          const dueToday = String(pt.due_date || "").slice(0, 10) === today;
+          const completedSomethingToday = (pt.chunks || []).some((c) => c.completed_at === today);
+          return dueToday || completedSomethingToday;
+        });
+        return {
+          ...a,
+          primary_tasks: keep,
+        };
+      })
+      .filter((a) => dateFilter !== "today" || a.primary_tasks.length > 0 || a.interrupts.length > 0);
+  }, [assignments, dateFilter, roleFilter]);
 
   const byRole = useMemo(() => {
     const m = new Map<WorkboardRoleId, MainAssignment>();
@@ -1142,6 +1156,31 @@ export default function WeeklyWorkboard() {
               </button>
             </div>
 
+            <div className={`inline-flex ${BENTO_SURFACE} p-1`}>
+              <button
+                type="button"
+                onClick={() => setDateFilter("week")}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-colors ${
+                  dateFilter === "week"
+                    ? "bg-violet-600 text-white shadow-lg shadow-violet-600/35"
+                    : "text-zinc-400 hover:text-white hover:bg-violet-500/10"
+                }`}
+              >
+                This week
+              </button>
+              <button
+                type="button"
+                onClick={() => setDateFilter("today")}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-colors ${
+                  dateFilter === "today"
+                    ? "bg-violet-600 text-white shadow-lg shadow-violet-600/35"
+                    : "text-zinc-400 hover:text-white hover:bg-violet-500/10"
+                }`}
+              >
+                Today
+              </button>
+            </div>
+
             <div className={cn(BENTO_SURFACE, "p-1")}>
               <select
                 value={roleFilter}
@@ -1156,29 +1195,6 @@ export default function WeeklyWorkboard() {
                   </option>
                 ))}
               </select>
-            </div>
-
-            <div className={cn(BENTO_SURFACE, "p-1 flex items-center gap-1.5")}>
-              <select
-                value={addRolePick}
-                onChange={(e) => setAddRolePick(e.target.value as WorkboardRoleId)}
-                className="h-10 rounded-xl bg-zinc-950 px-3 text-sm text-white outline-none border border-white/10 focus:border-violet-500/40"
-                title="Add a department card"
-              >
-                {WORKBOARD_ROLES.map((r) => (
-                  <option key={r.id} value={r.id} className="bg-zinc-950 text-white">
-                    + {r.label}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={() => addAssignment(addRolePick)}
-                className="h-10 px-3 rounded-xl border border-violet-500/25 bg-violet-600/20 text-white hover:bg-violet-600/35 transition-colors text-sm font-semibold"
-                title="Add card"
-              >
-                Add
-              </button>
             </div>
 
             <div className={`inline-flex ${BENTO_SURFACE} p-1`}>
@@ -1260,9 +1276,6 @@ export default function WeeklyWorkboard() {
               editDailyText={editDailyText}
               removeDailyItem={removeDailyItem}
               patchDaily={patchDaily}
-              patchPrimaryTask={patchPrimaryTask}
-              updateChunk={updateChunk}
-              updateInterrupt={updateInterrupt}
             />
           )}
         </ScrollReveal>
@@ -1291,9 +1304,6 @@ function CalendarView({
   editDailyText,
   removeDailyItem,
   patchDaily,
-  patchPrimaryTask,
-  updateChunk,
-  updateInterrupt,
 }: {
   weekStart: string;
   weekAssignments: MainAssignment[];
@@ -1304,9 +1314,6 @@ function CalendarView({
   editDailyText: (assignmentId: string, dayIso: string, itemId: string, text: string) => void;
   removeDailyItem: (assignmentId: string, dayIso: string, itemId: string) => void;
   patchDaily: (assignmentId: string, dayIso: string, next: WorkboardDailyItem[]) => void;
-  patchPrimaryTask: (assignmentId: string, taskId: string, patch: Partial<WorkboardPrimaryTask>) => void;
-  updateChunk: (assignmentId: string, primaryTaskId: string, chunkId: string, patch: Partial<WorkboardChunk>) => void;
-  updateInterrupt: (assignmentId: string, intId: string, patch: Partial<WorkboardInterrupt>) => void;
 }) {
   const days = useMemo(() => weekDays(weekStart), [weekStart]);
   const today = todayISO();
@@ -1317,100 +1324,16 @@ function CalendarView({
 
   const missingRoles = WORKBOARD_ROLES.filter((r) => !visible.some((a) => a.role_id === r.id));
 
-  type DayRow =
-    | { kind: "chunk"; role_id: WorkboardRoleId; assignment_id: string; primary_task_id: string; id: string; text: string; done: boolean }
-    | { kind: "daily"; role_id: WorkboardRoleId; assignment_id: string; id: string; text: string; done: boolean }
-    | { kind: "interrupt"; role_id: WorkboardRoleId; assignment_id: string; id: string; text: string; done: boolean };
-
-  type DaySection = {
-    key: string;
-    role_id: WorkboardRoleId;
-    assignment_id: string;
-    title: string;
-    rows: DayRow[];
-  };
-
-  // Build day columns with headings (main task) + visible steps beneath.
-  const daySections = useMemo(() => {
-    const out: Record<string, DaySection[]> = {};
+  // Flatten into day columns: {day -> [ {role, assignmentId, item} ] }
+  const dayRows = useMemo(() => {
+    const out: Record<string, Array<{ role_id: WorkboardRoleId; assignment_id: string; item: WorkboardDailyItem }>> = {};
     for (const d of days) out[d] = [];
-
-    const ensureSection = (dayIso: string, key: string, role_id: WorkboardRoleId, assignment_id: string, title: string) => {
-      const col = out[dayIso]!;
-      let sec = col.find((s) => s.key === key);
-      if (!sec) {
-        sec = { key, role_id, assignment_id, title, rows: [] };
-        col.push(sec);
-      }
-      return sec;
-    };
-
-    const pushRow = (dayIso: string | null, section: DaySection, row: DayRow) => {
-      if (!dayIso || !out[dayIso]) return;
-      section.rows.push(row);
-    };
-
     for (const a of visible) {
-      // Primary tasks and chunks grouped under the main task title.
-      for (const pt of a.primary_tasks || []) {
-        const secTitle = pt.title?.trim() ? pt.title.trim() : "Untitled main task";
-        for (const c of pt.chunks || []) {
-          const dayIso = isoFromWorkboardId(c.id) || c.completed_at || isoFromWorkboardId(pt.id) || String(pt.due_date || "").slice(0, 10);
-          if (!dayIso || !out[dayIso]) continue;
-          const sec = ensureSection(dayIso, `pt:${a.id}:${pt.id}`, a.role_id, a.id, secTitle);
-          pushRow(dayIso, sec, {
-            kind: "chunk",
-            role_id: a.role_id,
-            assignment_id: a.id,
-            primary_task_id: pt.id,
-            id: c.id,
-            text: c.title?.trim() ? c.title.trim() : "Untitled step",
-            done: c.status === "completed",
-          });
-        }
-      }
-
-      // Interrupts grouped under an "Extra work" heading.
-      for (const it of a.interrupts || []) {
-        const dayIso = isoFromWorkboardId(it.id);
-        if (!dayIso || !out[dayIso]) continue;
-        const sec = ensureSection(dayIso, `extra:${a.id}`, a.role_id, a.id, "Extra work");
-        pushRow(dayIso, sec, {
-          kind: "interrupt",
-          role_id: a.role_id,
-          assignment_id: a.id,
-          id: it.id,
-          text: it.title?.trim() ? it.title.trim() : "Untitled",
-          done: it.status === "completed",
-        });
-      }
-
-      // Ad-hoc daily items live under "Notes".
       const daily = a.daily || {};
       for (const d of days) {
         const items = Array.isArray(daily[d]) ? daily[d]! : [];
-        if (items.length === 0) continue;
-        const sec = ensureSection(d, `daily:${a.id}:${d}`, a.role_id, a.id, "Notes");
-        items.forEach((item) => {
-          sec.rows.push({
-            kind: "daily",
-            role_id: a.role_id,
-            assignment_id: a.id,
-            id: item.id,
-            text: item.text,
-            done: item.done,
-          });
-        });
+        items.forEach((item) => out[d].push({ role_id: a.role_id, assignment_id: a.id, item }));
       }
-    }
-
-    // Sort sections so real work (main tasks) appears above notes.
-    for (const d of days) {
-      out[d] = out[d]!.map((s) => ({ ...s, rows: s.rows })).sort((a, b) => {
-        const ax = a.title === "Notes" ? 2 : a.title === "Extra work" ? 1 : 0;
-        const bx = b.title === "Notes" ? 2 : b.title === "Extra work" ? 1 : 0;
-        return ax - bx || a.title.localeCompare(b.title);
-      });
     }
     return out;
   }, [visible, days]);
@@ -1443,25 +1366,18 @@ function CalendarView({
       </div>
 
       <div className={cn(BENTO_SURFACE, "p-4")}>
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="text-sm font-semibold text-white tabular-nums">{fmtWeekRange(weekStart)}</div>
-          <div className="text-[11px] text-zinc-500">
-            Tip: use <span className="text-zinc-300">Gallery</span> for editing full cards.
-          </div>
-        </div>
+        <div className="text-sm font-semibold text-white tabular-nums">{fmtWeekRange(weekStart)}</div>
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
           {days.map((d) => {
             const isToday = d === today;
-            const sections = daySections[d] || [];
+            const rows = dayRows[d] || [];
             const draft = draftByDay[d] || "";
             return (
               <div
                 key={d}
                 className={cn(
-                  "rounded-2xl border bg-black/30 backdrop-blur-xl p-3 min-h-[190px] flex flex-col",
-                  isToday
-                    ? "border-violet-500/35 shadow-[0_0_26px_-10px_rgba(124,58,237,0.55)]"
-                    : "border-white/10 hover:border-white/15 transition-colors",
+                  "rounded-2xl border bg-black/35 backdrop-blur-xl p-3 min-h-[170px] flex flex-col",
+                  isToday ? "border-violet-500/35 shadow-[0_0_26px_-10px_rgba(124,58,237,0.55)]" : "border-white/10",
                 )}
               >
                 <div className="flex items-start justify-between gap-2 mb-2">
@@ -1476,91 +1392,40 @@ function CalendarView({
                   )}
                 </div>
 
-                <div className="space-y-2 flex-1 min-h-0 overflow-y-auto pr-1">
-                  {sections.length === 0 ? (
+                <div className="space-y-1.5 flex-1 min-h-0 overflow-y-auto pr-1">
+                  {rows.length === 0 ? (
                     <div className="text-[11px] text-zinc-600 py-2">To-do</div>
                   ) : (
-                    sections.map((sec) => (
-                      <div key={sec.key} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-2.5">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <div className="text-[10px] uppercase tracking-wider text-zinc-500">
-                              {roleFilter === "all" ? roleShort(sec.role_id) : ""}
-                            </div>
-                            <div className="text-[12px] font-semibold text-white/90 truncate" title={sec.title}>
-                              {sec.title}
-                            </div>
-                          </div>
-                          <div className="text-[10px] text-zinc-600 tabular-nums">
-                            {sec.rows.filter((r) => r.done).length}/{sec.rows.length}
-                          </div>
+                    rows.map(({ role_id, assignment_id, item }) => (
+                      <div key={item.id} className="group flex items-start gap-2">
+                        <input
+                          type="checkbox"
+                          checked={item.done}
+                          onChange={(e) => toggleDailyItem(assignment_id, d, item.id, e.target.checked)}
+                          className="mt-1 h-4 w-4 rounded border-white/20 bg-zinc-900 text-violet-500 focus:ring-violet-500/40"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <input
+                            value={item.text}
+                            onChange={(e) => editDailyText(assignment_id, d, item.id, e.target.value)}
+                            className={cn(
+                              "w-full bg-transparent text-[12px] outline-none border-b border-transparent focus:border-white/10",
+                              item.done ? "text-zinc-500 line-through" : "text-zinc-200",
+                            )}
+                            placeholder="To-do"
+                          />
+                          {roleFilter === "all" && (
+                            <div className="mt-0.5 text-[10px] text-zinc-600">{roleShort(role_id)}</div>
+                          )}
                         </div>
-
-                        <div className="mt-2 space-y-1.5">
-                          {sec.rows.map((row) => {
-                            if (row.kind === "daily") {
-                              const itemDone = row.done;
-                              return (
-                                <div key={row.id} className="group flex items-start gap-2">
-                                  <input
-                                    type="checkbox"
-                                    checked={itemDone}
-                                    onChange={(e) => toggleDailyItem(row.assignment_id, d, row.id, e.target.checked)}
-                                    className="mt-0.5 h-4 w-4 rounded border-white/20 bg-zinc-900 text-violet-500 focus:ring-violet-500/40"
-                                  />
-                                  <input
-                                    value={row.text}
-                                    onChange={(e) => editDailyText(row.assignment_id, d, row.id, e.target.value)}
-                                    className={cn(
-                                      "flex-1 bg-transparent text-[12px] outline-none border-b border-transparent focus:border-white/10",
-                                      itemDone ? "text-zinc-500 line-through" : "text-zinc-200",
-                                    )}
-                                    placeholder="To-do"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => removeDailyItem(row.assignment_id, d, row.id)}
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-lg text-zinc-600 hover:text-red-300 hover:bg-red-500/10"
-                                    title="Remove"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              );
-                            }
-
-                            if (row.kind === "interrupt") {
-                              return (
-                                <label key={row.id} className="flex items-start gap-2 cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={row.done}
-                                    onChange={(e) => updateInterrupt(row.assignment_id, row.id, { status: e.target.checked ? "completed" : "in_progress" })}
-                                    className="mt-0.5 h-4 w-4 rounded border-white/20 bg-zinc-900 text-orange-500 focus:ring-orange-500/30"
-                                  />
-                                  <span className={cn("text-[12px] leading-snug", row.done ? "text-zinc-500 line-through" : "text-zinc-200")}>
-                                    {row.text}
-                                  </span>
-                                </label>
-                              );
-                            }
-
-                            // chunk
-                            return (
-                              <label key={row.id} className="flex items-start gap-2 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={row.done}
-                                  onChange={(e) => updateChunk(row.assignment_id, row.primary_task_id, row.id, { status: e.target.checked ? "completed" : "in_progress" })}
-                                  className="mt-0.5 h-4 w-4 rounded border-white/20 bg-zinc-900 text-violet-500 focus:ring-violet-500/30"
-                                />
-                                <span className={cn("text-[12px] leading-snug", row.done ? "text-zinc-500 line-through" : "text-zinc-200")}>
-                                  {row.text}
-                                </span>
-                              </label>
-                            );
-                          })}
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeDailyItem(assignment_id, d, item.id)}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-lg text-zinc-600 hover:text-red-300 hover:bg-red-500/10"
+                          title="Remove"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     ))
                   )}
