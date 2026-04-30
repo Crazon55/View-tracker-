@@ -578,7 +578,7 @@ function DragScrollText({ text, className }: { text: string; className?: string 
 export default function WeeklyWorkboard() {
   const { user } = useAuth();
   const [weekStart, setWeekStart] = useState(() => getMondayISO());
-  const [view, setView] = useState<"list" | "gallery">("list");
+  const [view, setView] = useState<"list" | "gallery" | "calendar">("list");
   const [dateFilter, setDateFilter] = useState<"week" | "today">("today");
   const [roleFilter, setRoleFilter] = useState<WorkboardRoleId | "all">("all");
   const [assignments, setAssignments] = useState<MainAssignment[]>([]);
@@ -1145,8 +1145,8 @@ export default function WeeklyWorkboard() {
                     : "text-zinc-400 hover:text-white hover:bg-violet-500/10"
                   }`}
               >
-                <CalendarDays className="w-4 h-4" />
-                Week
+                <List className="w-4 h-4" />
+                List
               </button>
               <button
                 type="button"
@@ -1158,6 +1158,17 @@ export default function WeeklyWorkboard() {
               >
                 <LayoutGrid className="w-4 h-4" />
                 Gallery
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("calendar")}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-colors ${view === "calendar"
+                    ? "bg-violet-600 text-white shadow-lg shadow-violet-600/35"
+                    : "text-zinc-400 hover:text-white hover:bg-violet-500/10"
+                  }`}
+              >
+                <CalendarDays className="w-4 h-4" />
+                Calendar
               </button>
             </div>
             {user?.email && (
@@ -1204,7 +1215,7 @@ export default function WeeklyWorkboard() {
               removeInterrupt={removeInterrupt}
               updateInterrupt={updateInterrupt}
             />
-          ) : (
+          ) : view === "calendar" ? (
             <CalendarView
               weekStart={weekStart}
               weekAssignments={weekAssignments}
@@ -1215,6 +1226,23 @@ export default function WeeklyWorkboard() {
               editDailyText={editDailyText}
               removeDailyItem={removeDailyItem}
               patchDaily={patchDaily}
+            />
+          ) : (
+            <ListView
+              weekAssignments={weekAssignments}
+              myWorkboardRole={myWorkboardRole}
+              addAssignment={addAssignment}
+              removeAssignment={removeAssignment}
+              patchAssignment={patchAssignment}
+              patchPrimaryTask={patchPrimaryTask}
+              addPrimaryTask={addPrimaryTask}
+              removePrimaryTask={removePrimaryTask}
+              addChunk={addChunk}
+              removeChunk={removeChunk}
+              updateChunk={updateChunk}
+              addInterrupt={addInterrupt}
+              removeInterrupt={removeInterrupt}
+              updateInterrupt={updateInterrupt}
             />
           )}
         </ScrollReveal>
