@@ -12,7 +12,6 @@ import {
   type WorkboardChunk,
   type WorkboardInterrupt,
   type WorkboardPrimaryTask,
-  type WorkboardDailyItem,
   type ChunkStatus,
   getMondayISO,
   addDaysISO,
@@ -29,7 +28,7 @@ import {
 import type { WorkboardMentionPerson } from "@/services/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { LayoutGrid, List, CalendarDays, ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Plus, Trash2, Link2, AtSign, User, UserCircle2 } from "lucide-react";
+import { LayoutGrid, List, ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Plus, Trash2, Link2, AtSign, User, UserCircle2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -578,7 +577,7 @@ function DragScrollText({ text, className }: { text: string; className?: string 
 export default function WeeklyWorkboard() {
   const { user } = useAuth();
   const [weekStart, setWeekStart] = useState(() => getMondayISO());
-  const [view, setView] = useState<"list" | "gallery" | "calendar">("list");
+  const [view, setView] = useState<"list" | "gallery">("list");
   const [dateFilter, setDateFilter] = useState<"week" | "today">("today");
   const [roleFilter, setRoleFilter] = useState<WorkboardRoleId | "all">("all");
   const [assignments, setAssignments] = useState<MainAssignment[]>([]);
@@ -919,68 +918,6 @@ export default function WeeklyWorkboard() {
     setAssignments((prev) => prev.map((a) => (a.id === id ? { ...a, ...patch } : a)));
   }, []);
 
-  const patchDaily = useCallback((assignmentId: string, dayIso: string, next: WorkboardDailyItem[]) => {
-    setAssignments((prev) =>
-      prev.map((a) => {
-        if (a.id !== assignmentId) return a;
-        const daily = { ...(a.daily || {}) };
-        daily[dayIso] = next;
-        return { ...a, daily };
-      }),
-    );
-  }, []);
-
-  const addDailyItem = useCallback((assignmentId: string, dayIso: string, text: string) => {
-    const t = text.trim();
-    if (!t) return;
-    setAssignments((prev) =>
-      prev.map((a) => {
-        if (a.id !== assignmentId) return a;
-        const daily = { ...(a.daily || {}) };
-        const cur = Array.isArray(daily[dayIso]) ? [...daily[dayIso]!] : [];
-        cur.push({ id: newId(), text: t, done: false, tags: [] });
-        daily[dayIso] = cur;
-        return { ...a, daily };
-      }),
-    );
-  }, []);
-
-  const toggleDailyItem = useCallback((assignmentId: string, dayIso: string, itemId: string, done: boolean) => {
-    setAssignments((prev) =>
-      prev.map((a) => {
-        if (a.id !== assignmentId) return a;
-        const daily = { ...(a.daily || {}) };
-        const cur = Array.isArray(daily[dayIso]) ? [...daily[dayIso]!] : [];
-        daily[dayIso] = cur.map((it) => (it.id === itemId ? { ...it, done } : it));
-        return { ...a, daily };
-      }),
-    );
-  }, []);
-
-  const editDailyText = useCallback((assignmentId: string, dayIso: string, itemId: string, text: string) => {
-    setAssignments((prev) =>
-      prev.map((a) => {
-        if (a.id !== assignmentId) return a;
-        const daily = { ...(a.daily || {}) };
-        const cur = Array.isArray(daily[dayIso]) ? [...daily[dayIso]!] : [];
-        daily[dayIso] = cur.map((it) => (it.id === itemId ? { ...it, text } : it));
-        return { ...a, daily };
-      }),
-    );
-  }, []);
-
-  const removeDailyItem = useCallback((assignmentId: string, dayIso: string, itemId: string) => {
-    setAssignments((prev) =>
-      prev.map((a) => {
-        if (a.id !== assignmentId) return a;
-        const daily = { ...(a.daily || {}) };
-        const cur = Array.isArray(daily[dayIso]) ? [...daily[dayIso]!] : [];
-        daily[dayIso] = cur.filter((it) => it.id !== itemId);
-        return { ...a, daily };
-      }),
-    );
-  }, []);
-
   return (
     <div
       className="min-h-screen text-zinc-100 bg-black"
@@ -1159,17 +1096,6 @@ export default function WeeklyWorkboard() {
                 <LayoutGrid className="w-4 h-4" />
                 Gallery
               </button>
-              <button
-                type="button"
-                onClick={() => setView("calendar")}
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-colors ${view === "calendar"
-                    ? "bg-violet-600 text-white shadow-lg shadow-violet-600/35"
-                    : "text-zinc-400 hover:text-white hover:bg-violet-500/10"
-                  }`}
-              >
-                <CalendarDays className="w-4 h-4" />
-                Calendar
-              </button>
             </div>
             {user?.email && (
               <div className={`${BENTO_SURFACE} p-1 flex items-center`}>
@@ -1215,18 +1141,6 @@ export default function WeeklyWorkboard() {
               removeInterrupt={removeInterrupt}
               updateInterrupt={updateInterrupt}
             />
-          ) : view === "calendar" ? (
-            <CalendarView
-              weekStart={weekStart}
-              weekAssignments={weekAssignments}
-              roleFilter={roleFilter}
-              addAssignment={addAssignment}
-              addDailyItem={addDailyItem}
-              toggleDailyItem={toggleDailyItem}
-              editDailyText={editDailyText}
-              removeDailyItem={removeDailyItem}
-              patchDaily={patchDaily}
-            />
           ) : (
             <ListView
               weekAssignments={weekAssignments}
@@ -1246,219 +1160,6 @@ export default function WeeklyWorkboard() {
             />
           )}
         </ScrollReveal>
-      </div>
-    </div>
-  );
-}
-
-function weekdayShort(iso: string): string {
-  const d = new Date(iso + "T12:00:00");
-  return d.toLocaleDateString("en-US", { weekday: "short" });
-}
-
-function monthDay(iso: string): string {
-  const d = new Date(iso + "T12:00:00");
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-function weekDays(weekStart: string): string[] {
-  return Array.from({ length: 7 }, (_, i) => addDaysISO(weekStart, i));
-}
-
-function CalendarView({
-  weekStart,
-  weekAssignments,
-  roleFilter,
-  addAssignment,
-  addDailyItem,
-  toggleDailyItem,
-  editDailyText,
-  removeDailyItem,
-  patchDaily,
-}: {
-  weekStart: string;
-  weekAssignments: MainAssignment[];
-  roleFilter: WorkboardRoleId | "all";
-  addAssignment: (role_id: WorkboardRoleId) => void;
-  addDailyItem: (assignmentId: string, dayIso: string, text: string) => void;
-  toggleDailyItem: (assignmentId: string, dayIso: string, itemId: string, done: boolean) => void;
-  editDailyText: (assignmentId: string, dayIso: string, itemId: string, text: string) => void;
-  removeDailyItem: (assignmentId: string, dayIso: string, itemId: string) => void;
-  patchDaily: (assignmentId: string, dayIso: string, next: WorkboardDailyItem[]) => void;
-}) {
-  const days = useMemo(() => weekDays(weekStart), [weekStart]);
-  const today = todayISO();
-
-  const visible = useMemo(() => {
-    return weekAssignments.filter((a) => (roleFilter === "all" ? true : a.role_id === roleFilter));
-  }, [weekAssignments, roleFilter]);
-
-  const missingRoles = WORKBOARD_ROLES.filter((r) => !visible.some((a) => a.role_id === r.id));
-
-  // Flatten into day columns: {day -> [ {role, assignmentId, item} ] }
-  const dayRows = useMemo(() => {
-    const out: Record<string, Array<{ role_id: WorkboardRoleId; assignment_id: string; item: WorkboardDailyItem }>> = {};
-    for (const d of days) out[d] = [];
-    for (const a of visible) {
-      const daily = a.daily || {};
-      for (const d of days) {
-        const items = Array.isArray(daily[d]) ? daily[d]! : [];
-        items.forEach((item) => out[d].push({ role_id: a.role_id, assignment_id: a.id, item }));
-      }
-    }
-    return out;
-  }, [visible, days]);
-
-  const [draftByDay, setDraftByDay] = useState<Record<string, string>>({});
-
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400">Week plan</p>
-          <p className="text-[11px] text-zinc-500 mt-1">
-            Log work day-wise (Notion-style). Switch week using the arrows above.
-          </p>
-        </div>
-        {missingRoles.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {missingRoles.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => addAssignment(r.id)}
-                className="px-3 py-2 rounded-xl text-xs font-medium border border-violet-500/25 bg-violet-600/15 text-zinc-100 hover:bg-violet-600 hover:text-white hover:border-violet-500/50 transition-colors shadow-[0_0_20px_-8px_rgba(124,58,237,0.4)]"
-              >
-                + {r.short}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className={cn(BENTO_SURFACE, "p-4")}>
-        <div className="text-sm font-semibold text-white tabular-nums">{fmtWeekRange(weekStart)}</div>
-        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
-          {days.map((d) => {
-            const isToday = d === today;
-            const rows = dayRows[d] || [];
-            const draft = draftByDay[d] || "";
-            return (
-              <div
-                key={d}
-                className={cn(
-                  "rounded-2xl border bg-black/35 backdrop-blur-xl p-3 min-h-[170px] flex flex-col",
-                  isToday ? "border-violet-500/35 shadow-[0_0_26px_-10px_rgba(124,58,237,0.55)]" : "border-white/10",
-                )}
-              >
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div>
-                    <div className="text-[11px] font-black text-white">{weekdayShort(d)}</div>
-                    <div className="text-[11px] text-zinc-500">{monthDay(d)}</div>
-                  </div>
-                  {isToday && (
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-violet-500/20 border border-violet-500/30 text-violet-100">
-                      Today
-                    </span>
-                  )}
-                </div>
-
-                <div className="space-y-1.5 flex-1 min-h-0 overflow-y-auto pr-1">
-                  {rows.length === 0 ? (
-                    <div className="text-[11px] text-zinc-600 py-2">To-do</div>
-                  ) : (
-                    rows.map(({ role_id, assignment_id, item }) => (
-                      <div key={item.id} className="group flex items-start gap-2">
-                        <input
-                          type="checkbox"
-                          checked={item.done}
-                          onChange={(e) => toggleDailyItem(assignment_id, d, item.id, e.target.checked)}
-                          className="mt-1 h-4 w-4 rounded border-white/20 bg-zinc-900 text-violet-500 focus:ring-violet-500/40"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <input
-                            value={item.text}
-                            onChange={(e) => editDailyText(assignment_id, d, item.id, e.target.value)}
-                            className={cn(
-                              "w-full bg-transparent text-[12px] outline-none border-b border-transparent focus:border-white/10",
-                              item.done ? "text-zinc-500 line-through" : "text-zinc-200",
-                            )}
-                            placeholder="To-do"
-                          />
-                          {roleFilter === "all" && (
-                            <div className="mt-0.5 text-[10px] text-zinc-600">{roleShort(role_id)}</div>
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeDailyItem(assignment_id, d, item.id)}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-lg text-zinc-600 hover:text-red-300 hover:bg-red-500/10"
-                          title="Remove"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                <div className="pt-2 mt-2 border-t border-white/[0.06]">
-                  <div className="flex items-center gap-2">
-                    <input
-                      value={draft}
-                      onChange={(e) => setDraftByDay((p) => ({ ...p, [d]: e.target.value }))}
-                      onKeyDown={(e) => {
-                        if (e.key !== "Enter") return;
-                        e.preventDefault();
-                        const text = (draftByDay[d] || "").trim();
-                        if (!text) return;
-                        // If filtering to a single role, add there; otherwise default to Ops (or first role) so the row has an owner.
-                        const targetRole: WorkboardRoleId =
-                          roleFilter !== "all"
-                            ? roleFilter
-                            : (visible[0]?.role_id || "ops_manager");
-                        const target = visible.find((a) => a.role_id === targetRole);
-                        if (!target) {
-                          toast.error("Add a department card first (use + buttons).");
-                          return;
-                        }
-                        addDailyItem(target.id, d, text);
-                        setDraftByDay((p) => ({ ...p, [d]: "" }));
-                      }}
-                      placeholder="Add…"
-                      className={cn(
-                        "flex-1 rounded-xl px-2.5 py-2 text-xs",
-                        "border border-white/10 bg-white/[0.03] backdrop-blur-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500/35 focus:border-violet-500/25",
-                      )}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const text = (draftByDay[d] || "").trim();
-                        if (!text) return;
-                        const targetRole: WorkboardRoleId =
-                          roleFilter !== "all"
-                            ? roleFilter
-                            : (visible[0]?.role_id || "ops_manager");
-                        const target = visible.find((a) => a.role_id === targetRole);
-                        if (!target) {
-                          toast.error("Add a department card first (use + buttons).");
-                          return;
-                        }
-                        addDailyItem(target.id, d, text);
-                        setDraftByDay((p) => ({ ...p, [d]: "" }));
-                      }}
-                      className="h-9 w-9 rounded-xl border border-violet-500/30 bg-violet-600/20 text-violet-200 hover:bg-violet-600/40 hover:text-white transition-colors flex items-center justify-center"
-                      title="Add"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
       </div>
     </div>
   );
