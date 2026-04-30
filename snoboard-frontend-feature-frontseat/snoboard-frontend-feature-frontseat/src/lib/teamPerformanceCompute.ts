@@ -135,9 +135,10 @@ export function computeStreaksFromTrackerIdeas(ideas: any[], days: number = 7): 
   }
 
   for (const idea of ideas) {
-    const creator = normCreator(idea?.created_by);
-    if (!creator) continue;
-    const slot = ensure(creator);
+    // IDEA streaks are credited to the creator (idea-making).
+    const ideaCreator = normCreator(idea?.created_by || idea?.executor_name);
+    if (!ideaCreator) continue;
+    const ideaSlot = ensure(ideaCreator);
 
     // Idea-day: prefer created_at-like fields; else fall back to earliest posting date.
     const createdIso =
@@ -159,8 +160,17 @@ export function computeStreaksFromTrackerIdeas(ideas: any[], days: number = 7): 
     }
 
     if (ideaDay && dayIndex[ideaDay] !== undefined) {
-      slot.idea[dayIndex[ideaDay]] = true;
+      ideaSlot.idea[dayIndex[ideaDay]] = true;
     }
+
+    // POSTING streaks should be credited to the person who actually posted.
+    //
+    // Important constraint: `tracker_postings` currently has (page, date, views…)
+    // but does NOT store per-page "who". So we attribute all postings for an idea
+    // to `posted_by` when available, falling back to the idea creator.
+    const poster = normCreator(idea?.posted_by || idea?.postedBy || idea?.executor_name || idea?.created_by);
+    if (!poster) continue;
+    const postSlot = ensure(poster);
 
     // Posting-day: any posting entry date in the window.
     const postings = Array.isArray((idea as any)?.tracker_postings) ? (idea as any).tracker_postings : [];
@@ -168,7 +178,7 @@ export function computeStreaksFromTrackerIdeas(ideas: any[], days: number = 7): 
       const di = isoDateOnly(p?.date);
       if (!di) continue;
       const idx = dayIndex[di];
-      if (idx !== undefined) slot.posting[idx] = true;
+      if (idx !== undefined) postSlot.posting[idx] = true;
     }
   }
 
