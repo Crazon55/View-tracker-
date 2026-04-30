@@ -578,7 +578,8 @@ export default function WeeklyWorkboard() {
   const { user } = useAuth();
   const [weekStart, setWeekStart] = useState(() => getMondayISO());
   const [view, setView] = useState<"list" | "gallery">("list");
-  const [dateFilter, setDateFilter] = useState<"week" | "today">("today");
+  // Default to week view so cards don't look "empty" when nothing is due today.
+  const [dateFilter, setDateFilter] = useState<"week" | "today">("week");
   const [roleFilter, setRoleFilter] = useState<WorkboardRoleId | "all">("all");
   const [assignments, setAssignments] = useState<MainAssignment[]>([]);
   const lastSaveOkAtRef = useRef<number | null>(null);
