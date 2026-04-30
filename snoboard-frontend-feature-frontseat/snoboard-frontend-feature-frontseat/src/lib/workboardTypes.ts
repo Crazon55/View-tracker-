@@ -99,15 +99,6 @@ export type WorkboardInterrupt = {
   tags: string[];
 };
 
-/** Notion-style: day-wise checklist item logged on the workboard. */
-export type WorkboardDailyItem = {
-  id: string;
-  text: string;
-  done: boolean;
-  /** @mentions / #tickets */
-  tags: string[];
-};
-
 export type MainAssignment = {
   id: string;
   role_id: WorkboardRoleId;
@@ -116,8 +107,6 @@ export type MainAssignment = {
   /** Shippable main lines; each has its own deadline and step list. */
   primary_tasks: WorkboardPrimaryTask[];
   interrupts: WorkboardInterrupt[];
-  /** Day-wise log for the current week. Keys are ISO dates (YYYY-MM-DD). */
-  daily?: Record<string, WorkboardDailyItem[]>;
   tags: string[];
 };
 
@@ -251,28 +240,6 @@ export function normalizeAssignments(list: MainAssignment[]): MainAssignment[] {
       };
     });
 
-    const daily: Record<string, WorkboardDailyItem[]> = (() => {
-      const raw = (a as any).daily;
-      if (!raw || typeof raw !== "object") return {};
-      const out: Record<string, WorkboardDailyItem[]> = {};
-      for (const [k, v] of Object.entries(raw)) {
-        if (!Array.isArray(v)) continue;
-        out[String(k)] = v
-          .filter(Boolean)
-          .map((it: any, idx: number) => ({
-            id: String(it?.id || newId()),
-            text: String(it?.text || ""),
-            done: Boolean(it?.done),
-            tags: Array.isArray(it?.tags) ? it.tags.map(String) : [],
-            sort_order: it?.sort_order ?? idx,
-          }))
-          // strip legacy sort_order if present, but keep stable order
-          .sort((x: any, y: any) => (x.sort_order ?? 0) - (y.sort_order ?? 0))
-          .map(({ sort_order, ...rest }: any) => rest);
-      }
-      return out;
-    })();
-
     return {
       id: a.id,
       role_id: a.role_id,
@@ -280,7 +247,6 @@ export function normalizeAssignments(list: MainAssignment[]): MainAssignment[] {
       description: a.description || "",
       primary_tasks,
       interrupts,
-      daily,
       tags: topTags,
     };
   });
