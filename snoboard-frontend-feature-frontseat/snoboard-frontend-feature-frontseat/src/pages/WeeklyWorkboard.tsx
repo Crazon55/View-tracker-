@@ -28,7 +28,7 @@ import {
 import type { WorkboardMentionPerson } from "@/services/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { LayoutGrid, List, ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Plus, Trash2, Link2, AtSign, User, UserCircle2 } from "lucide-react";
+import { LayoutGrid, List, ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Plus, Trash2, Link2, AtSign, User, UserCircle2, GripVertical } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -1875,6 +1875,12 @@ function WeekGridListView({
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDaysISO(weekStart, i)), [weekStart]);
   const dayLabel = (iso: string) => new Date(iso + "T12:00:00").toLocaleDateString("en-US", { weekday: "short" });
   const daySub = (iso: string) => new Date(iso + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const diffDays = (a: string, b: string) => {
+    const da = new Date(a + "T12:00:00").getTime();
+    const db = new Date(b + "T12:00:00").getTime();
+    if (!isFinite(da) || !isFinite(db)) return 0;
+    return Math.round((da - db) / 86400000);
+  };
 
   const byRole = useMemo(() => {
     const m = new Map<WorkboardRoleId, MainAssignment>();
@@ -1884,8 +1890,14 @@ function WeekGridListView({
 
   const [openRole, setOpenRole] = useState<Record<string, boolean>>({});
   const isOpen = (rid: string) => openRole[rid] === true;
+  const [dragOverDay, setDragOverDay] = useState<string | null>(null);
+
+  type DragPayload = { assignmentId: string; taskId: string; fromDay: string };
+  const dragRef = useRef<DragPayload | null>(null);
 
   const missingRoles = WORKBOARD_ROLES.filter((r) => !weekAssignments.some((a) => a.role_id === r.id));
+
+  const [addForDay, setAddForDay] = useState<Record<string, { role: WorkboardRoleId; title: string }>>({});
 
   return (
     <div className="space-y-5">
@@ -1911,11 +1923,141 @@ function WeekGridListView({
         <div className="text-sm font-semibold text-white tabular-nums">{fmtWeekRange(weekStart)}</div>
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
           {days.map((dIso) => (
-            <div key={dIso} className="rounded-2xl border border-white/10 bg-black/35 backdrop-blur-xl p-3 min-h-[220px]">
+            <div
+              key={dIso}
+              className={cn(
+                "rounded-2xl border bg-black/35 backdrop-blur-xl p-3 min-h-[240px]",
+                dragOverDay === dIso ? "border-violet-500/35 shadow-[0_0_26px_-10px_rgba(124,58,237,0.55)]" : "border-white/10",
+              )}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOverDay(dIso);
+              }}
+              onDragLeave={() => setDragOverDay((cur) => (cur === dIso ? null : cur))}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOverDay(null);
+                const payload = dragRef.current;
+                dragRef.current = null;
+                if (!payload) return;
+                // Only handle cross-day moves.
+                if (payload.fromDay === dIso) return;
+                const a = weekAssignments.find((x) => x.id === payload.assignmentId);
+                const pt = a?.primary_tasks?.find((x) => x.id === payload.taskId);
+                if (!a || !pt) return;
+                const origin = (pt as any).origin_due_date || pt.due_date;
+                patchPrimaryTask(payload.assignmentId, payload.taskId, {
+                  due_date: dIso,
+                  origin_due_date: origin,
+                } as any);
+              }}
+            >
               <div className="flex items-start justify-between gap-2 mb-2">
                 <div>
                   <div className="text-[11px] font-black text-white">{dayLabel(dIso)}</div>
                   <div className="text-[11px] text-zinc-500">{daySub(dIso)}</div>
+                </div>
+              </div>
+
+              {/* Add card on this date */}
+              <div className="mb-2 rounded-xl border border-white/10 bg-white/[0.02] p-2">
+                <div className="flex items-center gap-2">
+                  <select
+                    value={(addForDay[dIso]?.role || "ai_dev") as any}
+                    onChange={(e) =>
+                      setAddForDay((p) => ({
+                        ...p,
+                        [dIso]: { role: e.target.value as WorkboardRoleId, title: p[dIso]?.title || "" },
+                      }))
+                    }
+                    className="h-8 rounded-lg bg-zinc-950 px-2 text-[11px] text-white outline-none border border-white/10 focus:border-violet-500/40"
+                    title="Department"
+                  >
+                    {WORKBOARD_ROLES.map((r) => (
+                      <option key={r.id} value={r.id} className="bg-zinc-950 text-white">
+                        {r.short}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    value={addForDay[dIso]?.title || ""}
+                    onChange={(e) =>
+                      setAddForDay((p) => ({
+                        ...p,
+                        [dIso]: { role: (p[dIso]?.role || "ai_dev") as WorkboardRoleId, title: e.target.value },
+                      }))
+                    }
+                    placeholder="Add card…"
+                    className={cn(
+                      "flex-1 h-8 rounded-lg px-2 text-[11px]",
+                      "border border-white/10 bg-white/[0.03] backdrop-blur-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500/35 focus:border-violet-500/25",
+                    )}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") return;
+                      e.preventDefault();
+                      const role = (addForDay[dIso]?.role || "ai_dev") as WorkboardRoleId;
+                      const title = (addForDay[dIso]?.title || "").trim();
+                      if (!title) return;
+                      let a = byRole.get(role);
+                      if (!a) {
+                        // Create the department card first.
+                        addAssignment(role);
+                        toast.message("Added department card. Re-try adding the task.");
+                        return;
+                      }
+                      // Create a new primary task for the chosen date.
+                      const n = a.primary_tasks.length;
+                      patchAssignment(a.id, {
+                        primary_tasks: [
+                          ...a.primary_tasks,
+                          {
+                            id: newId(),
+                            title,
+                            due_date: dIso,
+                            origin_due_date: dIso,
+                            completed: false,
+                            sort_order: n,
+                            chunks: [],
+                          } as any,
+                        ],
+                      } as any);
+                      setAddForDay((p) => ({ ...p, [dIso]: { role, title: "" } }));
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="h-8 w-8 rounded-lg border border-violet-500/30 bg-violet-600/20 text-violet-200 hover:bg-violet-600/40 hover:text-white transition-colors flex items-center justify-center"
+                    title="Add"
+                    onClick={() => {
+                      const role = (addForDay[dIso]?.role || "ai_dev") as WorkboardRoleId;
+                      const title = (addForDay[dIso]?.title || "").trim();
+                      if (!title) return;
+                      const a = byRole.get(role);
+                      if (!a) {
+                        addAssignment(role);
+                        toast.message("Added department card. Re-try adding the task.");
+                        return;
+                      }
+                      const n = a.primary_tasks.length;
+                      patchAssignment(a.id, {
+                        primary_tasks: [
+                          ...a.primary_tasks,
+                          {
+                            id: newId(),
+                            title,
+                            due_date: dIso,
+                            origin_due_date: dIso,
+                            completed: false,
+                            sort_order: n,
+                            chunks: [],
+                          } as any,
+                        ],
+                      } as any);
+                      setAddForDay((p) => ({ ...p, [dIso]: { role, title: "" } }));
+                    }}
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
 
@@ -1949,9 +2091,40 @@ function WeekGridListView({
                       {open && (
                         <div className="px-3 pb-3">
                           {tasksToday.map((pt) => (
-                            <div key={pt.id} className="mt-2 rounded-lg border border-white/10 bg-black/30 p-2">
-                              <div className="text-[12px] font-semibold text-white">
-                                {pt.title?.trim() ? pt.title.trim() : "Untitled main task"}
+                            <div
+                              key={pt.id}
+                              className="mt-2 rounded-lg border border-white/10 bg-black/30 p-2"
+                              draggable
+                              onDragStart={() => {
+                                dragRef.current = { assignmentId: a.id, taskId: pt.id, fromDay: dIso };
+                              }}
+                              onDragEnd={() => {
+                                dragRef.current = null;
+                                setDragOverDay(null);
+                              }}
+                              title="Drag to another day"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <GripVertical className="w-4 h-4 text-zinc-600 shrink-0" />
+                                    <div className="text-[12px] font-semibold text-white truncate">
+                                      {pt.title?.trim() ? pt.title.trim() : "Untitled main task"}
+                                    </div>
+                                  </div>
+                                  {(() => {
+                                    const origin = (pt as any).origin_due_date || pt.due_date;
+                                    const delta = diffDays(pt.due_date, origin);
+                                    if (!delta) return null;
+                                    const label = `${Math.abs(delta)} day${Math.abs(delta) === 1 ? "" : "s"}`;
+                                    return (
+                                      <div className="mt-1 text-[10px] text-zinc-500">
+                                        Today: <span className="text-violet-200 font-semibold">{label}</span>
+                                      </div>
+                                    );
+                                  })()}
+                                </div>
+                                <span className="text-[10px] text-zinc-600 shrink-0">Drag</span>
                               </div>
                               {pt.chunks?.length ? (
                                 <ul className="mt-2 space-y-1.5">
