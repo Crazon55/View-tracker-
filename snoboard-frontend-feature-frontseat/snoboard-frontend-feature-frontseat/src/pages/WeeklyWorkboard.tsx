@@ -636,6 +636,38 @@ function deriveWeekLogFromExisting(a: MainAssignment, days: string[]): Workboard
   return out;
 }
 
+function assignmentContentScore(a: MainAssignment): number {
+  let score = 0;
+  if ((a.description || "").trim()) score += 2;
+  if (Array.isArray(a.tags) && a.tags.length) score += 1;
+  if (Array.isArray(a.interrupts) && a.interrupts.length) score += 2;
+
+  const pts = Array.isArray(a.primary_tasks) ? a.primary_tasks : [];
+  for (const p of pts) {
+    if ((p.title || "").trim()) score += 3;
+    if (Array.isArray(p.chunks) && p.chunks.length) {
+      score += 2;
+      for (const c of p.chunks) {
+        if ((c.title || "").trim()) score += 1;
+      }
+    }
+  }
+
+  const daily = a.daily && typeof a.daily === "object" ? a.daily : undefined;
+  if (daily) {
+    for (const v of Object.values(daily)) {
+      if (!Array.isArray(v)) continue;
+      score += v.filter((it) => (it?.text || "").trim()).length;
+    }
+  }
+
+  return score;
+}
+
+function weekAssignmentsScore(rows: MainAssignment[]): number {
+  return rows.reduce((acc, a) => acc + assignmentContentScore(a), 0);
+}
+
 export default function WeeklyWorkboard() {
   const { user } = useAuth();
   const [weekStart, setWeekStart] = useState(() => getMondayISO());
@@ -749,15 +781,30 @@ export default function WeeklyWorkboard() {
       const rows = Array.isArray(workboardQ.data.assignments) ? workboardQ.data.assignments : [];
       const serverRows = normalizeAssignments(rows as any);
       const localWeek = loadStore().filter((a) => a.week_start === weekStart);
+      const localNormalized = localWeek.length > 0 ? normalizeAssignments(localWeek as any) : [];
 
       // If the server has no data yet but this device has local tasks for the week,
       // publish the local version so the team can see it.
       if (serverRows.length === 0 && localWeek.length > 0) {
-        const localNormalized = normalizeAssignments(localWeek as any);
         setAssignments(localNormalized);
         // Fire-and-forget publish (the debounced save also covers it, but this is immediate)
         saveMut.mutate(localNormalized);
         return;
+      }
+
+      // Recovery: if server looks like placeholders but this device has richer saved work,
+      // automatically restore the richer local snapshot back to the shared DB.
+      if (localNormalized.length > 0) {
+        const serverScore = weekAssignmentsScore(serverRows);
+        const localScore = weekAssignmentsScore(localNormalized);
+        const serverLooksEmpty = serverScore <= Math.max(3, serverRows.length * 2);
+        const localClearlyRicher = localScore >= Math.max(10, serverScore + 8);
+        if (serverLooksEmpty && localClearlyRicher) {
+          setAssignments(localNormalized);
+          saveMut.mutate(localNormalized);
+          toast.success("Restored this week from a local snapshot (shared).");
+          return;
+        }
       }
 
       setAssignments(serverRows);
