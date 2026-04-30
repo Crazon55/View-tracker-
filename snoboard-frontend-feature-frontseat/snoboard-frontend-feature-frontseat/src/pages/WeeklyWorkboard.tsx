@@ -589,41 +589,51 @@ function weekDays(weekStart: string): string[] {
   return Array.from({ length: 7 }, (_, i) => addDaysISO(weekStart, i));
 }
 
-function hydrateDailyFromExisting(a: MainAssignment): MainAssignment {
-  const days = new Set(weekDays(a.week_start));
-  const daily = { ...(a.daily || {}) };
-  const hasAny = Object.keys(daily).some((k) => days.has(String(k).slice(0, 10)) && Array.isArray((daily as any)[k]) && (daily as any)[k].length > 0);
-  if (hasAny) return a;
+function deriveDayForPrimary(pt: WorkboardPrimaryTask): string | null {
+  return isoFromWorkboardId(pt.id) || String(pt.due_date || "").slice(0, 10) || null;
+}
 
-  const push = (dayIso: string | null, text: string, done: boolean) => {
-    if (!dayIso || !days.has(dayIso)) return;
-    const t = (text || "").trim();
-    if (!t) return;
-    const cur = Array.isArray(daily[dayIso]) ? [...(daily[dayIso] as any)] : [];
-    // de-dupe by text (best-effort)
-    if (cur.some((x: any) => String(x?.text || "").trim() === t)) return;
-    cur.push({ id: newId(), text: t, done, tags: [] });
-    daily[dayIso] = cur;
-  };
+function deriveWeekLogFromExisting(a: MainAssignment, days: string[]): WorkboardDailyItem[] {
+  const daySet = new Set(days);
+  const out: WorkboardDailyItem[] = [];
 
-  // Primary tasks: use created day from id, fall back to due_date (within week).
+  // Primary tasks + steps
   for (const pt of a.primary_tasks || []) {
-    const created = isoFromWorkboardId(pt.id) || String(pt.due_date || "").slice(0, 10);
-    push(created, pt.title || "Main task", Boolean(pt.completed));
-    // Steps: use created day from chunk id; done if completed.
+    const ptDay = deriveDayForPrimary(pt);
+    if (ptDay && daySet.has(ptDay)) {
+      const title = pt.title?.trim() ? pt.title.trim() : "Untitled main task";
+      out.push({
+        id: `wl-pt-${pt.id}`,
+        text: title,
+        done: Boolean(pt.completed) || primaryTaskAllStepsDone(pt),
+        tags: [],
+      });
+    }
     for (const c of pt.chunks || []) {
-      const cd = isoFromWorkboardId(c.id) || c.completed_at || created;
-      push(cd, c.title || "Step", c.status === "completed");
+      const cd = (isoFromWorkboardId(c.id) || c.completed_at || ptDay) ?? null;
+      if (!cd || !daySet.has(cd)) continue;
+      out.push({
+        id: `wl-ch-${c.id}`,
+        text: c.title?.trim() ? c.title.trim() : "Untitled step",
+        done: c.status === "completed",
+        tags: [],
+      });
     }
   }
 
-  // Interrupts: use created day from id.
+  // Interrupts
   for (const it of a.interrupts || []) {
-    const created = isoFromWorkboardId(it.id);
-    push(created, it.title || "Extra work", it.status === "completed");
+    const d = isoFromWorkboardId(it.id);
+    if (!d || !daySet.has(d)) continue;
+    out.push({
+      id: `wl-int-${it.id}`,
+      text: it.title?.trim() ? it.title.trim() : "Extra work",
+      done: it.status === "completed",
+      tags: [],
+    });
   }
 
-  return { ...a, daily };
+  return out;
 }
 
 export default function WeeklyWorkboard() {
@@ -719,16 +729,6 @@ export default function WeeklyWorkboard() {
       setAssignments(loadStore().filter((a) => a.week_start === weekStart));
     }
   }, [workboardQ.data?.week_start, workboardQ.data?.assignments, workboardQ.isError, weekStart]);
-
-  // One-time per-week migration: if day-grid is empty, prefill from existing tasks/steps by created date.
-  const didHydrateWeekRef = useRef<Record<string, boolean>>({});
-  useEffect(() => {
-    if (!weekStart) return;
-    if (didHydrateWeekRef.current[weekStart]) return;
-    if (workboardQ.isLoading) return;
-    didHydrateWeekRef.current[weekStart] = true;
-    setAssignments((prev) => prev.map(hydrateDailyFromExisting));
-  }, [weekStart, workboardQ.isLoading]);
 
   // Persist locally (offline fallback) and to server (shared).
   useEffect(() => {
@@ -1322,8 +1322,9 @@ function CalendarView({
   const today = todayISO();
 
   const visible = useMemo(() => {
-    return weekAssignments.filter((a) => (roleFilter === "all" ? true : a.role_id === roleFilter));
-  }, [weekAssignments, roleFilter]);
+    // Week view is a shared board: always show everyone's tasks.
+    return weekAssignments;
+  }, [weekAssignments]);
 
   const missingRoles = WORKBOARD_ROLES.filter((r) => !visible.some((a) => a.role_id === r.id));
 
@@ -1365,7 +1366,7 @@ function CalendarView({
       // Primary tasks and chunks grouped under the main task title.
       for (const pt of a.primary_tasks || []) {
         const secTitle = pt.title?.trim() ? pt.title.trim() : "Untitled main task";
-        const ptDayIso = isoFromWorkboardId(pt.id) || String(pt.due_date || "").slice(0, 10);
+        const ptDayIso = deriveDayForPrimary(pt);
         if (ptDayIso && out[ptDayIso]) {
           // Always show the main task itself on its created day (even if no steps).
           const sec = ensureSection(ptDayIso, `pt:${a.id}:${pt.id}`, a.role_id, a.id, secTitle);
@@ -1380,7 +1381,7 @@ function CalendarView({
           });
         }
         for (const c of pt.chunks || []) {
-          const dayIso = isoFromWorkboardId(c.id) || c.completed_at || isoFromWorkboardId(pt.id) || String(pt.due_date || "").slice(0, 10);
+          const dayIso = isoFromWorkboardId(c.id) || c.completed_at || ptDayIso;
           if (!dayIso || !out[dayIso]) continue;
           const sec = ensureSection(dayIso, `pt:${a.id}:${pt.id}`, a.role_id, a.id, secTitle);
           pushRow(dayIso, sec, {
@@ -2629,7 +2630,8 @@ function GalleryView({
         const open = expandId === a.id;
         const doneChunks = flatC.filter((c) => c.status === "completed").length;
         const galleryDoneToday = flatC.filter((c) => c.completed_at === todayISO()).length;
-        const weekDaily = weekDays.flatMap((d) => (a.daily && Array.isArray(a.daily[d]) ? a.daily[d]! : []));
+        const rawWeekDaily = weekDays.flatMap((d) => (a.daily && Array.isArray(a.daily[d]) ? a.daily[d]! : []));
+        const weekDaily = rawWeekDaily.length > 0 ? rawWeekDaily : deriveWeekLogFromExisting(a, weekDays);
         const weekDailyDone = weekDaily.filter((x) => x.done).length;
         return (
           <div
@@ -2690,7 +2692,7 @@ function GalleryView({
                 </div>
               </div>
 
-              {/* Week log (day-grid items) */}
+              {/* Week log (either day-grid items or derived from existing steps) */}
               {weekDaily.length > 0 && (
                 <div className="mt-3 border-t border-white/[0.06] pt-2">
                   <div className="flex items-center justify-between gap-2">
