@@ -81,6 +81,8 @@ export type WorkboardPrimaryTask = {
   id: string;
   title: string;
   due_date: string;
+  /** First due date this task was created with (used for "X days" shift badge when dragged). */
+  origin_due_date?: string;
   /** Manual completion; all steps being done also shows as completed in the UI. */
   completed: boolean;
   sort_order: number;
@@ -200,6 +202,9 @@ export function normalizeAssignments(list: MainAssignment[]): MainAssignment[] {
           id: pt.id || newId(),
           title: typeof pt.title === "string" ? pt.title : "",
           due_date: typeof pt.due_date === "string" ? pt.due_date : addDaysISO(weekStart, 4),
+          origin_due_date: typeof (pt as any).origin_due_date === "string"
+            ? (pt as any).origin_due_date
+            : (typeof pt.due_date === "string" ? pt.due_date : addDaysISO(weekStart, 4)),
           completed: Boolean(pt.completed),
           sort_order: typeof pt.sort_order === "number" ? pt.sort_order : order,
           chunks: ch,
@@ -217,6 +222,7 @@ export function normalizeAssignments(list: MainAssignment[]): MainAssignment[] {
           id: newId(),
           title: typeof legacy.title === "string" ? legacy.title : "",
           due_date: typeof legacy.due_date === "string" ? legacy.due_date : addDaysISO(weekStart, 4),
+          origin_due_date: typeof legacy.due_date === "string" ? legacy.due_date : addDaysISO(weekStart, 4),
           completed: false,
           sort_order: 0,
           chunks: ch,
