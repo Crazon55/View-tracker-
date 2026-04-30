@@ -654,49 +654,11 @@ export default function WeeklyWorkboard() {
     staleTime: 10_000,
   });
 
-  const mergeForSave = useCallback((serverRows: MainAssignment[], localRows: MainAssignment[]) => {
-    // Safety: preserve server rows unless we're updating the exact same assignment id,
-    // or intentionally replacing the role with non-empty content.
-    const byRole = new Map<WorkboardRoleId, MainAssignment>();
-    for (const s of serverRows) byRole.set(s.role_id, s);
-
-    const isPlaceholder = (a: MainAssignment) => {
-      const hasDaily = a.daily && Object.values(a.daily).some((v) => Array.isArray(v) && v.length > 0);
-      const hasInterrupts = Array.isArray(a.interrupts) && a.interrupts.length > 0;
-      const hasTags = Array.isArray(a.tags) && a.tags.length > 0;
-      const hasDesc = Boolean((a.description || "").trim());
-      const pts = Array.isArray(a.primary_tasks) ? a.primary_tasks : [];
-      const hasPrimary = pts.some((p) => Boolean((p.title || "").trim()) || (p.chunks || []).length > 0);
-      return !hasDaily && !hasInterrupts && !hasTags && !hasDesc && !hasPrimary;
-    };
-
-    // First apply exact-id updates (strongest signal).
-    const byId = new Map<string, MainAssignment>();
-    serverRows.forEach((a) => byId.set(a.id, a));
-    localRows.forEach((a) => {
-      if (byId.has(a.id)) byId.set(a.id, a);
-    });
-
-    // Now reconcile role uniqueness to avoid accidental wipes.
-    for (const a of localRows) {
-      const cur = byRole.get(a.role_id);
-      if (!cur) {
-        byRole.set(a.role_id, a);
-        continue;
-      }
-      if (cur.id === a.id) {
-        byRole.set(a.role_id, a);
-        continue;
-      }
-      if (isPlaceholder(a)) {
-        // Never let a blank newly-created card overwrite existing work.
-        continue;
-      }
-      // Non-empty local content: treat as intentional replacement for that role.
-      byRole.set(a.role_id, a);
-    }
-
-    return normalizeAssignments(Array.from(byRole.values()) as any);
+  const mergeByRole = useCallback((baseRows: MainAssignment[], incoming: MainAssignment[]) => {
+    const m = new Map<string, MainAssignment>();
+    baseRows.forEach((a) => m.set(a.role_id, a));
+    incoming.forEach((a) => m.set(a.role_id, a));
+    return normalizeAssignments(Array.from(m.values()) as any);
   }, []);
 
   const saveMut = useMutation({
@@ -710,7 +672,7 @@ export default function WeeklyWorkboard() {
       } catch {
         serverRows = [];
       }
-      const merged = mergeForSave(serverRows, rows);
+      const merged = mergeByRole(serverRows, rows);
       return saveWorkboardWeek(weekStart, merged);
     },
     onSuccess: () => {
@@ -1414,7 +1376,7 @@ function CalendarView({
             assignment_id: a.id,
             primary_task_id: pt.id,
             id: pt.id,
-            text: secTitle,
+            text: "Main task",
             done: Boolean(pt.completed) || primaryTaskAllStepsDone(pt),
           });
         }
