@@ -1262,6 +1262,7 @@ export default function WeeklyWorkboard() {
               removeDailyItem={removeDailyItem}
               patchDaily={patchDaily}
               patchPrimaryTask={patchPrimaryTask}
+              removePrimaryTask={removePrimaryTask}
               updateChunk={updateChunk}
               updateInterrupt={updateInterrupt}
               removeChunk={removeChunk}
@@ -1295,6 +1296,7 @@ function CalendarView({
   removeDailyItem,
   patchDaily,
   patchPrimaryTask,
+  removePrimaryTask,
   updateChunk,
   updateInterrupt,
   removeChunk,
@@ -1310,6 +1312,7 @@ function CalendarView({
   removeDailyItem: (assignmentId: string, dayIso: string, itemId: string) => void;
   patchDaily: (assignmentId: string, dayIso: string, next: WorkboardDailyItem[]) => void;
   patchPrimaryTask: (assignmentId: string, taskId: string, patch: Partial<WorkboardPrimaryTask>) => void;
+  removePrimaryTask: (assignmentId: string, taskId: string) => void;
   updateChunk: (assignmentId: string, primaryTaskId: string, chunkId: string, patch: Partial<WorkboardChunk>) => void;
   updateInterrupt: (assignmentId: string, intId: string, patch: Partial<WorkboardInterrupt>) => void;
   removeChunk: (assignmentId: string, primaryTaskId: string, chunkId: string) => void;
@@ -1325,6 +1328,7 @@ function CalendarView({
   const missingRoles = WORKBOARD_ROLES.filter((r) => !visible.some((a) => a.role_id === r.id));
 
   type DayRow =
+    | { kind: "primary"; role_id: WorkboardRoleId; assignment_id: string; primary_task_id: string; id: string; text: string; done: boolean }
     | { kind: "chunk"; role_id: WorkboardRoleId; assignment_id: string; primary_task_id: string; id: string; text: string; done: boolean }
     | { kind: "daily"; role_id: WorkboardRoleId; assignment_id: string; id: string; text: string; done: boolean }
     | { kind: "interrupt"; role_id: WorkboardRoleId; assignment_id: string; id: string; text: string; done: boolean };
@@ -1361,6 +1365,20 @@ function CalendarView({
       // Primary tasks and chunks grouped under the main task title.
       for (const pt of a.primary_tasks || []) {
         const secTitle = pt.title?.trim() ? pt.title.trim() : "Untitled main task";
+        const ptDayIso = isoFromWorkboardId(pt.id) || String(pt.due_date || "").slice(0, 10);
+        if (ptDayIso && out[ptDayIso]) {
+          // Always show the main task itself on its created day (even if no steps).
+          const sec = ensureSection(ptDayIso, `pt:${a.id}:${pt.id}`, a.role_id, a.id, secTitle);
+          pushRow(ptDayIso, sec, {
+            kind: "primary",
+            role_id: a.role_id,
+            assignment_id: a.id,
+            primary_task_id: pt.id,
+            id: pt.id,
+            text: "Main task",
+            done: Boolean(pt.completed) || primaryTaskAllStepsDone(pt),
+          });
+        }
         for (const c of pt.chunks || []) {
           const dayIso = isoFromWorkboardId(c.id) || c.completed_at || isoFromWorkboardId(pt.id) || String(pt.due_date || "").slice(0, 10);
           if (!dayIso || !out[dayIso]) continue;
@@ -1509,6 +1527,31 @@ function CalendarView({
 
                         <div className="mt-2 space-y-1.5">
                           {sec.rows.map((row) => {
+                            if (row.kind === "primary") {
+                              return (
+                                <div key={row.id} className="group flex items-start gap-2 min-w-0">
+                                  <label className="flex items-start gap-2 cursor-pointer min-w-0 flex-1">
+                                    <input
+                                      type="checkbox"
+                                      checked={row.done}
+                                      onChange={(e) => patchPrimaryTask(row.assignment_id, row.primary_task_id, { completed: e.target.checked })}
+                                      className="mt-0.5 h-4 w-4 rounded border-white/20 bg-zinc-900 text-violet-500 focus:ring-violet-500/30"
+                                    />
+                                    <span className={cn("text-[12px] leading-snug min-w-0 break-words", row.done ? "text-zinc-500 line-through" : "text-zinc-200")}>
+                                      {row.text}
+                                    </span>
+                                  </label>
+                                  <button
+                                    type="button"
+                                    onClick={() => removePrimaryTask(row.assignment_id, row.primary_task_id)}
+                                    className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity p-1 rounded-lg text-zinc-600 hover:text-red-300 hover:bg-red-500/10"
+                                    title="Remove"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              );
+                            }
                             if (row.kind === "daily") {
                               const itemDone = row.done;
                               return (
