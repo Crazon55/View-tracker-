@@ -22,6 +22,8 @@ export type SeedPerson = {
   niche: PersonNiche;
   aliases?: string[];
   emoji?: string;
+  /** Optional: handles (without @) owned by this person for posting attribution. */
+  pages?: string[];
 };
 
 // Role / niche assignments. Edit here when the team changes.

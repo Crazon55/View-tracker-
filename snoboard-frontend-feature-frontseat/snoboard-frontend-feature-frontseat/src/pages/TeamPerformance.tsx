@@ -12,6 +12,7 @@ import {
 } from "framer-motion";
 import { getSixDayMonth, getTeamsPerformance, getTrackerIdeas, getTrackerNiches } from "@/services/api";
 import { buildTeamPerformanceFromTracker, computeStreaksFromTrackerIdeas, type StreakDigest } from "@/lib/teamPerformanceCompute";
+import { PEOPLE_SEED } from "@/lib/peopleSeed";
 import {
   Trophy,
   Flame,
@@ -297,7 +298,15 @@ export default function TeamPerformance() {
   const streaks: StreakDigest | null = useMemo(() => {
     const ideas = streakIdeasQ.data;
     if (!Array.isArray(ideas) || ideas.length === 0) return null;
-    return computeStreaksFromTrackerIdeas(ideas, 7);
+    const pageOwnerByHandle: Record<string, string> = {};
+    for (const p of PEOPLE_SEED) {
+      for (const h of p.pages || []) {
+        const key = String(h || "").trim().replace(/^@/, "").toLowerCase();
+        if (!key) continue;
+        pageOwnerByHandle[key] = p.name;
+      }
+    }
+    return computeStreaksFromTrackerIdeas(ideas, 7, { pageOwnerByHandle });
   }, [streakIdeasQ.data]);
 
   const selectedStreak =

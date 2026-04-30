@@ -97,6 +97,13 @@ export type StreakDigest = {
   days: { iso: string }[];
 };
 
+function normHandle(raw: any): string {
+  return String(raw || "")
+    .trim()
+    .replace(/^@/, "")
+    .toLowerCase();
+}
+
 function isoDateOnly(x: any): string | null {
   if (!x) return null;
   // handle already-ISO strings, timestamps, Date
@@ -122,10 +129,15 @@ function lastNDaysIso(n: number): string[] {
   return out;
 }
 
-export function computeStreaksFromTrackerIdeas(ideas: any[], days: number = 7): StreakDigest {
+export function computeStreaksFromTrackerIdeas(
+  ideas: any[],
+  days: number = 7,
+  opts?: { pageOwnerByHandle?: Record<string, string> },
+): StreakDigest {
   const dayList = lastNDaysIso(days);
   const dayIndex: Record<string, number> = {};
   dayList.forEach((iso, idx) => (dayIndex[iso] = idx));
+  const pageOwnerByHandle = opts?.pageOwnerByHandle || {};
 
   const byPerson: Record<string, { idea: boolean[]; posting: boolean[] }> = {};
 
@@ -163,22 +175,22 @@ export function computeStreaksFromTrackerIdeas(ideas: any[], days: number = 7): 
       ideaSlot.idea[dayIndex[ideaDay]] = true;
     }
 
-    // POSTING streaks should be credited to the person who actually posted.
-    //
-    // Important constraint: `tracker_postings` currently has (page, date, views…)
-    // but does NOT store per-page "who". So we attribute all postings for an idea
-    // to `posted_by` when available, falling back to the idea creator.
-    const poster = normCreator(idea?.posted_by || idea?.postedBy || idea?.executor_name || idea?.created_by);
-    if (!poster) continue;
-    const postSlot = ensure(poster);
-
     // Posting-day: any posting entry date in the window.
     const postings = Array.isArray((idea as any)?.tracker_postings) ? (idea as any).tracker_postings : [];
     for (const p of postings) {
       const di = isoDateOnly(p?.date);
       if (!di) continue;
       const idx = dayIndex[di];
-      if (idx !== undefined) postSlot.posting[idx] = true;
+      if (idx === undefined) continue;
+
+      // Prefer the owner of the *page* (because it encodes who is scheduled to post it).
+      // If the page isn't mapped (or this idea is posted on multiple people's pages),
+      // fall back to the idea creator (per your requirement).
+      const pageHandle = normHandle(p?.page);
+      const pageOwner = normCreator(pageOwnerByHandle[pageHandle]);
+      const attributed = pageOwner || ideaCreator;
+      const postSlot = ensure(attributed);
+      postSlot.posting[idx] = true;
     }
   }
 
