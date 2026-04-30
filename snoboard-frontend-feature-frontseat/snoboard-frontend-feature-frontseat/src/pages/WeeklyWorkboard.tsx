@@ -1236,6 +1236,7 @@ export default function WeeklyWorkboard() {
             <GalleryView
               byRole={byRole}
               myWorkboardRole={myWorkboardRole}
+              weekStart={weekStart}
               addAssignment={addAssignment}
               removeAssignment={removeAssignment}
               patchAssignment={patchAssignment}
@@ -1263,6 +1264,8 @@ export default function WeeklyWorkboard() {
               patchPrimaryTask={patchPrimaryTask}
               updateChunk={updateChunk}
               updateInterrupt={updateInterrupt}
+              removeChunk={removeChunk}
+              removeInterrupt={removeInterrupt}
             />
           )}
         </ScrollReveal>
@@ -1294,6 +1297,8 @@ function CalendarView({
   patchPrimaryTask,
   updateChunk,
   updateInterrupt,
+  removeChunk,
+  removeInterrupt,
 }: {
   weekStart: string;
   weekAssignments: MainAssignment[];
@@ -1307,6 +1312,8 @@ function CalendarView({
   patchPrimaryTask: (assignmentId: string, taskId: string, patch: Partial<WorkboardPrimaryTask>) => void;
   updateChunk: (assignmentId: string, primaryTaskId: string, chunkId: string, patch: Partial<WorkboardChunk>) => void;
   updateInterrupt: (assignmentId: string, intId: string, patch: Partial<WorkboardInterrupt>) => void;
+  removeChunk: (assignmentId: string, primaryTaskId: string, chunkId: string) => void;
+  removeInterrupt: (assignmentId: string, intId: string) => void;
 }) {
   const days = useMemo(() => weekDays(weekStart), [weekStart]);
   const today = todayISO();
@@ -1416,6 +1423,7 @@ function CalendarView({
   }, [visible, days]);
 
   const [draftByDay, setDraftByDay] = useState<Record<string, string>>({});
+  const [draftRoleByDay, setDraftRoleByDay] = useState<Record<string, WorkboardRoleId>>({});
 
   return (
     <div className="space-y-5">
@@ -1454,6 +1462,7 @@ function CalendarView({
             const isToday = d === today;
             const sections = daySections[d] || [];
             const draft = draftByDay[d] || "";
+            const rolePick = draftRoleByDay[d] || visible[0]?.role_id || "ops_manager";
             return (
               <div
                 key={d}
@@ -1481,18 +1490,20 @@ function CalendarView({
                     <div className="text-[11px] text-zinc-600 py-2">To-do</div>
                   ) : (
                     sections.map((sec) => (
-                      <div key={sec.key} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-2.5">
+                      <div
+                        key={sec.key}
+                        className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-2.5"
+                      >
                         <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <div className="text-[10px] uppercase tracking-wider text-zinc-500">
-                              {roleFilter === "all" ? roleShort(sec.role_id) : ""}
-                            </div>
-                            <div className="text-[12px] font-semibold text-white/90 truncate" title={sec.title}>
+                          <div className="min-w-0 flex-1">
+                            {roleFilter === "all" ? (
+                              <div className="text-[10px] uppercase tracking-wider text-zinc-500">
+                                {roleShort(sec.role_id)}
+                              </div>
+                            ) : null}
+                            <div className="text-[12px] font-semibold text-white/90 line-clamp-2" title={sec.title}>
                               {sec.title}
                             </div>
-                          </div>
-                          <div className="text-[10px] text-zinc-600 tabular-nums">
-                            {sec.rows.filter((r) => r.done).length}/{sec.rows.length}
                           </div>
                         </div>
 
@@ -1501,26 +1512,28 @@ function CalendarView({
                             if (row.kind === "daily") {
                               const itemDone = row.done;
                               return (
-                                <div key={row.id} className="group flex items-start gap-2">
+                                <div key={row.id} className="group flex items-start gap-2 min-w-0">
                                   <input
                                     type="checkbox"
                                     checked={itemDone}
                                     onChange={(e) => toggleDailyItem(row.assignment_id, d, row.id, e.target.checked)}
                                     className="mt-0.5 h-4 w-4 rounded border-white/20 bg-zinc-900 text-violet-500 focus:ring-violet-500/40"
                                   />
-                                  <input
-                                    value={row.text}
-                                    onChange={(e) => editDailyText(row.assignment_id, d, row.id, e.target.value)}
-                                    className={cn(
-                                      "flex-1 bg-transparent text-[12px] outline-none border-b border-transparent focus:border-white/10",
-                                      itemDone ? "text-zinc-500 line-through" : "text-zinc-200",
-                                    )}
-                                    placeholder="To-do"
-                                  />
+                                  <div className="min-w-0 flex-1">
+                                    <input
+                                      value={row.text}
+                                      onChange={(e) => editDailyText(row.assignment_id, d, row.id, e.target.value)}
+                                      className={cn(
+                                        "w-full bg-transparent text-[12px] outline-none border-b border-transparent focus:border-white/10 truncate",
+                                        itemDone ? "text-zinc-500 line-through" : "text-zinc-200",
+                                      )}
+                                      placeholder="To-do"
+                                    />
+                                  </div>
                                   <button
                                     type="button"
                                     onClick={() => removeDailyItem(row.assignment_id, d, row.id)}
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-lg text-zinc-600 hover:text-red-300 hover:bg-red-500/10"
+                                    className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity p-1 rounded-lg text-zinc-600 hover:text-red-300 hover:bg-red-500/10"
                                     title="Remove"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
@@ -1531,33 +1544,53 @@ function CalendarView({
 
                             if (row.kind === "interrupt") {
                               return (
-                                <label key={row.id} className="flex items-start gap-2 cursor-pointer">
+                                <div key={row.id} className="group flex items-start gap-2 min-w-0">
+                                  <label className="flex items-start gap-2 cursor-pointer min-w-0 flex-1">
                                   <input
                                     type="checkbox"
                                     checked={row.done}
                                     onChange={(e) => updateInterrupt(row.assignment_id, row.id, { status: e.target.checked ? "completed" : "in_progress" })}
                                     className="mt-0.5 h-4 w-4 rounded border-white/20 bg-zinc-900 text-orange-500 focus:ring-orange-500/30"
                                   />
-                                  <span className={cn("text-[12px] leading-snug", row.done ? "text-zinc-500 line-through" : "text-zinc-200")}>
+                                  <span className={cn("text-[12px] leading-snug min-w-0 break-words", row.done ? "text-zinc-500 line-through" : "text-zinc-200")}>
                                     {row.text}
                                   </span>
-                                </label>
+                                  </label>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeInterrupt(row.assignment_id, row.id)}
+                                    className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity p-1 rounded-lg text-zinc-600 hover:text-red-300 hover:bg-red-500/10"
+                                    title="Remove"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
                               );
                             }
 
                             // chunk
                             return (
-                              <label key={row.id} className="flex items-start gap-2 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={row.done}
-                                  onChange={(e) => updateChunk(row.assignment_id, row.primary_task_id, row.id, { status: e.target.checked ? "completed" : "in_progress" })}
-                                  className="mt-0.5 h-4 w-4 rounded border-white/20 bg-zinc-900 text-violet-500 focus:ring-violet-500/30"
-                                />
-                                <span className={cn("text-[12px] leading-snug", row.done ? "text-zinc-500 line-through" : "text-zinc-200")}>
-                                  {row.text}
-                                </span>
-                              </label>
+                              <div key={row.id} className="group flex items-start gap-2 min-w-0">
+                                <label className="flex items-start gap-2 cursor-pointer min-w-0 flex-1">
+                                  <input
+                                    type="checkbox"
+                                    checked={row.done}
+                                    onChange={(e) => updateChunk(row.assignment_id, row.primary_task_id, row.id, { status: e.target.checked ? "completed" : "in_progress" })}
+                                    className="mt-0.5 h-4 w-4 rounded border-white/20 bg-zinc-900 text-violet-500 focus:ring-violet-500/30"
+                                  />
+                                  <span className={cn("text-[12px] leading-snug min-w-0 break-words", row.done ? "text-zinc-500 line-through" : "text-zinc-200")}>
+                                    {row.text}
+                                  </span>
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => removeChunk(row.assignment_id, row.primary_task_id, row.id)}
+                                  className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity p-1 rounded-lg text-zinc-600 hover:text-red-300 hover:bg-red-500/10"
+                                  title="Remove"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             );
                           })}
                         </div>
@@ -1568,6 +1601,20 @@ function CalendarView({
 
                 <div className="pt-2 mt-2 border-t border-white/[0.06]">
                   <div className="flex items-center gap-2">
+                    {roleFilter === "all" ? (
+                      <select
+                        value={rolePick}
+                        onChange={(e) => setDraftRoleByDay((p) => ({ ...p, [d]: e.target.value as WorkboardRoleId }))}
+                        className="h-9 rounded-xl bg-zinc-950 px-2.5 text-xs text-white outline-none border border-white/10 focus:border-violet-500/40"
+                        title="Which department?"
+                      >
+                        {WORKBOARD_ROLES.map((r) => (
+                          <option key={r.id} value={r.id} className="bg-zinc-950 text-white">
+                            {r.short}
+                          </option>
+                        ))}
+                      </select>
+                    ) : null}
                     <input
                       value={draft}
                       onChange={(e) => setDraftByDay((p) => ({ ...p, [d]: e.target.value }))}
@@ -1577,10 +1624,7 @@ function CalendarView({
                         const text = (draftByDay[d] || "").trim();
                         if (!text) return;
                         // If filtering to a single role, add there; otherwise default to Ops (or first role) so the row has an owner.
-                        const targetRole: WorkboardRoleId =
-                          roleFilter !== "all"
-                            ? roleFilter
-                            : (visible[0]?.role_id || "ops_manager");
+                        const targetRole: WorkboardRoleId = roleFilter !== "all" ? roleFilter : rolePick;
                         const target = visible.find((a) => a.role_id === targetRole);
                         if (!target) {
                           toast.error("Add a department card first (use + buttons).");
@@ -1600,10 +1644,7 @@ function CalendarView({
                       onClick={() => {
                         const text = (draftByDay[d] || "").trim();
                         if (!text) return;
-                        const targetRole: WorkboardRoleId =
-                          roleFilter !== "all"
-                            ? roleFilter
-                            : (visible[0]?.role_id || "ops_manager");
+                        const targetRole: WorkboardRoleId = roleFilter !== "all" ? roleFilter : rolePick;
                         const target = visible.find((a) => a.role_id === targetRole);
                         if (!target) {
                           toast.error("Add a department card first (use + buttons).");
@@ -2481,6 +2522,7 @@ function ListView({
 function GalleryView({
   byRole,
   myWorkboardRole,
+  weekStart,
   addAssignment,
   removeAssignment,
   patchAssignment,
@@ -2496,6 +2538,7 @@ function GalleryView({
 }: {
   byRole: Map<WorkboardRoleId, MainAssignment>;
   myWorkboardRole: WorkboardRoleId | null;
+  weekStart: string;
   addAssignment: (role_id: WorkboardRoleId) => void;
   removeAssignment: (id: string) => void;
   patchAssignment: (id: string, patch: Partial<MainAssignment>) => void;
@@ -2510,6 +2553,7 @@ function GalleryView({
   updateInterrupt: (assignmentId: string, intId: string, patch: Partial<WorkboardInterrupt>) => void;
 }) {
   const [expandId, setExpandId] = useState<string | null>(null);
+  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDaysISO(weekStart, i)), [weekStart]);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -2542,6 +2586,8 @@ function GalleryView({
         const open = expandId === a.id;
         const doneChunks = flatC.filter((c) => c.status === "completed").length;
         const galleryDoneToday = flatC.filter((c) => c.completed_at === todayISO()).length;
+        const weekDaily = weekDays.flatMap((d) => (a.daily && Array.isArray(a.daily[d]) ? a.daily[d]! : []));
+        const weekDailyDone = weekDaily.filter((x) => x.done).length;
         return (
           <div
             key={a.id}
@@ -2600,6 +2646,29 @@ function GalleryView({
                   )}
                 </div>
               </div>
+
+              {/* Week log (day-grid items) */}
+              {weekDaily.length > 0 && (
+                <div className="mt-3 border-t border-white/[0.06] pt-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-medium text-zinc-500">Week log</p>
+                    <p className="text-[10px] text-zinc-600 tabular-nums">{weekDailyDone}/{weekDaily.length}</p>
+                  </div>
+                  <ul className="mt-1.5 space-y-1">
+                    {weekDaily.slice(0, 5).map((it) => (
+                      <li key={it.id} className="text-[11px] text-zinc-300 flex items-start gap-2">
+                        <span className={cn("mt-0.5 h-2 w-2 rounded-full shrink-0", it.done ? "bg-emerald-400" : "bg-zinc-700")} />
+                        <span className={cn("min-w-0 break-words", it.done ? "text-zinc-500 line-through" : "text-zinc-300")}>
+                          {it.text}
+                        </span>
+                      </li>
+                    ))}
+                    {weekDaily.length > 5 && (
+                      <li className="text-[10px] text-zinc-600">+{weekDaily.length - 5} more</li>
+                    )}
+                  </ul>
+                </div>
+              )}
 
               {allAssignmentTags(a).length > 0 && (
                 <div className="mt-3 border-t border-white/[0.06] pt-2">
