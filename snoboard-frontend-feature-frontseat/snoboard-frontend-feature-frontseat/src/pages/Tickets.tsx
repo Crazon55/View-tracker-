@@ -299,6 +299,22 @@ export default function Tickets() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
 
+  const appendFiles = (incoming: File[]) => {
+    if (!incoming.length) return;
+    setFiles((prev) => {
+      const key = (f: File) => `${f.name}|${f.size}|${f.lastModified}|${f.type}`;
+      const seen = new Set(prev.map(key));
+      const next = [...prev];
+      for (const f of incoming) {
+        const k = key(f);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        next.push(f);
+      }
+      return next;
+    });
+  };
+
   const ticketsQ = useQuery<Ticket[]>({
     queryKey: ["tickets"],
     queryFn: () => getTickets(),
@@ -324,6 +340,33 @@ export default function Tickets() {
     if (!("Notification" in window)) return;
     if (Notification.permission === "default") Notification.requestPermission();
   }, []);
+
+  // WhatsApp-style: allow pasting images/videos directly into Attachments.
+  useEffect(() => {
+    if (!createOpen) return;
+
+    const onPaste = (e: ClipboardEvent) => {
+      const dt = e.clipboardData;
+      if (!dt?.items?.length) return;
+
+      const pasted: File[] = [];
+      for (const item of Array.from(dt.items)) {
+        if (item.kind !== "file") continue;
+        const file = item.getAsFile();
+        if (!file) continue;
+        if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) continue;
+        pasted.push(file);
+      }
+
+      if (pasted.length === 0) return;
+      e.preventDefault();
+      appendFiles(pasted);
+      toast.success(`${pasted.length} attachment${pasted.length === 1 ? "" : "s"} added from clipboard`);
+    };
+
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [createOpen]);
 
   const byStatus = useMemo(() => {
     const rows = ticketsQ.data || [];
@@ -843,13 +886,16 @@ export default function Tickets() {
                       multiple
                       accept="image/*,video/*"
                       className="hidden"
-                      onChange={(e) => setFiles(Array.from(e.target.files || []))}
+                      onChange={(e) => appendFiles(Array.from(e.target.files || []))}
                     />
                   </label>
                   <p className="text-xs text-zinc-500">
                     {files.length === 0 ? "No files selected" : `${files.length} file${files.length === 1 ? "" : "s"} selected`}
                   </p>
                 </div>
+                <p className="text-[11px] text-zinc-600 mt-2">
+                  Tip: paste screenshots here with <span className="text-zinc-400 font-semibold">Ctrl+V</span>
+                </p>
               </div>
             </div>
 
