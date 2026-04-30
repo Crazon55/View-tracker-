@@ -575,57 +575,6 @@ function DragScrollText({ text, className }: { text: string; className?: string 
   );
 }
 
-function isoFromWorkboardId(id: string): string | null {
-  // IDs are typically `${Date.now()}-${rand}`. Use that timestamp as "created day".
-  const head = String(id || "").split("-")[0];
-  const ts = Number(head);
-  if (!Number.isFinite(ts) || ts <= 0) return null;
-  const d = new Date(ts);
-  if (isNaN(d.getTime())) return null;
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function weekDays(weekStart: string): string[] {
-  return Array.from({ length: 7 }, (_, i) => addDaysISO(weekStart, i));
-}
-
-function hydrateDailyFromExisting(a: MainAssignment): MainAssignment {
-  const days = new Set(weekDays(a.week_start));
-  const daily = { ...(a.daily || {}) };
-  const hasAny = Object.keys(daily).some((k) => days.has(String(k).slice(0, 10)) && Array.isArray((daily as any)[k]) && (daily as any)[k].length > 0);
-  if (hasAny) return a;
-
-  const push = (dayIso: string | null, text: string, done: boolean) => {
-    if (!dayIso || !days.has(dayIso)) return;
-    const t = (text || "").trim();
-    if (!t) return;
-    const cur = Array.isArray(daily[dayIso]) ? [...(daily[dayIso] as any)] : [];
-    // de-dupe by text (best-effort)
-    if (cur.some((x: any) => String(x?.text || "").trim() === t)) return;
-    cur.push({ id: newId(), text: t, done, tags: [] });
-    daily[dayIso] = cur;
-  };
-
-  // Primary tasks: use created day from id, fall back to due_date (within week).
-  for (const pt of a.primary_tasks || []) {
-    const created = isoFromWorkboardId(pt.id) || String(pt.due_date || "").slice(0, 10);
-    push(created, pt.title || "Main task", Boolean(pt.completed));
-    // Steps: use created day from chunk id; done if completed.
-    for (const c of pt.chunks || []) {
-      const cd = isoFromWorkboardId(c.id) || c.completed_at || created;
-      push(cd, c.title || "Step", c.status === "completed");
-    }
-  }
-
-  // Interrupts: use created day from id.
-  for (const it of a.interrupts || []) {
-    const created = isoFromWorkboardId(it.id);
-    push(created, it.title || "Extra work", it.status === "completed");
-  }
-
-  return { ...a, daily };
-}
-
 export default function WeeklyWorkboard() {
   const { user } = useAuth();
   const [weekStart, setWeekStart] = useState(() => getMondayISO());
@@ -719,16 +668,6 @@ export default function WeeklyWorkboard() {
       setAssignments(loadStore().filter((a) => a.week_start === weekStart));
     }
   }, [workboardQ.data?.week_start, workboardQ.data?.assignments, workboardQ.isError, weekStart]);
-
-  // One-time per-week migration: if day-grid is empty, prefill from existing tasks/steps by created date.
-  const didHydrateWeekRef = useRef<Record<string, boolean>>({});
-  useEffect(() => {
-    if (!weekStart) return;
-    if (didHydrateWeekRef.current[weekStart]) return;
-    if (workboardQ.isLoading) return;
-    didHydrateWeekRef.current[weekStart] = true;
-    setAssignments((prev) => prev.map(hydrateDailyFromExisting));
-  }, [weekStart, workboardQ.isLoading]);
 
   // Persist locally (offline fallback) and to server (shared).
   useEffect(() => {
@@ -1292,6 +1231,10 @@ function weekdayShort(iso: string): string {
 function monthDay(iso: string): string {
   const d = new Date(iso + "T12:00:00");
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function weekDays(weekStart: string): string[] {
+  return Array.from({ length: 7 }, (_, i) => addDaysISO(weekStart, i));
 }
 
 function CalendarView({
