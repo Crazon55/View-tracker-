@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, useInView } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
-import { getWorkboardMentionCandidates, getWorkboardWeek, saveWorkboardWeek } from "@/services/api";
+import { getWorkboardMentionCandidates, getWorkboardWeek, getTickets, patchTicket, saveWorkboardWeek } from "@/services/api";
+import type { Ticket } from "@/services/api";
 import { toast } from "sonner";
 import {
   WORKBOARD_ROLES,
@@ -25,6 +26,7 @@ import {
   mentionFromName,
   workboardMentionSubtitle,
 } from "@/lib/workboardTypes";
+import { mapChunkStatusToTicket, mergeAssignedTicketsIntoInterrupts } from "@/lib/ticketWorkboardSync";
 import type { WorkboardMentionPerson } from "@/services/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
@@ -576,6 +578,7 @@ function DragScrollText({ text, className }: { text: string; className?: string 
 
 export default function WeeklyWorkboard() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [weekStart, setWeekStart] = useState(() => getMondayISO());
   const [view, setView] = useState<"list" | "gallery">("list");
   // Default to week view so cards don't look "empty" when nothing is due today.
@@ -592,6 +595,14 @@ export default function WeeklyWorkboard() {
     queryKey: ["weekly-workboard", weekStart],
     queryFn: () => getWorkboardWeek(weekStart),
     staleTime: 10_000,
+  });
+
+  const userEmailNorm = (user?.email || "").trim().toLowerCase();
+  const { data: myAssignedTickets = [] } = useQuery({
+    queryKey: ["tickets", "assigned", userEmailNorm],
+    queryFn: () => getTickets({ assigned_to_email: userEmailNorm }),
+    enabled: !!userEmailNorm,
+    staleTime: 15_000,
   });
 
   const mergeByRole = useCallback((baseRows: MainAssignment[], incoming: MainAssignment[]) => {
@@ -672,6 +683,39 @@ export default function WeeklyWorkboard() {
       hydratedWeekStartRef.current = weekStart;
     }
   }, [workboardQ.data?.week_start, workboardQ.data?.assignments, workboardQ.isError, weekStart]);
+
+  /** Mirror assigned Tickets into AI Developer → Extra work & blockers for this week (bidirectional via updateInterrupt). */
+  useEffect(() => {
+    if (!userEmailNorm) return;
+    if (hydratedWeekStartRef.current !== weekStart) return;
+    if (workboardQ.isLoading) return;
+
+    setAssignments((prev) => {
+      const aiIdx = prev.findIndex((a) => a.week_start === weekStart && a.role_id === "ai_dev");
+      if (aiIdx < 0) {
+        if (!myAssignedTickets.length) return prev;
+        const interrupts = mergeAssignedTicketsIntoInterrupts([], myAssignedTickets as Ticket[]);
+        return [
+          ...prev,
+          {
+            id: newId(),
+            role_id: "ai_dev",
+            week_start: weekStart,
+            description: "",
+            primary_tasks: [],
+            interrupts,
+            tags: [],
+          },
+        ];
+      }
+      const ai = prev[aiIdx];
+      const nextInts = mergeAssignedTicketsIntoInterrupts(ai.interrupts, myAssignedTickets as Ticket[]);
+      if (JSON.stringify(nextInts) === JSON.stringify(ai.interrupts)) return prev;
+      const copy = [...prev];
+      copy[aiIdx] = { ...ai, interrupts: nextInts };
+      return copy;
+    });
+  }, [userEmailNorm, weekStart, myAssignedTickets, workboardQ.isLoading]);
 
   // Persist locally (offline fallback) and to server (shared).
   useEffect(() => {
@@ -874,17 +918,33 @@ export default function WeeklyWorkboard() {
 
   const updateInterrupt = useCallback(
     (assignmentId: string, intId: string, patch: Partial<WorkboardInterrupt>) => {
+      let ticketId: string | null = null;
+      const ticketPatch: Record<string, unknown> = {};
       setAssignments((prev) =>
         prev.map((a) => {
           if (a.id !== assignmentId) return a;
           return {
             ...a,
-            interrupts: a.interrupts.map((x) => (x.id === intId ? { ...x, ...patch } : x)),
+            interrupts: a.interrupts.map((x) => {
+              if (x.id !== intId) return x;
+              const merged = { ...x, ...patch };
+              if (merged.source_ticket_id) {
+                ticketId = merged.source_ticket_id;
+                if ("status" in patch) ticketPatch.status = mapChunkStatusToTicket(merged.status);
+                if ("title" in patch) ticketPatch.title = merged.title;
+              }
+              return merged;
+            }),
           };
         })
       );
+      if (ticketId && Object.keys(ticketPatch).length > 0) {
+        patchTicket(ticketId, ticketPatch as any)
+          .then(() => queryClient.invalidateQueries({ queryKey: ["tickets"] }))
+          .catch(() => toast.error("Could not sync change to ticket"));
+      }
     },
-    []
+    [queryClient]
   );
 
   const addInterrupt = useCallback((assignmentId: string) => {
@@ -1738,6 +1798,12 @@ function AssignmentEditor({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-[11px] text-orange-300/80 shrink-0">Extra</span>
+                      {it.source_ticket_id && (
+                        <>
+                          <span className="text-[11px] text-zinc-600">·</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-400/90">Tickets</span>
+                        </>
+                      )}
                       <span className="text-[11px] text-zinc-600">·</span>
                       <span className="text-[11px] text-zinc-400">{CHUNK_STATUS_LABEL[it.status]}</span>
                       <div className="ml-auto text-[11px] text-zinc-500 line-clamp-1">
