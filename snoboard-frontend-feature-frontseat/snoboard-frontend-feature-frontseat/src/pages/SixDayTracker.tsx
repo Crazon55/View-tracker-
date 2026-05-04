@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import {
   getSixDayMonth, upsertSixDayEntry,
@@ -443,6 +443,31 @@ function fmtShort(d: string) {
   return new Date(d + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
+/** Merge a saved `six_day_entries` row into the month query cache — avoids refetch races that clear IP inputs. */
+function patchSixDayEntryInCache(
+  qc: { setQueryData: (key: unknown, updater: (old: unknown) => unknown) => void },
+  monthYm: string,
+  saved: Record<string, unknown> | null | undefined,
+) {
+  if (!saved || !monthYm) return;
+  const cycleNumber = Number((saved as any).cycle_number);
+  const pageId = String((saved as any).page_id);
+  if (Number.isNaN(cycleNumber) || !pageId) return;
+  qc.setQueryData(["six-day-month", monthYm], (old: any) => {
+    if (!old?.cycles) return old;
+    const cycles = old.cycles.map((c: any) => {
+      if (Number(c.cycle) !== cycleNumber) return c;
+      const list = [...(c.entries || [])];
+      const idx = list.findIndex((e: any) => String(e.page_id) === pageId);
+      const row = { ...(idx >= 0 ? list[idx] : {}), ...(saved as object) };
+      if (idx >= 0) list[idx] = row;
+      else list.push(row);
+      return { ...c, entries: list };
+    });
+    return { ...old, cycles };
+  });
+}
+
 
 /* ──────── Cycle Card ──────── */
 function CycleCard({
@@ -549,6 +574,7 @@ function CycleCard({
                   page={p}
                   cycle={cycle}
                   monthDate={monthDate}
+                  selectedMonth={selectedMonth}
                   qc={qc}
                   userEmail={userEmail}
                   onDataChange={onDataChange}
@@ -565,11 +591,12 @@ function CycleCard({
 
 /* ──────── IP row: weekly inputs + topline links (same card) ──────── */
 function IPDropdown({
-  page, cycle, monthDate, qc, userEmail, onDataChange,
+  page, cycle, monthDate, selectedMonth, qc, userEmail, onDataChange,
 }: {
   page: any;
   cycle: any;
   monthDate: string;
+  selectedMonth: string;
   qc: any;
   userEmail: string;
   onDataChange: () => void;
@@ -579,7 +606,7 @@ function IPDropdown({
   const [newViews, setNewViews] = useState("");
   const [newType, setNewType] = useState("reel");
 
-  const entry = (cycle.entries || []).find((e: any) => e.page_id === page.id);
+  const entry = (cycle.entries || []).find((e: any) => String(e.page_id) === String(page.id));
   const allContent: any[] = cycle.top_content || [];
   const toplineItems = allContent.filter((t: any) => t.page_id === page.id);
   const toplineViewsSum = toplineItems.reduce((s: number, t: any) => s + (t.views || 0), 0);
@@ -590,18 +617,32 @@ function IPDropdown({
   const [reelPerfStr, setReelPerfStr] = useState("");
   const [postPerfStr, setPostPerfStr] = useState("");
 
+  const rowKey = `${selectedMonth}|${cycle.cycle}|${page.id}`;
+  const rowKeyRef = useRef("");
+  /** True once we've seen a server row for this IP/cycle — used to ignore brief `entry === undefined` during refetch. */
+  const sawServerEntryRef = useRef(false);
+
   /**
-   * Sync inputs from server only when the *row* changes (page / cycle / month / new entry id).
-   * Do NOT depend on entry.views / reel_pct / etc.: after save, refetch can briefly return stale
-   * cache and would overwrite what the user just typed (needing 2–3 re-entries).
+   * Hydrate inputs from `entry` when switching IP/cycle/month, or when a row first appears.
+   * Do not reset when `entry` flickers undefined mid-refetch (same row) — that was clearing Reel/Post %.
    */
   useEffect(() => {
+    if (rowKeyRef.current !== rowKey) {
+      rowKeyRef.current = rowKey;
+      sawServerEntryRef.current = false;
+    }
+
+    if (sawServerEntryRef.current && !entry) {
+      return;
+    }
+    if (entry) sawServerEntryRef.current = true;
+
     setWeekViews(String((entry?.views as number | undefined) ?? 0));
     setReelPctStr(entry?.reel_pct != null && entry.reel_pct !== "" ? String(entry.reel_pct) : "");
     setPostPctStr(entry?.post_pct != null && entry.post_pct !== "" ? String(entry.post_pct) : "");
     setReelPerfStr(entry?.reel_perf != null && entry.reel_perf !== "" ? String(entry.reel_perf) : "");
     setPostPerfStr(entry?.post_perf != null && entry.post_perf !== "" ? String(entry.post_perf) : "");
-  }, [page.id, cycle.cycle, monthDate, entry?.id]);
+  }, [rowKey, entry, page.id, cycle.cycle, selectedMonth]);
 
   function parseOptionalPct(s: string): number | null {
     const t = s.trim();
@@ -621,9 +662,9 @@ function IPDropdown({
 
   const upsertEntryMut = useMutation({
     mutationFn: (data: Record<string, any>) => upsertSixDayEntry(data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["six-day-month"] });
-      onDataChange();
+    onSuccess: (saved: any) => {
+      patchSixDayEntryInCache(qc, selectedMonth, saved);
+      qc.invalidateQueries({ queryKey: ["growth-data"] });
     },
   });
 
