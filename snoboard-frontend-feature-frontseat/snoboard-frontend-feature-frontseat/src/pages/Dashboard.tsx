@@ -17,6 +17,31 @@ function formatCompact(n: number): string {
 type BreakdownMode = "reels" | "views";
 type TimePeriod = "all" | "monthly" | "custom";
 
+/** When reel/post rows lack `posted_at`, sum monthly `/api/v1/growth` rows whose month overlaps the custom range. */
+function sumGrowthViewsForHandleInMonthRange(
+  handle: string,
+  fromIso: string,
+  toIso: string,
+  growthRows: unknown[],
+): number {
+  const h = String(handle || "").trim().toLowerCase();
+  if (!h || h === "total" || !fromIso?.trim() || !toIso?.trim()) return 0;
+  const fromM = fromIso.slice(0, 7);
+  const toM = toIso.slice(0, 7);
+  let sum = 0;
+  for (const row of growthRows) {
+    const r = row as Record<string, unknown>;
+    const rh = String(r.handle || "").trim().toLowerCase();
+    if (rh !== h) continue;
+    const rowMonth = String(r.month || "").slice(0, 7);
+    if (!rowMonth) continue;
+    if (rowMonth >= fromM && rowMonth <= toM) {
+      sum += Number(r.views) || 0;
+    }
+  }
+  return sum;
+}
+
 function TogglePill({ options, value, onChange }: {
   options: { label: string; value: string }[];
   value: string;
@@ -136,18 +161,26 @@ export default function Dashboard() {
         if (!customFrom && !customTo) return page.all_time_views ?? 0;
         const from = customFrom || "0000-00-00";
         const to = customTo || "9999-99-99";
-        const pageReels = allReels.filter((r: any) => r.page_id === page.id);
-        const pagePosts = allPosts.filter((p: any) => p.page_id === page.id);
+        const pid = String(page.id ?? "");
+        const pageReels = allReels.filter((r: any) => String(r.page_id ?? "") === pid);
+        const pagePosts = allPosts.filter((p: any) => String(p.page_id ?? "") === pid);
         const filteredReels = pageReels.filter((r: any) => {
           const d = (r.posted_at || "")?.slice(0, 10);
-          return d >= from && d <= to;
+          return d && d >= from && d <= to;
         });
         const filteredPosts = pagePosts.filter((p: any) => {
           const d = (p.posted_at || p.created_at || "")?.slice(0, 10);
-          return d >= from && d <= to;
+          return d && d >= from && d <= to;
         });
-        return filteredReels.reduce((s: number, r: any) => s + (r.views ?? 0), 0)
-             + filteredPosts.reduce((s: number, p: any) => s + (p.actual_views ?? 0), 0);
+        const linear =
+          filteredReels.reduce((s: number, r: any) => s + (r.views ?? 0), 0) +
+          filteredPosts.reduce((s: number, p: any) => s + (p.actual_views ?? 0), 0);
+        if (linear > 0) return linear;
+        if (growthData.length > 0) {
+          const g = sumGrowthViewsForHandleInMonthRange(String(page.handle || ""), from, to, growthData);
+          if (g > 0) return g;
+        }
+        return linear;
       }
     }
   }
@@ -164,13 +197,14 @@ export default function Dashboard() {
     }
     const from = customFrom || "0000-00-00";
     const to = customTo || "9999-99-99";
+    const pid = String(page.id ?? "");
     const reelsCount = allReels.filter((r: any) => {
       const d = (r.posted_at || "")?.slice(0, 10);
-      return r.page_id === page.id && d >= from && d <= to;
+      return String(r.page_id ?? "") === pid && d && d >= from && d <= to;
     }).length;
     const postsCount = allPosts.filter((p: any) => {
       const d = (p.posted_at || p.created_at || "")?.slice(0, 10);
-      return p.page_id === page.id && d >= from && d <= to;
+      return String(p.page_id ?? "") === pid && d && d >= from && d <= to;
     }).length;
     return { reelsCount, postsCount };
   }
@@ -367,6 +401,7 @@ export default function Dashboard() {
               <div className="flex items-end justify-center gap-3 sm:gap-5">
                 {podiumOrder.map((page, i) => {
                   const views = getPageViews(page, globalPeriod);
+                  const podiumCounts = getPageCounts(page, globalPeriod);
                   return (
                     <div
                       key={page.id}
@@ -392,9 +427,9 @@ export default function Dashboard() {
                         </span>
                         <span className="text-[9px] uppercase tracking-wider text-zinc-500 mt-1">views</span>
                         <div className="mt-2 flex items-center gap-1 text-[10px] text-zinc-600">
-                          <span>{globalPeriod === "all" ? (page.all_time_reels_count ?? page.reels_count ?? 0) : (page.reels_count ?? 0)} reels</span>
+                          <span>{podiumCounts.reelsCount} reels</span>
                           <span>·</span>
-                          <span>{globalPeriod === "all" ? (page.all_time_posts_count ?? page.posts_count ?? 0) : (page.posts_count ?? 0)} posts</span>
+                          <span>{podiumCounts.postsCount} posts</span>
                         </div>
                       </div>
                     </div>
@@ -433,7 +468,21 @@ export default function Dashboard() {
                 { label: "Custom", value: "custom" },
               ]}
               value={globalPeriod}
-              onChange={(v) => setGlobalPeriod(v as TimePeriod)}
+              onChange={(v) => {
+                const next = v as TimePeriod;
+                if (next === "custom" && !customFrom.trim() && !customTo.trim()) {
+                  const now = new Date();
+                  const y = now.getFullYear();
+                  const m = now.getMonth();
+                  const pad = (n: number) => String(n).padStart(2, "0");
+                  const first = `${y}-${pad(m + 1)}-01`;
+                  const lastD = new Date(y, m + 1, 0).getDate();
+                  const last = `${y}-${pad(m + 1)}-${pad(lastD)}`;
+                  setCustomFrom(first);
+                  setCustomTo(last);
+                }
+                setGlobalPeriod(next);
+              }}
             />
             {globalPeriod === "custom" && (
               <div className="flex items-center gap-2">
