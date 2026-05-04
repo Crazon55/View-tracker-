@@ -2110,7 +2110,7 @@ function WeekGridListView({
             <div
               key={dIso}
               className={cn(
-                "group/daycol rounded-2xl border bg-black/35 backdrop-blur-xl p-3 min-h-[240px] flex flex-col",
+                "rounded-2xl border bg-black/35 backdrop-blur-xl p-3 min-h-[240px] flex flex-col",
                 dragOverDay === dIso ? "border-violet-500/35 shadow-[0_0_26px_-10px_rgba(124,58,237,0.55)]" : "border-white/10",
               )}
               onDragOver={(e) => {
@@ -2136,24 +2136,9 @@ function WeekGridListView({
                 } as any);
               }}
             >
-              <div className="flex items-start justify-between gap-2 mb-2 shrink-0">
-                <div>
-                  <div className="text-[11px] font-black text-white">{dayLabel(dIso)}</div>
-                  <div className="text-[11px] text-zinc-500">{daySub(dIso)}</div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => openAddTaskDialog(dIso)}
-                  className={cn(
-                    "h-8 w-8 rounded-lg border flex items-center justify-center transition-colors",
-                    "border-white/10 bg-white/[0.04] text-zinc-400 hover:text-white hover:border-violet-500/35 hover:bg-violet-600/20",
-                    "opacity-80 group-hover/daycol:opacity-100",
-                  )}
-                  title="Add card"
-                  aria-label="Add card on this day"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
+              <div className="mb-2 shrink-0">
+                <div className="text-[11px] font-black text-white">{dayLabel(dIso)}</div>
+                <div className="text-[11px] text-zinc-500">{daySub(dIso)}</div>
               </div>
 
               <div className="flex flex-col flex-1 min-h-0 gap-2">
