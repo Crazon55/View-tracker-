@@ -2902,6 +2902,19 @@ async def bandwidth_tracker(
     POST_STAGE_EDITS     = {"scripted"}
     POST_STAGE_POSTED    = {"uploaded"}
 
+    def _pillar_tag_set(raw) -> set[str]:
+        """Parse content_pillar: single value, comma- or pipe-separated multi-tags."""
+        if not raw:
+            return set()
+        s = str(raw).strip().lower()
+        out: set[str] = set()
+        for chunk in s.replace("\n", ",").split(","):
+            for p in chunk.split("|"):
+                t = p.strip()
+                if t:
+                    out.add(t)
+        return out
+
     for idea in ideas:
         niche_team = _idea_team(idea)
         idea_id = idea.get("id")
@@ -2910,7 +2923,7 @@ async def bandwidth_tracker(
         created_at_day = _date_key(idea.get("created_at"))
         idea_type = (idea.get("type") or "reel").lower()
         source = str(idea.get("source") or "original").lower()
-        pillar = str(idea.get("content_pillar") or "").strip().lower()
+        pillar_tags = _pillar_tag_set(idea.get("content_pillar"))
 
         # ----- REEL PIPELINE --------------------------------------------------
         if idea_type == "reel":
@@ -2987,7 +3000,7 @@ async def bandwidth_tracker(
                     # MM is a content-pillar tag; counted at creation too, in
                     # addition to the comp/og bucket above (so a Kaavya MM OG
                     # post shows up in BOTH OG and MM slots).
-                    if pillar == "mm":
+                    if "mm" in pillar_tags:
                         _bump(name, niche_team, created_at_day, "post_mm")
 
             # Edits: currently sitting in the "Scripted" column.
