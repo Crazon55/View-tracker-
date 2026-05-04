@@ -663,8 +663,10 @@ function IPDropdown({
   const upsertEntryMut = useMutation({
     mutationFn: (data: Record<string, any>) => upsertSixDayEntry(data),
     onSuccess: (saved: any) => {
+      // Instant UI: merge row locally so inputs don’t blank during refetch.
       patchSixDayEntryInCache(qc, selectedMonth, saved);
-      qc.invalidateQueries({ queryKey: ["growth-data"] });
+      // Restore full refresh (was dropped briefly): month totals, page_summaries, reconcile tab, growth charts.
+      onDataChange();
     },
   });
 
