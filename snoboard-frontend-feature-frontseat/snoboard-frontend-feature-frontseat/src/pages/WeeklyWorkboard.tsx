@@ -718,23 +718,18 @@ export default function WeeklyWorkboard() {
       .filter((a) => dateFilter !== "today" || a.primary_tasks.length > 0 || a.interrupts.length > 0);
   }, [assignments, dateFilter, roleFilter]);
 
+  /** Week list columns need full `primary_tasks` for each day; `weekAssignments` may slice by “today” and breaks patches. */
+  const weekGridAssignments = useMemo(() => {
+    return assignments
+      .filter((a) => a.week_start === weekStart)
+      .filter((a) => roleFilter === "all" || a.role_id === roleFilter);
+  }, [assignments, weekStart, roleFilter]);
+
   const byRole = useMemo(() => {
     const m = new Map<WorkboardRoleId, MainAssignment>();
     weekAssignments.forEach((a) => m.set(a.role_id, a));
     return m;
   }, [weekAssignments]);
-
-  const upsertAssignment = useCallback((next: MainAssignment) => {
-    setAssignments((prev) => {
-      const i = prev.findIndex((a) => a.id === next.id);
-      if (i >= 0) {
-        const copy = [...prev];
-        copy[i] = next;
-        return copy;
-      }
-      return [...prev, next];
-    });
-  }, []);
 
   const removeAssignment = useCallback((id: string) => {
     setAssignments((prev) => prev.filter((a) => a.id !== id));
@@ -742,19 +737,26 @@ export default function WeeklyWorkboard() {
 
   const addAssignment = useCallback(
     (role_id: WorkboardRoleId) => {
-      const id = newId();
-      upsertAssignment({
-        id,
-        role_id,
-        week_start: weekStart,
-        description: "",
-        /** No placeholder row — avoids a bogus “Untitled” card on Fri (weekStart+4) in the week grid. */
-        primary_tasks: [],
-        interrupts: [],
-        tags: [],
+      setAssignments((prev) => {
+        if (prev.some((a) => a.week_start === weekStart && a.role_id === role_id)) {
+          return prev;
+        }
+        const id = newId();
+        return [
+          ...prev,
+          {
+            id,
+            role_id,
+            week_start: weekStart,
+            description: "",
+            primary_tasks: [],
+            interrupts: [],
+            tags: [],
+          },
+        ];
       });
     },
-    [weekStart, upsertAssignment]
+    [weekStart],
   );
 
   const patchPrimaryTask = useCallback((assignmentId: string, taskId: string, patch: Partial<WorkboardPrimaryTask>) => {
@@ -1147,7 +1149,7 @@ export default function WeeklyWorkboard() {
           ) : (
             <WeekGridListView
               weekStart={weekStart}
-              weekAssignments={weekAssignments}
+              weekAssignments={weekGridAssignments}
               myWorkboardRole={myWorkboardRole}
               addAssignment={addAssignment}
               removeAssignment={removeAssignment}
@@ -1849,6 +1851,7 @@ function WeekGridListView({
   updateInterrupt,
 }: {
   weekStart: string;
+  /** Full tasks for this week (same week + role toolbar filter only). Not sliced by “today”. */
   weekAssignments: MainAssignment[];
   myWorkboardRole: WorkboardRoleId | null;
   addAssignment: (role_id: WorkboardRoleId) => void;
@@ -1898,6 +1901,7 @@ function WeekGridListView({
     title: string;
     chunkTitles: string[];
   } | null>(null);
+  const commitDialogBusyRef = useRef(false);
 
   type DragPayload = { assignmentId: string; taskId: string; fromDay: string };
   const dragRef = useRef<DragPayload | null>(null);
@@ -1952,46 +1956,51 @@ function WeekGridListView({
   const closeAddTaskDialog = () => setCreateDraft(null);
 
   const commitNewTaskFromDialog = () => {
-    if (!createDraft) return;
+    if (!createDraft || commitDialogBusyRef.current) return;
     const { dayIso, role, title, stepLines } = createDraft;
     const t = title.trim();
     if (!t) {
       toast.message("Add a title first");
       return;
     }
-    const chunkTitles = stepLines.map((s) => s.trim()).filter(Boolean);
-    const chunks: WorkboardChunk[] = chunkTitles.map((tit, i) => ({
-      id: newId(),
-      title: tit,
-      status: "not_started" as const,
-      sort_order: i,
-      tags: [],
-    }));
-    const a = byRole.get(role);
-    if (!a) {
-      pendingDayCardRef.current = { dayIso, role, title: t, chunkTitles };
-      addAssignment(role);
-      toast.message("Creating department card…");
+    commitDialogBusyRef.current = true;
+    try {
+      const chunkTitles = stepLines.map((s) => s.trim()).filter(Boolean);
+      const chunks: WorkboardChunk[] = chunkTitles.map((tit, i) => ({
+        id: newId(),
+        title: tit,
+        status: "not_started" as const,
+        sort_order: i,
+        tags: [],
+      }));
+      const a = byRole.get(role);
+      if (!a) {
+        pendingDayCardRef.current = { dayIso, role, title: t, chunkTitles };
+        addAssignment(role);
+        toast.message("Creating department card…");
+        closeAddTaskDialog();
+        return;
+      }
+      const n = a.primary_tasks.length;
+      patchAssignment(a.id, {
+        primary_tasks: [
+          ...a.primary_tasks,
+          {
+            id: newId(),
+            title: t,
+            due_date: dayIso,
+            origin_due_date: dayIso,
+            completed: false,
+            sort_order: n,
+            chunks,
+          } as any,
+        ],
+      } as any);
+      toast.success("Card added");
       closeAddTaskDialog();
-      return;
+    } finally {
+      commitDialogBusyRef.current = false;
     }
-    const n = a.primary_tasks.length;
-    patchAssignment(a.id, {
-      primary_tasks: [
-        ...a.primary_tasks,
-        {
-          id: newId(),
-          title: t,
-          due_date: dayIso,
-          origin_due_date: dayIso,
-          completed: false,
-          sort_order: n,
-          chunks,
-        } as any,
-      ],
-    } as any);
-    toast.success("Card added");
-    closeAddTaskDialog();
   };
 
   return (
