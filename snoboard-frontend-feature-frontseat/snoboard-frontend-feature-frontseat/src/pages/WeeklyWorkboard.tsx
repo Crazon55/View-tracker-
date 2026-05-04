@@ -30,7 +30,7 @@ import { mapChunkStatusToTicket, mergeAssignedTicketsIntoInterrupts } from "@/li
 import type { WorkboardMentionPerson } from "@/services/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { LayoutGrid, List, ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Plus, Trash2, Link2, AtSign, User, UserCircle2, GripVertical } from "lucide-react";
+import { LayoutGrid, List, ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Plus, Trash2, Link2, AtSign, User, UserCircle2, GripVertical, CheckCircle2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -2712,19 +2712,53 @@ function GalleryView({
                 <div className="mt-3 border-t border-white/[0.06] pt-2 flex-1 min-h-0">
                   <p className="text-[11px] font-medium text-orange-300/90 mb-1.5">Extra work</p>
                   <ul className="space-y-2">
-                    {a.interrupts.map((it) => (
-                      <li key={it.id} className="text-[11px] text-zinc-400 leading-snug">
-                        <div className="flex gap-1.5">
-                          <span className="text-amber-500/60 shrink-0">+</span>
-                          <DragScrollText text={it.title || "Untitled"} className="text-zinc-400 text-[11px]" />
-                        </div>
-                        {(it.tags || []).length > 0 && (
-                          <div className="mt-1 ml-4">
-                            <TagChipsRow tags={it.tags} max={4} />
+                    {a.interrupts.map((it) => {
+                      const done = it.status === "completed";
+                      return (
+                        <li
+                          key={it.id}
+                          className={cn(
+                            "text-[11px] leading-snug rounded-lg border px-2 py-1.5 -mx-0.5 transition-colors",
+                            done
+                              ? "border-emerald-500/30 bg-emerald-500/[0.07]"
+                              : "border-orange-500/15 bg-orange-500/[0.04]",
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex gap-1.5 min-w-0 flex-1">
+                              {done ? (
+                                <CheckCircle2
+                                  className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5"
+                                  aria-hidden
+                                />
+                              ) : (
+                                <span className="text-amber-500/70 shrink-0 mt-0.5">+</span>
+                              )}
+                              <DragScrollText
+                                text={it.title || "Untitled"}
+                                className={cn(
+                                  "text-[11px]",
+                                  done ? "text-emerald-100/95" : "text-zinc-300",
+                                )}
+                              />
+                            </div>
+                            <span
+                              className={cn(
+                                "shrink-0 text-[10px] font-medium tabular-nums",
+                                done ? "text-emerald-400/95" : "text-orange-200/85",
+                              )}
+                            >
+                              {CHUNK_STATUS_LABEL[it.status]}
+                            </span>
                           </div>
-                        )}
-                      </li>
-                    ))}
+                          {(it.tags || []).length > 0 && (
+                            <div className={cn("mt-1.5", done ? "ml-5" : "ml-4")}>
+                              <TagChipsRow tags={it.tags} max={4} />
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               )}
