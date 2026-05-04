@@ -590,23 +590,18 @@ function IPDropdown({
   const [reelPerfStr, setReelPerfStr] = useState("");
   const [postPerfStr, setPostPerfStr] = useState("");
 
+  /**
+   * Sync inputs from server only when the *row* changes (page / cycle / month / new entry id).
+   * Do NOT depend on entry.views / reel_pct / etc.: after save, refetch can briefly return stale
+   * cache and would overwrite what the user just typed (needing 2–3 re-entries).
+   */
   useEffect(() => {
     setWeekViews(String((entry?.views as number | undefined) ?? 0));
     setReelPctStr(entry?.reel_pct != null && entry.reel_pct !== "" ? String(entry.reel_pct) : "");
     setPostPctStr(entry?.post_pct != null && entry.post_pct !== "" ? String(entry.post_pct) : "");
     setReelPerfStr(entry?.reel_perf != null && entry.reel_perf !== "" ? String(entry.reel_perf) : "");
     setPostPerfStr(entry?.post_perf != null && entry.post_perf !== "" ? String(entry.post_perf) : "");
-  }, [
-    page.id,
-    cycle.cycle,
-    monthDate,
-    entry?.id,
-    entry?.views,
-    entry?.reel_pct,
-    entry?.post_pct,
-    entry?.reel_perf,
-    entry?.post_perf,
-  ]);
+  }, [page.id, cycle.cycle, monthDate, entry?.id]);
 
   function parseOptionalPct(s: string): number | null {
     const t = s.trim();
