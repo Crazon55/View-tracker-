@@ -57,9 +57,23 @@ function partitionRangeIntoSixDayWeeks(fromIso: string, toIso: string): SixDayTr
   return weeks;
 }
 
+/** Normalize month input (YYYY-MM, YYYY-M, YYYY-MM-DD) so parsing never silently fails. */
+function normalizeTrackerMonth(raw: string): string {
+  const t = (raw || "").trim();
+  if (!t) return "";
+  if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 7);
+  if (/^\d{4}-\d{2}$/.test(t.slice(0, 7))) return t.slice(0, 7);
+  const m = t.match(/^(\d{4})-(\d{1,2})$/);
+  if (m) {
+    const mo = Math.min(12, Math.max(1, parseInt(m[2], 10)));
+    return `${m[1]}-${String(mo).padStart(2, "0")}`;
+  }
+  return "";
+}
+
 /** `ym` = YYYY-MM from `<input type="month" />` → first/last calendar day. */
 function monthRangeFromYYYYMM(ym: string): { from: string; to: string } | null {
-  const s = (ym || "").trim();
+  const s = normalizeTrackerMonth(ym);
   if (s.length < 7) return null;
   const y = parseInt(s.slice(0, 4), 10);
   const mo = parseInt(s.slice(5, 7), 10) - 1;
@@ -78,15 +92,31 @@ function fmtShortRange(startIso: string, endIso: string): string {
   return `${a} – ${b}`;
 }
 
+function normIgHandle(h: unknown): string {
+  return String(h || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^@/, "")
+    .replace(/_/g, "");
+}
+
+function growthRowMatchesPage(row: Record<string, unknown>, page: any): boolean {
+  const pid = String(page.id ?? "");
+  const rpid = String(row.page_id ?? (row as any).pageId ?? "");
+  if (rpid && pid && rpid === pid) return true;
+  const ph = normIgHandle(page.handle);
+  const rh = normIgHandle(row.handle);
+  if (!rh || rh === "total") return false;
+  return ph === rh;
+}
+
 /** Allocate monthly growth totals by calendar days overlapping [rangeFrom, rangeTo] (fixes partial months vs summing full months). */
-function sumGrowthProratedForHandleInRange(
-  handle: string,
+function sumGrowthProratedForPageInRange(
+  page: any,
   rangeFrom: string,
   rangeTo: string,
   growthRows: unknown[],
 ): number {
-  const h = String(handle || "").trim().toLowerCase();
-  if (!h || h === "total") return 0;
   const rf = rangeFrom.slice(0, 10);
   const rt = rangeTo.slice(0, 10);
   if (!rf || !rt || rf > rt) return 0;
@@ -94,7 +124,7 @@ function sumGrowthProratedForHandleInRange(
   let total = 0;
   for (const row of growthRows) {
     const r = row as Record<string, unknown>;
-    if (String(r.handle || "").trim().toLowerCase() !== h) continue;
+    if (!growthRowMatchesPage(r, page)) continue;
     const rawMonth = String(r.month || "");
     const y = parseInt(rawMonth.slice(0, 4), 10);
     const mo = parseInt(rawMonth.slice(5, 7), 10) - 1;
@@ -114,6 +144,18 @@ function sumGrowthProratedForHandleInRange(
     total += monthViews * (overlapDays / lastD);
   }
   return Math.round(total);
+}
+
+/** If proration under-counts, use a single growth row for that calendar month. */
+function growthExactMonthRowTotal(page: any, monthPrefix: string, growthRows: unknown[]): number {
+  const ym = monthPrefix.slice(0, 7);
+  for (const row of growthRows) {
+    const r = row as Record<string, unknown>;
+    if (!growthRowMatchesPage(r, page)) continue;
+    if (String(r.month || "").slice(0, 7) !== ym) continue;
+    return Number(r.views) || 0;
+  }
+  return 0;
 }
 
 function getLinearViewsForPageInRange(
@@ -140,7 +182,13 @@ function getLinearViewsForPageInRange(
   );
 }
 
-/** Per–date-range views: reel/post sums when dated rows exist; otherwise prorated growth for that exact subrange. */
+type TrackerViewOpts = {
+  dashboardMonthYm: string;
+  trackerMonthYm: string;
+  isFullCalendarMonth: boolean;
+};
+
+/** Per–date-range views: reel/post sums; growth (by page id + handle); dashboard month total when API month matches. */
 function getCustomRangeViewsForPage(
   page: any,
   from: string,
@@ -148,13 +196,42 @@ function getCustomRangeViewsForPage(
   allReels: any[],
   allPosts: any[],
   growthRows: unknown[],
+  opts?: TrackerViewOpts,
 ): number {
   const linear = getLinearViewsForPageInRange(page, from, to, allReels, allPosts);
   if (linear > 0) return linear;
   if (growthRows.length > 0) {
-    return sumGrowthProratedForHandleInRange(String(page.handle || ""), from, to, growthRows);
+    const g = sumGrowthProratedForPageInRange(page, from, to, growthRows);
+    if (g > 0) return g;
+    if (from.slice(0, 7) === to.slice(0, 7)) {
+      const exact = growthExactMonthRowTotal(page, from, growthRows);
+      if (exact > 0) return exact;
+    }
+  }
+  if (
+    opts?.isFullCalendarMonth &&
+    opts.dashboardMonthYm &&
+    opts.trackerMonthYm &&
+    opts.dashboardMonthYm === opts.trackerMonthYm
+  ) {
+    return Number(page.total_views) || 0;
   }
   return 0;
+}
+
+function splitMonthTotalAcrossWeeks(
+  monthTotal: number,
+  weeks: SixDayTrackerWeek[],
+  monthFrom: string,
+  monthTo: string,
+): number[] {
+  const dim = daysInclusive(monthFrom, monthTo);
+  if (dim <= 0 || weeks.length === 0) return weeks.map(() => 0);
+  const raw = weeks.map((w) => monthTotal * (daysInclusive(w.start, w.end) / dim));
+  const rounded = raw.map((x) => Math.round(x));
+  let drift = monthTotal - rounded.reduce((a, b) => a + b, 0);
+  if (drift !== 0 && rounded.length) rounded[rounded.length - 1] += drift;
+  return rounded;
 }
 
 function getSixDayTrackerBreakdownForPage(
@@ -163,13 +240,30 @@ function getSixDayTrackerBreakdownForPage(
   allReels: any[],
   allPosts: any[],
   growthRows: unknown[],
+  opts: TrackerViewOpts | undefined,
+  monthFrom: string,
+  monthTo: string,
 ): { weekNum: number; start: string; end: string; rangeLabel: string; views: number }[] {
-  return weeks.map((w) => ({
+  const rows = weeks.map((w) => ({
     weekNum: w.weekNum,
     start: w.start,
     end: w.end,
     rangeLabel: fmtShortRange(w.start, w.end),
-    views: getCustomRangeViewsForPage(page, w.start, w.end, allReels, allPosts, growthRows),
+    views: getCustomRangeViewsForPage(page, w.start, w.end, allReels, allPosts, growthRows, opts),
+  }));
+  const sumW = rows.reduce((s, r) => s + r.views, 0);
+  if (sumW > 0) return rows;
+
+  const monthTotal = getCustomRangeViewsForPage(page, monthFrom, monthTo, allReels, allPosts, growthRows, opts);
+  if (monthTotal <= 0) return rows;
+
+  const splits = splitMonthTotalAcrossWeeks(monthTotal, weeks, monthFrom, monthTo);
+  return weeks.map((w, i) => ({
+    weekNum: w.weekNum,
+    start: w.start,
+    end: w.end,
+    rangeLabel: fmtShortRange(w.start, w.end),
+    views: splits[i] ?? 0,
   }));
 }
 
@@ -204,7 +298,7 @@ export default function Dashboard() {
   const [rightCardView] = useState<"donut" | "pages">("pages");
   const [globalPeriod, setGlobalPeriod] = useState<TimePeriod>("monthly");
   /** YYYY-MM for 6-day tracker; range is always the full selected calendar month. */
-  const [trackerMonth, setTrackerMonth] = useState(readTrackerMonthFromStorage);
+  const [trackerMonth, setTrackerMonth] = useState(() => normalizeTrackerMonth(readTrackerMonthFromStorage()));
   const [ipFilter, setIpFilter] = useState<"all" | "main" | "stage1">("all");
 
   // Stage-based filtering (stage 3 = main/stage3, stage 1 = stage1)
@@ -246,10 +340,12 @@ export default function Dashboard() {
     return m;
   }, [growthData]);
 
+  const trackerYmNormalized = useMemo(() => normalizeTrackerMonth(trackerMonth), [trackerMonth]);
+
   const { customFrom, customTo } = useMemo(() => {
-    const r = monthRangeFromYYYYMM(trackerMonth);
+    const r = monthRangeFromYYYYMM(trackerYmNormalized || trackerMonth);
     return r ?? { from: "", to: "" };
-  }, [trackerMonth]);
+  }, [trackerMonth, trackerYmNormalized]);
 
   const customTrackerWeeks = useMemo(() => {
     const a = (customFrom || "").trim().slice(0, 10);
@@ -294,16 +390,23 @@ export default function Dashboard() {
     : ipFilter === "main"
       ? allPages.filter((p: any) => (p.stage ?? 1) === 3)
       : allPages.filter((p: any) => (p.stage ?? 1) === 1);
-  const pages = (search.trim()
-    ? filteredByType.filter((p: any) =>
-        (p.handle ?? "").toLowerCase().includes(search.toLowerCase()) ||
-        (p.name ?? "").toLowerCase().includes(search.toLowerCase())
-      )
-    : filteredByType
-  ).sort((a: any, b: any) => getPageViews(b, globalPeriod) - getPageViews(a, globalPeriod));
-  const currentMonth = stats?.current_month
-    ? new Date(stats.current_month).toLocaleString("default", { month: "long", year: "numeric" })
-    : "";
+
+  const dashboardMonthYm = (stats?.current_month || "").slice(0, 7);
+  const trackerMonthYm = (trackerYmNormalized || "").slice(0, 7);
+  const monthBoundsForTracker = monthRangeFromYYYYMM(trackerYmNormalized);
+  const isFullCalendarMonth =
+    Boolean(monthBoundsForTracker) &&
+    customFrom === monthBoundsForTracker?.from &&
+    customTo === monthBoundsForTracker?.to;
+
+  const trackerViewOpts: TrackerViewOpts | undefined =
+    globalPeriod === "custom"
+      ? {
+          dashboardMonthYm,
+          trackerMonthYm,
+          isFullCalendarMonth: Boolean(isFullCalendarMonth && customFrom && customTo),
+        }
+      : undefined;
 
   function getPageViews(page: any, period: TimePeriod): number {
     switch (period) {
@@ -318,7 +421,15 @@ export default function Dashboard() {
       case "monthly": return page.total_views ?? 0;
       case "custom": {
         if (!customFrom || !customTo) return 0;
-        return getCustomRangeViewsForPage(page, customFrom, customTo, allReels, allPosts, growthData);
+        return getCustomRangeViewsForPage(
+          page,
+          customFrom,
+          customTo,
+          allReels,
+          allPosts,
+          growthData,
+          trackerViewOpts,
+        );
       }
     }
   }
@@ -346,6 +457,17 @@ export default function Dashboard() {
     }).length;
     return { reelsCount, postsCount };
   }
+
+  const pages = (search.trim()
+    ? filteredByType.filter((p: any) =>
+        (p.handle ?? "").toLowerCase().includes(search.toLowerCase()) ||
+        (p.name ?? "").toLowerCase().includes(search.toLowerCase())
+      )
+    : filteredByType
+  ).sort((a: any, b: any) => getPageViews(b, globalPeriod) - getPageViews(a, globalPeriod));
+  const currentMonth = stats?.current_month
+    ? new Date(stats.current_month).toLocaleString("default", { month: "long", year: "numeric" })
+    : "";
 
   return (
     <div className="min-h-screen bg-zinc-950">
@@ -622,7 +744,7 @@ export default function Dashboard() {
                   <input
                     type="month"
                     value={trackerMonth}
-                    onChange={(e) => setTrackerMonth(e.target.value)}
+                    onChange={(e) => setTrackerMonth(normalizeTrackerMonth(e.target.value))}
                     className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500/50 cursor-pointer min-w-[10rem]"
                   />
                 </label>
@@ -659,8 +781,17 @@ export default function Dashboard() {
             const { reelsCount, postsCount } = getPageCounts(page, globalPeriod);
             const isTracker = globalPeriod === "custom" && Boolean(trackerMonth?.trim());
             const sixDayBreakdown =
-              isTracker && customTrackerWeeks.length > 0
-                ? getSixDayTrackerBreakdownForPage(page, customTrackerWeeks, allReels, allPosts, growthData)
+              isTracker && customTrackerWeeks.length > 0 && customFrom && customTo
+                ? getSixDayTrackerBreakdownForPage(
+                    page,
+                    customTrackerWeeks,
+                    allReels,
+                    allPosts,
+                    growthData,
+                    trackerViewOpts,
+                    customFrom,
+                    customTo,
+                  )
                 : [];
             const weeksCombined = sixDayBreakdown.reduce((s, w) => s + w.views, 0);
 
@@ -686,9 +817,9 @@ export default function Dashboard() {
                   className="text-xs text-zinc-600 hover:text-violet-400 transition-colors mb-4 block"
                 >@{page.handle}</a>
 
-                {isTracker && (
+                {isTracker && trackerYmNormalized && (
                   <p className="text-[11px] text-zinc-500 mb-2 font-medium">
-                    {new Date(trackerMonth + "-01T12:00:00").toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+                    {new Date(trackerYmNormalized + "-01T12:00:00").toLocaleDateString("en-US", { month: "long", year: "numeric" })}
                   </p>
                 )}
 
@@ -746,8 +877,8 @@ export default function Dashboard() {
                   </div>
                 )}
 
-                {isTracker && sixDayBreakdown.length === 0 && (
-                  <p className="mt-3 text-[11px] text-amber-500/90">Select a month above to load week-wise totals.</p>
+                {isTracker && (!trackerYmNormalized || customTrackerWeeks.length === 0) && (
+                  <p className="mt-3 text-[11px] text-amber-500/90">Pick a month above — calendar weeks load from that full month.</p>
                 )}
 
                 {/* Mini breakdown */}
