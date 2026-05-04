@@ -46,6 +46,20 @@ function partitionRangeIntoSixDayWeeks(fromIso: string, toIso: string): SixDayTr
   return weeks;
 }
 
+/** `ym` = YYYY-MM from `<input type="month" />` → first/last calendar day. */
+function monthRangeFromYYYYMM(ym: string): { from: string; to: string } | null {
+  const s = (ym || "").trim();
+  if (s.length < 7) return null;
+  const y = parseInt(s.slice(0, 4), 10);
+  const mo = parseInt(s.slice(5, 7), 10) - 1;
+  if (!y || isNaN(mo) || mo < 0 || mo > 11) return null;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const from = `${y}-${pad(mo + 1)}-01`;
+  const lastD = new Date(y, mo + 1, 0).getDate();
+  const to = `${y}-${pad(mo + 1)}-${pad(lastD)}`;
+  return { from, to };
+}
+
 function fmtShortRange(startIso: string, endIso: string): string {
   const o = { month: "short", day: "numeric" } as const;
   const a = new Date(startIso.slice(0, 10) + "T12:00:00").toLocaleDateString("en-US", o);
@@ -178,8 +192,8 @@ export default function Dashboard() {
   const [breakdownMode, setBreakdownMode] = useState<BreakdownMode>("reels");
   const [rightCardView] = useState<"donut" | "pages">("pages");
   const [globalPeriod, setGlobalPeriod] = useState<TimePeriod>("monthly");
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
+  /** YYYY-MM for 6-day tracker; range is always the full selected calendar month. */
+  const [trackerMonth, setTrackerMonth] = useState("");
   const [ipFilter, setIpFilter] = useState<"all" | "main" | "stage1">("all");
 
   // Stage-based filtering (stage 3 = main/stage3, stage 1 = stage1)
@@ -220,6 +234,11 @@ export default function Dashboard() {
     }
     return m;
   }, [growthData]);
+
+  const { customFrom, customTo } = useMemo(() => {
+    const r = monthRangeFromYYYYMM(trackerMonth);
+    return r ?? { from: "", to: "" };
+  }, [trackerMonth]);
 
   const customTrackerWeeks = useMemo(() => {
     const a = (customFrom || "").trim().slice(0, 10);
@@ -564,40 +583,28 @@ export default function Dashboard() {
               value={globalPeriod}
               onChange={(v) => {
                 const next = v as TimePeriod;
-                if (next === "custom" && !customFrom.trim() && !customTo.trim()) {
+                if (next === "custom" && !trackerMonth.trim()) {
                   const now = new Date();
-                  const y = now.getFullYear();
-                  const m = now.getMonth();
-                  const pad = (n: number) => String(n).padStart(2, "0");
-                  const first = `${y}-${pad(m + 1)}-01`;
-                  const lastD = new Date(y, m + 1, 0).getDate();
-                  const last = `${y}-${pad(m + 1)}-${pad(lastD)}`;
-                  setCustomFrom(first);
-                  setCustomTo(last);
+                  setTrackerMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
                 }
                 setGlobalPeriod(next);
               }}
             />
             {globalPeriod === "custom" && (
               <div className="flex flex-col items-end gap-1">
-                <div className="flex items-center gap-2">
+                <label className="flex items-center gap-2">
+                  <span className="text-[10px] uppercase tracking-wider text-zinc-500 shrink-0">Month</span>
                   <input
-                    type="date"
-                    value={customFrom}
-                    onChange={(e) => setCustomFrom(e.target.value)}
-                    className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500/50 cursor-pointer"
+                    type="month"
+                    value={trackerMonth}
+                    onChange={(e) => setTrackerMonth(e.target.value)}
+                    className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500/50 cursor-pointer min-w-[10rem]"
                   />
-                  <span className="text-zinc-600 text-xs">to</span>
-                  <input
-                    type="date"
-                    value={customTo}
-                    onChange={(e) => setCustomTo(e.target.value)}
-                    className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500/50 cursor-pointer"
-                  />
-                </div>
+                </label>
                 {customTrackerWeeks.length > 0 && (
                   <p className="text-[10px] text-zinc-500 max-w-[min(100vw-2rem,300px)] text-right leading-snug">
-                    {customTrackerWeeks.length} tracker week{customTrackerWeeks.length === 1 ? "" : "s"} (6 days each, last may be shorter). Per-week views on each card. Reel/post dates when available; else monthly growth prorated by days in range.
+                    Full calendar month · {customTrackerWeeks.length} tracker week
+                    {customTrackerWeeks.length === 1 ? "" : "s"} (6 days each; last week may be shorter). Per-week views on cards; reel/post dates when available, else growth prorated by days.
                   </p>
                 )}
               </div>
