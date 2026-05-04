@@ -461,15 +461,20 @@ export default function Dashboard() {
       }
       case "monthly": return page.total_views ?? 0;
       case "custom": {
-        if (!customFrom || !customTo) return 0;
         const sd = sixDayByPageId.get(String(page.id));
         if (sd?.summary) {
-          const av = sd.summary.actual_views;
-          if (av != null && av !== "" && !Number.isNaN(Number(av)))
-            return Number(av);
           const cvs = Number(sd.summary.cycle_views_sum);
+          const avRaw = sd.summary.actual_views;
+          const avNum =
+            avRaw != null && avRaw !== "" && !Number.isNaN(Number(avRaw))
+              ? Number(avRaw)
+              : null;
+          // DB often stores actual_views=0 before reconcile — trust cycle sum when it has entries.
+          if (avNum != null && avNum > 0) return avNum;
           if (!Number.isNaN(cvs)) return cvs;
+          if (avNum != null) return avNum;
         }
+        if (!customFrom || !customTo) return 0;
         return getCustomRangeViewsForPage(
           page,
           customFrom,
@@ -692,7 +697,10 @@ export default function Dashboard() {
 
         {/* Leaderboard Podium */}
         {allPages.length >= 3 && (() => {
-          const top3 = allPages.slice(0, 3);
+          const sortedForPodium = [...allPages].sort(
+            (a: any, b: any) => getPageViews(b, globalPeriod) - getPageViews(a, globalPeriod),
+          );
+          const top3 = sortedForPodium.slice(0, 3);
           const podiumOrder = [top3[1], top3[0], top3[2]]; // 2nd, 1st, 3rd
           const heights = [140, 180, 110]; // podium step heights
           const medals = ["🥈", "🥇", "🥉"];
@@ -1006,8 +1014,9 @@ export default function Dashboard() {
 
                 {isTracker &&
                   trackerYmNormalized &&
-                  customTrackerWeeks.length === 0 &&
-                  !sixDayMonthPending && (
+                  (!customFrom || !customTo || customFrom > customTo) &&
+                  !sixDayMonthPending &&
+                  !(sixDayMonthQueryEnabled && sixDayMonthPayload) && (
                     <p className="mt-3 text-[11px] text-amber-500/90">Invalid month — choose a valid calendar month.</p>
                   )}
 

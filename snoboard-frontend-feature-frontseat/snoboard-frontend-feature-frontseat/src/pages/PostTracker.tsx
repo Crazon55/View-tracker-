@@ -31,6 +31,67 @@ const PT: Record<string,{label:string;color:string;bg:string}> = {
 };
 const SOURCES = ["original","competitor"];
 
+const PILLAR_OPTIONS = ["News","Static - Quote","Memes","Informational","Case Study","MM","Blue Ocean"];
+const BUCKET_OPTIONS = [
+  "Events in India","Stories","Merger","Before & After Comparison","Charts/Tables/Stats","Tips/Business Ideas",
+  "Net Worth","Case Studies","Quotes","Local News","Govt Policies","Stock Market","Startup News","Tech/AI News",
+];
+
+/** Stored as `|` pipe-separated in DB (legacy single values still work). */
+function splitPillarBucket(raw: string | null | undefined): string[] {
+  if (!raw || typeof raw !== "string") return [];
+  return raw.split(/[|,\n]/).map((s) => s.trim()).filter(Boolean);
+}
+function joinPillarBucket(tags: string[]): string | null {
+  if (!tags.length) return null;
+  return tags.join("|");
+}
+
+function MultiTagPicker({
+  options,
+  valueJoined,
+  onSave,
+  is,
+}: {
+  options: string[];
+  valueJoined: string | null | undefined;
+  onSave: (v: string | null) => void;
+  is: React.CSSProperties;
+}) {
+  const selected = splitPillarBucket(valueJoined);
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+      {options.map((opt) => {
+        const sel = selected.includes(opt);
+        return (
+          <button
+            type="button"
+            key={opt}
+            onClick={() => {
+              const next = sel ? selected.filter((x) => x !== opt) : [...selected, opt];
+              onSave(joinPillarBucket(next));
+            }}
+            style={{
+              padding: "6px 10px",
+              borderRadius: 8,
+              border: sel ? "2px solid #7c3aed" : "1.5px solid #3f3f46",
+              background: sel ? "#27272a" : "#18181b",
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+              color: sel ? "#fff" : "#71717a",
+              textAlign: "left",
+              lineHeight: 1.25,
+            }}
+          >
+            {opt}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // All date math here is intentionally LOCAL. `toISOString().slice(0,10)` is
 // poison on any machine east of UTC (e.g. IST = UTC+5:30) — midnight local
 // converts to 18:30 the previous day in UTC, and the slice gives you
@@ -340,7 +401,9 @@ function IdeaCard({idea,niches,onClick}: {idea:any;niches:any[];onClick:()=>void
         <span style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:idea.source==="competitor"?"#EEEDFE":"#E8F5EE",color:idea.source==="competitor"?"#534AB7":"#1A5E3A",fontWeight:500}}>{idea.source==="competitor"?"Comp":"Orig"}</span>
         {idea.format&&<span style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:"#18181b",color:"#a1a1aa",fontWeight:500,textTransform:"capitalize",border:"1px solid #3f3f46"}}>{idea.format}</span>}
         {ideaNiches.map((n: any)=><span key={n.id} style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:"#27272a",color:"#a1a1aa",fontWeight:500}}>{n.name}</span>)}
-        {idea.content_pillar&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:99,background:"rgba(124,58,237,0.15)",color:"#B49EFF",fontWeight:500}}>{idea.content_pillar}</span>}
+        {splitPillarBucket(idea.content_pillar).map((t) => (
+          <span key={t} style={{fontSize:9,padding:"1px 6px",borderRadius:99,background:"rgba(124,58,237,0.15)",color:"#B49EFF",fontWeight:500}}>{t}</span>
+        ))}
         {pc>0&&<span style={{fontSize:10,color:"#52525b",fontWeight:500}}>{pc}pg</span>}
       </div>
       {/* Info row */}
@@ -425,7 +488,9 @@ function IdeaCard({idea,niches,onClick}: {idea:any;niches:any[];onClick:()=>void
         )}
         {idea.created_by&&<span style={{fontSize:10,color:"#52525b"}}>by {idea.created_by}</span>}
         {idea.main_page_hook&&<span style={{fontSize:10,color:"#71717a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{idea.main_page_hook}</span>}
-        {idea.content_bucket&&<span style={{fontSize:9,color:"#3f3f46"}}>{idea.content_bucket}</span>}
+        {splitPillarBucket(idea.content_bucket).map((t) => (
+          <span key={t} style={{fontSize:9,color:"#3f3f46"}}>{t}</span>
+        ))}
       </div>
     </div>
   );
@@ -723,7 +788,7 @@ export default function PostTracker(){
   const [addNicheOpen,setAddNicheOpen]=useState(false);
   const [editNiche,setEditNiche]=useState<any>(null);
   const [newNiche,setNewNiche]=useState({name:"",pages:""});
-  const [newIdea,setNewIdea]=useState({title:"",source:"original",nicheIds:[] as string[],format:"static",caption:"",canva_link:"",content_pillar:"",content_bucket:"",comp_link:"",hook_text:"",carousel_slides: [""] as string[]});
+  const [newIdea,setNewIdea]=useState({title:"",source:"original",nicheIds:[] as string[],format:"static",caption:"",canva_link:"",content_pillars: [] as string[],content_buckets: [] as string[],comp_link:"",hook_text:"",carousel_slides: [""] as string[]});
   const [viewMode,setViewMode]=useState("board");
   const [nicheFilter,setNicheFilter]=useState("all");
   const [pageFilter,setPageFilter]=useState("all");
@@ -766,14 +831,14 @@ export default function PostTracker(){
       canva_link: newIdea.canva_link.trim() || null,
       hook_text: newIdea.hook_text.trim() || null,
       slides_content: slides_content,
-      content_pillar: newIdea.content_pillar || null,
-      content_bucket: newIdea.content_bucket || null,
+      content_pillar: joinPillarBucket(newIdea.content_pillars),
+      content_bucket: joinPillarBucket(newIdea.content_buckets),
       comp_link: newIdea.comp_link.trim() || null,
       stage: "new",
       type: "post",
       created_by: user?.user_metadata?.full_name || user?.email?.split("@")[0] || user?.email || null,
     });
-    setNewIdea({title:"",source:"original",nicheIds:[],format:"static",caption:"",canva_link:"",content_pillar:"",content_bucket:"",comp_link:"",hook_text:"",carousel_slides: [""]});
+    setNewIdea({title:"",source:"original",nicheIds:[],format:"static",caption:"",canva_link:"",content_pillars:[],content_buckets:[],comp_link:"",hook_text:"",carousel_slides: [""]});
     setAddOpen(false);
   }
   function moveIdea(id: string, ns: string){
@@ -1025,20 +1090,26 @@ export default function PostTracker(){
             />
           )}
           <div><label style={ls}>Canva link</label><input value={newIdea.canva_link} onChange={e=>setNewIdea(p=>({...p,canva_link:e.target.value}))} placeholder="https://canva.com/design/…" style={is}/></div>
-          <div style={{display:"flex",gap:10}}>
-            <div style={{flex:1}}>
-              <label style={ls}>Content pillar</label>
-              <select value={newIdea.content_pillar} onChange={e=>setNewIdea(p=>({...p,content_pillar:e.target.value}))} style={{...is,cursor:"pointer"}}>
-                <option value="">Select pillar</option>
-                {["News","Static - Quote","Memes","Informational","Case Study","MM","Blue Ocean"].map(p=><option key={p} value={p}>{p}</option>)}
-              </select>
+          <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+            <div style={{flex:"1 1 220px"}}>
+              <label style={ls}>Content pillar (multi)</label>
+              <MultiTagPicker
+                options={PILLAR_OPTIONS}
+                valueJoined={joinPillarBucket(newIdea.content_pillars)}
+                onSave={(v) =>
+                  setNewIdea((p) => ({ ...p, content_pillars: splitPillarBucket(v) }))
+                }
+              />
             </div>
-            <div style={{flex:1}}>
-              <label style={ls}>Content bucket</label>
-              <select value={newIdea.content_bucket} onChange={e=>setNewIdea(p=>({...p,content_bucket:e.target.value}))} style={{...is,cursor:"pointer"}}>
-                <option value="">Select bucket</option>
-                {["Events in India","Stories","Merger","Before & After Comparison","Charts/Tables/Stats","Tips/Business Ideas","Net Worth","Case Studies","Quotes","Local News","Govt Policies","Stock Market","Startup News","Tech/AI News"].map(b=><option key={b} value={b}>{b}</option>)}
-              </select>
+            <div style={{flex:"1 1 220px"}}>
+              <label style={ls}>Content bucket (multi)</label>
+              <MultiTagPicker
+                options={BUCKET_OPTIONS}
+                valueJoined={joinPillarBucket(newIdea.content_buckets)}
+                onSave={(v) =>
+                  setNewIdea((p) => ({ ...p, content_buckets: splitPillarBucket(v) }))
+                }
+              />
             </div>
           </div>
           {newIdea.source==="original"&&(
@@ -1064,8 +1135,12 @@ export default function PostTracker(){
               <span style={{fontSize:11,padding:"3px 9px",borderRadius:99,background:cd.source==="competitor"?"#EEEDFE":"#E8F5EE",color:cd.source==="competitor"?"#534AB7":"#1A5E3A",fontWeight:500}}>{cd.source==="competitor"?"Competitor":"Original"}</span>
               {cd.format&&<span style={{fontSize:11,padding:"3px 9px",borderRadius:99,background:"#18181b",color:"#a1a1aa",fontWeight:500,textTransform:"capitalize",border:"1px solid #3f3f46"}}>{cd.format}</span>}
               {cdNiches.map((n: any)=><span key={n.id} style={{fontSize:11,padding:"3px 9px",borderRadius:99,background:"#27272a",color:"#a1a1aa",fontWeight:500}}>{n.name}</span>)}
-              {cd.content_pillar&&<span style={{fontSize:10,padding:"2px 8px",borderRadius:99,background:"rgba(124,58,237,0.15)",color:"#B49EFF",fontWeight:500}}>{cd.content_pillar}</span>}
-              {cd.content_bucket&&<span style={{fontSize:10,padding:"2px 8px",borderRadius:99,background:"rgba(212,149,42,0.15)",color:"#F0C060",fontWeight:500}}>{cd.content_bucket}</span>}
+              {splitPillarBucket(cd.content_pillar).map((t) => (
+                <span key={t} style={{fontSize:10,padding:"2px 8px",borderRadius:99,background:"rgba(124,58,237,0.15)",color:"#B49EFF",fontWeight:500}}>{t}</span>
+              ))}
+              {splitPillarBucket(cd.content_bucket).map((t) => (
+                <span key={t} style={{fontSize:10,padding:"2px 8px",borderRadius:99,background:"rgba(212,149,42,0.15)",color:"#F0C060",fontWeight:500}}>{t}</span>
+              ))}
             </div>
             {sa[cd.stage]?.length>0&&<div style={{display:"flex",gap:6}}>{sa[cd.stage].map(a=><button key={a.stage} onClick={()=>moveIdea(cd.id,a.stage)} style={a.style}>{a.label}</button>)}</div>}
 
@@ -1096,20 +1171,24 @@ export default function PostTracker(){
               <SafeTextInput value={cd.canva_link} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{canva_link:v}})} placeholder="https://canva.com/design/…" style={is}/>
               {cd.canva_link&&<a href={cd.canva_link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all",display:"inline-block",marginTop:4}}>{cd.canva_link}</a>}
             </div>
-            <div style={{display:"flex",gap:10}}>
-              <div style={{flex:1}}>
-                <label style={ls}>Content pillar</label>
-                <select defaultValue={cd.content_pillar||""} key={cd.id+"_pillar"} onChange={e=>updateIdeaMut.mutate({id:cd.id,data:{content_pillar:e.target.value||null}})} style={{...is,cursor:"pointer"}}>
-                  <option value="">Select pillar</option>
-                  {["News","Static - Quote","Memes","Informational","Case Study","MM","Blue Ocean"].map(p=><option key={p} value={p}>{p}</option>)}
-                </select>
+            <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+              <div style={{flex:"1 1 220px"}}>
+                <label style={ls}>Content pillar (multi)</label>
+                <MultiTagPicker
+                  key={`${cd.id}_pillar`}
+                  options={PILLAR_OPTIONS}
+                  valueJoined={cd.content_pillar}
+                  onSave={(v) => updateIdeaMut.mutate({ id: cd.id, data: { content_pillar: v } })}
+                />
               </div>
-              <div style={{flex:1}}>
-                <label style={ls}>Content bucket</label>
-                <select defaultValue={cd.content_bucket||""} key={cd.id+"_bucket"} onChange={e=>updateIdeaMut.mutate({id:cd.id,data:{content_bucket:e.target.value||null}})} style={{...is,cursor:"pointer"}}>
-                  <option value="">Select bucket</option>
-                  {["Events in India","Stories","Merger","Before & After Comparison","Charts/Tables/Stats","Tips/Business Ideas","Net Worth","Case Studies","Quotes","Local News","Govt Policies","Stock Market","Startup News","Tech/AI News"].map(b=><option key={b} value={b}>{b}</option>)}
-                </select>
+              <div style={{flex:"1 1 220px"}}>
+                <label style={ls}>Content bucket (multi)</label>
+                <MultiTagPicker
+                  key={`${cd.id}_bucket`}
+                  options={BUCKET_OPTIONS}
+                  valueJoined={cd.content_bucket}
+                  onSave={(v) => updateIdeaMut.mutate({ id: cd.id, data: { content_bucket: v } })}
+                />
               </div>
             </div>
             <div><label style={ls}>{cd.source==="competitor" ? "Comp link" : "Original source / references"}</label><SafeTextInput value={cd.comp_link} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{comp_link:v}})} placeholder={cd.source==="competitor" ? "Competitor post URL" : "Reference links, articles, sources..."} style={is}/></div>
