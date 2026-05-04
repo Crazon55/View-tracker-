@@ -322,6 +322,8 @@ export default function Tickets() {
   });
 
   const prevRef = useRef<Record<string, { status?: string; assigned_to_email?: string | null; updated_at?: string; tags?: string[] }>>({});
+  /** After the first in-memory snapshot, we may emit “new event” toasts. First pass only seeds `prevRef` so historical @mentions don’t spam notifications on load/refetch. */
+  const ticketNotifySeededRef = useRef(false);
 
   const { data: mentionPayload } = useQuery({
     queryKey: ["tickets-mention-candidates"],
@@ -383,6 +385,7 @@ export default function Tickets() {
     if (!email) return;
     const rows = ticketsQ.data || [];
     const prev = prevRef.current;
+    const skipNewEventToasts = !ticketNotifySeededRef.current;
 
     const ping = (title: string, body: string) => {
       playNotificationChime();
@@ -403,8 +406,9 @@ export default function Tickets() {
       const nowMentioned = myMentionTag ? (t.tags || []).includes(myMentionTag) : false;
       const wasMentioned = myMentionTag ? (pid?.tags || []).includes(myMentionTag) : false;
       const justMentioned = nowMentioned && (!pid || !wasMentioned);
+      const activeTicket = String(t.status || "") !== "resolved";
 
-      if (justMentioned) {
+      if (justMentioned && !skipNewEventToasts && activeTicket) {
         ping(
           "Bug Tickets — You were mentioned",
           `#${t.ticket_number ?? "—"}: ${t.title || t.description.slice(0, 60)}`,
@@ -435,6 +439,7 @@ export default function Tickets() {
     prevRef.current = Object.fromEntries(
       rows.map((t) => [t.id, { status: t.status, assigned_to_email: t.assigned_to_email, updated_at: t.updated_at, tags: t.tags }]),
     );
+    ticketNotifySeededRef.current = true;
   }, [ticketsQ.data, user?.email, myMentionTag]);
 
   const createMut = useMutation({
