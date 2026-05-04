@@ -31,10 +31,11 @@ const PT: Record<string,{label:string;color:string;bg:string}> = {
 };
 const SOURCES = ["original","competitor"];
 
-const PILLAR_OPTIONS = ["News","Static - Quote","Memes","Informational","Case Study","MM","Blue Ocean"];
+const PILLAR_OPTIONS = ["News","Static - Quote","Memes","Informational","Case Study","MM","Blue Ocean","Client Post"];
 const BUCKET_OPTIONS = [
   "Events in India","Stories","Merger","Before & After Comparison","Charts/Tables/Stats","Tips/Business Ideas",
   "Net Worth","Case Studies","Quotes","Local News","Govt Policies","Stock Market","Startup News","Tech/AI News",
+  "Top X","Events in the world","Comparison",
 ];
 
 /** Stored as `|` pipe-separated in DB (legacy single values still work). */
