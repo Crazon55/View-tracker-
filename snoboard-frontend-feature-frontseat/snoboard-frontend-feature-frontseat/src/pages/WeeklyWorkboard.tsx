@@ -1891,6 +1891,11 @@ function WeekGridListView({
   const [openRole, setOpenRole] = useState<Record<string, boolean>>({});
   const isOpen = (rid: string) => openRole[rid] === true;
   const [dragOverDay, setDragOverDay] = useState<string | null>(null);
+  /** Per-day inline composer (Notion-style: opens from + New card or header +). */
+  const [composerOpen, setComposerOpen] = useState<Record<string, boolean>>({});
+  const addTitleInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  /** If user adds a card before the department row exists, finish after `addAssignment` creates it. */
+  const pendingDayCardRef = useRef<{ dayIso: string; role: WorkboardRoleId; title: string } | null>(null);
 
   type DragPayload = { assignmentId: string; taskId: string; fromDay: string };
   const dragRef = useRef<DragPayload | null>(null);
@@ -1898,6 +1903,75 @@ function WeekGridListView({
   const missingRoles = WORKBOARD_ROLES.filter((r) => !weekAssignments.some((a) => a.role_id === r.id));
 
   const [addForDay, setAddForDay] = useState<Record<string, { role: WorkboardRoleId; title: string }>>({});
+
+  const defaultRoleForDay = (dIso: string): WorkboardRoleId =>
+    addForDay[dIso]?.role ?? myWorkboardRole ?? "ai_dev";
+
+  useEffect(() => {
+    const p = pendingDayCardRef.current;
+    if (!p) return;
+    const a = byRole.get(p.role);
+    if (!a) return;
+    const title = p.title.trim();
+    if (!title) {
+      pendingDayCardRef.current = null;
+      return;
+    }
+    const n = a.primary_tasks.length;
+    patchAssignment(a.id, {
+      primary_tasks: [
+        ...a.primary_tasks,
+        {
+          id: newId(),
+          title,
+          due_date: p.dayIso,
+          origin_due_date: p.dayIso,
+          completed: false,
+          sort_order: n,
+          chunks: [],
+        } as any,
+      ],
+    } as any);
+    pendingDayCardRef.current = null;
+    setAddForDay((prev) => ({ ...prev, [p.dayIso]: { role: p.role, title: "" } }));
+    toast.success("Card added");
+  }, [weekAssignments, byRole, patchAssignment]);
+
+  const submitCardForDay = (dIso: string) => {
+    const role = defaultRoleForDay(dIso);
+    const title = (addForDay[dIso]?.title || "").trim();
+    if (!title) return;
+    const a = byRole.get(role);
+    if (!a) {
+      pendingDayCardRef.current = { dayIso: dIso, role, title };
+      addAssignment(role);
+      toast.message("Creating department card…");
+      return;
+    }
+    const n = a.primary_tasks.length;
+    patchAssignment(a.id, {
+      primary_tasks: [
+        ...a.primary_tasks,
+        {
+          id: newId(),
+          title,
+          due_date: dIso,
+          origin_due_date: dIso,
+          completed: false,
+          sort_order: n,
+          chunks: [],
+        } as any,
+      ],
+    } as any);
+    setAddForDay((p) => ({ ...p, [dIso]: { role, title: "" } }));
+  };
+
+  const openComposer = (dIso: string) => {
+    setComposerOpen((p) => ({ ...p, [dIso]: true }));
+    requestAnimationFrame(() => {
+      addTitleInputRefs.current[dIso]?.focus();
+    });
+  };
 
   return (
     <div className="space-y-5">
@@ -1926,7 +2000,7 @@ function WeekGridListView({
             <div
               key={dIso}
               className={cn(
-                "rounded-2xl border bg-black/35 backdrop-blur-xl p-3 min-h-[240px]",
+                "group/daycol rounded-2xl border bg-black/35 backdrop-blur-xl p-3 min-h-[240px] flex flex-col",
                 dragOverDay === dIso ? "border-violet-500/35 shadow-[0_0_26px_-10px_rgba(124,58,237,0.55)]" : "border-white/10",
               )}
               onDragOver={(e) => {
@@ -1952,116 +2026,28 @@ function WeekGridListView({
                 } as any);
               }}
             >
-              <div className="flex items-start justify-between gap-2 mb-2">
+              <div className="flex items-start justify-between gap-2 mb-2 shrink-0">
                 <div>
                   <div className="text-[11px] font-black text-white">{dayLabel(dIso)}</div>
                   <div className="text-[11px] text-zinc-500">{daySub(dIso)}</div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => openComposer(dIso)}
+                  className={cn(
+                    "h-8 w-8 rounded-lg border flex items-center justify-center transition-colors",
+                    "border-white/10 bg-white/[0.04] text-zinc-400 hover:text-white hover:border-violet-500/35 hover:bg-violet-600/20",
+                    "opacity-80 group-hover/daycol:opacity-100",
+                  )}
+                  title="Add card"
+                  aria-label="Add card on this day"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
               </div>
 
-              {/* Add card on this date */}
-              <div className="mb-2 rounded-xl border border-white/10 bg-white/[0.02] p-2">
-                <div className="flex items-center gap-2">
-                  <select
-                    value={(addForDay[dIso]?.role || "ai_dev") as any}
-                    onChange={(e) =>
-                      setAddForDay((p) => ({
-                        ...p,
-                        [dIso]: { role: e.target.value as WorkboardRoleId, title: p[dIso]?.title || "" },
-                      }))
-                    }
-                    className="h-8 rounded-lg bg-zinc-950 px-2 text-[11px] text-white outline-none border border-white/10 focus:border-violet-500/40"
-                    title="Department"
-                  >
-                    {WORKBOARD_ROLES.map((r) => (
-                      <option key={r.id} value={r.id} className="bg-zinc-950 text-white">
-                        {r.short}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    value={addForDay[dIso]?.title || ""}
-                    onChange={(e) =>
-                      setAddForDay((p) => ({
-                        ...p,
-                        [dIso]: { role: (p[dIso]?.role || "ai_dev") as WorkboardRoleId, title: e.target.value },
-                      }))
-                    }
-                    placeholder="Add card…"
-                    className={cn(
-                      "flex-1 h-8 rounded-lg px-2 text-[11px]",
-                      "border border-white/10 bg-white/[0.03] backdrop-blur-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500/35 focus:border-violet-500/25",
-                    )}
-                    onKeyDown={(e) => {
-                      if (e.key !== "Enter") return;
-                      e.preventDefault();
-                      const role = (addForDay[dIso]?.role || "ai_dev") as WorkboardRoleId;
-                      const title = (addForDay[dIso]?.title || "").trim();
-                      if (!title) return;
-                      let a = byRole.get(role);
-                      if (!a) {
-                        // Create the department card first.
-                        addAssignment(role);
-                        toast.message("Added department card. Re-try adding the task.");
-                        return;
-                      }
-                      // Create a new primary task for the chosen date.
-                      const n = a.primary_tasks.length;
-                      patchAssignment(a.id, {
-                        primary_tasks: [
-                          ...a.primary_tasks,
-                          {
-                            id: newId(),
-                            title,
-                            due_date: dIso,
-                            origin_due_date: dIso,
-                            completed: false,
-                            sort_order: n,
-                            chunks: [],
-                          } as any,
-                        ],
-                      } as any);
-                      setAddForDay((p) => ({ ...p, [dIso]: { role, title: "" } }));
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="h-8 w-8 rounded-lg border border-violet-500/30 bg-violet-600/20 text-violet-200 hover:bg-violet-600/40 hover:text-white transition-colors flex items-center justify-center"
-                    title="Add"
-                    onClick={() => {
-                      const role = (addForDay[dIso]?.role || "ai_dev") as WorkboardRoleId;
-                      const title = (addForDay[dIso]?.title || "").trim();
-                      if (!title) return;
-                      const a = byRole.get(role);
-                      if (!a) {
-                        addAssignment(role);
-                        toast.message("Added department card. Re-try adding the task.");
-                        return;
-                      }
-                      const n = a.primary_tasks.length;
-                      patchAssignment(a.id, {
-                        primary_tasks: [
-                          ...a.primary_tasks,
-                          {
-                            id: newId(),
-                            title,
-                            due_date: dIso,
-                            origin_due_date: dIso,
-                            completed: false,
-                            sort_order: n,
-                            chunks: [],
-                          } as any,
-                        ],
-                      } as any);
-                      setAddForDay((p) => ({ ...p, [dIso]: { role, title: "" } }));
-                    }}
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
+              <div className="flex flex-col flex-1 min-h-0 gap-2">
+                <div className="space-y-2 flex-1 min-h-0 overflow-y-auto pr-0.5 [scrollbar-gutter:stable]">
                 {WORKBOARD_ROLES.map((r) => {
                   const a = byRole.get(r.id);
                   if (!a) return null;
@@ -2158,12 +2144,99 @@ function WeekGridListView({
                     </div>
                   );
                 })}
-                {/* If nothing due this day, mimic Notion "To-do" placeholder */}
                 {WORKBOARD_ROLES.every((r) => {
                   const a = byRole.get(r.id);
                   if (!a) return true;
                   return !(a.primary_tasks || []).some((pt) => String(pt.due_date || "").slice(0, 10) === dIso);
-                }) && <div className="text-[11px] text-zinc-600 py-2">To-do</div>}
+                }) && (
+                  <p className="text-[11px] text-zinc-600 py-1 px-0.5">No tasks — add one below.</p>
+                )}
+                </div>
+
+                <div className="shrink-0 pt-2 mt-auto border-t border-white/[0.06]">
+                  {!composerOpen[dIso] ? (
+                    <button
+                      type="button"
+                      onClick={() => openComposer(dIso)}
+                      className={cn(
+                        "w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[11px] font-medium transition-colors",
+                        "border border-dashed border-white/12 bg-transparent text-zinc-500 hover:text-zinc-200 hover:border-violet-500/30 hover:bg-violet-500/[0.06]",
+                      )}
+                    >
+                      <Plus className="w-3.5 h-3.5 shrink-0 opacity-70" />
+                      New card
+                    </button>
+                  ) : (
+                    <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.05] p-2 space-y-2 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <select
+                          value={defaultRoleForDay(dIso) as any}
+                          onChange={(e) =>
+                            setAddForDay((p) => ({
+                              ...p,
+                              [dIso]: { role: e.target.value as WorkboardRoleId, title: p[dIso]?.title || "" },
+                            }))
+                          }
+                          className="h-8 w-full sm:w-[44%] rounded-lg bg-zinc-950 px-2 text-[11px] text-white outline-none border border-white/10 focus:border-violet-500/40"
+                          title="Department"
+                        >
+                          {WORKBOARD_ROLES.map((r) => (
+                            <option key={r.id} value={r.id} className="bg-zinc-950 text-white">
+                              {r.short}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="flex flex-1 items-center gap-1.5 min-w-0">
+                          <input
+                            ref={(el) => {
+                              addTitleInputRefs.current[dIso] = el;
+                            }}
+                            value={addForDay[dIso]?.title || ""}
+                            onChange={(e) =>
+                              setAddForDay((p) => {
+                                const role = (p[dIso]?.role ?? myWorkboardRole ?? "ai_dev") as WorkboardRoleId;
+                                return { ...p, [dIso]: { role, title: e.target.value } };
+                              })
+                            }
+                            placeholder="Title…"
+                            className={cn(
+                              "flex-1 min-w-0 h-8 rounded-lg px-2 text-[11px]",
+                              "border border-white/10 bg-zinc-950/80 text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500/35 focus:border-violet-500/25",
+                            )}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                submitCardForDay(dIso);
+                              }
+                              if (e.key === "Escape") {
+                                e.preventDefault();
+                                setComposerOpen((p) => ({ ...p, [dIso]: false }));
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="h-8 w-8 shrink-0 rounded-lg border border-violet-500/35 bg-violet-600/25 text-violet-100 hover:bg-violet-600/45 hover:text-white transition-colors flex items-center justify-center"
+                            title="Add card"
+                            onClick={() => submitCardForDay(dIso)}
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] text-zinc-500">Enter to save · Esc to close</span>
+                        <button
+                          type="button"
+                          className="text-[10px] text-zinc-500 hover:text-zinc-300"
+                          onClick={() => setComposerOpen((p) => ({ ...p, [dIso]: false }))}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ))}
