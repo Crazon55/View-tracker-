@@ -1889,23 +1889,28 @@ function WeekGridListView({
   }, [weekAssignments]);
 
   const [openRole, setOpenRole] = useState<Record<string, boolean>>({});
-  const isOpen = (rid: string) => openRole[rid] === true;
   const [dragOverDay, setDragOverDay] = useState<string | null>(null);
-  /** Per-day inline composer (Notion-style: opens from + New card or header +). */
-  const [composerOpen, setComposerOpen] = useState<Record<string, boolean>>({});
-  const addTitleInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  /** Large create dialog: title + steps for a chosen day. */
+  const [createDraft, setCreateDraft] = useState<{
+    dayIso: string;
+    role: WorkboardRoleId;
+    title: string;
+    stepLines: string[];
+  } | null>(null);
+  /** Which task cards show steps (key: assignmentId:taskId). */
+  const [expandedDayTasks, setExpandedDayTasks] = useState<Record<string, boolean>>({});
   /** If user adds a card before the department row exists, finish after `addAssignment` creates it. */
-  const pendingDayCardRef = useRef<{ dayIso: string; role: WorkboardRoleId; title: string } | null>(null);
+  const pendingDayCardRef = useRef<{
+    dayIso: string;
+    role: WorkboardRoleId;
+    title: string;
+    chunkTitles: string[];
+  } | null>(null);
 
   type DragPayload = { assignmentId: string; taskId: string; fromDay: string };
   const dragRef = useRef<DragPayload | null>(null);
 
   const missingRoles = WORKBOARD_ROLES.filter((r) => !weekAssignments.some((a) => a.role_id === r.id));
-
-  const [addForDay, setAddForDay] = useState<Record<string, { role: WorkboardRoleId; title: string }>>({});
-
-  const defaultRoleForDay = (dIso: string): WorkboardRoleId =>
-    addForDay[dIso]?.role ?? myWorkboardRole ?? "ai_dev";
 
   useEffect(() => {
     const p = pendingDayCardRef.current;
@@ -1917,6 +1922,13 @@ function WeekGridListView({
       pendingDayCardRef.current = null;
       return;
     }
+    const chunks: WorkboardChunk[] = p.chunkTitles.map((tit, i) => ({
+      id: newId(),
+      title: tit,
+      status: "not_started",
+      sort_order: i,
+      tags: [],
+    }));
     const n = a.primary_tasks.length;
     patchAssignment(a.id, {
       primary_tasks: [
@@ -1928,24 +1940,47 @@ function WeekGridListView({
           origin_due_date: p.dayIso,
           completed: false,
           sort_order: n,
-          chunks: [],
+          chunks,
         } as any,
       ],
     } as any);
     pendingDayCardRef.current = null;
-    setAddForDay((prev) => ({ ...prev, [p.dayIso]: { role: p.role, title: "" } }));
     toast.success("Card added");
   }, [weekAssignments, byRole, patchAssignment]);
 
-  const submitCardForDay = (dIso: string) => {
-    const role = defaultRoleForDay(dIso);
-    const title = (addForDay[dIso]?.title || "").trim();
-    if (!title) return;
+  const openAddTaskDialog = (dIso: string) => {
+    setCreateDraft({
+      dayIso: dIso,
+      role: myWorkboardRole ?? "ai_dev",
+      title: "",
+      stepLines: [""],
+    });
+  };
+
+  const closeAddTaskDialog = () => setCreateDraft(null);
+
+  const commitNewTaskFromDialog = () => {
+    if (!createDraft) return;
+    const { dayIso, role, title, stepLines } = createDraft;
+    const t = title.trim();
+    if (!t) {
+      toast.message("Add a title first");
+      return;
+    }
+    const chunkTitles = stepLines.map((s) => s.trim()).filter(Boolean);
+    const chunks: WorkboardChunk[] = chunkTitles.map((tit, i) => ({
+      id: newId(),
+      title: tit,
+      status: "not_started" as const,
+      sort_order: i,
+      tags: [],
+    }));
     const a = byRole.get(role);
     if (!a) {
-      pendingDayCardRef.current = { dayIso: dIso, role, title };
+      pendingDayCardRef.current = { dayIso, role, title: t, chunkTitles };
       addAssignment(role);
       toast.message("Creating department card…");
+      closeAddTaskDialog();
       return;
     }
     const n = a.primary_tasks.length;
@@ -1954,23 +1989,17 @@ function WeekGridListView({
         ...a.primary_tasks,
         {
           id: newId(),
-          title,
-          due_date: dIso,
-          origin_due_date: dIso,
+          title: t,
+          due_date: dayIso,
+          origin_due_date: dayIso,
           completed: false,
           sort_order: n,
-          chunks: [],
+          chunks,
         } as any,
       ],
     } as any);
-    setAddForDay((p) => ({ ...p, [dIso]: { role, title: "" } }));
-  };
-
-  const openComposer = (dIso: string) => {
-    setComposerOpen((p) => ({ ...p, [dIso]: true }));
-    requestAnimationFrame(() => {
-      addTitleInputRefs.current[dIso]?.focus();
-    });
+    toast.success("Card added");
+    closeAddTaskDialog();
   };
 
   return (
@@ -2033,7 +2062,7 @@ function WeekGridListView({
                 </div>
                 <button
                   type="button"
-                  onClick={() => openComposer(dIso)}
+                  onClick={() => openAddTaskDialog(dIso)}
                   className={cn(
                     "h-8 w-8 rounded-lg border flex items-center justify-center transition-colors",
                     "border-white/10 bg-white/[0.04] text-zinc-400 hover:text-white hover:border-violet-500/35 hover:bg-violet-600/20",
@@ -2048,38 +2077,38 @@ function WeekGridListView({
 
               <div className="flex flex-col flex-1 min-h-0 gap-2">
                 <div className="space-y-2 flex-1 min-h-0 overflow-y-auto pr-0.5 [scrollbar-gutter:stable]">
-                {WORKBOARD_ROLES.map((r) => {
-                  const a = byRole.get(r.id);
-                  if (!a) return null;
-                  const tasksToday = (a.primary_tasks || []).filter((pt) => String(pt.due_date || "").slice(0, 10) === dIso);
-                  if (tasksToday.length === 0) return null;
-                  const open = isOpen(`${dIso}:${r.id}`);
-                  return (
-                    <div key={`${dIso}:${r.id}`} className="rounded-xl border border-white/10 bg-white/[0.03]">
-                      <button
-                        type="button"
-                        onClick={() => setOpenRole((p) => ({ ...p, [`${dIso}:${r.id}`]: !open }))}
-                        className="w-full px-3 py-2 text-left flex items-start gap-2 hover:bg-white/[0.04] transition-colors"
-                      >
-                        <span className="mt-0.5 text-zinc-500 shrink-0">
-                          {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRightIcon className="w-4 h-4" />}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-[10px] font-semibold uppercase tracking-wider text-violet-300/90">
-                            {roleShort(r.id)}
-                          </div>
-                          <div className="text-[12px] text-zinc-300">
-                            {tasksToday.length} main task{tasksToday.length === 1 ? "" : "s"}
-                          </div>
-                        </div>
-                      </button>
-
-                      {open && (
-                        <div className="px-3 pb-3">
-                          {tasksToday.map((pt) => (
+                  {(() => {
+                    const tasksForDay: { a: MainAssignment; pt: WorkboardPrimaryTask }[] = [];
+                    for (const a of weekAssignments) {
+                      for (const pt of a.primary_tasks || []) {
+                        if (String(pt.due_date || "").slice(0, 10) === dIso) {
+                          tasksForDay.push({ a, pt });
+                        }
+                      }
+                    }
+                    tasksForDay.sort((x, y) => {
+                      const rs = roleShort(x.a.role_id).localeCompare(roleShort(y.a.role_id));
+                      if (rs !== 0) return rs;
+                      return (x.pt.title || "").localeCompare(y.pt.title || "");
+                    });
+                    if (tasksForDay.length === 0) {
+                      return (
+                        <p className="text-[11px] text-zinc-600 py-1 px-0.5">No tasks — add one below.</p>
+                      );
+                    }
+                    return tasksForDay.map(({ a, pt }) => {
+                      const expandKey = `${a.id}:${pt.id}`;
+                      const stepsOpen = expandedDayTasks[expandKey] === true;
+                      const origin = (pt as any).origin_due_date || pt.due_date;
+                      const delta = diffDays(pt.due_date, origin);
+                      return (
+                        <div
+                          key={expandKey}
+                          className="rounded-xl border border-white/10 bg-white/[0.04] overflow-hidden"
+                        >
+                          <div className="flex items-stretch gap-0">
                             <div
-                              key={pt.id}
-                              className="mt-2 rounded-lg border border-white/10 bg-black/30 p-2"
+                              className="shrink-0 w-8 flex items-center justify-center cursor-grab active:cursor-grabbing text-zinc-600 hover:text-zinc-400 border-r border-white/[0.06] bg-black/20"
                               draggable
                               onDragStart={() => {
                                 dragRef.current = { assignmentId: a.id, taskId: pt.id, fromDay: dIso };
@@ -2090,158 +2119,222 @@ function WeekGridListView({
                               }}
                               title="Drag to another day"
                             >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-1.5">
-                                    <GripVertical className="w-4 h-4 text-zinc-600 shrink-0" />
-                                    <div className="text-[12px] font-semibold text-white truncate">
-                                      {pt.title?.trim() ? pt.title.trim() : "Untitled main task"}
-                                    </div>
-                                  </div>
-                                  {(() => {
-                                    const origin = (pt as any).origin_due_date || pt.due_date;
-                                    const delta = diffDays(pt.due_date, origin);
-                                    if (!delta) return null;
-                                    const label = `${Math.abs(delta)} day${Math.abs(delta) === 1 ? "" : "s"}`;
-                                    return (
-                                      <div className="mt-1 text-[10px] text-zinc-500">
-                                        Today: <span className="text-violet-200 font-semibold">{label}</span>
-                                      </div>
-                                    );
-                                  })()}
-                                </div>
-                                <span className="text-[10px] text-zinc-600 shrink-0">Drag</span>
-                              </div>
+                              <GripVertical className="w-4 h-4" />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedDayTasks((p) => ({ ...p, [expandKey]: !stepsOpen }))
+                              }
+                              className={cn(
+                                "flex-1 min-w-0 text-left px-2.5 py-2.5 flex items-start gap-2",
+                                "hover:bg-white/[0.06] transition-colors",
+                              )}
+                            >
+                              <span className="mt-0.5 text-zinc-500 shrink-0">
+                                {stepsOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRightIcon className="w-4 h-4" />}
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="text-[12px] font-semibold text-white line-clamp-2 block">
+                                  {pt.title?.trim() ? pt.title.trim() : "Untitled main task"}
+                                </span>
+                                <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                                  <span className="text-[10px] font-medium text-violet-300/90">{roleShort(a.role_id)}</span>
+                                  {!!delta && (
+                                    <span className="text-[10px] text-zinc-500">
+                                      · moved <span className="text-violet-200/90">{Math.abs(delta)}d</span>
+                                    </span>
+                                  )}
+                                </span>
+                              </span>
+                            </button>
+                          </div>
+                          {stepsOpen && (
+                            <div className="px-3 pb-3 pt-0 border-t border-white/[0.06] bg-black/25">
                               {pt.chunks?.length ? (
                                 <ul className="mt-2 space-y-1.5">
                                   {pt.chunks.map((c) => (
-                                    <li key={c.id} className="flex items-start justify-between gap-2">
-                                      <span className="text-[11px] text-zinc-300 min-w-0 truncate">{c.title || "Untitled step"}</span>
+                                    <li
+                                      key={c.id}
+                                      className="flex items-start justify-between gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2 py-1.5"
+                                    >
+                                      <span className="text-[11px] text-zinc-200 min-w-0">
+                                        {c.title?.trim() ? c.title.trim() : "Untitled step"}
+                                      </span>
                                       <span className="text-[10px] text-zinc-500 shrink-0">{CHUNK_STATUS_LABEL[c.status]}</span>
                                     </li>
                                   ))}
                                 </ul>
                               ) : (
-                                <div className="mt-1.5 text-[11px] text-zinc-600">No steps yet</div>
+                                <p className="mt-2 text-[11px] text-zinc-500">No steps yet.</p>
                               )}
+                              <button
+                                type="button"
+                                onClick={() => setOpenRole((p) => ({ ...p, [`editor:${a.id}`]: true }))}
+                                className="mt-2 text-[11px] text-violet-300 hover:text-violet-200"
+                              >
+                                Edit in department →
+                              </button>
                             </div>
-                          ))}
-
-                          <div className="mt-3">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                // Jump into full editor for that department (role).
-                                setOpenRole((p) => ({ ...p, [`editor:${a.id}`]: true }));
-                              }}
-                              className="text-[11px] text-violet-300 hover:text-violet-200"
-                            >
-                              Edit department card →
-                            </button>
-                          </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
-                {WORKBOARD_ROLES.every((r) => {
-                  const a = byRole.get(r.id);
-                  if (!a) return true;
-                  return !(a.primary_tasks || []).some((pt) => String(pt.due_date || "").slice(0, 10) === dIso);
-                }) && (
-                  <p className="text-[11px] text-zinc-600 py-1 px-0.5">No tasks — add one below.</p>
-                )}
+                      );
+                    });
+                  })()}
                 </div>
 
                 <div className="shrink-0 pt-2 mt-auto border-t border-white/[0.06]">
-                  {!composerOpen[dIso] ? (
-                    <button
-                      type="button"
-                      onClick={() => openComposer(dIso)}
-                      className={cn(
-                        "w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[11px] font-medium transition-colors",
-                        "border border-dashed border-white/12 bg-transparent text-zinc-500 hover:text-zinc-200 hover:border-violet-500/30 hover:bg-violet-500/[0.06]",
-                      )}
-                    >
-                      <Plus className="w-3.5 h-3.5 shrink-0 opacity-70" />
-                      New card
-                    </button>
-                  ) : (
-                    <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.05] p-2 space-y-2 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                        <select
-                          value={defaultRoleForDay(dIso) as any}
-                          onChange={(e) =>
-                            setAddForDay((p) => ({
-                              ...p,
-                              [dIso]: { role: e.target.value as WorkboardRoleId, title: p[dIso]?.title || "" },
-                            }))
-                          }
-                          className="h-8 w-full sm:w-[44%] rounded-lg bg-zinc-950 px-2 text-[11px] text-white outline-none border border-white/10 focus:border-violet-500/40"
-                          title="Department"
-                        >
-                          {WORKBOARD_ROLES.map((r) => (
-                            <option key={r.id} value={r.id} className="bg-zinc-950 text-white">
-                              {r.short}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="flex flex-1 items-center gap-1.5 min-w-0">
-                          <input
-                            ref={(el) => {
-                              addTitleInputRefs.current[dIso] = el;
-                            }}
-                            value={addForDay[dIso]?.title || ""}
-                            onChange={(e) =>
-                              setAddForDay((p) => {
-                                const role = (p[dIso]?.role ?? myWorkboardRole ?? "ai_dev") as WorkboardRoleId;
-                                return { ...p, [dIso]: { role, title: e.target.value } };
-                              })
-                            }
-                            placeholder="Title…"
-                            className={cn(
-                              "flex-1 min-w-0 h-8 rounded-lg px-2 text-[11px]",
-                              "border border-white/10 bg-zinc-950/80 text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500/35 focus:border-violet-500/25",
-                            )}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                e.preventDefault();
-                                submitCardForDay(dIso);
-                              }
-                              if (e.key === "Escape") {
-                                e.preventDefault();
-                                setComposerOpen((p) => ({ ...p, [dIso]: false }));
-                              }
-                            }}
-                          />
-                          <button
-                            type="button"
-                            className="h-8 w-8 shrink-0 rounded-lg border border-violet-500/35 bg-violet-600/25 text-violet-100 hover:bg-violet-600/45 hover:text-white transition-colors flex items-center justify-center"
-                            title="Add card"
-                            onClick={() => submitCardForDay(dIso)}
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[10px] text-zinc-500">Enter to save · Esc to close</span>
-                        <button
-                          type="button"
-                          className="text-[10px] text-zinc-500 hover:text-zinc-300"
-                          onClick={() => setComposerOpen((p) => ({ ...p, [dIso]: false }))}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => openAddTaskDialog(dIso)}
+                    className={cn(
+                      "w-full flex items-center gap-2 rounded-xl px-2.5 py-2.5 text-left text-[11px] font-medium transition-colors",
+                      "border border-dashed border-white/12 bg-transparent text-zinc-500 hover:text-zinc-200 hover:border-violet-500/30 hover:bg-violet-500/[0.06]",
+                    )}
+                  >
+                    <Plus className="w-3.5 h-3.5 shrink-0 opacity-70" />
+                    New card
+                  </button>
                 </div>
               </div>
             </div>
           ))}
         </div>
       </div>
+
+      <Dialog
+        open={createDraft !== null}
+        onOpenChange={(o) => {
+          if (!o) closeAddTaskDialog();
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[min(90vh,720px)] overflow-y-auto border border-white/10 bg-zinc-950/98 text-zinc-100 backdrop-blur-2xl sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-white text-lg">
+              New card
+              {createDraft && (
+                <span className="text-zinc-500 font-normal text-base">
+                  {" "}
+                  · {dayLabel(createDraft.dayIso)} {daySub(createDraft.dayIso)}
+                </span>
+              )}
+            </DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              Add a title and optional steps. Cards in the week view show the title; open a card to see its steps.
+            </DialogDescription>
+          </DialogHeader>
+
+          {createDraft && (
+            <div className="space-y-5 pt-1">
+              <div>
+                <label className="text-xs font-medium text-zinc-500" htmlFor="wb-create-role">
+                  Department
+                </label>
+                <select
+                  id="wb-create-role"
+                  value={createDraft.role}
+                  onChange={(e) =>
+                    setCreateDraft((d) =>
+                      d ? { ...d, role: e.target.value as WorkboardRoleId } : d,
+                    )
+                  }
+                  className={cn("mt-1.5 w-full rounded-xl px-3 py-2.5 text-sm", GLASS_INPUT)}
+                >
+                  {WORKBOARD_ROLES.map((r) => (
+                    <option key={r.id} value={r.id} className="bg-zinc-950 text-white">
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-zinc-500" htmlFor="wb-create-title">
+                  Title
+                </label>
+                <textarea
+                  id="wb-create-title"
+                  value={createDraft.title}
+                  onChange={(e) =>
+                    setCreateDraft((d) => (d ? { ...d, title: e.target.value } : d))
+                  }
+                  placeholder="What needs to ship?"
+                  rows={4}
+                  className={cn("mt-1.5 w-full rounded-xl px-3 py-2.5 text-sm resize-y min-h-[100px]", GLASS_TEXTAREA)}
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-xs font-medium text-zinc-500">Steps</label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCreateDraft((d) => (d ? { ...d, stepLines: [...d.stepLines, ""] } : d))
+                    }
+                    className="text-xs font-medium text-violet-400 hover:text-violet-300 inline-flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add step
+                  </button>
+                </div>
+                <div className="mt-2 space-y-2">
+                  {createDraft.stepLines.map((line, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <input
+                        value={line}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setCreateDraft((d) => {
+                            if (!d) return d;
+                            const next = [...d.stepLines];
+                            next[i] = v;
+                            return { ...d, stepLines: next };
+                          });
+                        }}
+                        placeholder={i === 0 ? "First step (optional)" : `Step ${i + 1}`}
+                        className={cn("flex-1 min-w-0 rounded-xl px-3 py-2 text-sm", GLASS_INPUT)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCreateDraft((d) => {
+                            if (!d) return d;
+                            const next = d.stepLines.filter((_, j) => j !== i);
+                            return { ...d, stepLines: next.length ? next : [""] };
+                          })
+                        }
+                        className="shrink-0 p-2 rounded-xl text-zinc-600 hover:text-red-400 hover:bg-red-500/10"
+                        title="Remove step"
+                        aria-label="Remove step"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-white/[0.06]">
+                <button
+                  type="button"
+                  onClick={closeAddTaskDialog}
+                  className="px-4 py-2 rounded-xl text-sm text-zinc-400 hover:text-white hover:bg-white/[0.06]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={commitNewTaskFromDialog}
+                  className="px-5 py-2 rounded-xl text-sm font-medium bg-violet-600 text-white hover:bg-violet-500 shadow-lg shadow-violet-600/25"
+                >
+                  Add card
+                </button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Hidden editors (opened by per-role edit buttons) */}
       <div className="hidden">
