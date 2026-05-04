@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getDashboard, getAutoReels, getManualReels, getPosts } from "@/services/api";
 import { useNavigate } from "react-router-dom";
@@ -91,6 +91,16 @@ export default function Dashboard() {
 
   const stats = data;
   const totalViews = stats?.total_views ?? 0;
+  /** Same per-page all-time definition as Growth page: sum of `views` across all months from /api/v1/growth. */
+  const growthAllTimeByHandle = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const row of growthData) {
+      const h = String((row as any).handle || "").trim().toLowerCase();
+      if (!h || h === "total") continue;
+      m.set(h, (m.get(h) ?? 0) + (Number((row as any).views) || 0));
+    }
+    return m;
+  }, [growthData]);
   const allPagesRaw = stats?.pages ?? [];
   const allPages = [...allPagesRaw];
   const filteredByType = ipFilter === "all"
@@ -111,7 +121,14 @@ export default function Dashboard() {
 
   function getPageViews(page: any, period: TimePeriod): number {
     switch (period) {
-      case "all": return page.all_time_views ?? 0;
+      case "all": {
+        const h = String(page.handle || "").trim().toLowerCase();
+        if (growthData.length > 0) {
+          const fromGrowth = growthAllTimeByHandle.get(h);
+          if (fromGrowth !== undefined) return fromGrowth;
+        }
+        return page.all_time_views ?? 0;
+      }
       case "monthly": return page.total_views ?? 0;
       case "custom": {
         if (!customFrom && !customTo) return page.all_time_views ?? 0;
