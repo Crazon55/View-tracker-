@@ -768,6 +768,12 @@ export default function WeeklyWorkboard() {
       .filter((a) => roleFilter === "all" || a.role_id === roleFilter);
   }, [assignments, weekStart, roleFilter]);
 
+  /** Week grid: all departments for this week (ignore role toolbar) — ticket-by-day + editors must still see AI Dev. */
+  const weekGridAssignmentsAllRoles = useMemo(
+    () => assignments.filter((a) => a.week_start === weekStart),
+    [assignments, weekStart],
+  );
+
   const byRole = useMemo(() => {
     const m = new Map<WorkboardRoleId, MainAssignment>();
     weekAssignments.forEach((a) => m.set(a.role_id, a));
@@ -1209,6 +1215,7 @@ export default function WeeklyWorkboard() {
             <WeekGridListView
               weekStart={weekStart}
               weekAssignments={weekGridAssignments}
+              weekAssignmentsAllRoles={weekGridAssignmentsAllRoles}
               myWorkboardRole={myWorkboardRole}
               addAssignment={addAssignment}
               removeAssignment={removeAssignment}
@@ -1901,6 +1908,7 @@ function todayISO() {
 function WeekGridListView({
   weekStart,
   weekAssignments,
+  weekAssignmentsAllRoles,
   myWorkboardRole,
   addAssignment,
   removeAssignment,
@@ -1918,6 +1926,8 @@ function WeekGridListView({
   weekStart: string;
   /** Full tasks for this week (same week + role toolbar filter only). Not sliced by “today”. */
   weekAssignments: MainAssignment[];
+  /** Same week, all departments — used for ticket cards by day and department editors when the toolbar hides a role. */
+  weekAssignmentsAllRoles: MainAssignment[];
   myWorkboardRole: WorkboardRoleId | null;
   addAssignment: (role_id: WorkboardRoleId) => void;
   removeAssignment: (id: string) => void;
@@ -1947,6 +1957,11 @@ function WeekGridListView({
     weekAssignments.forEach((a) => m.set(a.role_id, a));
     return m;
   }, [weekAssignments]);
+
+  const aiDevAssignment = useMemo(
+    () => weekAssignmentsAllRoles.find((a) => a.role_id === "ai_dev"),
+    [weekAssignmentsAllRoles],
+  );
 
   const [openRole, setOpenRole] = useState<Record<string, boolean>>({});
   const [dragOverDay, setDragOverDay] = useState<string | null>(null);
@@ -2160,95 +2175,183 @@ function WeekGridListView({
                       if (rs !== 0) return rs;
                       return (x.pt.title || "").localeCompare(y.pt.title || "");
                     });
-                    if (tasksForDay.length === 0) {
+
+                    const weekEnd = addDaysISO(weekStart, 6);
+                    const ticketsForDay: WorkboardInterrupt[] = [];
+                    if (aiDevAssignment) {
+                      for (const it of aiDevAssignment.interrupts || []) {
+                        if (!it.source_ticket_id || !it.ticket_anchor_date) continue;
+                        const anchor = String(it.ticket_anchor_date).slice(0, 10);
+                        if (anchor < weekStart || anchor > weekEnd) continue;
+                        if (anchor !== dIso) continue;
+                        ticketsForDay.push(it);
+                      }
+                      ticketsForDay.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+                    }
+
+                    if (tasksForDay.length === 0 && ticketsForDay.length === 0) {
                       return (
                         <p className="text-[11px] text-zinc-600 py-1 px-0.5">No tasks — add one below.</p>
                       );
                     }
-                    return tasksForDay.map(({ a, pt }) => {
-                      const expandKey = `${a.id}:${pt.id}`;
-                      const stepsOpen = expandedDayTasks[expandKey] === true;
-                      const origin = (pt as any).origin_due_date || pt.due_date;
-                      const delta = diffDays(pt.due_date, origin);
-                      return (
-                        <div
-                          key={expandKey}
-                          className="rounded-xl border border-white/10 bg-white/[0.04] overflow-hidden"
-                        >
-                          <div className="flex items-stretch gap-0">
+
+                    return (
+                      <>
+                        {tasksForDay.map(({ a, pt }) => {
+                          const expandKey = `${a.id}:${pt.id}`;
+                          const stepsOpen = expandedDayTasks[expandKey] === true;
+                          const origin = (pt as any).origin_due_date || pt.due_date;
+                          const delta = diffDays(pt.due_date, origin);
+                          return (
                             <div
-                              className="shrink-0 w-8 flex items-center justify-center cursor-grab active:cursor-grabbing text-zinc-600 hover:text-zinc-400 border-r border-white/[0.06] bg-black/20"
-                              draggable
-                              onDragStart={() => {
-                                dragRef.current = { assignmentId: a.id, taskId: pt.id, fromDay: dIso };
-                              }}
-                              onDragEnd={() => {
-                                dragRef.current = null;
-                                setDragOverDay(null);
-                              }}
-                              title="Drag to another day"
+                              key={expandKey}
+                              className="rounded-xl border border-white/10 bg-white/[0.04] overflow-hidden"
                             >
-                              <GripVertical className="w-4 h-4" />
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setExpandedDayTasks((p) => ({ ...p, [expandKey]: !stepsOpen }))
-                              }
-                              className={cn(
-                                "flex-1 min-w-0 text-left px-2.5 py-2.5 flex items-start gap-2",
-                                "hover:bg-white/[0.06] transition-colors",
-                              )}
-                            >
-                              <span className="mt-0.5 text-zinc-500 shrink-0">
-                                {stepsOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRightIcon className="w-4 h-4" />}
-                              </span>
-                              <span className="min-w-0 flex-1">
-                                <span className="text-[12px] font-semibold text-white line-clamp-2 block">
-                                  {pt.title?.trim() ? pt.title.trim() : "Untitled main task"}
-                                </span>
-                                <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                                  <span className="text-[10px] font-medium text-violet-300/90">{roleShort(a.role_id)}</span>
-                                  {!!delta && (
-                                    <span className="text-[10px] text-zinc-500">
-                                      · moved <span className="text-violet-200/90">{Math.abs(delta)}d</span>
-                                    </span>
+                              <div className="flex items-stretch gap-0">
+                                <div
+                                  className="shrink-0 w-8 flex items-center justify-center cursor-grab active:cursor-grabbing text-zinc-600 hover:text-zinc-400 border-r border-white/[0.06] bg-black/20"
+                                  draggable
+                                  onDragStart={() => {
+                                    dragRef.current = { assignmentId: a.id, taskId: pt.id, fromDay: dIso };
+                                  }}
+                                  onDragEnd={() => {
+                                    dragRef.current = null;
+                                    setDragOverDay(null);
+                                  }}
+                                  title="Drag to another day"
+                                >
+                                  <GripVertical className="w-4 h-4" />
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setExpandedDayTasks((p) => ({ ...p, [expandKey]: !stepsOpen }))
+                                  }
+                                  className={cn(
+                                    "flex-1 min-w-0 text-left px-2.5 py-2.5 flex items-start gap-2",
+                                    "hover:bg-white/[0.06] transition-colors",
                                   )}
-                                </span>
-                              </span>
-                            </button>
-                          </div>
-                          {stepsOpen && (
-                            <div className="px-3 pb-3 pt-0 border-t border-white/[0.06] bg-black/25">
-                              {pt.chunks?.length ? (
-                                <ul className="mt-2 space-y-1.5">
-                                  {pt.chunks.map((c) => (
-                                    <li
-                                      key={c.id}
-                                      className="flex items-start justify-between gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2 py-1.5"
-                                    >
-                                      <span className="text-[11px] text-zinc-200 min-w-0">
-                                        {c.title?.trim() ? c.title.trim() : "Untitled step"}
-                                      </span>
-                                      <span className="text-[10px] text-zinc-500 shrink-0">{CHUNK_STATUS_LABEL[c.status]}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              ) : (
-                                <p className="mt-2 text-[11px] text-zinc-500">No steps yet.</p>
+                                >
+                                  <span className="mt-0.5 text-zinc-500 shrink-0">
+                                    {stepsOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRightIcon className="w-4 h-4" />}
+                                  </span>
+                                  <span className="min-w-0 flex-1">
+                                    <span className="text-[12px] font-semibold text-white line-clamp-2 block">
+                                      {pt.title?.trim() ? pt.title.trim() : "Untitled main task"}
+                                    </span>
+                                    <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                                      <span className="text-[10px] font-medium text-violet-300/90">{roleShort(a.role_id)}</span>
+                                      {!!delta && (
+                                        <span className="text-[10px] text-zinc-500">
+                                          · moved <span className="text-violet-200/90">{Math.abs(delta)}d</span>
+                                        </span>
+                                      )}
+                                    </span>
+                                  </span>
+                                </button>
+                              </div>
+                              {stepsOpen && (
+                                <div className="px-3 pb-3 pt-0 border-t border-white/[0.06] bg-black/25">
+                                  {pt.chunks?.length ? (
+                                    <ul className="mt-2 space-y-1.5">
+                                      {pt.chunks.map((c) => (
+                                        <li
+                                          key={c.id}
+                                          className="flex items-start justify-between gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2 py-1.5"
+                                        >
+                                          <span className="text-[11px] text-zinc-200 min-w-0">
+                                            {c.title?.trim() ? c.title.trim() : "Untitled step"}
+                                          </span>
+                                          <span className="text-[10px] text-zinc-500 shrink-0">{CHUNK_STATUS_LABEL[c.status]}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <p className="mt-2 text-[11px] text-zinc-500">No steps yet.</p>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => setOpenRole((p) => ({ ...p, [`editor:${a.id}`]: true }))}
+                                    className="mt-2 text-[11px] text-violet-300 hover:text-violet-200"
+                                  >
+                                    Edit in department →
+                                  </button>
+                                </div>
                               )}
-                              <button
-                                type="button"
-                                onClick={() => setOpenRole((p) => ({ ...p, [`editor:${a.id}`]: true }))}
-                                className="mt-2 text-[11px] text-violet-300 hover:text-violet-200"
-                              >
-                                Edit in department →
-                              </button>
                             </div>
-                          )}
-                        </div>
-                      );
-                    });
+                          );
+                        })}
+
+                        {ticketsForDay.length > 0 && aiDevAssignment && (
+                          <div
+                            className={cn(
+                              "space-y-2",
+                              tasksForDay.length > 0 && "pt-1 mt-1 border-t border-white/[0.08]",
+                            )}
+                          >
+                            <div className="text-[10px] font-semibold uppercase tracking-wider text-orange-300/90 px-0.5">
+                              Tickets · AI Dev
+                            </div>
+                            {ticketsForDay.map((it) => {
+                              const expandKey = `tix:${aiDevAssignment.id}:${it.id}`;
+                              const detailOpen = expandedDayTasks[expandKey] === true;
+                              return (
+                                <div
+                                  key={expandKey}
+                                  className="rounded-xl border border-orange-500/30 bg-gradient-to-br from-orange-500/[0.08] to-transparent overflow-hidden"
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setExpandedDayTasks((p) => ({ ...p, [expandKey]: !detailOpen }))
+                                    }
+                                    className={cn(
+                                      "w-full text-left px-2.5 py-2.5 flex items-start gap-2",
+                                      "hover:bg-orange-500/[0.08] transition-colors",
+                                    )}
+                                  >
+                                    <span className="mt-0.5 text-orange-400/80 shrink-0">
+                                      {detailOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRightIcon className="w-4 h-4" />}
+                                    </span>
+                                    <span className="min-w-0 flex-1">
+                                      <span className="text-[12px] font-semibold text-white line-clamp-2 block">
+                                        {it.title?.trim() ? it.title.trim() : "Ticket"}
+                                      </span>
+                                      <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                                        <span className="text-[10px] font-medium text-violet-300/90">Tickets</span>
+                                        <span className="text-[10px] text-zinc-500">·</span>
+                                        <span className="text-[10px] text-orange-200/90">{CHUNK_STATUS_LABEL[it.status]}</span>
+                                      </span>
+                                    </span>
+                                  </button>
+                                  {detailOpen && (
+                                    <div className="px-3 pb-3 pt-0 border-t border-orange-500/20 bg-black/20">
+                                      {it.note?.trim() ? (
+                                        <p className="mt-2 text-[11px] text-zinc-300 whitespace-pre-wrap">{it.note.trim()}</p>
+                                      ) : (
+                                        <p className="mt-2 text-[11px] text-zinc-500">No extra notes.</p>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setOpenRole((p) => ({
+                                            ...p,
+                                            [`editor:${aiDevAssignment.id}`]: true,
+                                          }))
+                                        }
+                                        className="mt-2 text-[11px] text-orange-300 hover:text-orange-200"
+                                      >
+                                        Edit in AI Developer →
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </>
+                    );
                   })()}
                 </div>
 
@@ -2407,7 +2510,7 @@ function WeekGridListView({
 
       {/* Hidden editors (opened by per-role edit buttons) */}
       <div className="hidden">
-        {weekAssignments.map((a) => (
+        {weekAssignmentsAllRoles.map((a) => (
           <Dialog key={a.id} open={openRole[`editor:${a.id}`] === true} onOpenChange={(o) => setOpenRole((p) => ({ ...p, [`editor:${a.id}`]: o }))}>
             <DialogContent className="max-w-3xl border border-white/10 bg-zinc-950/95 text-zinc-100 backdrop-blur-2xl">
               <DialogHeader>

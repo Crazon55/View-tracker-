@@ -40,6 +40,10 @@ export function mergeAssignedTicketsIntoInterrupts(
         `Ticket #${t.ticket_number ?? "?"}`) ||
       "Ticket";
     const created = (t.created_at || "").slice(0, 10);
+    const ticket_anchor_date =
+      prev && prev.source_ticket_id === t.id && prev.ticket_anchor_date?.trim()
+        ? prev.ticket_anchor_date.trim().slice(0, 10)
+        : created || undefined;
     const defaultNote = created ? `Ticket · added ${created}` : "Synced from Tickets";
     const note =
       prev?.note?.trim() &&
@@ -57,6 +61,7 @@ export function mergeAssignedTicketsIntoInterrupts(
       blocks_target_kind: null,
       tags: Array.isArray(prev?.tags) && prev.tags.length ? prev.tags : [`#ticket-${t.id}`],
       source_ticket_id: t.id,
+      ...(ticket_anchor_date ? { ticket_anchor_date } : {}),
     };
   });
 

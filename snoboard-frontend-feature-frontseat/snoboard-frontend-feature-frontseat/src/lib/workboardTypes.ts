@@ -101,6 +101,8 @@ export type WorkboardInterrupt = {
   tags: string[];
   /** When set, this row is mirrored from the Tickets board (bidirectional sync). */
   source_ticket_id?: string;
+  /** ISO date (YYYY-MM-DD) for week-grid column placement (usually ticket creation date). */
+  ticket_anchor_date?: string;
 };
 
 export type MainAssignment = {
@@ -240,13 +242,16 @@ export function normalizeAssignments(list: MainAssignment[]): MainAssignment[] {
       if (blocks_target_kind === "main" && blocks_target_id === a.id && firstId) {
         blocks_target_id = firstId;
       }
-      const src = (i as WorkboardInterrupt).source_ticket_id;
+      const wi = i as WorkboardInterrupt;
+      const src = wi.source_ticket_id;
+      const ta = wi.ticket_anchor_date;
       return {
         ...i,
         tags: Array.isArray(i.tags) ? i.tags : [],
         blocks_target_id,
         blocks_target_kind,
         ...(typeof src === "string" && src ? { source_ticket_id: src } : {}),
+        ...(typeof ta === "string" && ta.trim() ? { ticket_anchor_date: ta.trim().slice(0, 10) } : {}),
       };
     });
 
