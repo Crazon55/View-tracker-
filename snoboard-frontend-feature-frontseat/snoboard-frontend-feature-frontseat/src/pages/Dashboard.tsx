@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getDashboard, getAutoReels, getManualReels, getPosts } from "@/services/api";
+import { getDashboard, getAutoReels, getManualReels, getPosts, getSixDayMonth } from "@/services/api";
 import { useNavigate } from "react-router-dom";
 import { Search, TrendingUp, MoreVertical } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -342,6 +342,47 @@ export default function Dashboard() {
 
   const trackerYmNormalized = useMemo(() => normalizeTrackerMonth(trackerMonth), [trackerMonth]);
 
+  const sixDayMonthQueryEnabled =
+    globalPeriod === "custom" && Boolean(trackerYmNormalized && trackerYmNormalized.length >= 7);
+
+  const { data: sixDayMonthPayload, isPending: sixDayMonthPending } = useQuery({
+    queryKey: ["six-day-month", trackerYmNormalized],
+    queryFn: () => getSixDayMonth(trackerYmNormalized),
+    enabled: sixDayMonthQueryEnabled,
+    staleTime: 60_000,
+  });
+
+  /** Same source as the 6-Day Tracker page: entries + monthly actuals per page_id. */
+  const sixDayByPageId = useMemo(() => {
+    const m = new Map<
+      string,
+      {
+        summary: any;
+        cycles: { cycle: number; start: string; end: string; views: number }[];
+      }
+    >();
+    const payload = sixDayMonthPayload as Record<string, unknown> | undefined;
+    if (!payload) return m;
+    const cycles = (payload.cycles as any[]) || [];
+    const summaries = (payload.page_summaries as any[]) || [];
+    for (const p of summaries) {
+      const pid = String(p.page_id);
+      const perCycle = cycles.map((c: any) => {
+        const views = (c.entries || [])
+          .filter((e: any) => String(e.page_id) === pid)
+          .reduce((s: number, e: any) => s + (Number(e.views) || 0), 0);
+        return {
+          cycle: c.cycle as number,
+          start: String(c.start || ""),
+          end: String(c.end || ""),
+          views,
+        };
+      });
+      m.set(pid, { summary: p, cycles: perCycle });
+    }
+    return m;
+  }, [sixDayMonthPayload]);
+
   const { customFrom, customTo } = useMemo(() => {
     const r = monthRangeFromYYYYMM(trackerYmNormalized || trackerMonth);
     return r ?? { from: "", to: "" };
@@ -421,6 +462,14 @@ export default function Dashboard() {
       case "monthly": return page.total_views ?? 0;
       case "custom": {
         if (!customFrom || !customTo) return 0;
+        const sd = sixDayByPageId.get(String(page.id));
+        if (sd?.summary) {
+          const av = sd.summary.actual_views;
+          if (av != null && av !== "" && !Number.isNaN(Number(av)))
+            return Number(av);
+          const cvs = Number(sd.summary.cycle_views_sum);
+          if (!Number.isNaN(cvs)) return cvs;
+        }
         return getCustomRangeViewsForPage(
           page,
           customFrom,
@@ -743,15 +792,14 @@ export default function Dashboard() {
                   <span className="text-[10px] uppercase tracking-wider text-zinc-500 shrink-0">Month</span>
                   <input
                     type="month"
-                    value={trackerMonth}
+                    value={trackerYmNormalized || trackerMonth}
                     onChange={(e) => setTrackerMonth(normalizeTrackerMonth(e.target.value))}
                     className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500/50 cursor-pointer min-w-[10rem]"
                   />
                 </label>
                 {customTrackerWeeks.length > 0 && (
                   <p className="text-[10px] text-zinc-500 max-w-[min(100vw-2rem,300px)] text-right leading-snug">
-                    Full calendar month · {customTrackerWeeks.length} tracker week
-                    {customTrackerWeeks.length === 1 ? "" : "s"} (6 days each; last week may be shorter). Per-week views on cards; reel/post dates when available, else growth prorated by days.
+                    Same window as 6-Day Tracker: official cycles (e.g. Apr 1–6) and per-page views load from the tracker month API. Cards fall back to reels/growth only if that page has no tracker row.
                   </p>
                 )}
               </div>
@@ -780,8 +828,26 @@ export default function Dashboard() {
             const reelPct = pageTotal > 0 ? ((page.reel_views ?? 0) / pageTotal * 100) : 0;
             const { reelsCount, postsCount } = getPageCounts(page, globalPeriod);
             const isTracker = globalPeriod === "custom" && Boolean(trackerMonth?.trim());
-            const sixDayBreakdown =
-              isTracker && customTrackerWeeks.length > 0 && customFrom && customTo
+            const sdPage = sixDayByPageId.get(String(page.id));
+            const hasApiCycleData =
+              isTracker &&
+              Boolean(sixDayMonthPayload) &&
+              !sixDayMonthPending &&
+              Boolean(sdPage?.cycles?.length);
+            const apiCyclesForCard = hasApiCycleData
+              ? (sdPage!.cycles as { cycle: number; start: string; end: string; views: number }[]).filter(
+                  (c) => c.views > 0,
+                )
+              : [];
+            const apiCyclesCombined = hasApiCycleData
+              ? sdPage!.cycles.reduce((s, c) => s + c.views, 0)
+              : 0;
+            const legacyWeekBreakdown =
+              isTracker &&
+              !hasApiCycleData &&
+              customTrackerWeeks.length > 0 &&
+              customFrom &&
+              customTo
                 ? getSixDayTrackerBreakdownForPage(
                     page,
                     customTrackerWeeks,
@@ -793,7 +859,10 @@ export default function Dashboard() {
                     customTo,
                   )
                 : [];
-            const weeksCombined = sixDayBreakdown.reduce((s, w) => s + w.views, 0);
+            const weeksCombined = hasApiCycleData
+              ? apiCyclesCombined
+              : legacyWeekBreakdown.reduce((s, w) => s + w.views, 0);
+            const sixDayBreakdown = legacyWeekBreakdown;
 
             return (
               <div
@@ -825,7 +894,7 @@ export default function Dashboard() {
 
                 {/* Total Views Label */}
                 <p className="text-[10px] uppercase tracking-[0.15em] text-violet-400 font-bold mb-2">
-                  {isTracker ? "Month total (full month)" : "Total Views"}
+                  {isTracker ? "Month total (6-day tracker)" : "Total Views"}
                 </p>
 
                 {/* Big View Number + Growth */}
@@ -842,10 +911,51 @@ export default function Dashboard() {
                   )}
                 </div>
 
-                {isTracker && sixDayBreakdown.length > 0 && (
+                {isTracker && hasApiCycleData && apiCyclesForCard.length > 0 && (
                   <div className="mt-4 pt-3 border-t border-zinc-800 space-y-2">
                     <p className="text-[9px] uppercase tracking-[0.18em] text-emerald-400/90 font-bold">
-                      6-day tracker (week-wise)
+                      6-day tracker (cycle-wise)
+                    </p>
+                    <ul className="space-y-1.5">
+                      {apiCyclesForCard.map((c) => (
+                        <li
+                          key={`cycle-${c.cycle}-${c.start}`}
+                          className="flex items-start justify-between gap-2 text-[11px] leading-tight"
+                        >
+                          <span className="text-zinc-500 min-w-0">
+                            <span className="text-zinc-300 font-semibold">Cycle {c.cycle}</span>
+                            <span className="block text-[10px] text-zinc-600 mt-0.5">
+                              {fmtShortRange(c.start, c.end)}
+                            </span>
+                          </span>
+                          <span className="text-zinc-100 tabular-nums font-semibold shrink-0">
+                            {formatCompact(c.views)}
+                          </span>
+                        </li>
+                      ))}
+                      <li className="flex items-start justify-between gap-2 text-[11px] pt-2 mt-1 border-t border-zinc-800/90">
+                        <span className="text-zinc-400 font-semibold">Cycles combined (entries)</span>
+                        <span className="text-emerald-300/95 tabular-nums font-bold shrink-0">
+                          {formatCompact(apiCyclesCombined)}
+                        </span>
+                      </li>
+                    </ul>
+                    {Math.abs(apiCyclesCombined - viewsForPeriod) > 2 && sdPage?.summary?.actual_views != null && (
+                      <p className="text-[9px] text-zinc-600 leading-snug">
+                        Month total uses monthly actual from the tracker when set; cycle rows sum entries only.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {isTracker && hasApiCycleData && apiCyclesForCard.length === 0 && (
+                  <p className="mt-3 text-[11px] text-zinc-500">No per-cycle entries for this page this month.</p>
+                )}
+
+                {isTracker && sixDayBreakdown.length > 0 && !hasApiCycleData && (
+                  <div className="mt-4 pt-3 border-t border-zinc-800 space-y-2">
+                    <p className="text-[9px] uppercase tracking-[0.18em] text-emerald-400/90 font-bold">
+                      6-day tracker (estimated weeks)
                     </p>
                     <ul className="space-y-1.5">
                       {sixDayBreakdown.map((w) => (
@@ -877,9 +987,29 @@ export default function Dashboard() {
                   </div>
                 )}
 
-                {isTracker && (!trackerYmNormalized || customTrackerWeeks.length === 0) && (
-                  <p className="mt-3 text-[11px] text-amber-500/90">Pick a month above — calendar weeks load from that full month.</p>
+                {isTracker && sixDayMonthPending && sixDayMonthQueryEnabled && (
+                  <p className="mt-3 text-[11px] text-zinc-500">Loading 6-day tracker data…</p>
                 )}
+
+                {isTracker &&
+                  !sixDayMonthPending &&
+                  sixDayMonthQueryEnabled &&
+                  !sixDayMonthPayload && (
+                    <p className="mt-3 text-[11px] text-amber-500/90">
+                      Could not load 6-day tracker for this month. Check the API or try again.
+                    </p>
+                  )}
+
+                {isTracker && !trackerYmNormalized && (
+                  <p className="mt-3 text-[11px] text-amber-500/90">Pick a month above.</p>
+                )}
+
+                {isTracker &&
+                  trackerYmNormalized &&
+                  customTrackerWeeks.length === 0 &&
+                  !sixDayMonthPending && (
+                    <p className="mt-3 text-[11px] text-amber-500/90">Invalid month — choose a valid calendar month.</p>
+                  )}
 
                 {/* Mini breakdown */}
                 <div className="flex items-center gap-3 mt-4 pt-3 border-t border-zinc-900">
