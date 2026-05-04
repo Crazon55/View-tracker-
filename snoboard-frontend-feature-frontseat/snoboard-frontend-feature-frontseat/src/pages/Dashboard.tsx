@@ -559,7 +559,7 @@ export default function Dashboard() {
               options={[
                 { label: "All Time", value: "all" },
                 { label: "Monthly", value: "monthly" },
-                { label: "Custom", value: "custom" },
+                { label: "6 day tracker wise", value: "custom" },
               ]}
               value={globalPeriod}
               onChange={(v) => {
