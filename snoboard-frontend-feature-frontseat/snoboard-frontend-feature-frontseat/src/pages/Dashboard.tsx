@@ -78,6 +78,18 @@ export default function Dashboard() {
     enabled: true,
   });
 
+  /** Same per-page all-time definition as Growth page: sum of `views` across all months from /api/v1/growth.
+   * Must run before any early return — hooks order must be stable (React #310). */
+  const growthAllTimeByHandle = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const row of growthData) {
+      const h = String((row as any).handle || "").trim().toLowerCase();
+      if (!h || h === "total") continue;
+      m.set(h, (m.get(h) ?? 0) + (Number((row as any).views) || 0));
+    }
+    return m;
+  }, [growthData]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-950">
@@ -91,16 +103,6 @@ export default function Dashboard() {
 
   const stats = data;
   const totalViews = stats?.total_views ?? 0;
-  /** Same per-page all-time definition as Growth page: sum of `views` across all months from /api/v1/growth. */
-  const growthAllTimeByHandle = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const row of growthData) {
-      const h = String((row as any).handle || "").trim().toLowerCase();
-      if (!h || h === "total") continue;
-      m.set(h, (m.get(h) ?? 0) + (Number((row as any).views) || 0));
-    }
-    return m;
-  }, [growthData]);
   const allPagesRaw = stats?.pages ?? [];
   const allPages = [...allPagesRaw];
   const filteredByType = ipFilter === "all"
