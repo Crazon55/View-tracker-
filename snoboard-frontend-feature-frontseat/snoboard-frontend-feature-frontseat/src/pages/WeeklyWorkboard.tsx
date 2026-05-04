@@ -748,16 +748,8 @@ export default function WeeklyWorkboard() {
         role_id,
         week_start: weekStart,
         description: "",
-        primary_tasks: [
-          {
-            id: newId(),
-            title: "",
-            due_date: addDaysISO(weekStart, 4),
-            completed: false,
-            sort_order: 0,
-            chunks: [],
-          },
-        ],
+        /** No placeholder row — avoids a bogus “Untitled” card on Fri (weekStart+4) in the week grid. */
+        primary_tasks: [],
         interrupts: [],
         tags: [],
       });
@@ -789,7 +781,7 @@ export default function WeeklyWorkboard() {
             {
               id: newId(),
               title: "",
-              due_date: addDaysISO(a.week_start, 4),
+              due_date: a.week_start,
               completed: false,
               sort_order: n,
               chunks: [],
@@ -804,7 +796,6 @@ export default function WeeklyWorkboard() {
     setAssignments((prev) =>
       prev.map((a) => {
         if (a.id !== assignmentId) return a;
-        if (a.primary_tasks.length <= 1) return a;
         return { ...a, primary_tasks: a.primary_tasks.filter((p) => p.id !== taskId) };
       })
     );
@@ -1538,16 +1529,17 @@ function AssignmentEditor({
                     <div className="flex-1 min-w-0 space-y-2">
                       <div className="flex items-center gap-2">
                         <span className="text-[11px] text-zinc-500">Title</span>
-                        {a.primary_tasks.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); removePrimaryTask(a.id, pt.id); }}
-                            className="p-1 rounded-lg text-zinc-600 hover:text-red-400 ml-auto"
-                            title="Remove this main task"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removePrimaryTask(a.id, pt.id);
+                          }}
+                          className="p-1 rounded-lg text-zinc-600 hover:text-red-400 ml-auto"
+                          title="Remove this main task"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                       <textarea
                         value={pt.title}
@@ -2081,9 +2073,12 @@ function WeekGridListView({
                     const tasksForDay: { a: MainAssignment; pt: WorkboardPrimaryTask }[] = [];
                     for (const a of weekAssignments) {
                       for (const pt of a.primary_tasks || []) {
-                        if (String(pt.due_date || "").slice(0, 10) === dIso) {
-                          tasksForDay.push({ a, pt });
-                        }
+                        if (String(pt.due_date || "").slice(0, 10) !== dIso) continue;
+                        /** Hide legacy placeholder rows (empty title + no steps) so they don’t appear on Fri by mistake. */
+                        const hasContent =
+                          Boolean(pt.title?.trim()) || (pt.chunks?.length ?? 0) > 0;
+                        if (!hasContent) continue;
+                        tasksForDay.push({ a, pt });
                       }
                     }
                     tasksForDay.sort((x, y) => {
