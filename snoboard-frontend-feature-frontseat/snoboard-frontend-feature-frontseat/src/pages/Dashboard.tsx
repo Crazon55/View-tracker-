@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { motion, AnimatePresence } from "framer-motion";
+import { addDaysISO } from "@/lib/workboardTypes";
 
 function formatCompact(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
@@ -17,29 +18,134 @@ function formatCompact(n: number): string {
 type BreakdownMode = "reels" | "views";
 type TimePeriod = "all" | "monthly" | "custom";
 
-/** When reel/post rows lack `posted_at`, sum monthly `/api/v1/growth` rows whose month overlaps the custom range. */
-function sumGrowthViewsForHandleInMonthRange(
+type SixDayTrackerWeek = { weekNum: number; start: string; end: string };
+
+function daysInclusive(fromIso: string, toIso: string): number {
+  const d1 = new Date(fromIso.slice(0, 10) + "T12:00:00").getTime();
+  const d2 = new Date(toIso.slice(0, 10) + "T12:00:00").getTime();
+  if (!isFinite(d1) || !isFinite(d2) || d2 < d1) return 0;
+  return Math.round((d2 - d1) / 86400000) + 1;
+}
+
+/** Split [from, to] into consecutive 6-day blocks (inclusive): Week 1 = days 1–6, Week 2 = 7–12, … Last block may be shorter. */
+function partitionRangeIntoSixDayWeeks(fromIso: string, toIso: string): SixDayTrackerWeek[] {
+  const from = fromIso.slice(0, 10);
+  const to = toIso.slice(0, 10);
+  if (!from || !to || from > to) return [];
+  const weeks: SixDayTrackerWeek[] = [];
+  let cur = from;
+  let weekNum = 1;
+  while (cur <= to) {
+    const segEnd = addDaysISO(cur, 5);
+    const end = segEnd <= to ? segEnd : to;
+    weeks.push({ weekNum, start: cur, end });
+    cur = addDaysISO(end, 1);
+    weekNum++;
+    if (weekNum > 200) break;
+  }
+  return weeks;
+}
+
+function fmtShortRange(startIso: string, endIso: string): string {
+  const o = { month: "short", day: "numeric" } as const;
+  const a = new Date(startIso.slice(0, 10) + "T12:00:00").toLocaleDateString("en-US", o);
+  const b = new Date(endIso.slice(0, 10) + "T12:00:00").toLocaleDateString("en-US", o);
+  return `${a} – ${b}`;
+}
+
+/** Allocate monthly growth totals by calendar days overlapping [rangeFrom, rangeTo] (fixes partial months vs summing full months). */
+function sumGrowthProratedForHandleInRange(
   handle: string,
-  fromIso: string,
-  toIso: string,
+  rangeFrom: string,
+  rangeTo: string,
   growthRows: unknown[],
 ): number {
   const h = String(handle || "").trim().toLowerCase();
-  if (!h || h === "total" || !fromIso?.trim() || !toIso?.trim()) return 0;
-  const fromM = fromIso.slice(0, 7);
-  const toM = toIso.slice(0, 7);
-  let sum = 0;
+  if (!h || h === "total") return 0;
+  const rf = rangeFrom.slice(0, 10);
+  const rt = rangeTo.slice(0, 10);
+  if (!rf || !rt || rf > rt) return 0;
+
+  let total = 0;
   for (const row of growthRows) {
     const r = row as Record<string, unknown>;
-    const rh = String(r.handle || "").trim().toLowerCase();
-    if (rh !== h) continue;
-    const rowMonth = String(r.month || "").slice(0, 7);
-    if (!rowMonth) continue;
-    if (rowMonth >= fromM && rowMonth <= toM) {
-      sum += Number(r.views) || 0;
-    }
+    if (String(r.handle || "").trim().toLowerCase() !== h) continue;
+    const rawMonth = String(r.month || "");
+    const y = parseInt(rawMonth.slice(0, 4), 10);
+    const mo = parseInt(rawMonth.slice(5, 7), 10) - 1;
+    if (!y || isNaN(mo) || mo < 0 || mo > 11) continue;
+
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const monthStart = `${y}-${pad(mo + 1)}-01`;
+    const lastD = new Date(y, mo + 1, 0).getDate();
+    const monthEnd = `${y}-${pad(mo + 1)}-${pad(lastD)}`;
+    const overlapStart = rf > monthStart ? rf : monthStart;
+    const overlapEnd = rt < monthEnd ? rt : monthEnd;
+    if (overlapStart > overlapEnd) continue;
+
+    const monthViews = Number(r.views) || 0;
+    const overlapDays = daysInclusive(overlapStart, overlapEnd);
+    if (overlapDays <= 0 || lastD <= 0) continue;
+    total += monthViews * (overlapDays / lastD);
   }
-  return sum;
+  return Math.round(total);
+}
+
+function getLinearViewsForPageInRange(
+  page: any,
+  from: string,
+  to: string,
+  allReels: any[],
+  allPosts: any[],
+): number {
+  const pid = String(page.id ?? "");
+  const pageReels = allReels.filter((r: any) => String(r.page_id ?? "") === pid);
+  const pagePosts = allPosts.filter((p: any) => String(p.page_id ?? "") === pid);
+  const filteredReels = pageReels.filter((r: any) => {
+    const d = (r.posted_at || "")?.slice(0, 10);
+    return d && d >= from && d <= to;
+  });
+  const filteredPosts = pagePosts.filter((p: any) => {
+    const d = (p.posted_at || p.created_at || "")?.slice(0, 10);
+    return d && d >= from && d <= to;
+  });
+  return (
+    filteredReels.reduce((s: number, r: any) => s + (r.views ?? 0), 0) +
+    filteredPosts.reduce((s: number, p: any) => s + (p.actual_views ?? 0), 0)
+  );
+}
+
+/** Per–date-range views: reel/post sums when dated rows exist; otherwise prorated growth for that exact subrange. */
+function getCustomRangeViewsForPage(
+  page: any,
+  from: string,
+  to: string,
+  allReels: any[],
+  allPosts: any[],
+  growthRows: unknown[],
+): number {
+  const linear = getLinearViewsForPageInRange(page, from, to, allReels, allPosts);
+  if (linear > 0) return linear;
+  if (growthRows.length > 0) {
+    return sumGrowthProratedForHandleInRange(String(page.handle || ""), from, to, growthRows);
+  }
+  return 0;
+}
+
+function getSixDayTrackerBreakdownForPage(
+  page: any,
+  weeks: SixDayTrackerWeek[],
+  allReels: any[],
+  allPosts: any[],
+  growthRows: unknown[],
+): { weekNum: number; start: string; end: string; rangeLabel: string; views: number }[] {
+  return weeks.map((w) => ({
+    weekNum: w.weekNum,
+    start: w.start,
+    end: w.end,
+    rangeLabel: fmtShortRange(w.start, w.end),
+    views: getCustomRangeViewsForPage(page, w.start, w.end, allReels, allPosts, growthRows),
+  }));
 }
 
 function TogglePill({ options, value, onChange }: {
@@ -115,6 +221,13 @@ export default function Dashboard() {
     return m;
   }, [growthData]);
 
+  const customTrackerWeeks = useMemo(() => {
+    const a = (customFrom || "").trim().slice(0, 10);
+    const b = (customTo || "").trim().slice(0, 10);
+    if (!a || !b || a > b) return [] as SixDayTrackerWeek[];
+    return partitionRangeIntoSixDayWeeks(a, b);
+  }, [customFrom, customTo]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-950">
@@ -161,26 +274,7 @@ export default function Dashboard() {
         if (!customFrom && !customTo) return page.all_time_views ?? 0;
         const from = customFrom || "0000-00-00";
         const to = customTo || "9999-99-99";
-        const pid = String(page.id ?? "");
-        const pageReels = allReels.filter((r: any) => String(r.page_id ?? "") === pid);
-        const pagePosts = allPosts.filter((p: any) => String(p.page_id ?? "") === pid);
-        const filteredReels = pageReels.filter((r: any) => {
-          const d = (r.posted_at || "")?.slice(0, 10);
-          return d && d >= from && d <= to;
-        });
-        const filteredPosts = pagePosts.filter((p: any) => {
-          const d = (p.posted_at || p.created_at || "")?.slice(0, 10);
-          return d && d >= from && d <= to;
-        });
-        const linear =
-          filteredReels.reduce((s: number, r: any) => s + (r.views ?? 0), 0) +
-          filteredPosts.reduce((s: number, p: any) => s + (p.actual_views ?? 0), 0);
-        if (linear > 0) return linear;
-        if (growthData.length > 0) {
-          const g = sumGrowthViewsForHandleInMonthRange(String(page.handle || ""), from, to, growthData);
-          if (g > 0) return g;
-        }
-        return linear;
+        return getCustomRangeViewsForPage(page, from, to, allReels, allPosts, growthData);
       }
     }
   }
@@ -485,20 +579,27 @@ export default function Dashboard() {
               }}
             />
             {globalPeriod === "custom" && (
-              <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={customFrom}
-                  onChange={(e) => setCustomFrom(e.target.value)}
-                  className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500/50 cursor-pointer"
-                />
-                <span className="text-zinc-600 text-xs">to</span>
-                <input
-                  type="date"
-                  value={customTo}
-                  onChange={(e) => setCustomTo(e.target.value)}
-                  className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500/50 cursor-pointer"
-                />
+              <div className="flex flex-col items-end gap-1">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={customFrom}
+                    onChange={(e) => setCustomFrom(e.target.value)}
+                    className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500/50 cursor-pointer"
+                  />
+                  <span className="text-zinc-600 text-xs">to</span>
+                  <input
+                    type="date"
+                    value={customTo}
+                    onChange={(e) => setCustomTo(e.target.value)}
+                    className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500/50 cursor-pointer"
+                  />
+                </div>
+                {customTrackerWeeks.length > 0 && (
+                  <p className="text-[10px] text-zinc-500 max-w-[min(100vw-2rem,300px)] text-right leading-snug">
+                    {customTrackerWeeks.length} tracker week{customTrackerWeeks.length === 1 ? "" : "s"} (6 days each, last may be shorter). Per-week views on each card. Reel/post dates when available; else monthly growth prorated by days in range.
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -524,6 +625,10 @@ export default function Dashboard() {
             const pageTotal = (page.reel_views ?? 0) + (page.post_views ?? 0);
             const reelPct = pageTotal > 0 ? ((page.reel_views ?? 0) / pageTotal * 100) : 0;
             const { reelsCount, postsCount } = getPageCounts(page, globalPeriod);
+            const sixDayBreakdown =
+              globalPeriod === "custom" && customTrackerWeeks.length > 0
+                ? getSixDayTrackerBreakdownForPage(page, customTrackerWeeks, allReels, allPosts, growthData)
+                : [];
 
             return (
               <div
@@ -549,7 +654,9 @@ export default function Dashboard() {
 
                 {/* Total Views Label */}
                 <p className="text-[10px] uppercase tracking-[0.15em] text-violet-400 font-bold mb-2">
-                  Total Views
+                  {globalPeriod === "custom" && customTrackerWeeks.length > 1
+                    ? "Total views (full range)"
+                    : "Total Views"}
                 </p>
 
                 {/* Big View Number + Growth */}
@@ -565,6 +672,30 @@ export default function Dashboard() {
                     </span>
                   )}
                 </div>
+
+                {sixDayBreakdown.length > 0 && (
+                  <div className="mt-4 pt-3 border-t border-zinc-800 space-y-2">
+                    <p className="text-[9px] uppercase tracking-[0.18em] text-emerald-400/90 font-bold">
+                      6-day tracker
+                    </p>
+                    <ul className="space-y-1.5">
+                      {sixDayBreakdown.map((w) => (
+                        <li
+                          key={`${w.weekNum}-${w.start}`}
+                          className="flex items-start justify-between gap-2 text-[11px] leading-tight"
+                        >
+                          <span className="text-zinc-500 min-w-0">
+                            <span className="text-zinc-300 font-semibold">Week {w.weekNum}</span>
+                            <span className="block text-[10px] text-zinc-600 mt-0.5">{w.rangeLabel}</span>
+                          </span>
+                          <span className="text-zinc-100 tabular-nums font-semibold shrink-0">
+                            {formatCompact(w.views)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
                 {/* Mini breakdown */}
                 <div className="flex items-center gap-3 mt-4 pt-3 border-t border-zinc-900">
