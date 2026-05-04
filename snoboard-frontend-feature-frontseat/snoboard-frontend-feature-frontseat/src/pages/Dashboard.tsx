@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getDashboard, getAutoReels, getManualReels, getPosts } from "@/services/api";
 import { useNavigate } from "react-router-dom";
@@ -17,6 +17,17 @@ function formatCompact(n: number): string {
 
 type BreakdownMode = "reels" | "views";
 type TimePeriod = "all" | "monthly" | "custom";
+
+const TRACKER_MONTH_KEY = "fs-dashboard-tracker-ym";
+
+function readTrackerMonthFromStorage(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return localStorage.getItem(TRACKER_MONTH_KEY) || "";
+  } catch {
+    return "";
+  }
+}
 
 type SixDayTrackerWeek = { weekNum: number; start: string; end: string };
 
@@ -193,7 +204,7 @@ export default function Dashboard() {
   const [rightCardView] = useState<"donut" | "pages">("pages");
   const [globalPeriod, setGlobalPeriod] = useState<TimePeriod>("monthly");
   /** YYYY-MM for 6-day tracker; range is always the full selected calendar month. */
-  const [trackerMonth, setTrackerMonth] = useState("");
+  const [trackerMonth, setTrackerMonth] = useState(readTrackerMonthFromStorage);
   const [ipFilter, setIpFilter] = useState<"all" | "main" | "stage1">("all");
 
   // Stage-based filtering (stage 3 = main/stage3, stage 1 = stage1)
@@ -247,6 +258,22 @@ export default function Dashboard() {
     return partitionRangeIntoSixDayWeeks(a, b);
   }, [customFrom, customTo]);
 
+  useEffect(() => {
+    try {
+      if (trackerMonth.trim()) localStorage.setItem(TRACKER_MONTH_KEY, trackerMonth.trim());
+    } catch {
+      /* ignore */
+    }
+  }, [trackerMonth]);
+
+  /** Ensures a month is always set in tracker mode (never treat custom as “no range” / all-time). */
+  useEffect(() => {
+    if (globalPeriod !== "custom") return;
+    if (trackerMonth.trim()) return;
+    const now = new Date();
+    setTrackerMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
+  }, [globalPeriod, trackerMonth]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-950">
@@ -290,10 +317,8 @@ export default function Dashboard() {
       }
       case "monthly": return page.total_views ?? 0;
       case "custom": {
-        if (!customFrom && !customTo) return page.all_time_views ?? 0;
-        const from = customFrom || "0000-00-00";
-        const to = customTo || "9999-99-99";
-        return getCustomRangeViewsForPage(page, from, to, allReels, allPosts, growthData);
+        if (!customFrom || !customTo) return 0;
+        return getCustomRangeViewsForPage(page, customFrom, customTo, allReels, allPosts, growthData);
       }
     }
   }
@@ -305,8 +330,8 @@ export default function Dashboard() {
         postsCount: period === "all" ? (page.all_time_posts_count ?? page.posts_count ?? 0) : (page.posts_count ?? 0),
       };
     }
-    if (!customFrom && !customTo) {
-      return { reelsCount: page.all_time_reels_count ?? 0, postsCount: page.all_time_posts_count ?? 0 };
+    if (!customFrom || !customTo) {
+      return { reelsCount: 0, postsCount: 0 };
     }
     const from = customFrom || "0000-00-00";
     const to = customTo || "9999-99-99";
@@ -632,10 +657,12 @@ export default function Dashboard() {
             const pageTotal = (page.reel_views ?? 0) + (page.post_views ?? 0);
             const reelPct = pageTotal > 0 ? ((page.reel_views ?? 0) / pageTotal * 100) : 0;
             const { reelsCount, postsCount } = getPageCounts(page, globalPeriod);
+            const isTracker = globalPeriod === "custom" && Boolean(trackerMonth?.trim());
             const sixDayBreakdown =
-              globalPeriod === "custom" && customTrackerWeeks.length > 0
+              isTracker && customTrackerWeeks.length > 0
                 ? getSixDayTrackerBreakdownForPage(page, customTrackerWeeks, allReels, allPosts, growthData)
                 : [];
+            const weeksCombined = sixDayBreakdown.reduce((s, w) => s + w.views, 0);
 
             return (
               <div
@@ -659,11 +686,15 @@ export default function Dashboard() {
                   className="text-xs text-zinc-600 hover:text-violet-400 transition-colors mb-4 block"
                 >@{page.handle}</a>
 
+                {isTracker && (
+                  <p className="text-[11px] text-zinc-500 mb-2 font-medium">
+                    {new Date(trackerMonth + "-01T12:00:00").toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+                  </p>
+                )}
+
                 {/* Total Views Label */}
                 <p className="text-[10px] uppercase tracking-[0.15em] text-violet-400 font-bold mb-2">
-                  {globalPeriod === "custom" && customTrackerWeeks.length > 1
-                    ? "Total views (full range)"
-                    : "Total Views"}
+                  {isTracker ? "Month total (full month)" : "Total Views"}
                 </p>
 
                 {/* Big View Number + Growth */}
@@ -672,7 +703,7 @@ export default function Dashboard() {
                     {formatCompact(viewsForPeriod)}
                   </p>
 
-                  {reelPct > 0 && (
+                  {reelPct > 0 && !isTracker && (
                     <span className="inline-flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] font-bold px-2 py-1 rounded-full">
                       <TrendingUp className="w-3 h-3" />
                       {reelPct.toFixed(1)}%
@@ -680,10 +711,10 @@ export default function Dashboard() {
                   )}
                 </div>
 
-                {sixDayBreakdown.length > 0 && (
+                {isTracker && sixDayBreakdown.length > 0 && (
                   <div className="mt-4 pt-3 border-t border-zinc-800 space-y-2">
                     <p className="text-[9px] uppercase tracking-[0.18em] text-emerald-400/90 font-bold">
-                      6-day tracker
+                      6-day tracker (week-wise)
                     </p>
                     <ul className="space-y-1.5">
                       {sixDayBreakdown.map((w) => (
@@ -700,8 +731,23 @@ export default function Dashboard() {
                           </span>
                         </li>
                       ))}
+                      <li className="flex items-start justify-between gap-2 text-[11px] pt-2 mt-1 border-t border-zinc-800/90">
+                        <span className="text-zinc-400 font-semibold">All weeks combined</span>
+                        <span className="text-emerald-300/95 tabular-nums font-bold shrink-0">
+                          {formatCompact(weeksCombined)}
+                        </span>
+                      </li>
                     </ul>
+                    {Math.abs(weeksCombined - viewsForPeriod) > 2 && (
+                      <p className="text-[9px] text-zinc-600 leading-snug">
+                        Month total uses the full range once; weeks may differ slightly from rounding.
+                      </p>
+                    )}
                   </div>
+                )}
+
+                {isTracker && sixDayBreakdown.length === 0 && (
+                  <p className="mt-3 text-[11px] text-amber-500/90">Select a month above to load week-wise totals.</p>
                 )}
 
                 {/* Mini breakdown */}
