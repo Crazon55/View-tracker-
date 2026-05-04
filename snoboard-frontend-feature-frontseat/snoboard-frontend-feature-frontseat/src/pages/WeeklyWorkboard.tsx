@@ -597,12 +597,12 @@ export default function WeeklyWorkboard() {
     staleTime: 10_000,
   });
 
-  const userEmailNorm = (user?.email || "").trim().toLowerCase();
-  const { data: myAssignedTickets = [] } = useQuery({
-    queryKey: ["tickets", "assigned", userEmailNorm],
-    queryFn: () => getTickets({ assigned_to_email: userEmailNorm }),
-    enabled: !!userEmailNorm,
+  /** Same list as the Tickets page — all tickets sync to AI Developer extra work (no assignee filter). */
+  const { data: allTickets = [] } = useQuery({
+    queryKey: ["tickets"],
+    queryFn: () => getTickets(),
     staleTime: 15_000,
+    refetchInterval: 20_000,
   });
 
   const mergeByRole = useCallback((baseRows: MainAssignment[], incoming: MainAssignment[]) => {
@@ -684,17 +684,16 @@ export default function WeeklyWorkboard() {
     }
   }, [workboardQ.data?.week_start, workboardQ.data?.assignments, workboardQ.isError, weekStart]);
 
-  /** Mirror assigned Tickets into AI Developer → Extra work & blockers for this week (bidirectional via updateInterrupt). */
+  /** Mirror all Tickets into AI Developer → Extra work & blockers (bidirectional via updateInterrupt). */
   useEffect(() => {
-    if (!userEmailNorm) return;
     if (hydratedWeekStartRef.current !== weekStart) return;
     if (workboardQ.isLoading) return;
 
     setAssignments((prev) => {
       const aiIdx = prev.findIndex((a) => a.week_start === weekStart && a.role_id === "ai_dev");
       if (aiIdx < 0) {
-        if (!myAssignedTickets.length) return prev;
-        const interrupts = mergeAssignedTicketsIntoInterrupts([], myAssignedTickets as Ticket[]);
+        if (!allTickets.length) return prev;
+        const interrupts = mergeAssignedTicketsIntoInterrupts([], allTickets as Ticket[]);
         return [
           ...prev,
           {
@@ -709,13 +708,13 @@ export default function WeeklyWorkboard() {
         ];
       }
       const ai = prev[aiIdx];
-      const nextInts = mergeAssignedTicketsIntoInterrupts(ai.interrupts, myAssignedTickets as Ticket[]);
+      const nextInts = mergeAssignedTicketsIntoInterrupts(ai.interrupts, allTickets as Ticket[]);
       if (JSON.stringify(nextInts) === JSON.stringify(ai.interrupts)) return prev;
       const copy = [...prev];
       copy[aiIdx] = { ...ai, interrupts: nextInts };
       return copy;
     });
-  }, [userEmailNorm, weekStart, myAssignedTickets, workboardQ.isLoading]);
+  }, [weekStart, allTickets, workboardQ.isLoading]);
 
   // Persist locally (offline fallback) and to server (shared).
   useEffect(() => {

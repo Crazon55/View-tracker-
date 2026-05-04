@@ -17,7 +17,7 @@ export function mapChunkStatusToTicket(s: ChunkStatus): "not_started" | "in_prog
 
 /**
  * Replaces ticket-backed interrupts while preserving manual (non-synced) rows.
- * Tickets are sorted newest-first; each row shows the ticket created date in the note.
+ * Pass the full ticket list (or any subset); sorted newest-first; created date in note.
  */
 export function mergeAssignedTicketsIntoInterrupts(
   existing: WorkboardInterrupt[],
