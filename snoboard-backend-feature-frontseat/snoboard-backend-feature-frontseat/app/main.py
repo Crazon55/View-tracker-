@@ -1747,6 +1747,9 @@ def _team_views_6d_from_six_day_tracker(
     """If the current month has at least one `six_day_entries` row (any cycle),
     return per-team view totals summed across the full month; otherwise return
     None to keep posting-based rolling-6d.
+
+    `today` must be the org calendar date (Asia/Kolkata) so month rollover matches
+    the 6-day tracker and monthly wrap.
     """
     y, m = today.year, today.month
     month_date = f"{y}-{m:02d}-01"
@@ -1788,15 +1791,17 @@ async def teams_performance():
     """Gamified leaderboard: Garfields vs Goofies.
 
     Team `views_6d` and the leader margin use the **6-Day Performance Tracker**
-    month total (sum of `six_day_entries.views` for the current month, all
-    cycles) when that month has data; otherwise they fall back to a rolling
-    6-calendar-day sum from `tracker_postings`.
+    month total (sum of `six_day_entries.views` for the current calendar month in
+    **Asia/Kolkata (IST)**, all cycles) when that month has data; otherwise they
+    fall back to a rolling 6-calendar-day sum from `tracker_postings` using the
+    same timezone for "today" and the cutoff.
 
     Other stats (all-time views, per-creator 6d, hall-of-fame) still use postings.
     Idea counts by stage come from `tracker_ideas`.
     """
     from app.database.client import get_supabase_client
     from datetime import datetime, timedelta, timezone
+
     client = get_supabase_client()
 
     niches = client.table("tracker_niches").select("id,name,pages").execute().data or []
@@ -1867,7 +1872,10 @@ async def teams_performance():
             idea_by_id[iid] = idea
 
     # ---- Aggregate views --------------------------------------------------
-    today = datetime.now(timezone.utc).date()
+    # IST aligns with monthly wrap and ops; UTC "today" lags behind India for
+    # ~5.5h after local midnight and caused the scoreboard to show the prior month.
+    _ist = timezone(timedelta(hours=5, minutes=30))
+    today = datetime.now(_ist).date()
     cutoff_6d = today - timedelta(days=6)
 
     # Per team: total + 6d views; per creator inside team: views + idea count
