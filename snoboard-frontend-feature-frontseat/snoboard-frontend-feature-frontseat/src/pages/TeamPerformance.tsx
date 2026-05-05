@@ -80,6 +80,12 @@ function formatPct(rate: number | undefined | null): string {
   return `${((rate ?? 0) * 100).toFixed(1)}%`;
 }
 
+/** Subtitle under “The arena” — matches backend views_period. */
+function arenaPeriodSubtitle(period: string | undefined, days: number) {
+  if (period === "calendar_month") return "this month · IST";
+  return `last ${days} days`;
+}
+
 const TEAM_SKIN: Record<
   string,
   {
@@ -224,6 +230,8 @@ type PerfData = {
   top_creator_6d?: any | null;
   people?: any[];
   window_days?: number;
+  views_period?: "calendar_month" | "rolling";
+  views_period_days?: number;
   _source?: "api" | "client";
 };
 
@@ -395,7 +403,11 @@ export default function TeamPerformance() {
               <div className="flex items-center gap-2 mb-2">
                 <Swords className="w-5 h-5 text-amber-400" />
                 <span className="text-[11px] uppercase tracking-[0.25em] text-amber-400 font-bold">
-                  The arena · last {data.window_days ?? 6} days
+                  The arena ·{" "}
+                  {arenaPeriodSubtitle(
+                    data.views_period,
+                    data.views_period_days ?? data.window_days ?? 7,
+                  )}
                 </span>
               </div>
               <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight leading-none">
@@ -532,6 +544,8 @@ export default function TeamPerformance() {
             topCreator={data.top_creator_6d}
             topIdea6d={data.top_idea_6d}
             topIdeaAll={data.top_idea_overall}
+            viewsPeriod={data.views_period}
+            viewsPeriodDays={data.views_period_days ?? data.window_days ?? 7}
           />
         </ScrollReveal>
 
@@ -570,14 +584,24 @@ export default function TeamPerformance() {
             <ScrollReveal delay={0.08} className="mt-8">
               <div className="grid gap-5 md:grid-cols-2">
                 {orderedTeams.map((team: any) => (
-                  <TeamCard key={team.key} team={team} isLeader={leaderKey === team.key} />
+                  <TeamCard
+                    key={team.key}
+                    team={team}
+                    isLeader={leaderKey === team.key}
+                    viewsPeriod={data.views_period}
+                    viewsPeriodDays={data.views_period_days ?? data.window_days ?? 7}
+                  />
                 ))}
               </div>
             </ScrollReveal>
 
             {/* ============================== PEOPLE LEADERBOARD ============================== */}
             <ScrollReveal delay={0.1}>
-              <PeopleLeaderboard people={people} windowDays={data.window_days ?? 6} />
+              <PeopleLeaderboard
+                people={people}
+                windowDays={data.views_period_days ?? data.window_days ?? 7}
+                viewsPeriod={data.views_period}
+              />
             </ScrollReveal>
           </>
         )}
@@ -897,11 +921,17 @@ function HallOfFame({
   topCreator,
   topIdea6d,
   topIdeaAll,
+  viewsPeriod,
+  viewsPeriodDays: _viewsPeriodDays,
 }: {
   topCreator: any | null | undefined;
   topIdea6d: any | null | undefined;
   topIdeaAll: any | null | undefined;
+  viewsPeriod?: string;
+  viewsPeriodDays?: number;
 }) {
+  const monthMode = viewsPeriod === "calendar_month";
+  const rollDays = _viewsPeriodDays ?? 7;
   return (
     <div className="mt-8">
       <div className="flex items-center gap-2 mb-3">
@@ -909,10 +939,10 @@ function HallOfFame({
         <h2 className="text-sm font-black uppercase tracking-[0.2em] text-white">Hall of Fame</h2>
       </div>
       <div className="grid gap-4 md:grid-cols-3">
-        <MvpCard creator={topCreator} />
+        <MvpCard creator={topCreator} monthMode={monthMode} rollingDays={rollDays} />
         <IdeaTrophyCard
           idea={topIdea6d}
-          label="Hottest idea · 6d"
+          label={monthMode ? "Hottest idea · month" : `Hottest idea · ${rollDays}d`}
           icon={<Flame className="w-4 h-4 text-orange-400" />}
           gradient="from-orange-500/20 via-red-500/10 to-transparent"
           borderClass="border-orange-500/30"
@@ -929,7 +959,15 @@ function HallOfFame({
   );
 }
 
-function MvpCard({ creator }: { creator: any | null | undefined }) {
+function MvpCard({
+  creator,
+  monthMode,
+  rollingDays = 7,
+}: {
+  creator: any | null | undefined;
+  monthMode?: boolean;
+  rollingDays?: number;
+}) {
   if (!creator) {
     return (
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 text-center text-zinc-500 text-sm">
@@ -948,7 +986,7 @@ function MvpCard({ creator }: { creator: any | null | undefined }) {
     >
       <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${skin.grad}`} />
       <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] font-bold text-amber-400 mb-3">
-        <Crown className="w-3.5 h-3.5" /> MVP of the week
+        <Crown className="w-3.5 h-3.5" /> MVP · {monthMode ? "month" : `${rollingDays}d`}
       </div>
       <div className="flex items-center gap-3">
         <motion.div
@@ -968,7 +1006,9 @@ function MvpCard({ creator }: { creator: any | null | undefined }) {
       </div>
       <div className="mt-4 flex items-end justify-between">
         <div>
-          <p className="text-[10px] uppercase tracking-wider text-zinc-500">Views · 6d</p>
+          <p className="text-[10px] uppercase tracking-wider text-zinc-500">
+            Views · {monthMode ? "month (posts)" : `${rollingDays}d`}
+          </p>
           <p className="text-3xl font-black text-white tabular-nums leading-none">
             <Odometer value={creator.views} format={formatViews} />
           </p>
@@ -1107,10 +1147,22 @@ function TeamCardLineProgress({
   );
 }
 
-function TeamCard({ team, isLeader }: { team: any; isLeader: boolean }) {
+function TeamCard({
+  team,
+  isLeader,
+  viewsPeriod,
+  viewsPeriodDays,
+}: {
+  team: any;
+  isLeader: boolean;
+  viewsPeriod?: string;
+  viewsPeriodDays?: number;
+}) {
   const skin = teamSkin(team.key);
   const cr = team.top_creator_6d;
   const idea = team.top_idea_6d;
+  const monthMode = viewsPeriod === "calendar_month";
+  const n = viewsPeriodDays ?? 7;
   return (
     <div
       className={`relative rounded-3xl border ${
@@ -1137,7 +1189,9 @@ function TeamCard({ team, isLeader }: { team: any; isLeader: boolean }) {
           </p>
         </div>
         <div className="text-right shrink-0">
-          <p className="text-[10px] uppercase tracking-wider text-zinc-500">Views · 6d</p>
+          <p className="text-[10px] uppercase tracking-wider text-zinc-500">
+            Views · {monthMode ? "tracker (month)" : `${n}d`}
+          </p>
           <p className="text-3xl font-black text-white tabular-nums leading-none">{formatViews(team.views_6d)}</p>
         </div>
       </div>
@@ -1152,7 +1206,9 @@ function TeamCard({ team, isLeader }: { team: any; isLeader: boolean }) {
       <div className="px-5 pb-5 space-y-5">
         <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] backdrop-blur-sm p-4 space-y-4">
           <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-[0.18em] text-zinc-500 mb-1.5">Top creator · 6d</p>
+            <p className="text-[10px] uppercase tracking-[0.18em] text-zinc-500 mb-1.5">
+              Top creator · {monthMode ? "month" : `${n}d`}
+            </p>
             <p className="text-sm font-bold text-white truncate">{cr?.name ?? "—"}</p>
             {cr ? (
               <p className="text-[12px] text-zinc-400 mt-0.5">
@@ -1164,7 +1220,9 @@ function TeamCard({ team, isLeader }: { team: any; isLeader: boolean }) {
           </div>
           <div className="h-px bg-zinc-800/80" />
           <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-[0.18em] text-zinc-500 mb-1.5">Top idea · 6d</p>
+            <p className="text-[10px] uppercase tracking-[0.18em] text-zinc-500 mb-1.5">
+              Top idea · {monthMode ? "month" : `${n}d`}
+            </p>
             <p className="text-sm font-bold text-white line-clamp-2 leading-snug">{idea?.title ?? "—"}</p>
             {idea ? (
               <p className="text-[12px] text-zinc-400 mt-0.5">{formatViews(idea.views)} views</p>
@@ -1243,7 +1301,16 @@ function TeamCard({ team, isLeader }: { team: any; isLeader: boolean }) {
 
 /* ============================== people leaderboard ============================== */
 
-function PeopleLeaderboard({ people, windowDays }: { people: any[]; windowDays: number }) {
+function PeopleLeaderboard({
+  people,
+  windowDays,
+  viewsPeriod,
+}: {
+  people: any[];
+  windowDays: number;
+  viewsPeriod?: string;
+}) {
+  const monthMode = viewsPeriod === "calendar_month";
   const [mode, setMode] = useState<"6d" | "all">("6d");
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -1276,7 +1343,7 @@ function PeopleLeaderboard({ people, windowDays }: { people: any[]; windowDays: 
               mode === "6d" ? "bg-amber-500 text-zinc-900" : "text-zinc-400 hover:text-white"
             }`}
           >
-            Last {windowDays}d
+            {monthMode ? "This month" : `Last ${windowDays}d`}
           </button>
           <button
             onClick={() => setMode("all")}
@@ -1350,7 +1417,7 @@ function PeopleLeaderboard({ people, windowDays }: { people: any[]; windowDays: 
                     {formatViews(score)}
                   </p>
                   <p className="text-[10px] text-zinc-500 uppercase tracking-wider">
-                    {mode === "6d" ? "6d views" : "all time"}
+                    {mode === "6d" ? (monthMode ? "Month views" : `${windowDays}d views`) : "all time"}
                   </p>
                 </div>
               </motion.div>

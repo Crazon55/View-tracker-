@@ -1796,7 +1796,12 @@ async def teams_performance():
     fall back to a rolling 6-calendar-day sum from `tracker_postings` using the
     same timezone for "today" and the cutoff.
 
-    Other stats (all-time views, per-creator 6d, hall-of-fame) still use postings.
+    Posting-derived short-window stats (per-creator, top ideas, hall-of-fame MVP /
+    hottest idea, people board) use the **same window** as the scoreboard mode:
+    **month-to-date (IST)** when six-day tracker data exists for the month, else
+    a **rolling 7-day** slice (today−6…today, IST). All-time hall-of-fame card
+    is unchanged.
+
     Idea counts by stage come from `tracker_ideas`.
     """
     from app.database.client import get_supabase_client
@@ -1876,7 +1881,23 @@ async def teams_performance():
     # ~5.5h after local midnight and caused the scoreboard to show the prior month.
     _ist = timezone(timedelta(hours=5, minutes=30))
     today = datetime.now(_ist).date()
+    month_start = today.replace(day=1)
     cutoff_6d = today - timedelta(days=6)
+
+    try:
+        six_day_team_6d = _team_views_6d_from_six_day_tracker(client, team_accounts, today)
+    except Exception:
+        six_day_team_6d = None
+
+    # Align posting-based “short window” with six-day month mode so MVP / top idea
+    # / people board reset monthly instead of using a rolling week that straddles months.
+    if six_day_team_6d is not None:
+        posting_period_start = month_start
+        views_period = "calendar_month"
+    else:
+        posting_period_start = cutoff_6d
+        views_period = "rolling"
+    views_period_days = (today - posting_period_start).days + 1
 
     # Per team: total + 6d views; per creator inside team: views + idea count
     team_stats: dict[str, dict] = {
@@ -1912,7 +1933,7 @@ async def teams_performance():
         if dstr:
             try:
                 d = datetime.strptime(dstr, "%Y-%m-%d").date()
-                in_6d = d >= cutoff_6d and d <= today
+                in_6d = posting_period_start <= d <= today
             except ValueError:
                 in_6d = False
 
@@ -1935,12 +1956,6 @@ async def teams_performance():
             cmap["ideas"].add(iid)
             if in_6d:
                 cmap["views_6d"] += v
-
-    # ---- 6-day tracker: team scoreboard from month total (all cycles in month)
-    try:
-        six_day_team_6d = _team_views_6d_from_six_day_tracker(client, team_accounts, today)
-    except Exception:
-        six_day_team_6d = None
 
     # ---- Idea counts by stage --------------------------------------------
     stats: dict[str, dict[str, int]] = {
@@ -2154,7 +2169,9 @@ async def teams_performance():
             "top_idea_6d": top_idea_6d_overall,
             "top_creator_6d": top_creator_6d_overall,
             "people": people,
-            "window_days": 6,
+            "views_period": views_period,
+            "views_period_days": views_period_days,
+            "window_days": views_period_days,
         },
     }
 
