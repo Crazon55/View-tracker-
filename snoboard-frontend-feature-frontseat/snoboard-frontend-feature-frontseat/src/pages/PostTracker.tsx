@@ -7,7 +7,7 @@ import {
   getTrackerNiches, createTrackerNiche, updateTrackerNiche, deleteTrackerNiche,
   getTrackerIdeas, createTrackerIdea, updateTrackerIdea, deleteTrackerIdea,
   createTrackerPosting, updateTrackerPosting, deleteTrackerPosting,
-  getTrackerIdeaCloudinarySign,
+  signTrackerIdeaUploadCompat,
 } from "@/services/api";
 import PostedDateEditor from "@/components/PostedDateEditor";
 
@@ -197,8 +197,7 @@ async function uploadIdeaAssets(opts: {
 }) {
   const { ideaId, files, uploader } = opts;
   if (!files.length) return [];
-  const sign = await getTrackerIdeaCloudinarySign(ideaId, { uploader });
-  const payload = sign?.data ?? sign;
+  const payload = await signTrackerIdeaUploadCompat(ideaId, { uploader });
   const uploaded: any[] = [];
   for (const file of files) {
     const fd = new FormData();
