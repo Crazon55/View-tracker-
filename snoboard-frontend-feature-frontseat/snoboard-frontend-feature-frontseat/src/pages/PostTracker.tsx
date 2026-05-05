@@ -1107,7 +1107,11 @@ export default function PostTracker(){
   const bp: React.CSSProperties={padding:"9px 20px",background:"#7c3aed",color:"#fff",border:"none",borderRadius:9,fontSize:13,fontWeight:600,cursor:"pointer"};
   const bs: React.CSSProperties={padding:"9px 20px",background:"#27272a",color:"#e4e4e7",border:"1px solid #3f3f46",borderRadius:9,fontSize:13,fontWeight:500,cursor:"pointer"};
 
-  const cd=detailIdea?ideas.find(i=>i.id===detailIdea.id)||detailIdea:null;
+  // For the open modal, prefer the locally-updated `detailIdea` so newly uploaded
+  // assets render immediately (list rows refetch async).
+  const cd = detailIdea
+    ? { ...(ideas.find((i) => i.id === detailIdea.id) || {}), ...(detailIdea || {}) }
+    : null;
   const cdNiches=cd?niches.filter((n: any)=>detailNicheIds.includes(n.id)):[];
   const cdPages=cdNiches.flatMap((n: any)=>n.pages||[]).filter((v: string,i: number,a: string[])=>a.indexOf(v)===i);
 
