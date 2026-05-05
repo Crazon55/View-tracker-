@@ -2596,10 +2596,12 @@ function GalleryView({
             className={cn(
               BENTO_SURFACE,
               "overflow-hidden flex flex-col min-h-0",
+              // When expanded, constrain height so the editor scrolls smoothly inside.
+              open && "max-h-[min(86vh,920px)]",
               isFeaturedSlot && "ring-2 ring-violet-500/45 shadow-[0_0_50px_-14px_rgba(124,58,237,0.4)]",
             )}
           >
-            <div className="p-4 flex-1 flex flex-col min-h-0">
+            <div className={cn("p-4 flex flex-col", open ? "flex-none" : "flex-1 min-h-0")}>
               <div className="flex items-center justify-between gap-2 mb-2">
                 <span className="text-xs font-medium text-violet-300/90 flex items-center flex-wrap gap-1.5">
                   {roleShort(r.id)}
