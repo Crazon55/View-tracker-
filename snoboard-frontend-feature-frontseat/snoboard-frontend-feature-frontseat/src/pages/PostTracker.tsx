@@ -135,6 +135,8 @@ function mapIdea(raw: any): any {
     canva_link: raw.canva_link || null,
     hook_text: raw.hook_text || null,
     slides_content: Array.isArray(raw.slides_content) ? raw.slides_content : [],
+    writer_comments: raw.writer_comments || "",
+    assets: Array.isArray(raw.assets) ? raw.assets : [],
     postings: (raw.tracker_postings || []).map((p: any) => ({
       id: p.id,
       page: p.page,
@@ -951,7 +953,6 @@ export default function PostTracker(){
 
       e.preventDefault();
       try {
-        toast.success(`${pasted.length} screenshot${pasted.length === 1 ? "" : "s"} added from clipboard`);
         const uploaded = await uploadIdeaAssets({
           ideaId: detailIdea.id,
           files: pasted,
@@ -960,7 +961,11 @@ export default function PostTracker(){
         if (cancelled) return;
         const cdNow = (ideas.find((i) => i.id === detailIdea.id) || detailIdea) as any;
         const prev = Array.isArray(cdNow?.assets) ? cdNow.assets : [];
-        updateIdeaMut.mutate({ id: detailIdea.id, data: { assets: [...prev, ...uploaded] } });
+        const nextAssets = [...prev, ...uploaded];
+        // Optimistically render immediately in the open modal
+        setDetailIdea((cur: any) => (cur && cur.id === detailIdea.id ? { ...cur, assets: nextAssets } : cur));
+        updateIdeaMut.mutate({ id: detailIdea.id, data: { assets: nextAssets } });
+        toast.success(`${uploaded.length} screenshot${uploaded.length === 1 ? "" : "s"} uploaded`);
       } catch (ex: any) {
         if (cancelled) return;
         toast.error(ex?.message || "Failed to paste/upload screenshot");
