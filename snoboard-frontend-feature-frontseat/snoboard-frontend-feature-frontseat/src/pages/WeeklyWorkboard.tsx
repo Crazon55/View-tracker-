@@ -2497,27 +2497,29 @@ function WeekGridListView({
       <div className="hidden">
         {weekAssignmentsAllRoles.map((a) => (
           <Dialog key={a.id} open={openRole[`editor:${a.id}`] === true} onOpenChange={(o) => setOpenRole((p) => ({ ...p, [`editor:${a.id}`]: o }))}>
-            <DialogContent className="max-w-3xl border border-white/10 bg-zinc-950/95 text-zinc-100 backdrop-blur-2xl">
+            <DialogContent className="max-w-3xl max-h-[min(90vh,820px)] overflow-hidden border border-white/10 bg-zinc-950/95 text-zinc-100 backdrop-blur-2xl flex flex-col">
               <DialogHeader>
                 <DialogTitle className="text-white">{roleLabel(a.role_id)}</DialogTitle>
                 <DialogDescription className="text-zinc-400">
                   Edit main tasks, steps, and blockers for this department.
                 </DialogDescription>
               </DialogHeader>
-              <AssignmentEditor
-                a={a}
-                removeAssignment={removeAssignment}
-                patchAssignment={patchAssignment}
-                patchPrimaryTask={patchPrimaryTask}
-                addPrimaryTask={addPrimaryTask}
-                removePrimaryTask={removePrimaryTask}
-                addChunk={addChunk}
-                removeChunk={removeChunk}
-                updateChunk={updateChunk}
-                addInterrupt={addInterrupt}
-                removeInterrupt={removeInterrupt}
-                updateInterrupt={updateInterrupt}
-              />
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-y-auto pr-0.5 [scrollbar-gutter:stable] touch-pan-y">
+                <AssignmentEditor
+                  a={a}
+                  removeAssignment={removeAssignment}
+                  patchAssignment={patchAssignment}
+                  patchPrimaryTask={patchPrimaryTask}
+                  addPrimaryTask={addPrimaryTask}
+                  removePrimaryTask={removePrimaryTask}
+                  addChunk={addChunk}
+                  removeChunk={removeChunk}
+                  updateChunk={updateChunk}
+                  addInterrupt={addInterrupt}
+                  removeInterrupt={removeInterrupt}
+                  updateInterrupt={updateInterrupt}
+                />
+              </div>
             </DialogContent>
           </Dialog>
         ))}
