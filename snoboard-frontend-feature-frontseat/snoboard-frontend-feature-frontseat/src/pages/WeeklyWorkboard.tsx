@@ -953,6 +953,7 @@ export default function WeeklyWorkboard() {
   );
 
   const addInterrupt = useCallback((assignmentId: string) => {
+    const created_at = todayISO();
     setAssignments((prev) =>
       prev.map((a) => {
         if (a.id !== assignmentId) return a;
@@ -965,6 +966,7 @@ export default function WeeklyWorkboard() {
               title: "",
               status: "not_started",
               note: "",
+              created_at,
               blocks_target_id: null,
               blocks_target_kind: null,
               tags: [],
@@ -2162,19 +2164,28 @@ function WeekGridListView({
                     });
 
                     const weekEnd = addDaysISO(weekStart, 6);
-                    const ticketsForDay: WorkboardInterrupt[] = [];
+                    const extrasForDay: WorkboardInterrupt[] = [];
                     if (aiDevAssignment) {
                       for (const it of aiDevAssignment.interrupts || []) {
-                        if (!it.source_ticket_id || !it.ticket_anchor_date) continue;
-                        const anchor = String(it.ticket_anchor_date).slice(0, 10);
-                        if (anchor < weekStart || anchor > weekEnd) continue;
-                        if (anchor !== dIso) continue;
-                        ticketsForDay.push(it);
+                        // Ticket-backed: use ticket_anchor_date.
+                        if (it.source_ticket_id && it.ticket_anchor_date) {
+                          const anchor = String(it.ticket_anchor_date).slice(0, 10);
+                          if (anchor < weekStart || anchor > weekEnd) continue;
+                          if (anchor !== dIso) continue;
+                          extrasForDay.push(it);
+                          continue;
+                        }
+                        // Manual extras: show on the day they were created.
+                        const created = String((it as any).created_at || "").slice(0, 10);
+                        if (!created) continue;
+                        if (created < weekStart || created > weekEnd) continue;
+                        if (created !== dIso) continue;
+                        extrasForDay.push(it);
                       }
-                      ticketsForDay.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+                      extrasForDay.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
                     }
 
-                    if (tasksForDay.length === 0 && ticketsForDay.length === 0) {
+                    if (tasksForDay.length === 0 && extrasForDay.length === 0) {
                       return (
                         <p className="text-[11px] text-zinc-600 py-1 px-0.5">No tasks — add one below.</p>
                       );
@@ -2267,7 +2278,7 @@ function WeekGridListView({
                           );
                         })}
 
-                        {ticketsForDay.length > 0 && aiDevAssignment && (
+                        {extrasForDay.length > 0 && aiDevAssignment && (
                           <div
                             className={cn(
                               "space-y-2",
@@ -2275,9 +2286,9 @@ function WeekGridListView({
                             )}
                           >
                             <div className="text-[10px] font-semibold uppercase tracking-wider text-orange-300/90 px-0.5">
-                              Tickets · AI Dev
+                              Added today · AI Dev (tickets + extras)
                             </div>
-                            {ticketsForDay.map((it) => {
+                            {extrasForDay.map((it) => {
                               const expandKey = `tix:${aiDevAssignment.id}:${it.id}`;
                               const detailOpen = expandedDayTasks[expandKey] === true;
                               return (
@@ -2300,10 +2311,12 @@ function WeekGridListView({
                                     </span>
                                     <span className="min-w-0 flex-1">
                                       <span className="text-[12px] font-semibold text-white line-clamp-2 block">
-                                        {it.title?.trim() ? it.title.trim() : "Ticket"}
+                                        {it.title?.trim() ? it.title.trim() : (it.source_ticket_id ? "Ticket" : "Extra")}
                                       </span>
                                       <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                                        <span className="text-[10px] font-medium text-violet-300/90">Tickets</span>
+                                        <span className="text-[10px] font-medium text-violet-300/90">
+                                          {it.source_ticket_id ? "Tickets" : "Extra"}
+                                        </span>
                                         <span className="text-[10px] text-zinc-500">·</span>
                                         <span className="text-[10px] text-orange-200/90">{CHUNK_STATUS_LABEL[it.status]}</span>
                                       </span>

@@ -94,6 +94,8 @@ export type WorkboardInterrupt = {
   title: string;
   status: ChunkStatus;
   note: string;
+  /** ISO date (YYYY-MM-DD) when this interrupt was created (manual rows) */
+  created_at?: string;
   /** What this interrupt blocks: chunk id, or a primary-task id (kind main) */
   blocks_target_id: string | null;
   blocks_target_kind: "chunk" | "main" | null;
