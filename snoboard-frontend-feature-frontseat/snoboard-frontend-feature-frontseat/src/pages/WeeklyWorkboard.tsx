@@ -2780,7 +2780,7 @@ function GalleryView({
               </button>
             </div>
             {open && (
-              <div className="border-t border-white/10 p-4 bg-black/45 backdrop-blur-2xl max-h-[min(72vh,780px)] overflow-y-auto overscroll-y-contain">
+              <div className="border-t border-white/10 p-4 bg-black/45 backdrop-blur-2xl flex-1 min-h-0 overflow-y-auto overscroll-y-auto [scrollbar-gutter:stable] touch-pan-y">
                 <AssignmentEditor
                   a={a}
                   compact
