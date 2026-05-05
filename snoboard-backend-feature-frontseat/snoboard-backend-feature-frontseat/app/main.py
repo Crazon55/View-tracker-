@@ -2204,6 +2204,27 @@ def _tracker_ideas_approved_for_pages_col_exists(client) -> bool:
     return _tracker_ideas_approved_for_pages_col_exists._cache
 
 
+def _tracker_ideas_writer_assets_cols_exist(client) -> tuple[bool, bool]:
+    """(writer_comments, assets) column existence, cached."""
+    c = getattr(_tracker_ideas_writer_assets_cols_exist, "_cache", None)
+    if c is not None:
+        return c
+    writer_ok = False
+    assets_ok = False
+    try:
+        client.table("tracker_ideas").select("writer_comments").limit(1).execute()
+        writer_ok = True
+    except Exception:
+        writer_ok = False
+    try:
+        client.table("tracker_ideas").select("assets").limit(1).execute()
+        assets_ok = True
+    except Exception:
+        assets_ok = False
+    _tracker_ideas_writer_assets_cols_exist._cache = (writer_ok, assets_ok)
+    return _tracker_ideas_writer_assets_cols_exist._cache
+
+
 @app.get("/api/v1/tracker/ideas")
 async def tracker_ideas_list(type: str | None = None):
     from app.database.client import get_supabase_client
@@ -2225,6 +2246,24 @@ async def tracker_ideas_create(request: Request):
         single = body.get("niche_id") or body.get("nicheId")
         if single:
             niche_ids = [single]
+
+    writer_ok, assets_ok = _tracker_ideas_writer_assets_cols_exist(client)
+    if body.get("writer_comments") is not None and not writer_ok:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Cannot save writer comments: writer_comments column is missing on tracker_ideas. "
+                "Run migrations/tracker_ideas_writer_comments_assets.sql in Supabase."
+            ),
+        )
+    if body.get("assets") is not None and not assets_ok:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Cannot save assets: assets column is missing on tracker_ideas. "
+                "Run migrations/tracker_ideas_writer_comments_assets.sql in Supabase."
+            ),
+        )
     row = {
         "title": body["title"],
         "source": body.get("source", "original"),
@@ -2251,6 +2290,8 @@ async def tracker_ideas_create(request: Request):
         "canva_link": body.get("canva_link"),
         "hook_text": body.get("hook_text"),
         "slides_content": body.get("slides_content"),
+        "writer_comments": body.get("writer_comments") if writer_ok else None,
+        "assets": body.get("assets") if assets_ok else None,
     }
     if body.get("approved_for_pages") is not None:
         row["approved_for_pages"] = body.get("approved_for_pages") or []
@@ -2279,6 +2320,7 @@ async def tracker_ideas_update(idea_id: str, request: Request):
         "type", "tags", "frame_link", "kalakar_link", "format", "main_page_hook",
         "content_pillar", "content_bucket", "caption", "canva_link",
         "hook_text", "slides_content",
+        "writer_comments", "assets",
         # Bandwidth attribution fields (allow direct admin edits)
         "base_edit_by", "base_edit_at", "pintu_set_by", "pintu_set_at",
         "posted_by", "posted_at", "killed_by", "killed_at",
@@ -2289,6 +2331,28 @@ async def tracker_ideas_update(idea_id: str, request: Request):
         allowed["niche_id"] = allowed["niche_ids"][0] if allowed["niche_ids"] else None
     if "comp_link" in allowed:
         allowed["link"] = allowed["comp_link"]
+
+    writer_ok, assets_ok = _tracker_ideas_writer_assets_cols_exist(client)
+    if ("writer_comments" in body) and (not writer_ok):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Cannot save writer comments: writer_comments column is missing on tracker_ideas. "
+                "Run migrations/tracker_ideas_writer_comments_assets.sql in Supabase."
+            ),
+        )
+    if ("assets" in body) and (not assets_ok):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Cannot save assets: assets column is missing on tracker_ideas. "
+                "Run migrations/tracker_ideas_writer_comments_assets.sql in Supabase."
+            ),
+        )
+    if not writer_ok:
+        allowed.pop("writer_comments", None)
+    if not assets_ok:
+        allowed.pop("assets", None)
 
     # ---- Bandwidth stage-stamping --------------------------------------
     # When an idea transitions into one of the attributed stages, credit the
@@ -4004,6 +4068,55 @@ async def tickets_cloudinary_sign(request: Request):
     }
     signature = _cloudinary_signature(params, api_secret)
 
+    upload_url = f"https://api.cloudinary.com/v1_1/{cloud_name}/auto/upload"
+    return {
+        "success": True,
+        "data": {
+            "cloud_name": cloud_name,
+            "api_key": api_key,
+            "timestamp": timestamp,
+            "signature": signature,
+            "upload_url": upload_url,
+            "folder": folder,
+            "tags": tags,
+            "context": context,
+            "expires_at": expires_at.isoformat(),
+        },
+    }
+
+
+@app.post("/api/v1/tracker/ideas/{idea_id}/cloudinary-sign")
+async def tracker_idea_cloudinary_sign(idea_id: str, request: Request):
+    """
+    Returns signed upload params for direct-from-browser uploads for tracker ideas.
+
+    Body: { uploader, resource_type? }
+    """
+    cloud_name = _require_env("CLOUDINARY_CLOUD_NAME")
+    api_key = _require_env("CLOUDINARY_API_KEY")
+    api_secret = _require_env("CLOUDINARY_API_SECRET")
+
+    body = await request.json()
+    uploader = str(body.get("uploader") or "").strip()
+
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(days=30)
+    timestamp = int(now.timestamp())
+
+    folder = f"tracker-ideas/{idea_id}"
+    tags = ",".join(["tracker_ideas", f"tracker_idea_id_{idea_id}"] + ([f"uploader_{uploader.split('@')[0]}"] if uploader else []))
+    context_parts = [f"tracker_idea_id={idea_id}", f"expires_at={expires_at.isoformat()}"]
+    if uploader:
+        context_parts.append(f"uploader={uploader}")
+    context = "|".join(context_parts)
+
+    params = {
+        "timestamp": timestamp,
+        "folder": folder,
+        "tags": tags,
+        "context": context,
+    }
+    signature = _cloudinary_signature(params, api_secret)
     upload_url = f"https://api.cloudinary.com/v1_1/{cloud_name}/auto/upload"
     return {
         "success": True,

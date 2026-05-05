@@ -7,11 +7,12 @@ import {
   getTrackerNiches, createTrackerNiche, updateTrackerNiche, deleteTrackerNiche,
   getTrackerIdeas, createTrackerIdea, updateTrackerIdea, deleteTrackerIdea,
   createTrackerPosting, updateTrackerPosting, deleteTrackerPosting,
+  getTrackerIdeaCloudinarySign,
 } from "@/services/api";
 import PostedDateEditor from "@/components/PostedDateEditor";
 
-const STAGES = ["new","approved","design_approval","scripted","testing","proven_ideas","batch_production","scheduled","uploaded"];
-const SL: Record<string,string> = { new:"New ideas", approved:"Approved", design_approval:"Design approval", scripted:"Scripted", testing:"Testing", proven_ideas:"Proven ideas", batch_production:"Batch production", scheduled:"Scheduled", uploaded:"Uploaded" };
+const STAGES = ["new","approved","scripted","design_approval","testing","proven_ideas","batch_production","scheduled","uploaded"];
+const SL: Record<string,string> = { new:"New ideas", approved:"Approved", design_approval:"Designed", scripted:"Scripted", testing:"Testing", proven_ideas:"Proven ideas", batch_production:"Batch production", scheduled:"Scheduled", uploaded:"Uploaded" };
 const SC: Record<string,{bg:string;text:string;dot:string}> = {
   new:{ bg:"rgba(74,127,212,0.15)",text:"#7BB0FF",dot:"#4A7FD4" },
   approved:{ bg:"rgba(45,158,95,0.15)",text:"#5AE0A0",dot:"#2D9E5F" },
@@ -186,6 +187,130 @@ function SafeTextArea({value, onSave, style, placeholder, rows}: {value: string;
       rows={rows}
       style={style}
     />
+  );
+}
+
+async function uploadIdeaAssets(opts: {
+  ideaId: string;
+  files: File[];
+  uploader?: string;
+}) {
+  const { ideaId, files, uploader } = opts;
+  if (!files.length) return [];
+  const sign = await getTrackerIdeaCloudinarySign(ideaId, { uploader });
+  const payload = sign?.data ?? sign;
+  const uploaded: any[] = [];
+  for (const file of files) {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("api_key", String(payload.api_key));
+    fd.append("timestamp", String(payload.timestamp));
+    fd.append("signature", String(payload.signature));
+    fd.append("folder", String(payload.folder));
+    if (payload.tags) fd.append("tags", String(payload.tags));
+    if (payload.context) fd.append("context", String(payload.context));
+    const res = await fetch(String(payload.upload_url), { method: "POST", body: fd });
+    if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+    const js = await res.json();
+    uploaded.push({
+      url: js.secure_url || js.url,
+      public_id: js.public_id,
+      resource_type: js.resource_type,
+      bytes: js.bytes,
+      format: js.format,
+      original_filename: js.original_filename,
+      uploaded_at: new Date().toISOString(),
+      uploader: uploader || null,
+    });
+  }
+  return uploaded;
+}
+
+function IdeaAssetsEditor({
+  idea,
+  uploader,
+  onChangeAssets,
+}: {
+  idea: any;
+  uploader?: string;
+  onChangeAssets: (assets: any[]) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string>("");
+  const assets = Array.isArray(idea?.assets) ? idea.assets : [];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <input
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={async (e) => {
+            const files = Array.from(e.target.files || []);
+            if (!files.length) return;
+            setErr("");
+            setBusy(true);
+            try {
+              const uploaded = await uploadIdeaAssets({ ideaId: idea.id, files, uploader });
+              onChangeAssets([...(assets || []), ...uploaded]);
+            } catch (ex: any) {
+              setErr(ex?.message || "Upload failed");
+            } finally {
+              setBusy(false);
+              // allow re-upload of same file
+              e.currentTarget.value = "";
+            }
+          }}
+          style={{ fontSize: 12, color: "#a1a1aa" }}
+          disabled={busy}
+        />
+        {busy && <span style={{ fontSize: 12, color: "#a1a1aa" }}>Uploading…</span>}
+        {err && <span style={{ fontSize: 12, color: "#FF7070" }}>{err}</span>}
+      </div>
+
+      {assets.length > 0 ? (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 }}>
+          {assets.map((a: any, idx: number) => {
+            const url = a?.url || "";
+            return (
+              <div key={a.public_id || url || idx} style={{ border: "1px solid #27272a", borderRadius: 10, overflow: "hidden", background: "#09090b" }}>
+                {url ? (
+                  <a href={url} target="_blank" rel="noopener noreferrer" style={{ display: "block" }}>
+                    <img src={url} alt={a.original_filename || "asset"} style={{ width: "100%", height: 110, objectFit: "cover", display: "block" }} />
+                  </a>
+                ) : (
+                  <div style={{ height: 110, display: "flex", alignItems: "center", justifyContent: "center", color: "#71717a", fontSize: 12 }}>
+                    (no preview)
+                  </div>
+                )}
+                <div style={{ padding: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 11, color: "#a1a1aa", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {a.original_filename || "asset"}
+                    </div>
+                    {!!a.uploaded_at && (
+                      <div style={{ fontSize: 10, color: "#52525b" }}>
+                        {String(a.uploaded_at).slice(0, 10)}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onChangeAssets(assets.filter((_: any, j: number) => j !== idx))}
+                    style={{ background: "transparent", border: "none", color: "#FF7070", cursor: "pointer", fontSize: 12, fontWeight: 600 }}
+                    title="Remove"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div style={{ fontSize: 12, color: "#52525b" }}>No assets yet.</div>
+      )}
+    </div>
   );
 }
 
@@ -937,9 +1062,9 @@ export default function PostTracker(){
 
   const sa: Record<string, {label:string;stage:string;style:React.CSSProperties}[]>={
     new:[{label:"Approve",stage:"approved",style:bp}],
-    approved:[{label:"Approve design",stage:"design_approval",style:bp}],
-    design_approval:[{label:"Mark scripted",stage:"scripted",style:bp}],
-    scripted:[{label:"Start testing",stage:"testing",style:bp}],
+    approved:[{label:"Mark scripted",stage:"scripted",style:bp}],
+    scripted:[{label:"Mark designed",stage:"design_approval",style:bp}],
+    design_approval:[{label:"Start testing",stage:"testing",style:bp}],
     testing:[{label:"Mark proven",stage:"proven_ideas",style:{...bp,background:"#1D9E75"}}],
     proven_ideas:[{label:"Move to batch",stage:"batch_production",style:bp}],
     batch_production:[{label:"Schedule",stage:"scheduled",style:{...bp,background:"#534AB7"}}],
@@ -1194,6 +1319,26 @@ export default function PostTracker(){
             </div>
             <div><label style={ls}>{cd.source==="competitor" ? "Comp link" : "Original source / references"}</label><SafeTextInput value={cd.comp_link} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{comp_link:v}})} placeholder={cd.source==="competitor" ? "Competitor post URL" : "Reference links, articles, sources..."} style={is}/></div>
             {cd.comp_link&&<a href={cd.comp_link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.comp_link}</a>}
+
+            <div>
+              <label style={ls}>Comments by the writer</label>
+              <SafeTextArea
+                value={cd.writer_comments || ""}
+                onSave={(v) => updateIdeaMut.mutate({ id: cd.id, data: { writer_comments: v } })}
+                rows={4}
+                placeholder="Explain the idea briefly: why it matters, the angle, what the editor should watch for…"
+                style={{ ...is, resize: "vertical", minHeight: 90 }}
+              />
+            </div>
+
+            <div>
+              <label style={ls}>Assets (photos / screenshots)</label>
+              <IdeaAssetsEditor
+                idea={cd}
+                uploader={user?.email || user?.id || ""}
+                onChangeAssets={(assets) => updateIdeaMut.mutate({ id: cd.id, data: { assets } })}
+              />
+            </div>
 
             {/* Page checklist — from testing stage onwards */}
             {cdPages.length>0&&!["new","approved","design_approval","scripted"].includes(cd.stage)&&(
