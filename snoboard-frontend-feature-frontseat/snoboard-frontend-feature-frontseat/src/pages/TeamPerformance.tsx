@@ -236,21 +236,28 @@ type PerfData = {
 };
 
 async function fetchPerf(): Promise<PerfData> {
+  const y = new Date();
+  const ym = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, "0")}`;
+
+  // Prefer backend aggregates, but if prod is on an older build that doesn't
+  // provide views_period metadata yet, dynamically compute client-side so the
+  // page resets month-to-date when the 6-day tracker has month data.
   try {
     const data = await getTeamsPerformance();
-    return { ...data, _source: "api" };
+    const hasPeriodMeta = data && (data as any).views_period != null && (data as any).views_period_days != null;
+    if (hasPeriodMeta) return { ...(data as any), _source: "api" };
   } catch {
-    const y = new Date();
-    const ym = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, "0")}`;
-    const [ideas, niches, sixDay] = await Promise.all([
-      getTrackerIdeas(),
-      getTrackerNiches(),
-      getSixDayMonth(ym).catch(() => null),
-    ]);
-    const ideaList = Array.isArray(ideas) ? ideas : [];
-    const nicheList = Array.isArray(niches) ? niches : [];
-    return { ...buildTeamPerformanceFromTracker(ideaList, nicheList, sixDay), _source: "client" };
+    // fall through to client compute
   }
+
+  const [ideas, niches, sixDay] = await Promise.all([
+    getTrackerIdeas(),
+    getTrackerNiches(),
+    getSixDayMonth(ym).catch(() => null),
+  ]);
+  const ideaList = Array.isArray(ideas) ? ideas : [];
+  const nicheList = Array.isArray(niches) ? niches : [];
+  return { ...buildTeamPerformanceFromTracker(ideaList, nicheList, sixDay), _source: "client" };
 }
 
 /* ============================== page ============================== */
