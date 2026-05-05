@@ -168,7 +168,10 @@ export const getTeamsPerformance = () =>
     top_idea_6d?: any;
     top_creator_6d?: any;
     people?: any[];
+    /** @deprecated use views_period_days; kept for older clients */
     window_days?: number;
+    views_period?: "calendar_month" | "rolling";
+    views_period_days?: number;
   }>("/api/v1/teams/performance");
 
 export const createTrackerIdea = (data: any) =>

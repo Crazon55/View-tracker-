@@ -221,6 +221,8 @@ export function buildTeamPerformanceFromTracker(
   top_idea_6d: any | null;
   top_creator_6d: any | null;
   people: any[];
+  views_period: "calendar_month" | "rolling";
+  views_period_days: number;
   window_days: number;
 } {
   const nicheIdToTeam: Record<string, TeamKey> = {};
@@ -267,11 +269,22 @@ export function buildTeamPerformanceFromTracker(
     goofies: emptyStats(),
   };
 
-  // Views aggregation
+  // Views aggregation — match backend: month-to-date postings when six-day tracker
+  // has month data; else rolling 7-day window (local calendar, ~IST in practice for team).
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const cutoff = new Date(today);
-  cutoff.setDate(cutoff.getDate() - 6);
+  const rollingCutoff = new Date(today);
+  rollingCutoff.setDate(rollingCutoff.getDate() - 6);
+
+  const sixDayByTeam = computeTeamViews6dFromSixDay(teamAccounts, sixDayMonth);
+  const periodStart =
+    sixDayByTeam != null
+      ? new Date(today.getFullYear(), today.getMonth(), 1)
+      : rollingCutoff;
+  const views_period: "calendar_month" | "rolling" =
+    sixDayByTeam != null ? "calendar_month" : "rolling";
+  const views_period_days =
+    Math.floor((today.getTime() - periodStart.getTime()) / 86400000) + 1;
 
   type CreatorStat = { views_total: number; views_6d: number; ideas: Set<string> };
   const teamViews: Record<TeamKey, {
@@ -321,7 +334,7 @@ export function buildTeamPerformanceFromTracker(
       let in6d = false;
       if (dStr) {
         const d = new Date(dStr + "T00:00:00");
-        if (!isNaN(d.getTime())) in6d = d >= cutoff && d <= today;
+        if (!isNaN(d.getTime())) in6d = d >= periodStart && d <= today;
       }
       tv.views_total += v;
       tv.views_by_idea.set(idea.id, (tv.views_by_idea.get(idea.id) || 0) + v);
@@ -353,8 +366,6 @@ export function buildTeamPerformanceFromTracker(
       team: team_key,
     };
   }
-
-  const sixDayByTeam = computeTeamViews6dFromSixDay(teamAccounts, sixDayMonth);
 
   const teams_out = TEAM_ORDER.map((team_key) => {
     const handles = Array.from(teamAccounts[team_key]).sort();
@@ -503,6 +514,8 @@ export function buildTeamPerformanceFromTracker(
     top_idea_6d,
     top_creator_6d: top_creator_6d_overall,
     people,
-    window_days: 6,
+    views_period,
+    views_period_days,
+    window_days: views_period_days,
   };
 }
