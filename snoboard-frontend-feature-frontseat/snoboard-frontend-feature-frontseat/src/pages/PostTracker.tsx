@@ -115,9 +115,38 @@ const addD = (s: string, n: number) => { const d=new Date(s+"T00:00:00"); d.setD
 const getWD = (m: string) => Array.from({length:7},(_,i)=>addD(m,i));
 const monthStart = () => { const d=new Date(); return toLocalISO(new Date(d.getFullYear(),d.getMonth(),1)); };
 
+const ASSETS_NOTE_PREFIX = "__assets1:";
+function assetsFromNotes(notes: any): any[] {
+  const s = String(notes || "");
+  const i = s.indexOf(ASSETS_NOTE_PREFIX);
+  if (i < 0) return [];
+  const line = s.slice(i).split("\n", 1)[0] || "";
+  const payload = line.slice(ASSETS_NOTE_PREFIX.length).trim();
+  if (!payload) return [];
+  try {
+    const decoded = decodeURIComponent(payload);
+    const arr = JSON.parse(decoded);
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+function notesWithAssets(prevNotes: any, assets: any[]): string | null {
+  const base = String(prevNotes || "");
+  const lines = base.split("\n").filter((l) => !String(l).startsWith(ASSETS_NOTE_PREFIX));
+  const cleaned = lines.join("\n").trimEnd();
+  if (!assets || assets.length === 0) return cleaned || null;
+  const payload = encodeURIComponent(JSON.stringify(assets));
+  const next = (cleaned ? cleaned + "\n" : "") + ASSETS_NOTE_PREFIX + payload;
+  return next;
+}
+
 /** Map a raw API idea to the shape the UI expects */
 function mapIdea(raw: any): any {
   const nicheIds: string[] = (raw.niche_ids && raw.niche_ids.length > 0) ? raw.niche_ids : (raw.niche_id ? [raw.niche_id] : []);
+  const noteAssets = assetsFromNotes(raw.notes);
+  const apiAssets = Array.isArray(raw.assets) ? raw.assets : [];
+  const assets = apiAssets.length ? apiAssets : noteAssets;
   return {
     ...raw,
     nicheIds,
@@ -136,7 +165,7 @@ function mapIdea(raw: any): any {
     hook_text: raw.hook_text || null,
     slides_content: Array.isArray(raw.slides_content) ? raw.slides_content : [],
     writer_comments: raw.writer_comments || "",
-    assets: Array.isArray(raw.assets) ? raw.assets : [],
+    assets,
     postings: (raw.tracker_postings || []).map((p: any) => ({
       id: p.id,
       page: p.page,
@@ -964,7 +993,14 @@ export default function PostTracker(){
         const nextAssets = [...prev, ...uploaded];
         // Optimistically render immediately in the open modal
         setDetailIdea((cur: any) => (cur && cur.id === detailIdea.id ? { ...cur, assets: nextAssets } : cur));
-        updateIdeaMut.mutate({ id: detailIdea.id, data: { assets: nextAssets } });
+        updateIdeaMut.mutate({
+          id: detailIdea.id,
+          data: {
+            assets: nextAssets,
+            // Persist compat for older backend builds by encoding in notes too.
+            notes: notesWithAssets(cdNow?.notes, nextAssets),
+          },
+        });
         toast.success(`${uploaded.length} screenshot${uploaded.length === 1 ? "" : "s"} uploaded`);
       } catch (ex: any) {
         if (cancelled) return;
@@ -1391,7 +1427,17 @@ export default function PostTracker(){
               <IdeaAssetsEditor
                 idea={cd}
                 uploader={user?.email || user?.id || ""}
-                onChangeAssets={(assets) => updateIdeaMut.mutate({ id: cd.id, data: { assets } })}
+                onChangeAssets={(assets) => {
+                  // Optimistic
+                  setDetailIdea((cur: any) => (cur && cur.id === cd.id ? { ...cur, assets } : cur));
+                  updateIdeaMut.mutate({
+                    id: cd.id,
+                    data: {
+                      assets,
+                      notes: notesWithAssets(cd?.notes, assets),
+                    },
+                  });
+                }}
               />
             </div>
 
