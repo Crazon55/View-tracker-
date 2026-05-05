@@ -240,6 +240,9 @@ function IdeaAssetsEditor({
   const assets = Array.isArray(idea?.assets) ? idea.assets : [];
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ fontSize: 12, color: "#71717a" }}>
+        Tip: paste screenshots with <strong style={{ color: "#a1a1aa" }}>Ctrl+V</strong>
+      </div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <input
           type="file"
@@ -927,6 +930,50 @@ export default function PostTracker(){
   const [filterDateFrom,setFilterDateFrom]=useState("");
   const [filterDateTo,setFilterDateTo]=useState("");
   const [collapsedStages,setCollapsedStages]=useState<Record<string,boolean>>({});
+
+  // WhatsApp-style: allow pasting screenshots directly into idea Assets (Ctrl+V).
+  useEffect(() => {
+    if (!detailIdea?.id) return;
+
+    let cancelled = false;
+    const onPaste = async (e: ClipboardEvent) => {
+      const dt = e.clipboardData;
+      if (!dt?.items?.length) return;
+
+      const pasted: File[] = [];
+      for (const item of Array.from(dt.items)) {
+        if (item.kind !== "file") continue;
+        const file = item.getAsFile();
+        if (!file) continue;
+        if (!file.type.startsWith("image/")) continue;
+        pasted.push(file);
+      }
+      if (pasted.length === 0) return;
+
+      e.preventDefault();
+      try {
+        toast.success(`${pasted.length} screenshot${pasted.length === 1 ? "" : "s"} added from clipboard`);
+        const uploaded = await uploadIdeaAssets({
+          ideaId: detailIdea.id,
+          files: pasted,
+          uploader: user?.email || user?.id || "",
+        });
+        if (cancelled) return;
+        const cdNow = (ideas.find((i) => i.id === detailIdea.id) || detailIdea) as any;
+        const prev = Array.isArray(cdNow?.assets) ? cdNow.assets : [];
+        updateIdeaMut.mutate({ id: detailIdea.id, data: { assets: [...prev, ...uploaded] } });
+      } catch (ex: any) {
+        if (cancelled) return;
+        toast.error(ex?.message || "Failed to paste/upload screenshot");
+      }
+    };
+
+    window.addEventListener("paste", onPaste);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("paste", onPaste);
+    };
+  }, [detailIdea?.id, user?.email, user?.id, ideas, updateIdeaMut]);
 
   const nicheFiltered=nicheFilter==="all"?ideas:ideas.filter(i=>(i.nicheIds||[]).includes(nicheFilter));
   const sourceFiltered=sourceFilter==="all"?nicheFiltered:nicheFiltered.filter(i=>i.source===sourceFilter);
