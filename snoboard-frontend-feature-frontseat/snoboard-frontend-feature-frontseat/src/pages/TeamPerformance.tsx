@@ -86,6 +86,16 @@ function arenaPeriodSubtitle(period: string | undefined, days: number) {
   return `last ${days} days`;
 }
 
+function viewMetricLabel(period: string | undefined, days: number) {
+  if (period === "calendar_month") return "tracker (month)";
+  return `${days}d (posts)`;
+}
+
+function splitLabel(period: string | undefined, days: number) {
+  if (period === "calendar_month") return "Month view split (6-day tracker)";
+  return `View split (${days}d posts)`;
+}
+
 const TEAM_SKIN: Record<
   string,
   {
@@ -290,6 +300,8 @@ export default function TeamPerformance() {
   const teams = data?.teams ?? [];
   const leaderKey = data?.leader_key ?? null;
   const people = data?.people ?? [];
+  const viewsPeriod = data?.views_period;
+  const viewsPeriodDays = data?.views_period_days ?? data?.window_days ?? 7;
   // order teams in fixed slot order so the hero scoreboard is stable
   const teamA = teams.find((t: any) => t.key === "garfields");
   const teamB = teams.find((t: any) => t.key === "goofies");
@@ -542,6 +554,8 @@ export default function TeamPerformance() {
             leaderKey={leaderKey}
             totalViews6d={totalViews6d}
             totalViewsAll={totalViewsAll}
+            viewsPeriod={viewsPeriod}
+            viewsPeriodDays={viewsPeriodDays}
           />
         )}
 
@@ -751,12 +765,16 @@ function HeroScoreboard({
   leaderKey,
   totalViews6d,
   totalViewsAll,
+  viewsPeriod,
+  viewsPeriodDays,
 }: {
   teamA: any;
   teamB: any;
   leaderKey: string | null;
   totalViews6d: number;
   totalViewsAll: number;
+  viewsPeriod?: "calendar_month" | "rolling";
+  viewsPeriodDays: number;
 }) {
   const pctA =
     totalViews6d > 0 ? Math.max(2, Math.round(((teamA.views_6d || 0) / totalViews6d) * 100)) : 50;
@@ -778,7 +796,13 @@ function HeroScoreboard({
 
       {/* score row */}
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 sm:gap-6">
-        <TeamScorePanel team={teamA} isLeader={leaderKey === teamA.key} align="right" />
+        <TeamScorePanel
+          team={teamA}
+          isLeader={leaderKey === teamA.key}
+          align="right"
+          viewsPeriod={viewsPeriod}
+          viewsPeriodDays={viewsPeriodDays}
+        />
         <div className="flex flex-col items-center gap-1">
           <div className="text-[10px] uppercase tracking-[0.3em] text-zinc-500 font-bold">VS</div>
           <motion.div
@@ -790,15 +814,20 @@ function HeroScoreboard({
             <Swords className="w-5 h-5 sm:w-6 sm:h-6 text-zinc-900" />
           </motion.div>
         </div>
-        <TeamScorePanel team={teamB} isLeader={leaderKey === teamB.key} align="left" />
+        <TeamScorePanel
+          team={teamB}
+          isLeader={leaderKey === teamB.key}
+          align="left"
+          viewsPeriod={viewsPeriod}
+          viewsPeriodDays={viewsPeriodDays}
+        />
       </div>
 
-      {/* 6-day tracker: month-total view split */}
+      {/* view split */}
       <div className="mt-7">
         <div className="flex justify-between text-[11px] text-zinc-500 mb-1.5 uppercase tracking-wider font-semibold">
           <span className="flex items-center gap-1">
-            <Flame className="w-3.5 h-3.5 text-orange-400" /> Month view split
-            <span className="lowercase text-zinc-600 font-medium normal-case tracking-normal">(6-day tracker)</span>
+            <Flame className="w-3.5 h-3.5 text-orange-400" /> {splitLabel(viewsPeriod, viewsPeriodDays)}
           </span>
           <span className="text-white tabular-nums">{formatViews(totalViews6d)} total</span>
         </div>
@@ -832,10 +861,14 @@ function TeamScorePanel({
   team,
   isLeader,
   align,
+  viewsPeriod,
+  viewsPeriodDays,
 }: {
   team: any;
   isLeader: boolean;
   align: "left" | "right";
+  viewsPeriod?: "calendar_month" | "rolling";
+  viewsPeriodDays: number;
 }) {
   const skin = teamSkin(team.key);
   const emojiControls = useAnimationControls();
@@ -910,7 +943,7 @@ function TeamScorePanel({
         {skin.tagline}
       </div>
       <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold mt-1">
-        Views · tracker (month)
+        Views · {viewMetricLabel(viewsPeriod, viewsPeriodDays)}
       </div>
       <div className={`text-3xl sm:text-5xl font-black tabular-nums ${isLeader ? "text-white" : "text-zinc-400"}`}>
         <Odometer value={team.views_6d || 0} format={formatViews} />
