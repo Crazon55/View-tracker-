@@ -184,6 +184,40 @@ export const deleteTrackerIdea = (id: string) =>
 export const getTrackerIdeaCloudinarySign = (ideaId: string, data: { uploader?: string }) =>
   fetchApi<any>(`/api/v1/tracker/ideas/${ideaId}/cloudinary-sign`, { method: "POST", body: JSON.stringify(data) });
 
+/**
+ * Temporary compat: prod backend may not have the tracker idea signing endpoint yet.
+ * If it 404s, fall back to the Tickets signer (it doesn't validate ticket existence).
+ */
+export async function signTrackerIdeaUploadCompat(ideaId: string, data: { uploader?: string }) {
+  const path = `/api/v1/tracker/ideas/${ideaId}/cloudinary-sign`;
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "ngrok-skip-browser-warning": "true",
+      ...(_accessToken ? { Authorization: `Bearer ${_accessToken}` } : {}),
+    },
+    body: JSON.stringify(data || {}),
+  });
+  if (res.ok) {
+    const json = await res.json();
+    return json.data ?? json;
+  }
+  if (res.status === 404) {
+    // use tickets signer as fallback
+    const ticket_number = String(ideaId).replace(/[^0-9]/g, "").slice(0, 6) || "0";
+    const payload = {
+      ticket_id: ideaId,
+      ticket_number,
+      uploader: data?.uploader,
+    };
+    const json = await fetchApi<any>("/api/v1/tickets/cloudinary-sign", { method: "POST", body: JSON.stringify(payload) });
+    return json;
+  }
+  const errBody = await res.json().catch(() => null);
+  throw new Error(errBody?.detail || `API error: ${res.status}`);
+}
+
 export const createTrackerPosting = (ideaId: string, data: any) =>
   fetchApi<any>(`/api/v1/tracker/ideas/${ideaId}/postings`, { method: "POST", body: JSON.stringify(data) });
 export const updateTrackerPosting = (id: string, data: any) =>
