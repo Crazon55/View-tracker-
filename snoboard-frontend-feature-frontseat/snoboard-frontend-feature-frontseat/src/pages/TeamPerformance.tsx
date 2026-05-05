@@ -537,11 +537,7 @@ export default function TeamPerformance() {
                 </PopoverContent>
               </Popover>
 
-              {data._source === "client" && (
-                <p className="text-[11px] text-amber-400/90 border border-amber-500/25 rounded-lg px-3 py-2 bg-amber-500/5 max-w-xs">
-                  Showing client-computed stats — redeploy the API for live aggregates.
-                </p>
-              )}
+              {/* Never show debug/source banners in prod UI */}
             </div>
           </div>
         </ScrollReveal>

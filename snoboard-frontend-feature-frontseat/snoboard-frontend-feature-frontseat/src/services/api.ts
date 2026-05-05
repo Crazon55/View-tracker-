@@ -181,6 +181,9 @@ export const updateTrackerIdea = (id: string, data: any) =>
 export const deleteTrackerIdea = (id: string) =>
   fetchApi<any>(`/api/v1/tracker/ideas/${id}`, { method: "DELETE" });
 
+export const getTrackerIdeaCloudinarySign = (ideaId: string, data: { uploader?: string }) =>
+  fetchApi<any>(`/api/v1/tracker/ideas/${ideaId}/cloudinary-sign`, { method: "POST", body: JSON.stringify(data) });
+
 export const createTrackerPosting = (ideaId: string, data: any) =>
   fetchApi<any>(`/api/v1/tracker/ideas/${ideaId}/postings`, { method: "POST", body: JSON.stringify(data) });
 export const updateTrackerPosting = (id: string, data: any) =>
