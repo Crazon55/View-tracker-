@@ -1209,7 +1209,7 @@ export default function PostTracker(){
             </select>
           )}
           <div style={{display:"flex",background:"#27272a",borderRadius:7,overflow:"hidden",border:"1px solid #3f3f46"}}>
-            {["board","list","calendar","analytics"].map(v=>(
+            {["board","calendar","analytics"].map(v=>(
               <button key={v} onClick={()=>setViewMode(v)} style={{padding:"5px 12px",border:"none",fontSize:12,fontWeight:500,cursor:"pointer",background:viewMode===v?"#3f3f46":"transparent",color:viewMode===v?"#fff":"#71717a",boxShadow:viewMode===v?"0 1px 3px rgba(0,0,0,0.06)":"none",textTransform:"capitalize"}}>{v}</button>
             ))}
           </div>
@@ -1251,29 +1251,6 @@ export default function PostTracker(){
               </div>
             </div>
           ))}
-        </div>
-      )}
-
-      {/* List */}
-      {viewMode==="list"&&(
-        <div style={{padding:"14px 24px 14px 70px",maxWidth:960}}>
-          {STAGES.filter(s=>counts[s]>0).map(stage=>{const collapsed=collapsedStages[stage];return(
-            <div key={stage} style={{marginBottom:18}}>
-              <div onClick={()=>setCollapsedStages(p=>({...p,[stage]:!p[stage]}))} style={{display:"flex",alignItems:"center",gap:7,marginBottom:7,cursor:"pointer",userSelect:"none"}}>
-                <span style={{fontSize:10,color:"#71717a",transform:collapsed?"rotate(-90deg)":"rotate(0deg)",transition:"transform 0.15s",display:"inline-block"}}>▼</span>
-                <span style={{width:7,height:7,borderRadius:"50%",background:SC[stage].dot}}/>
-                <span style={{fontSize:13,fontWeight:600,color:SC[stage].text}}>{SL[stage]}</span>
-                <span style={{fontSize:11,color:"#52525b"}}>{counts[stage]}</span>
-              </div>
-              {!collapsed&&filteredIdeas.filter(i=>i.stage===stage).map(idea=>{const ideaNiches=niches.filter((n: any)=>(idea.nicheIds||[]).includes(n.id));return(
-                <div key={idea.id} onClick={()=>openDetail(idea)} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:"#18181b",borderRadius:8,marginBottom:3,border:"1px solid #27272a",cursor:"pointer",fontSize:13}}>
-                  <span style={{flex:1,fontWeight:500}}>{idea.title}</span>
-                  <span style={{fontSize:11,color:"#52525b"}}>{ideaNiches.map((n: any)=>n.name).join(", ")}</span>
-                  <span style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:idea.source==="competitor"?"#EEEDFE":"#E8F5EE",color:idea.source==="competitor"?"#534AB7":"#1A5E3A",fontWeight:500}}>{idea.source==="competitor"?"Comp":"Orig"}</span>
-                  {idea.postings?.length>0&&<span style={{fontSize:10,color:"#52525b"}}>{idea.postings.length}pg</span>}
-                </div>);})}
-            </div>);})}
-          {filteredIdeas.length===0&&<p style={{textAlign:"center",color:"#52525b",padding:40,fontSize:13}}>No ideas yet.</p>}
         </div>
       )}
 
