@@ -220,38 +220,16 @@ function Modal({open,onClose,title,children,wide}: {open:boolean;onClose:()=>voi
 
 function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove,stage}: {po:any;page:string;fmtD:(d:string)=>string;PT:any;updatePostingMut:any;onRemove:()=>void;stage?:string}){
   const [editing,setEditing]=useState(false);
-  const [views,setViews]=useState(po.views?.toString()||"");
-  const [perfTag,setPerfTag]=useState(po.perf_tag||"");
   const [postDate,setPostDate]=useState(po.date||"");
-  const fmtNum = (n: number) => { if(n>=1000000) return (n/1000000).toFixed(1)+"M"; if(n>=1000) return (n/1000).toFixed(1)+"k"; return n.toString(); };
 
   
   const stageColor = stage==="testing"?"#D4952A":stage==="proven_ideas"?"#1D9E75":stage==="kill"?"#C93B3B":stage==="scheduled"?"#534AB7":stage==="posted"?"#2D9E5F":"#7c3aed";
 
   if(!editing){
-    // Unified "TESTED" indicator: tells you which of the 4 buckets the
-    // posting landed in. Prefers the manually-tagged perf_tag, falls back
-    // to auto-computing from views vs baseline so older postings (before
-    // we asked for perf_tag) still display a result.
-    const autoTag = gPerf(po.views, po.baselineViews);
-    const effectiveTag = (perfTag && PT[perfTag]) ? perfTag : autoTag;
-    const t = effectiveTag && PT[effectiveTag] ? PT[effectiveTag] : null;
-    const isTested = po.views!=null && (stage==="testing"||stage==="proven_ideas"||stage==="scheduled"||stage==="posted");
     return(
       <div style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}} onClick={()=>setEditing(true)}>
         <div onClick={e=>{e.stopPropagation();onRemove();}} title="Remove page" style={{width:20,height:20,borderRadius:5,background:stageColor,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,cursor:"pointer"}}><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
         <span style={{fontSize:13,fontWeight:600,color:"#fff"}}>@{page}</span>
-        {po.views!=null&&<span style={{fontSize:17,fontWeight:800,color:"#fff",fontFamily:"monospace",letterSpacing:"-0.02em"}}>{fmtNum(po.views)}</span>}
-        {po.views==null&&<span style={{fontSize:11,color:"#52525b"}}>no views yet</span>}
-        {isTested && t && (
-          <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:t.bg,color:t.color,border:`1px solid ${t.color}55`,textTransform:"uppercase",letterSpacing:"0.05em"}}>
-            <span style={{opacity:0.75}}>Tested ·</span>
-            <span>{t.label}</span>
-          </span>
-        )}
-        {isTested && !t && (
-          <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:"rgba(212,149,42,0.15)",color:"#D4952A",border:"1px solid rgba(212,149,42,0.35)",textTransform:"uppercase",letterSpacing:"0.05em"}}>Tested · Set baseline</span>
-        )}
         <span style={{fontSize:11,color:"#52525b",marginLeft:"auto",whiteSpace:"nowrap"}}>{po.date ? fmtD(po.date) : ""}</span>
       </div>
     );
@@ -267,17 +245,8 @@ function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove,stage}: {po:any;
         <span style={{fontSize:10,color:"#71717a",fontWeight:600}}>Date</span>
         <input type="date" value={postDate} onChange={e=>setPostDate(e.target.value)} style={{padding:"5px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:12,background:"#09090b",color:"#fff",cursor:"pointer"}}/>
       </div>
-      <div style={{display:"flex",alignItems:"center",gap:8,marginLeft:30}}>
-        <span style={{fontSize:10,color:"#71717a",fontWeight:600}}>Views</span>
-        <input type="number" value={views} onChange={e=>setViews(e.target.value)} placeholder="Enter views" style={{width:100,padding:"5px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:12,background:"#09090b",color:"#fff"}}/>
-      </div>
-      <div style={{display:"flex",gap:4,marginLeft:30}}>
-        {(["below","baseline","topline","viral"] as const).map(tag=>{const t=PT[tag];const active=perfTag===tag;return(
-          <button key={tag} onClick={()=>setPerfTag(tag)} style={{padding:"4px 10px",borderRadius:6,border:active?`2px solid ${t.color}`:"1px solid #3f3f46",background:active?t.bg:"transparent",color:active?t.color:"#52525b",fontSize:10,fontWeight:600,cursor:"pointer",transition:"all 0.15s"}}>{t.label}</button>
-        );})}
-      </div>
       <div style={{display:"flex",gap:6,marginLeft:30,marginTop:2}}>
-        <button onClick={()=>{updatePostingMut.mutate({id:po.id,data:{views:Number(views)||null,perf_tag:perfTag||null,date:postDate||null}},{onSuccess:()=>setEditing(false)});}} disabled={updatePostingMut.isPending} style={{padding:"5px 16px",borderRadius:7,border:"none",fontSize:11,fontWeight:600,cursor:"pointer",background:updatePostingMut.isPending?"#52525b":"#7c3aed",color:"#fff"}}>{updatePostingMut.isPending?"Saving...":"Save"}</button>
+        <button onClick={()=>{updatePostingMut.mutate({id:po.id,data:{date:postDate||null}},{onSuccess:()=>setEditing(false)});}} disabled={updatePostingMut.isPending} style={{padding:"5px 16px",borderRadius:7,border:"none",fontSize:11,fontWeight:600,cursor:"pointer",background:updatePostingMut.isPending?"#52525b":"#7c3aed",color:"#fff"}}>{updatePostingMut.isPending?"Saving...":"Save"}</button>
         <button onClick={()=>setEditing(false)} style={{padding:"5px 12px",borderRadius:7,border:"1px solid #3f3f46",fontSize:11,fontWeight:500,cursor:"pointer",background:"transparent",color:"#a1a1aa"}}>Cancel</button>
         <button onClick={onRemove} style={{padding:"5px 12px",borderRadius:7,border:"1px solid #3f3f46",fontSize:11,fontWeight:500,cursor:"pointer",background:"transparent",color:"#FF7070",marginLeft:"auto"}}>Remove</button>
       </div>
@@ -1035,11 +1004,7 @@ export default function ContentTracker(){
               {allPagesForFilter.map((p: string)=><option key={p} value={p}>{p}</option>)}
             </select>
           )}
-          <div style={{display:"flex",background:"#27272a",borderRadius:7,overflow:"hidden",border:"1px solid #3f3f46"}}>
-            {["board","list","calendar","analytics"].map(v=>(
-              <button key={v} onClick={()=>setViewMode(v)} style={{padding:"5px 12px",border:"none",fontSize:12,fontWeight:500,cursor:"pointer",background:viewMode===v?"#3f3f46":"transparent",color:viewMode===v?"#fff":"#71717a",boxShadow:viewMode===v?"0 1px 3px rgba(0,0,0,0.06)":"none",textTransform:"capitalize"}}>{v}</button>
-            ))}
-          </div>
+          {/* View mode switch removed (List/Calendar not used) */}
           <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
             <div style={{display:"flex",alignItems:"center",gap:4}}>
               <input type="date" value={filterDateFrom} onChange={e=>setFilterDateFrom(e.target.value)} title="From" style={{padding:"5px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:11,background:"#09090b",color:"#a1a1aa",cursor:"pointer"}}/>
@@ -1081,35 +1046,7 @@ export default function ContentTracker(){
         </div>
       )}
 
-      {/* List */}
-      {viewMode==="list"&&(
-        <div style={{padding:"14px 24px 14px 70px",maxWidth:960}}>
-          {STAGES.filter(s=>counts[s]>0).map(stage=>{const collapsed=collapsedStages[stage];return(
-            <div key={stage} style={{marginBottom:18}}>
-              <div onClick={()=>setCollapsedStages(p=>({...p,[stage]:!p[stage]}))} style={{display:"flex",alignItems:"center",gap:7,marginBottom:7,cursor:"pointer",userSelect:"none"}}>
-                <span style={{fontSize:10,color:"#71717a",transform:collapsed?"rotate(-90deg)":"rotate(0deg)",transition:"transform 0.15s",display:"inline-block"}}>▼</span>
-                <span style={{width:7,height:7,borderRadius:"50%",background:SC[stage].dot}}/>
-                <span style={{fontSize:13,fontWeight:600,color:SC[stage].text}}>{SL[stage]}</span>
-                <span style={{fontSize:11,color:"#52525b"}}>{counts[stage]}</span>
-              </div>
-              {!collapsed&&filteredIdeas.filter(i=>i.stage===stage).map(idea=>{const ideaNiches=niches.filter((n: any)=>(idea.nicheIds||[]).includes(n.id));return(
-                <div key={idea.id} onClick={()=>openDetail(idea)} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:"#18181b",borderRadius:8,marginBottom:3,border:"1px solid #27272a",cursor:"pointer",fontSize:13}}>
-                  <span style={{flex:1,fontWeight:500}}>{idea.title}</span>
-                  <span style={{fontSize:11,color:"#52525b"}}>{ideaNiches.map((n: any)=>n.name).join(", ")}</span>
-                  <span style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:idea.source==="competitor"?"#EEEDFE":"#E8F5EE",color:idea.source==="competitor"?"#534AB7":"#1A5E3A",fontWeight:500}}>{idea.source==="competitor"?"Comp":"Orig"}</span>
-                  {idea.postings?.length>0&&<span style={{fontSize:10,color:"#52525b"}}>{idea.postings.length}pg</span>}
-                </div>);})}
-            </div>
-          );})}
-          {filteredIdeas.length===0&&<p style={{textAlign:"center",color:"#52525b",padding:40,fontSize:13}}>No ideas yet.</p>}
-        </div>
-      )}
-
-      {/* Calendar */}
-      {viewMode==="calendar"&&<CalendarView ideas={ideas} niches={niches} nicheFilter={nicheFilter} pageFilter={pageFilter} onClickIdea={openDetail} weekStart={weekStart} setWeekStart={setWeekStart}/>}
-
-      {/* Analytics */}
-      {viewMode==="analytics"&&<AnalyticsView ideas={ideas} niches={niches} nicheFilter={nicheFilter} pageFilter={pageFilter} dateFrom={dateFrom} dateTo={dateTo} setDateFrom={setDateFrom} setDateTo={setDateTo} setPageFilter={setPageFilter} onClickIdea={openDetail}/>}
+      {/* List/Calendar/Analytics views removed */}
 
       {/* Add Idea */}
       <Modal open={addOpen} onClose={()=>setAddOpen(false)} title="Add new idea">

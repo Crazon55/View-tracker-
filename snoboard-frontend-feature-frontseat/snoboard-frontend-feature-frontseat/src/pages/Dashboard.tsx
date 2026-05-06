@@ -291,14 +291,6 @@ function TogglePill({ options, value, onChange }: {
   );
 }
 
-function softWrapIdText(s: unknown): string {
-  const t = String(s ?? "").trim();
-  if (!t) return "";
-  // Add soft wrap opportunities at separators so long handles/domains don't overflow
-  // but also don't split in the middle of words.
-  return t.replace(/[._-]/g, (m) => `${m}\u200B`);
-}
-
 export default function Dashboard() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
@@ -728,8 +720,6 @@ export default function Dashboard() {
                 {podiumOrder.map((page, i) => {
                   const views = getPageViews(page, globalPeriod);
                   const podiumCounts = getPageCounts(page, globalPeriod);
-                  const displayName = softWrapIdText(page.name || page.handle);
-                  const displayHandle = softWrapIdText(page.handle);
                   return (
                     <div
                       key={page.id}
@@ -742,18 +732,18 @@ export default function Dashboard() {
                       </span>
                       <div className="w-full text-center mb-2">
                         <p
-                          className={`px-1 font-black text-white uppercase tracking-wide leading-snug whitespace-normal break-normal ${
-                            ranks[i] === 1 ? "text-sm sm:text-base" : "text-xs sm:text-sm"
-                          } min-h-[2.4rem] flex items-center justify-center`}
+                          className={`px-1 font-black text-white uppercase tracking-wide leading-tight whitespace-normal break-words ${
+                            ranks[i] === 1 ? "text-xs sm:text-sm" : "text-[11px] sm:text-xs"
+                          } min-h-[2.2rem] flex items-center justify-center`}
                           title={String(page.name || page.handle || "")}
                         >
-                          {displayName}
+                          {page.name || page.handle}
                         </p>
                         <p
-                          className="px-1 text-[10px] text-zinc-600 leading-tight min-h-[1rem] flex items-center justify-center"
+                          className="px-1 text-[10px] text-zinc-600 leading-tight min-h-[1rem] flex items-center justify-center truncate"
                           title={`@${String(page.handle || "")}`}
                         >
-                          @{displayHandle}
+                          @{page.handle}
                         </p>
                       </div>
 
