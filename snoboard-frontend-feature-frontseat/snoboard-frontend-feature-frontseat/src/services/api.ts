@@ -393,24 +393,3 @@ export const getDeadlines = (role?: string) =>
 export const getUserRole = (email: string) => fetchApi<any>(`/api/v1/user-role/${encodeURIComponent(email)}`);
 export const setUserRole = (data: { email: string; role: string; name?: string }) =>
   fetchApi<any>("/api/v1/user-role", { method: "POST", body: JSON.stringify(data) });
-
-// Chat
-export interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
-}
-
-export interface ChatResponseData {
-  type: "text" | "chart";
-  content: string;
-  chart_type?: "bar" | "line" | "pie";
-  title?: string;
-  data?: Record<string, any>[];
-  data_keys?: { xKey: string; yKeys: string[] };
-}
-
-export const sendChatMessage = (message: string, history: ChatMessage[]) =>
-  fetchApi<ChatResponseData>("/api/v1/chat", {
-    method: "POST",
-    body: JSON.stringify({ message, history }),
-  });
