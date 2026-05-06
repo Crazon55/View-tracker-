@@ -625,7 +625,7 @@ export default function TeamPerformance() {
       </div>
 
       {/* ============================== RESET (stress reliever) ============================== */}
-      <div className="fixed bottom-24 right-6 z-[60] flex items-center gap-2">
+      <div className="fixed bottom-6 left-6 z-[60] flex flex-col sm:flex-row items-start sm:items-center gap-2">
         <button
           type="button"
           onClick={() => {
