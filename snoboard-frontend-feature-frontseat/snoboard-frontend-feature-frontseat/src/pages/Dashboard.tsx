@@ -730,10 +730,14 @@ export default function Dashboard() {
                       <span className={`text-3xl sm:text-4xl mb-2 ${ranks[i] === 1 ? "animate-bounce" : ""}`} style={ranks[i] === 1 ? { animationDuration: "2s" } : {}}>
                         {medals[i]}
                       </span>
-                      <p className={`font-black text-white uppercase tracking-wide text-center leading-tight mb-1 ${ranks[i] === 1 ? "text-sm sm:text-base" : "text-xs sm:text-sm"}`}>
+                      <p
+                        className={`w-full px-1 font-black text-white uppercase tracking-wide text-center leading-snug mb-1 whitespace-normal break-words ${
+                          ranks[i] === 1 ? "text-sm sm:text-base" : "text-xs sm:text-sm"
+                        }`}
+                      >
                         {page.name || page.handle}
                       </p>
-                      <p className="text-[10px] text-zinc-600 mb-2">@{page.handle}</p>
+                      <p className="w-full px-1 text-[10px] text-zinc-600 mb-2 truncate">@{page.handle}</p>
 
                       {/* Podium block */}
                       <div
