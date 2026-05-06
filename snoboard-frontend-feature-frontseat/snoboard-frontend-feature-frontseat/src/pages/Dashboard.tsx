@@ -705,9 +705,10 @@ export default function Dashboard() {
           const heights = [140, 180, 110]; // podium step heights
           const medals = ["🥈", "🥇", "🥉"];
           const ranks = [2, 1, 3];
-          const borderColors = ["border-zinc-400/40", "border-yellow-500/50", "border-amber-700/40"];
-          const glowColors = ["", "shadow-[0_0_40px_-5px_rgba(234,179,8,0.2)]", ""];
-          const bgColors = ["bg-zinc-400/5", "bg-yellow-500/5", "bg-amber-700/5"];
+          // Solid podium colors to keep cards visible on dark background
+          const podiumBg = ["bg-[#6f6f6f]", "bg-[#b58b1a]", "bg-[#6b3f1f]"]; // silver, gold, bronze
+          const borderColors = ["border-white/10", "border-white/10", "border-white/10"];
+          const glowColors = ["shadow-[0_12px_45px_-20px_rgba(255,255,255,0.25)]", "shadow-[0_18px_60px_-22px_rgba(181,139,26,0.55)]", "shadow-[0_12px_45px_-20px_rgba(107,63,31,0.5)]"];
 
           return (
             <div className="mb-10">
@@ -736,14 +737,14 @@ export default function Dashboard() {
 
                       {/* Podium block */}
                       <div
-                        className={`w-full rounded-t-xl border ${borderColors[i]} ${bgColors[i]} ${glowColors[i]} flex flex-col items-center justify-center transition-all`}
+                        className={`w-full rounded-t-xl border ${borderColors[i]} ${podiumBg[i]} ${glowColors[i]} flex flex-col items-center justify-center transition-all`}
                         style={{ height: heights[i] }}
                       >
                         <span className={`font-black tabular-nums text-white ${ranks[i] === 1 ? "text-2xl sm:text-3xl" : "text-lg sm:text-xl"}`}>
                           {formatCompact(views)}
                         </span>
-                        <span className="text-[9px] uppercase tracking-wider text-zinc-500 mt-1">views</span>
-                        <div className="mt-2 flex items-center gap-1 text-[10px] text-zinc-600">
+                        <span className="text-[9px] uppercase tracking-wider text-white/80 mt-1">views</span>
+                        <div className="mt-2 flex items-center gap-1 text-[10px] text-white/70">
                           <span>{podiumCounts.reelsCount} reels</span>
                           <span>·</span>
                           <span>{podiumCounts.postsCount} posts</span>
