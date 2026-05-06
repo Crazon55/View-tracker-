@@ -195,7 +195,7 @@ export default function Stage1Tracker() {
   );
 
   return (
-    <div className="min-h-screen bg-zinc-950 pr-6 pb-8 pt-20 pl-20 sm:px-6 sm:py-8">
+    <div className="min-h-screen bg-zinc-950 pr-6 pb-8 pt-24 pl-24">
       <div className="max-w-[1600px] mx-auto">
         <div className="mb-6 pr-72">
           <h1 className="text-3xl font-black text-white">Stage 1 Tracker</h1>
