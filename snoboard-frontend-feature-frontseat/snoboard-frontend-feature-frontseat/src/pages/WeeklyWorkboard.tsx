@@ -1051,26 +1051,6 @@ export default function WeeklyWorkboard() {
       </Dialog>
 
       <div className="pl-[70px] pr-6 pt-8 pb-12 max-w-[min(100%,1520px)] mx-auto">
-        <ScrollReveal>
-          <header className={`${BENTO_SURFACE} p-6 mb-8`}>
-            <h1 className="text-3xl font-semibold tracking-tight text-white">Bandwidth tracker &amp; ops</h1>
-            <p className="text-sm text-zinc-400 mt-2 max-w-xl leading-relaxed">
-              Plan by role, split work into steps, and log what&apos;s blocking. Same detail — easier to scan.
-            </p>
-            <ul className="mt-4 flex flex-wrap gap-2 text-[13px]">
-              <li className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3.5 py-1.5 text-zinc-300">
-                <span className="text-violet-200/90">@name</span>
-                <span className="text-zinc-600 mx-1">·</span>
-                <span className="text-violet-200/90">#ticket</span>
-                <span className="text-zinc-500"> on steps so asks stay with the work</span>
-              </li>
-              <li className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3.5 py-1.5 text-zinc-400">
-                Shared for the team
-              </li>
-            </ul>
-          </header>
-        </ScrollReveal>
-
         <ScrollReveal delay={0.05}>
           <div className="flex flex-wrap items-center gap-3 mb-8">
             <div
