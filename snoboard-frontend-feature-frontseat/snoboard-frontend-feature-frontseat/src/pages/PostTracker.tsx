@@ -116,6 +116,7 @@ const getWD = (m: string) => Array.from({length:7},(_,i)=>addD(m,i));
 const monthStart = () => { const d=new Date(); return toLocalISO(new Date(d.getFullYear(),d.getMonth(),1)); };
 
 const ASSETS_NOTE_PREFIX = "__assets1:";
+const WRITER_NOTE_PREFIX = "__writer_comments1:";
 function assetsFromNotes(notes: any): any[] {
   const s = String(notes || "");
   const i = s.indexOf(ASSETS_NOTE_PREFIX);
@@ -141,12 +142,36 @@ function notesWithAssets(prevNotes: any, assets: any[]): string | null {
   return next;
 }
 
+function writerCommentsFromNotes(notes: any): string {
+  const s = String(notes || "");
+  const i = s.indexOf(WRITER_NOTE_PREFIX);
+  if (i < 0) return "";
+  const line = s.slice(i).split("\n", 1)[0] || "";
+  const payload = line.slice(WRITER_NOTE_PREFIX.length).trim();
+  if (!payload) return "";
+  try {
+    return decodeURIComponent(payload);
+  } catch {
+    return "";
+  }
+}
+function notesWithWriterComments(prevNotes: any, writerComments: string): string | null {
+  const base = String(prevNotes || "");
+  const lines = base.split("\n").filter((l) => !String(l).startsWith(WRITER_NOTE_PREFIX));
+  const cleaned = lines.join("\n").trimEnd();
+  const wc = String(writerComments || "").trimEnd();
+  if (!wc) return cleaned || null;
+  const payload = encodeURIComponent(wc);
+  return (cleaned ? cleaned + "\n" : "") + WRITER_NOTE_PREFIX + payload;
+}
+
 /** Map a raw API idea to the shape the UI expects */
 function mapIdea(raw: any): any {
   const nicheIds: string[] = (raw.niche_ids && raw.niche_ids.length > 0) ? raw.niche_ids : (raw.niche_id ? [raw.niche_id] : []);
   const noteAssets = assetsFromNotes(raw.notes);
   const apiAssets = Array.isArray(raw.assets) ? raw.assets : [];
   const assets = apiAssets.length ? apiAssets : noteAssets;
+  const writerFromNotes = writerCommentsFromNotes(raw.notes);
   return {
     ...raw,
     nicheIds,
@@ -164,7 +189,7 @@ function mapIdea(raw: any): any {
     canva_link: raw.canva_link || null,
     hook_text: raw.hook_text || null,
     slides_content: Array.isArray(raw.slides_content) ? raw.slides_content : [],
-    writer_comments: raw.writer_comments || "",
+    writer_comments: raw.writer_comments || writerFromNotes || "",
     assets,
     postings: (raw.tracker_postings || []).map((p: any) => ({
       id: p.id,
@@ -938,6 +963,7 @@ export default function PostTracker(){
   const [detailNicheIds,setDetailNicheIds]=useState<string[]>([]);
   const [writerDraft,setWriterDraft]=useState("");
   const writerDirty=useRef(false);
+  const writerSaveTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const nicheSaveTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const nicheSaveRef=useRef<string[]>([]);
   const saveNiches=useCallback((ideaId: string, next: string[])=>{
@@ -1167,10 +1193,32 @@ export default function PostTracker(){
     try {
       await updateIdeaMut.mutateAsync({ id: ideaId, data: { writer_comments: next } });
     } catch {
-      // updateIdeaMut already toasts onError; keep draft dirty so user doesn't lose text.
-      writerDirty.current = true;
+      // Fallback: some deployments don't have the writer_comments column yet.
+      // Persist to `notes` (like assets) so the UI doesn't "poof" on close.
+      try {
+        const currentNotes = (cd?.id === ideaId ? cd?.notes : null) as any;
+        const nextNotes = notesWithWriterComments(currentNotes, next);
+        await updateIdeaMut.mutateAsync({ id: ideaId, data: { notes: nextNotes } });
+        setDetailIdea((cur: any)=>(cur && cur.id===ideaId ? {...cur, writer_comments: next, notes: nextNotes} : cur));
+      } catch {
+        // updateIdeaMut already toasts onError; keep draft dirty so user doesn't lose text.
+        writerDirty.current = true;
+      }
     }
-  }, [writerDraft, updateIdeaMut]);
+  }, [writerDraft, updateIdeaMut, cd?.id, cd?.notes]);
+
+  // Autosave writer comments while typing (urgent: prevents loss on close).
+  useEffect(() => {
+    if (!cd?.id) return;
+    if (!writerDirty.current) return;
+    if (writerSaveTimer.current) clearTimeout(writerSaveTimer.current);
+    writerSaveTimer.current = setTimeout(() => {
+      flushWriterComments(cd.id);
+    }, 600);
+    return () => {
+      if (writerSaveTimer.current) clearTimeout(writerSaveTimer.current);
+    };
+  }, [writerDraft, cd?.id, flushWriterComments]);
 
   const sa: Record<string, {label:string;stage:string;style:React.CSSProperties}[]>={
     new:[{label:"Approve",stage:"approved",style:bp}],
