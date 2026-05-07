@@ -1985,7 +1985,9 @@ function WeekGridListView({
   } | null>(null);
   const commitDialogBusyRef = useRef(false);
 
-  type DragPayload = { assignmentId: string; taskId: string; fromDay: string };
+  type DragPayload =
+    | { kind: "task"; assignmentId: string; taskId: string; fromDay: string }
+    | { kind: "chunk"; assignmentId: string; taskId: string; chunkId: string; fromDay: string };
   const dragRef = useRef<DragPayload | null>(null);
 
   const missingRoles = WORKBOARD_ROLES.filter((r) => !weekAssignments.some((a) => a.role_id === r.id));
@@ -2131,10 +2133,20 @@ function WeekGridListView({
                 const a = weekAssignments.find((x) => x.id === payload.assignmentId);
                 const pt = a?.primary_tasks?.find((x) => x.id === payload.taskId);
                 if (!a || !pt) return;
-                const origin = (pt as any).origin_due_date || pt.due_date;
-                patchPrimaryTask(payload.assignmentId, payload.taskId, {
-                  due_date: dIso,
-                  origin_due_date: origin,
+                if (payload.kind === "task") {
+                  const origin = (pt as any).origin_due_date || pt.due_date;
+                  patchPrimaryTask(payload.assignmentId, payload.taskId, {
+                    due_date: dIso,
+                    origin_due_date: origin,
+                  } as any);
+                  return;
+                }
+                const ch = pt.chunks?.find((c) => c.id === payload.chunkId);
+                if (!ch) return;
+                const origin = (ch as any).origin_scheduled_for || (ch as any).scheduled_for || pt.due_date;
+                updateChunk(payload.assignmentId, payload.taskId, payload.chunkId, {
+                  scheduled_for: dIso,
+                  origin_scheduled_for: origin,
                 } as any);
               }}
             >
@@ -2147,6 +2159,7 @@ function WeekGridListView({
                 <div className="space-y-2 flex-1 min-h-0 overflow-y-auto pr-0.5 [scrollbar-gutter:stable]">
                   {(() => {
                     const tasksForDay: { a: MainAssignment; pt: WorkboardPrimaryTask }[] = [];
+                    const stepMovesForDay: { a: MainAssignment; pt: WorkboardPrimaryTask; c: WorkboardChunk }[] = [];
                     for (const a of weekAssignments) {
                       for (const pt of a.primary_tasks || []) {
                         if (String(pt.due_date || "").slice(0, 10) !== dIso) continue;
@@ -2157,10 +2170,30 @@ function WeekGridListView({
                         tasksForDay.push({ a, pt });
                       }
                     }
+                    for (const a of weekAssignments) {
+                      for (const pt of a.primary_tasks || []) {
+                        const ptDay = String(pt.due_date || "").slice(0, 10);
+                        for (const c of pt.chunks || []) {
+                          const cDay = String((c as any).scheduled_for || ptDay || "").slice(0, 10);
+                          if (!cDay || cDay !== dIso) continue;
+                          // Only show in this "moved steps" lane when it doesn't naturally belong to the task's day.
+                          if (ptDay === dIso && !(c as any).scheduled_for) continue;
+                          if (ptDay === dIso && (c as any).scheduled_for === dIso) continue;
+                          stepMovesForDay.push({ a, pt, c });
+                        }
+                      }
+                    }
                     tasksForDay.sort((x, y) => {
                       const rs = roleShort(x.a.role_id).localeCompare(roleShort(y.a.role_id));
                       if (rs !== 0) return rs;
                       return (x.pt.title || "").localeCompare(y.pt.title || "");
+                    });
+                    stepMovesForDay.sort((x, y) => {
+                      const rs = roleShort(x.a.role_id).localeCompare(roleShort(y.a.role_id));
+                      if (rs !== 0) return rs;
+                      const ts = (x.pt.title || "").localeCompare(y.pt.title || "");
+                      if (ts !== 0) return ts;
+                      return (x.c.title || "").localeCompare(y.c.title || "");
                     });
 
                     const weekEnd = addDaysISO(weekStart, 6);
@@ -2208,7 +2241,7 @@ function WeekGridListView({
                                   className="shrink-0 w-8 flex items-center justify-center cursor-grab active:cursor-grabbing text-zinc-600 hover:text-zinc-400 border-r border-white/[0.06] bg-black/20"
                                   draggable
                                   onDragStart={() => {
-                                    dragRef.current = { assignmentId: a.id, taskId: pt.id, fromDay: dIso };
+                                    dragRef.current = { kind: "task", assignmentId: a.id, taskId: pt.id, fromDay: dIso };
                                   }}
                                   onDragEnd={() => {
                                     dragRef.current = null;
@@ -2250,11 +2283,30 @@ function WeekGridListView({
                                 <div className="px-3 pb-3 pt-0 border-t border-white/[0.06] bg-black/25">
                                   {pt.chunks?.length ? (
                                     <ul className="mt-2 space-y-1.5">
-                                      {pt.chunks.map((c) => (
+                                      {pt.chunks
+                                        .filter((c) => {
+                                          const cDay = String((c as any).scheduled_for || pt.due_date || "").slice(0, 10);
+                                          return cDay === dIso;
+                                        })
+                                        .map((c) => (
                                         <li
                                           key={c.id}
                                           className="flex items-start justify-between gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2 py-1.5"
                                         >
+                                          <div
+                                            draggable
+                                            onDragStart={() => {
+                                              dragRef.current = { kind: "chunk", assignmentId: a.id, taskId: pt.id, chunkId: c.id, fromDay: dIso };
+                                            }}
+                                            onDragEnd={() => {
+                                              dragRef.current = null;
+                                              setDragOverDay(null);
+                                            }}
+                                            title="Drag step to another day"
+                                            className="shrink-0 cursor-grab active:cursor-grabbing text-zinc-500 hover:text-zinc-300 pt-0.5"
+                                          >
+                                            <GripVertical className="w-3.5 h-3.5" />
+                                          </div>
                                           <span className="text-[11px] text-zinc-200 min-w-0">
                                             {c.title?.trim() ? c.title.trim() : "Untitled step"}
                                           </span>
@@ -2277,6 +2329,52 @@ function WeekGridListView({
                             </div>
                           );
                         })}
+
+                        {stepMovesForDay.length > 0 && (
+                          <div className={cn("space-y-2", tasksForDay.length > 0 && "pt-1 mt-1 border-t border-white/[0.08]")}>
+                            <div className="text-[10px] font-semibold uppercase tracking-wider text-violet-200/80 px-0.5">
+                              Steps moved here
+                            </div>
+                            <div className="space-y-1.5">
+                              {stepMovesForDay.map(({ a, pt, c }) => (
+                                <div
+                                  key={`${a.id}:${pt.id}:${c.id}`}
+                                  className="rounded-xl border border-violet-500/20 bg-violet-600/[0.06] px-2.5 py-2 flex items-start gap-2"
+                                >
+                                  <div
+                                    draggable
+                                    onDragStart={() => {
+                                      dragRef.current = {
+                                        kind: "chunk",
+                                        assignmentId: a.id,
+                                        taskId: pt.id,
+                                        chunkId: c.id,
+                                        fromDay: dIso,
+                                      };
+                                    }}
+                                    onDragEnd={() => {
+                                      dragRef.current = null;
+                                      setDragOverDay(null);
+                                    }}
+                                    title="Drag step to another day"
+                                    className="shrink-0 cursor-grab active:cursor-grabbing text-violet-200/50 hover:text-violet-200 pt-0.5"
+                                  >
+                                    <GripVertical className="w-3.5 h-3.5" />
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="text-[11px] text-white/90 line-clamp-2">
+                                      {c.title?.trim() ? c.title.trim() : "Untitled step"}
+                                    </div>
+                                    <div className="mt-0.5 text-[10px] text-zinc-500 line-clamp-1">
+                                      {roleShort(a.role_id)} · {pt.title?.trim() ? pt.title.trim() : "Main task"}
+                                    </div>
+                                  </div>
+                                  <span className="text-[10px] text-zinc-500 shrink-0">{CHUNK_STATUS_LABEL[c.status]}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
 
                         {extrasForDay.length > 0 && aiDevAssignment && (
                           <div
