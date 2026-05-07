@@ -74,6 +74,10 @@ export type WorkboardChunk = {
   tags: string[];
   /** ISO date (YYYY-MM-DD) when this chunk was marked completed; cleared on unmark */
   completed_at?: string;
+  /** Optional: schedule this step on a specific day (YYYY-MM-DD). Defaults to parent task due_date. */
+  scheduled_for?: string;
+  /** First scheduled day this step had (for "moved Xd" badges if needed later). */
+  origin_scheduled_for?: string;
 };
 
 /** A top-level “main task” for the week: its own title, due date, steps, and completion. */
@@ -173,6 +177,8 @@ function normalizeChunk(c: WorkboardChunk): WorkboardChunk {
   return {
     ...c,
     tags: Array.isArray(c.tags) ? c.tags : [],
+    scheduled_for: typeof (c as any).scheduled_for === "string" ? String((c as any).scheduled_for).slice(0, 10) : undefined,
+    origin_scheduled_for: typeof (c as any).origin_scheduled_for === "string" ? String((c as any).origin_scheduled_for).slice(0, 10) : undefined,
   };
 }
 
