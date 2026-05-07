@@ -936,6 +936,8 @@ export default function PostTracker(){
   const [addOpen,setAddOpen]=useState(false);
   const [detailIdea,setDetailIdea]=useState<any>(null);
   const [detailNicheIds,setDetailNicheIds]=useState<string[]>([]);
+  const [writerDraft,setWriterDraft]=useState("");
+  const writerDirty=useRef(false);
   const nicheSaveTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const nicheSaveRef=useRef<string[]>([]);
   const saveNiches=useCallback((ideaId: string, next: string[])=>{
@@ -1151,6 +1153,25 @@ export default function PostTracker(){
   const cdNiches=cd?niches.filter((n: any)=>detailNicheIds.includes(n.id)):[];
   const cdPages=cdNiches.flatMap((n: any)=>n.pages||[]).filter((v: string,i: number,a: string[])=>a.indexOf(v)===i);
 
+  // Keep a stable draft for writer comments so closing the modal doesn't drop unsaved text.
+  useEffect(() => {
+    if (!cd?.id) return;
+    if (writerDirty.current) return;
+    setWriterDraft(String(cd.writer_comments || ""));
+  }, [cd?.id, cd?.writer_comments]);
+
+  const flushWriterComments = useCallback(async (ideaId: string) => {
+    if (!writerDirty.current) return;
+    const next = String(writerDraft || "");
+    writerDirty.current = false;
+    try {
+      await updateIdeaMut.mutateAsync({ id: ideaId, data: { writer_comments: next } });
+    } catch {
+      // updateIdeaMut already toasts onError; keep draft dirty so user doesn't lose text.
+      writerDirty.current = true;
+    }
+  }, [writerDraft, updateIdeaMut]);
+
   const sa: Record<string, {label:string;stage:string;style:React.CSSProperties}[]>={
     new:[{label:"Approve",stage:"approved",style:bp}],
     approved:[{label:"Mark scripted",stage:"scripted",style:bp}],
@@ -1319,6 +1340,9 @@ export default function PostTracker(){
       {/* Detail Modal */}
       <Modal open={!!cd} onClose={()=>{
         if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        if(cd?.id){
+          flushWriterComments(cd.id);
+        }
         if(nicheSaveTimer.current){clearTimeout(nicheSaveTimer.current);nicheSaveTimer.current=null;if(cd)updateIdeaMut.mutate({id:cd.id,data:{niche_ids:nicheSaveRef.current}});}
         closeDetail();
       }} title={cd?.title||""} wide>
@@ -1337,6 +1361,40 @@ export default function PostTracker(){
               ))}
             </div>
             {sa[cd.stage]?.length>0&&<div style={{display:"flex",gap:6}}>{sa[cd.stage].map(a=><button key={a.stage} onClick={()=>moveIdea(cd.id,a.stage)} style={a.style}>{a.label}</button>)}</div>}
+            {cd.format === "carousel" && (
+              <button
+                type="button"
+                onClick={async ()=>{
+                  try{
+                    const creator = user?.user_metadata?.full_name || user?.email?.split("@")[0] || user?.email || null;
+                    const created = await createTrackerIdea({
+                      title: `${cd.title || "Untitled"} (copy)`,
+                      source: cd.source || "original",
+                      niche_ids: cd.nicheIds || [],
+                      format: "carousel",
+                      caption: cd.caption || null,
+                      canva_link: null,
+                      hook_text: cd.hook_text || null,
+                      slides_content: Array.isArray(cd.slides_content) ? cd.slides_content : null,
+                      content_pillar: cd.content_pillar || null,
+                      content_bucket: cd.content_bucket || null,
+                      comp_link: cd.comp_link || null,
+                      stage: "new",
+                      type: "post",
+                      created_by: creator,
+                    });
+                    invalidate();
+                    toast.success("Carousel duplicated");
+                    openDetail(mapIdea(created));
+                  }catch(ex:any){
+                    toast.error(ex?.message || "Failed to duplicate carousel");
+                  }
+                }}
+                style={{...bs,borderColor:"#3f3f46",fontSize:12}}
+              >
+                Duplicate carousel
+              </button>
+            )}
 
             {cd.stage==="uploaded"&&(
               <PostedDateEditor
@@ -1430,9 +1488,15 @@ export default function PostTracker(){
 
             <div>
               <label style={ls}>Comments by the writer</label>
-              <SafeTextArea
-                value={cd.writer_comments || ""}
-                onSave={(v) => updateIdeaMut.mutate({ id: cd.id, data: { writer_comments: v } })}
+              <textarea
+                value={writerDraft}
+                onChange={(e)=>{
+                  writerDirty.current = true;
+                  setWriterDraft(e.target.value);
+                }}
+                onBlur={()=>{
+                  if(cd?.id) flushWriterComments(cd.id);
+                }}
                 rows={4}
                 placeholder="Explain the idea briefly: why it matters, the angle, what the editor should watch for…"
                 style={{ ...is, resize: "vertical", minHeight: 90 }}
