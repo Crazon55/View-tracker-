@@ -219,8 +219,10 @@ function Modal({open,onClose,title,children,wide}: {open:boolean;onClose:()=>voi
 }
 
 function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove,stage}: {po:any;page:string;fmtD:(d:string)=>string;PT:any;updatePostingMut:any;onRemove:()=>void;stage?:string}){
-  const [editing,setEditing]=useState(false);
+  const hasViews = po.views !== null && po.views !== undefined;
+  const [editing,setEditing]=useState(!hasViews);
   const [postDate,setPostDate]=useState(po.date||"");
+  const [views,setViews]=useState((po.views ?? "").toString());
 
   
   const stageColor = stage==="testing"?"#D4952A":stage==="proven_ideas"?"#1D9E75":stage==="kill"?"#C93B3B":stage==="scheduled"?"#534AB7":stage==="posted"?"#2D9E5F":"#7c3aed";
@@ -230,7 +232,13 @@ function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove,stage}: {po:any;
       <div style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}} onClick={()=>setEditing(true)}>
         <div onClick={e=>{e.stopPropagation();onRemove();}} title="Remove page" style={{width:20,height:20,borderRadius:5,background:stageColor,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,cursor:"pointer"}}><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
         <span style={{fontSize:13,fontWeight:600,color:"#fff"}}>@{page}</span>
+        {hasViews && (
+          <span style={{fontSize:12,fontWeight:700,color:"#fff",fontFamily:"monospace"}}>
+            {Number(po.views).toLocaleString()}
+          </span>
+        )}
         <span style={{fontSize:11,color:"#52525b",marginLeft:"auto",whiteSpace:"nowrap"}}>{po.date ? fmtD(po.date) : ""}</span>
+        <span style={{fontSize:10,color:"#3f3f46"}}>click to edit</span>
       </div>
     );
   }
@@ -245,8 +253,29 @@ function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove,stage}: {po:any;
         <span style={{fontSize:10,color:"#71717a",fontWeight:600}}>Date</span>
         <input type="date" value={postDate} onChange={e=>setPostDate(e.target.value)} style={{padding:"5px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:12,background:"#09090b",color:"#fff",cursor:"pointer"}}/>
       </div>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginLeft:30}}>
+        <span style={{fontSize:10,color:"#71717a",fontWeight:600}}>Views</span>
+        <input
+          type="number"
+          value={views}
+          onChange={(e)=>setViews(e.target.value)}
+          placeholder="Enter views"
+          style={{width:120,padding:"5px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:12,background:"#09090b",color:"#fff"}}
+        />
+      </div>
       <div style={{display:"flex",gap:6,marginLeft:30,marginTop:2}}>
-        <button onClick={()=>{updatePostingMut.mutate({id:po.id,data:{date:postDate||null}},{onSuccess:()=>setEditing(false)});}} disabled={updatePostingMut.isPending} style={{padding:"5px 16px",borderRadius:7,border:"none",fontSize:11,fontWeight:600,cursor:"pointer",background:updatePostingMut.isPending?"#52525b":"#7c3aed",color:"#fff"}}>{updatePostingMut.isPending?"Saving...":"Save"}</button>
+        <button
+          onClick={()=>{
+            updatePostingMut.mutate(
+              {id:po.id,data:{date:postDate||null,views: views==="" ? null : Number(views)||null}},
+              {onSuccess:()=>setEditing(false)}
+            );
+          }}
+          disabled={updatePostingMut.isPending}
+          style={{padding:"5px 16px",borderRadius:7,border:"none",fontSize:11,fontWeight:600,cursor:"pointer",background:updatePostingMut.isPending?"#52525b":"#7c3aed",color:"#fff"}}
+        >
+          {updatePostingMut.isPending?"Saving...":"Save"}
+        </button>
         <button onClick={()=>setEditing(false)} style={{padding:"5px 12px",borderRadius:7,border:"1px solid #3f3f46",fontSize:11,fontWeight:500,cursor:"pointer",background:"transparent",color:"#a1a1aa"}}>Cancel</button>
         <button onClick={onRemove} style={{padding:"5px 12px",borderRadius:7,border:"1px solid #3f3f46",fontSize:11,fontWeight:500,cursor:"pointer",background:"transparent",color:"#FF7070",marginLeft:"auto"}}>Remove</button>
       </div>
