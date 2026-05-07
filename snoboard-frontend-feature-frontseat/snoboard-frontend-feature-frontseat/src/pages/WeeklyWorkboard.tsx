@@ -1052,35 +1052,34 @@ export default function WeeklyWorkboard() {
 
       <div className="pl-[70px] pr-6 pt-8 pb-12 max-w-[min(100%,1520px)] mx-auto">
         <ScrollReveal delay={0.05}>
-          <div className="flex flex-wrap items-center gap-3 mb-8">
-            <div
-              className={`flex items-center gap-0.5 ${BENTO_SURFACE} p-1`}
-            >
+          <div className="flex flex-wrap items-center justify-start gap-3 mb-8">
+
+            <div className={`inline-flex items-center ${BENTO_SURFACE} p-1`}>
               <button
                 type="button"
                 onClick={() => setWeekStart((w) => addDaysISO(w, -7))}
-                className="p-2.5 rounded-xl text-zinc-400 hover:text-white hover:bg-violet-500/15 transition-colors"
+                className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-violet-500/15 transition-colors"
                 aria-label="Previous week"
+                title="Previous week"
               >
                 <ChevronLeft className="w-4 h-4" />
-              </button>
-              <span className="px-4 text-sm font-medium text-white min-w-[200px] text-center tabular-nums">
-                {fmtWeekRange(weekStart)}
-              </span>
-              <button
-                type="button"
-                onClick={() => setWeekStart((w) => addDaysISO(w, 7))}
-                className="p-2.5 rounded-xl text-zinc-400 hover:text-white hover:bg-violet-500/15 transition-colors"
-                aria-label="Next week"
-              >
-                <ChevronRight className="w-4 h-4" />
               </button>
               <button
                 type="button"
                 onClick={() => setWeekStart(getMondayISO())}
-                className="ml-0.5 mr-1 px-3 py-2 text-xs font-semibold rounded-xl border border-violet-500/35 bg-violet-600/25 text-white hover:bg-violet-600/45 transition-colors shadow-[0_0_24px_-6px_rgba(124,58,237,0.5)]"
+                className="text-sm font-semibold text-white tabular-nums px-2 rounded-xl hover:bg-violet-500/15 transition-colors py-1"
+                title="Jump to this week"
               >
-                This week
+                {fmtWeekRange(weekStart)}
+              </button>
+              <button
+                type="button"
+                onClick={() => setWeekStart((w) => addDaysISO(w, 7))}
+                className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-violet-500/15 transition-colors"
+                aria-label="Next week"
+                title="Next week"
+              >
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
 
@@ -1196,6 +1195,7 @@ export default function WeeklyWorkboard() {
           ) : (
             <WeekGridListView
               weekStart={weekStart}
+              setWeekStart={setWeekStart}
               weekAssignments={weekGridAssignments}
               weekAssignmentsAllRoles={weekGridAssignmentsAllRoles}
               myWorkboardRole={myWorkboardRole}
@@ -1889,6 +1889,7 @@ function todayISO() {
 
 function WeekGridListView({
   weekStart,
+  setWeekStart,
   weekAssignments,
   weekAssignmentsAllRoles,
   myWorkboardRole,
@@ -1906,6 +1907,7 @@ function WeekGridListView({
   updateInterrupt,
 }: {
   weekStart: string;
+  setWeekStart: React.Dispatch<React.SetStateAction<string>>;
   /** Full tasks for this week (same week + role toolbar filter only). Not sliced by “today”. */
   weekAssignments: MainAssignment[];
   /** Same week, all departments — used for ticket cards by day and department editors when the toolbar hides a role. */
@@ -2088,8 +2090,7 @@ function WeekGridListView({
       )}
 
       <div className={cn(BENTO_SURFACE, "p-4")}>
-        <div className="text-sm font-semibold text-white tabular-nums">{fmtWeekRange(weekStart)}</div>
-        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
           {days.map((dIso) => (
             <div
               key={dIso}
