@@ -1054,35 +1054,6 @@ export default function WeeklyWorkboard() {
         <ScrollReveal delay={0.05}>
           <div className="flex flex-wrap items-center justify-start gap-3 mb-8">
 
-            <div className={`inline-flex items-center ${BENTO_SURFACE} p-1`}>
-              <button
-                type="button"
-                onClick={() => setWeekStart((w) => addDaysISO(w, -7))}
-                className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-violet-500/15 transition-colors"
-                aria-label="Previous week"
-                title="Previous week"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setWeekStart(getMondayISO())}
-                className="text-sm font-semibold text-white tabular-nums px-2 rounded-xl hover:bg-violet-500/15 transition-colors py-1"
-                title="Jump to this week"
-              >
-                {fmtWeekRange(weekStart)}
-              </button>
-              <button
-                type="button"
-                onClick={() => setWeekStart((w) => addDaysISO(w, 7))}
-                className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-violet-500/15 transition-colors"
-                aria-label="Next week"
-                title="Next week"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-
             <div className={`inline-flex ${BENTO_SURFACE} p-1`}>
               <button
                 type="button"
@@ -2088,6 +2059,35 @@ function WeekGridListView({
           </div>
         </div>
       )}
+
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => setWeekStart((w) => addDaysISO(w, -7))}
+          className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-violet-500/15 transition-colors"
+          aria-label="Previous week"
+          title="Previous week"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => setWeekStart(getMondayISO())}
+          className="text-sm font-semibold text-white tabular-nums px-2 rounded-xl hover:bg-violet-500/15 transition-colors py-1"
+          title="Jump to this week"
+        >
+          {fmtWeekRange(weekStart)}
+        </button>
+        <button
+          type="button"
+          onClick={() => setWeekStart((w) => addDaysISO(w, 7))}
+          className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-violet-500/15 transition-colors"
+          aria-label="Next week"
+          title="Next week"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
 
       <div className={cn(BENTO_SURFACE, "p-4")}>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
