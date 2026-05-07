@@ -25,6 +25,7 @@ const SC: Record<string,{bg:string;text:string;dot:string}> = {
 const PT: Record<string,{label:string;color:string;bg:string}> = {
   below:{ label:"Below",color:"#FF7070",bg:"rgba(201,59,59,0.15)" },
   baseline:{ label:"Baseline",color:"#F0C060",bg:"rgba(212,149,42,0.15)" },
+  above_baseline:{ label:"Above",color:"#7BB0FF",bg:"rgba(74,127,212,0.15)" },
   topline:{ label:"Topline",color:"#50E0B0",bg:"rgba(29,158,117,0.15)" },
   viral:{ label:"Viral",color:"#B49EFF",bg:"rgba(123,97,196,0.15)" },
 };
@@ -78,7 +79,15 @@ function mergeAfpIntoTags(tags: string[] | undefined, pages: string[]): string[]
   }
   return rest;
 }
-const gPerf = (v: number|null, b: number|null) => { if(!v||!b) return null; const r=v/b; if(r>=20) return "viral"; if(r>=5) return "topline"; if(r>=0.8) return "baseline"; return "below"; };
+const gPerf = (v: number|null, b: number|null) => {
+  if(!v||!b) return null;
+  const r=v/b;
+  if(r>=20) return "viral";
+  if(r>=5) return "topline";
+  if(r>=1.2) return "above_baseline";
+  if(r>=0.8) return "baseline";
+  return "below";
+};
 const getMonday = (d: string) => { const dt=new Date(d+"T00:00:00"); const day=dt.getDay(); dt.setDate(dt.getDate()-day+(day===0?-6:1)); return toLocalISO(dt); };
 const addD = (s: string, n: number) => { const d=new Date(s+"T00:00:00"); d.setDate(d.getDate()+n); return toLocalISO(d); };
 const getWD = (m: string) => Array.from({length:7},(_,i)=>addD(m,i));
@@ -223,11 +232,13 @@ function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove,stage}: {po:any;
   const [editing,setEditing]=useState(!hasViews);
   const [postDate,setPostDate]=useState(po.date||"");
   const [views,setViews]=useState((po.views ?? "").toString());
+  const [perfTag,setPerfTag]=useState<string>(po.perf_tag || "");
 
   
   const stageColor = stage==="testing"?"#D4952A":stage==="proven_ideas"?"#1D9E75":stage==="kill"?"#C93B3B":stage==="scheduled"?"#534AB7":stage==="posted"?"#2D9E5F":"#7c3aed";
 
   if(!editing){
+    const effectiveTag = (po.perf_tag && PT[po.perf_tag]) ? po.perf_tag : gPerf(po.views ?? null, po.baselineViews ?? null);
     return(
       <div style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}} onClick={()=>setEditing(true)}>
         <div onClick={e=>{e.stopPropagation();onRemove();}} title="Remove page" style={{width:20,height:20,borderRadius:5,background:stageColor,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,cursor:"pointer"}}><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
@@ -237,6 +248,7 @@ function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove,stage}: {po:any;
             {Number(po.views).toLocaleString()}
           </span>
         )}
+        {!!effectiveTag && <PB tag={effectiveTag} />}
         <span style={{fontSize:11,color:"#52525b",marginLeft:"auto",whiteSpace:"nowrap"}}>{po.date ? fmtD(po.date) : ""}</span>
         <span style={{fontSize:10,color:"#3f3f46"}}>click to edit</span>
       </div>
@@ -263,11 +275,34 @@ function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove,stage}: {po:any;
           style={{width:120,padding:"5px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:12,background:"#09090b",color:"#fff"}}
         />
       </div>
+      <div style={{display:"flex",gap:6,marginLeft:30,flexWrap:"wrap"}}>
+        {(["below","baseline","above_baseline","topline","viral"] as const).map((tag)=>{const t=PT[tag];const active=perfTag===tag;return(
+          <button
+            key={tag}
+            type="button"
+            onClick={()=>setPerfTag(tag)}
+            style={{
+              padding:"4px 10px",
+              borderRadius:6,
+              border:active?`2px solid ${t.color}`:"1px solid #3f3f46",
+              background:active?t.bg:"transparent",
+              color:active?t.color:"#52525b",
+              fontSize:10,
+              fontWeight:600,
+              cursor:"pointer",
+              transition:"all 0.15s",
+            }}
+            title={t.label}
+          >
+            {t.label === "Below" ? "Below baseline" : t.label === "Above" ? "Above baseline" : t.label}
+          </button>
+        );})}
+      </div>
       <div style={{display:"flex",gap:6,marginLeft:30,marginTop:2}}>
         <button
           onClick={()=>{
             updatePostingMut.mutate(
-              {id:po.id,data:{date:postDate||null,views: views==="" ? null : Number(views)||null}},
+              {id:po.id,data:{date:postDate||null,views: views==="" ? null : Number(views)||null,perf_tag: perfTag || null}},
               {onSuccess:()=>setEditing(false)}
             );
           }}
@@ -415,7 +450,7 @@ function AnalyticsView({ideas,niches,nicheFilter,pageFilter,dateFrom,dateTo,setD
 
   const data = useMemo(()=>{
     let totalViews=0, totalPosts=0;
-    const perfCounts: Record<string,number>={below:0,baseline:0,topline:0,viral:0};
+    const perfCounts: Record<string,number>={below:0,baseline:0,above_baseline:0,topline:0,viral:0};
     const pageMap: Record<string,{views:number;posts:number;best:string|null}>={};
     const dailyMap: Record<string,number>={};
     ideas.forEach((idea: any)=>{
@@ -429,7 +464,7 @@ function AnalyticsView({ideas,niches,nicheFilter,pageFilter,dateFrom,dateTo,setD
         if(perf) perfCounts[perf]++;
         if(!pageMap[p.page]) pageMap[p.page]={views:0,posts:0,best:null};
         pageMap[p.page].views+=p.views; pageMap[p.page].posts++;
-        const order: Record<string,number>={viral:4,topline:3,baseline:2,below:1};
+        const order: Record<string,number>={viral:5,topline:4,above_baseline:3,baseline:2,below:1};
         if((order[perf||""]||0)>(order[pageMap[p.page].best||""]||0)) pageMap[p.page].best=perf;
         if(!dailyMap[p.date]) dailyMap[p.date]=0;
         dailyMap[p.date]+=p.views;
@@ -504,7 +539,7 @@ function AnalyticsView({ideas,niches,nicheFilter,pageFilter,dateFrom,dateTo,setD
         <div style={cardS}>
           <div style={{fontSize:11,color:"#71717a",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:6}}>Performance</div>
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-            {(["viral","topline","baseline","below"] as const).map(k=>data.perfCounts[k]>0&&<span key={k} style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:99,background:PT[k].bg,color:PT[k].color}}>{data.perfCounts[k]} {PT[k].label}</span>)}
+            {(["viral","topline","above_baseline","baseline","below"] as const).map(k=>data.perfCounts[k]>0&&<span key={k} style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:99,background:PT[k].bg,color:PT[k].color}}>{data.perfCounts[k]} {PT[k].label === "Above" ? "Above baseline" : PT[k].label === "Below" ? "Below baseline" : PT[k].label}</span>)}
           </div>
         </div>
       </div>
