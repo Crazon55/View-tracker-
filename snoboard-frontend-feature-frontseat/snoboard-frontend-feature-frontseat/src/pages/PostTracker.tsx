@@ -1349,6 +1349,46 @@ export default function PostTracker(){
 
             {/* Editable fields */}
             <div><label style={ls}>Niches</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{niches.map((n: any)=>{const sel=detailNicheIds.includes(n.id);return <button key={n.id} onClick={()=>{const next=sel?detailNicheIds.filter((x: string)=>x!==n.id):[...detailNicheIds,n.id];setDetailNicheIds(next);saveNiches(cd.id,next);}} style={{padding:"6px 12px",borderRadius:8,border:sel?"2px solid #7c3aed":"1.5px solid #3f3f46",background:sel?"#27272a":"#18181b",fontSize:12,fontWeight:600,cursor:"pointer",color:sel?"#fff":"#71717a"}}>{n.name}</button>;})}</div></div>
+            <div>
+              <label style={ls}>Format</label>
+              <div style={{display:"flex",gap:6}}>
+                {(["static","carousel"] as const).map((f)=>(
+                  <button
+                    key={f}
+                    type="button"
+                    onClick={()=>{
+                      if(cd.format===f) return;
+                      const nextSlides =
+                        f === "carousel"
+                          ? (Array.isArray(cd.slides_content) && cd.slides_content.length > 0 ? cd.slides_content : [""])
+                          : null;
+                      // Optimistic for the open modal.
+                      setDetailIdea((cur: any)=>(cur && cur.id===cd.id ? {...cur, format:f, slides_content: nextSlides} : cur));
+                      updateIdeaMut.mutate({id:cd.id,data:{format:f, slides_content: nextSlides}});
+                    }}
+                    style={{
+                      flex:1,
+                      padding:"8px 10px",
+                      borderRadius:8,
+                      border: cd.format===f ? "2px solid #7c3aed" : "1.5px solid #3f3f46",
+                      background: cd.format===f ? "#27272a" : "#18181b",
+                      fontSize:12,
+                      fontWeight:600,
+                      cursor:"pointer",
+                      textTransform:"capitalize",
+                      color: cd.format===f ? "#fff" : "#a1a1aa",
+                    }}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+              {cd.format === "static" && Array.isArray(cd.slides_content) && cd.slides_content.length > 0 && (
+                <div style={{marginTop:6,fontSize:11,color:"#52525b"}}>
+                  Switching to static clears saved slides content.
+                </div>
+              )}
+            </div>
             <div><label style={ls}>Hook text</label><SafeTextArea value={cd.hook_text || ""} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{hook_text:v.trim()||null}})} rows={2} placeholder="Short feed hook — the scroll-stopper line" style={{...is,resize:"vertical",minHeight:56}}/></div>
             <div><label style={ls}>Caption</label><SafeTextArea value={cd.caption} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{caption:v}})} rows={4} placeholder="Paste the full Instagram caption here…" style={{...is,resize:"vertical",minHeight:90}}/></div>
             {cd.format === "carousel" && (
