@@ -915,7 +915,7 @@ export default function PostTracker(){
   const updateIdeaMut = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => updateTrackerIdea(id, data),
     onSuccess: () => { invalidate(); },
-    onError: () => toast.error("Failed to update idea"),
+    onError: (e: any) => toast.error(e?.message || "Failed to update idea"),
   });
   const deleteIdeaMut = useMutation({
     mutationFn: (id: string) => deleteTrackerIdea(id),
@@ -1183,7 +1183,12 @@ export default function PostTracker(){
   useEffect(() => {
     if (!cd?.id) return;
     if (writerDirty.current) return;
-    setWriterDraft(String(cd.writer_comments || ""));
+    // Never clobber a non-empty local draft with an empty server value.
+    const incoming = String(cd.writer_comments || "");
+    setWriterDraft((prev) => {
+      if (prev && !incoming) return prev;
+      return incoming;
+    });
   }, [cd?.id, cd?.writer_comments]);
 
   const flushWriterComments = useCallback(async (ideaId: string) => {
@@ -1191,7 +1196,12 @@ export default function PostTracker(){
     const next = String(writerDraft || "");
     writerDirty.current = false;
     try {
-      await updateIdeaMut.mutateAsync({ id: ideaId, data: { writer_comments: next } });
+      const currentNotes = (cd?.id === ideaId ? cd?.notes : null) as any;
+      const nextNotes = notesWithWriterComments(currentNotes, next);
+      // Attempt the proper column write; also keep a notes backup.
+      await updateIdeaMut.mutateAsync({ id: ideaId, data: { writer_comments: next, notes: nextNotes } });
+      // Keep modal stable even if list refetch lags.
+      setDetailIdea((cur: any)=>(cur && cur.id===ideaId ? {...cur, writer_comments: next, notes: nextNotes} : cur));
     } catch {
       // Fallback: some deployments don't have the writer_comments column yet.
       // Persist to `notes` (like assets) so the UI doesn't "poof" on close.
