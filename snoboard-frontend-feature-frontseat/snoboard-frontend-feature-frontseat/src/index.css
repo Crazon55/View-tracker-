@@ -340,3 +340,52 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   filter: invert(1);
   cursor: pointer;
 }
+
+/* ────────────────────────────────────────────────────────────────────
+   Phone  ≤ 768 px
+   Nothing is removed or changed — these rules only apply on small screens.
+──────────────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Stop content from creating unwanted horizontal scroll */
+  html, body, #root { overflow-x: hidden; max-width: 100vw; }
+
+  /* iOS Safari auto-zooms when any focused input has font-size < 16 px.
+     Preventing that keeps the viewport stable while typing. */
+  input, select, textarea { font-size: max(16px, 1em) !important; }
+
+  /* Slim scrollbars — fingers navigate via swipe, not scrollbar drag */
+  ::-webkit-scrollbar       { width: 3px;  height: 3px;  }
+  ::-webkit-scrollbar-thumb { border-width: 1px; }
+
+  /* Move the fixed pill (top-right header bar) away from the notch/status bar */
+  .fixed.top-5.right-5 {
+    top: 0.4rem;
+    right: 0.4rem;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────
+   Smart TV / large screens  ≥ 1920 px
+   zoom scales the entire rendered page proportionally — inline px
+   values, paddings, and font sizes all grow together, so no
+   individual component needs to be touched.
+──────────────────────────────────────────────────────────────────── */
+@media (min-width: 1920px) {
+  html { zoom: 1.3; }
+
+  /* Clear focus ring for D-pad / remote-pointer navigation */
+  :focus-visible {
+    outline: 3px solid rgba(124, 58, 237, 0.9) !important;
+    outline-offset: 4px !important;
+    border-radius: 4px;
+  }
+
+  /* Bigger scrollbar track — easier to hit with a remote pointer */
+  ::-webkit-scrollbar       { width: 14px; height: 14px; }
+  ::-webkit-scrollbar-thumb { border-width: 3px; }
+}
+
+/* 4K screens */
+@media (min-width: 2560px) {
+  html { zoom: 1.65; }
+}
