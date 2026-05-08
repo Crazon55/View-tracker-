@@ -51,53 +51,92 @@ async function fetchArticles(): Promise<NewsArticle[]> {
   return (data as NewsArticle[]) || [];
 }
 
-async function fetchGoogleNewsRSS() {
-  const feeds = [
-    "https://news.google.com/rss/search?q=startup+india+funding&hl=en-IN&gl=IN&ceid=IN:en",
-    "https://news.google.com/rss/search?q=venture+capital+india&hl=en-IN&gl=IN&ceid=IN:en",
-    "https://news.google.com/rss/search?q=funding+round+startup&hl=en-IN&gl=IN&ceid=IN:en",
+const RSS_FEEDS = [
+  // Google News RSS searches — most reliable, keyword-targeted
+  { url: "https://news.google.com/rss/search?q=startup+india+funding+rounds&hl=en-IN&gl=IN&ceid=IN:en", label: "Google News" },
+  { url: "https://news.google.com/rss/search?q=venture+capital+india&hl=en-IN&gl=IN&ceid=IN:en", label: "Google News" },
+  { url: "https://news.google.com/rss/search?q=business+startup+India&hl=en-IN&gl=IN&ceid=IN:en", label: "Google News" },
+  // Direct RSS feeds
+  { url: "https://inc42.com/feed/", label: "Inc42" },
+  { url: "https://techcrunch.com/feed/", label: "TechCrunch" },
+  { url: "https://www.business-standard.com/rss/companies/start-ups.rss", label: "Business Standard" },
+  { url: "https://www.moneycontrol.com/rss/business.xml", label: "Moneycontrol" },
+];
+
+const KEYWORDS_LC = ["startup", "venture capital", "funding", "business"];
+
+async function fetchRSSWithProxy(url: string): Promise<string | null> {
+  // Try multiple CORS proxies in order
+  const proxies = [
+    `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
   ];
-
-  const articles: Omit<NewsArticle, "id" | "created_at">[] = [];
-
-  for (const feed of feeds) {
+  for (const proxy of proxies) {
     try {
-      const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(feed)}`);
+      const res = await fetch(proxy, { signal: AbortSignal.timeout(8000) });
       if (!res.ok) continue;
-      const json = await res.json();
-      const parser = new DOMParser();
-      const xml = parser.parseFromString(json.contents, "text/xml");
-      const items = xml.querySelectorAll("item");
-      items.forEach((item) => {
-        const title = item.querySelector("title")?.textContent || "";
-        const link = item.querySelector("link")?.textContent || "";
-        const desc = item.querySelector("description")?.textContent || "";
-        const cleanDesc = desc.replace(/<[^>]+>/g, "").slice(0, 300);
-        if (title && link) {
-          articles.push({
-            title: title.trim(),
-            summary: cleanDesc.trim() || null,
-            url: link.trim(),
-            source: sourceName(link),
-            keywords: ["auto"],
-          });
-        }
-      });
+      // allorigins wraps in JSON; corsproxy returns raw
+      const text = await res.text();
+      if (text.startsWith("{")) {
+        const json = JSON.parse(text);
+        return json.contents ?? null;
+      }
+      return text;
     } catch {
-      // skip failed feed
+      continue;
     }
   }
+  return null;
+}
 
-  // Deduplicate by title
+function parseRSSItems(xml: string, defaultLabel: string): Omit<NewsArticle, "id" | "created_at">[] {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, "text/xml");
+  const items = doc.querySelectorAll("item");
+  const results: Omit<NewsArticle, "id" | "created_at">[] = [];
+  items.forEach((item) => {
+    const title = item.querySelector("title")?.textContent?.trim() || "";
+    const rawLink = item.querySelector("link")?.textContent?.trim()
+      || item.querySelector("link")?.getAttribute("href")?.trim() || "";
+    const desc = item.querySelector("description")?.textContent || "";
+    const cleanDesc = desc.replace(/<[^>]+>/g, "").replace(/&[a-z]+;/gi, " ").replace(/\s+/g, " ").trim().slice(0, 400);
+    if (!title || !rawLink) return;
+    const combined = `${title} ${cleanDesc}`.toLowerCase();
+    if (!KEYWORDS_LC.some((kw) => combined.includes(kw))) return;
+    results.push({
+      title,
+      summary: cleanDesc || null,
+      url: rawLink,
+      source: defaultLabel,
+      keywords: KEYWORDS_LC.filter((kw) => combined.includes(kw)),
+    });
+  });
+  return results;
+}
+
+async function fetchAllNews(): Promise<{ articles: Omit<NewsArticle, "id" | "created_at">[]; errors: string[] }> {
+  const all: Omit<NewsArticle, "id" | "created_at">[] = [];
+  const errors: string[] = [];
+
+  await Promise.allSettled(
+    RSS_FEEDS.map(async ({ url, label }) => {
+      const xml = await fetchRSSWithProxy(url);
+      if (!xml) { errors.push(label); return; }
+      const items = parseRSSItems(xml, label);
+      all.push(...items);
+    })
+  );
+
+  // Deduplicate by normalised title
   const seen = new Set<string>();
-  const unique = articles.filter((a) => {
-    const key = a.title.toLowerCase().slice(0, 60);
+  const unique = all.filter((a) => {
+    const key = a.title.toLowerCase().replace(/\s+/g, " ").slice(0, 80);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
 
-  return unique.slice(0, 20);
+  return { articles: unique.slice(0, 40), errors };
 }
 
 export default function NewsFeed() {
@@ -114,17 +153,18 @@ export default function NewsFeed() {
 
   const refreshMut = useMutation({
     mutationFn: async () => {
-      const fresh = await fetchGoogleNewsRSS();
-      if (!fresh.length) throw new Error("No articles fetched");
+      const { articles, errors } = await fetchAllNews();
+      if (errors.length) toast.warning(`${errors.length} source(s) failed: ${errors.join(", ")}`);
+      if (!articles.length) throw new Error("No matching articles found from any source. Try again in a moment.");
       const { error } = await supabase.from("news_articles").upsert(
-        fresh.map((a) => ({ ...a })),
+        articles,
         { onConflict: "url", ignoreDuplicates: true }
       );
-      if (error) throw new Error(error.message);
-      return fresh.length;
+      if (error) throw new Error(`Database error: ${error.message}. Make sure you ran the SQL to create the news_articles table.`);
+      return articles.length;
     },
     onSuccess: (count) => {
-      toast.success(`Fetched ${count} fresh articles`);
+      toast.success(`${count} articles loaded`);
       refetch();
     },
     onError: (e: any) => toast.error(e?.message || "Fetch failed"),
