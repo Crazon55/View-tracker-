@@ -204,9 +204,62 @@ function playClip(src: string) {
   }
 }
 
+function playLionRoar() {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const duration = 1.8;
+
+    const bufferSize = Math.floor(ctx.sampleRate * duration);
+    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const noiseData = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) noiseData[i] = Math.random() * 2 - 1;
+
+    const noiseSource = ctx.createBufferSource();
+    noiseSource.buffer = noiseBuffer;
+
+    const lowpass = ctx.createBiquadFilter();
+    lowpass.type = "lowpass";
+    lowpass.frequency.setValueAtTime(300, ctx.currentTime);
+    lowpass.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + duration * 0.7);
+    lowpass.Q.value = 3;
+
+    const osc = ctx.createOscillator();
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(80, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(35, ctx.currentTime + duration);
+
+    const masterGain = ctx.createGain();
+    masterGain.gain.setValueAtTime(0, ctx.currentTime);
+    masterGain.gain.linearRampToValueAtTime(0.4, ctx.currentTime + 0.15);
+    masterGain.gain.setValueAtTime(0.4, ctx.currentTime + 0.9);
+    masterGain.gain.linearRampToValueAtTime(0, ctx.currentTime + duration);
+
+    const oscGain = ctx.createGain();
+    oscGain.gain.value = 0.15;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.value = 0.5;
+
+    noiseSource.connect(lowpass);
+    lowpass.connect(noiseGain);
+    noiseGain.connect(masterGain);
+    osc.connect(oscGain);
+    oscGain.connect(masterGain);
+    masterGain.connect(ctx.destination);
+
+    noiseSource.start();
+    noiseSource.stop(ctx.currentTime + duration);
+    osc.start();
+    osc.stop(ctx.currentTime + duration);
+    window.setTimeout(() => ctx.close(), (duration + 0.5) * 1000);
+  } catch {
+    /* no-op */
+  }
+}
+
 function playTeamSound(teamKey: string) {
   if (teamKey === "goofies") playClip(BARK_SRC);
   else if (teamKey === "garfields") playClip(MEOW_SRC);
+  else if (teamKey === "sheruses") playLionRoar();
 }
 
 /* ============================== odometer ============================== */
@@ -443,7 +496,7 @@ export default function TeamPerformance() {
                 Leader<span className="text-amber-400">board</span>
               </h1>
               <p className="text-sm text-zinc-400 mt-2 max-w-2xl">
-                Garfields vs Goofies — same stats as below, in a calmer read.
+                Garfields vs Goofies vs Sherus — same stats as below, in a calmer read.
               </p>
             </div>
             <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -557,6 +610,7 @@ export default function TeamPerformance() {
           <HeroScoreboard
             teamA={teamA}
             teamB={teamB}
+            teamC={teamC}
             leaderKey={leaderKey}
             totalViews6d={totalViews6d}
             totalViewsAll={totalViewsAll}
@@ -605,26 +659,12 @@ export default function TeamPerformance() {
           </div>
         </div>
 
-        {/* ============================== THE SHERUS — always visible ============================== */}
-        {teamC && (
-          <ScrollReveal delay={0.04} className="mt-6">
-            <div className="max-w-md">
-              <TeamCard
-                team={teamC}
-                isLeader={leaderKey === teamC.key}
-                viewsPeriod={data.views_period}
-                viewsPeriodDays={data.views_period_days ?? data.window_days ?? 7}
-              />
-            </div>
-          </ScrollReveal>
-        )}
-
         {showDetails && (
           <>
             {/* ============================== TEAM CARDS ============================== */}
             <ScrollReveal delay={0.08} className="mt-8">
-              <div className="grid gap-5 md:grid-cols-2">
-                {[teamA, teamB].filter(Boolean).map((team: any) => (
+              <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+                {[teamA, teamB, teamC].filter(Boolean).map((team: any) => (
                   <TeamCard
                     key={team.key}
                     team={team}
@@ -779,9 +819,26 @@ export default function TeamPerformance() {
 
 /* ============================== hero scoreboard ============================== */
 
+function VsBadge() {
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <div className="text-[10px] uppercase tracking-[0.3em] text-zinc-500 font-bold">VS</div>
+      <motion.div
+        initial={{ scale: 0 }}
+        animate={{ scale: 1, rotate: [0, 5, -5, 0] }}
+        transition={{ type: "spring", stiffness: 200, damping: 12 }}
+        className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/30"
+      >
+        <Swords className="w-5 h-5 sm:w-6 sm:h-6 text-zinc-900" />
+      </motion.div>
+    </div>
+  );
+}
+
 function HeroScoreboard({
   teamA,
   teamB,
+  teamC,
   leaderKey,
   totalViews6d,
   totalViewsAll,
@@ -790,15 +847,20 @@ function HeroScoreboard({
 }: {
   teamA: any;
   teamB: any;
+  teamC?: any;
   leaderKey: string | null;
   totalViews6d: number;
   totalViewsAll: number;
   viewsPeriod?: "calendar_month" | "rolling";
   viewsPeriodDays: number;
 }) {
-  const pctA =
-    totalViews6d > 0 ? Math.max(2, Math.round(((teamA.views_6d || 0) / totalViews6d) * 100)) : 50;
-  const pctB = Math.max(2, 100 - pctA);
+  const threeWay = Boolean(teamC);
+
+  const rawA = totalViews6d > 0 ? Math.max(2, Math.round(((teamA.views_6d || 0) / totalViews6d) * 100)) : threeWay ? 34 : 50;
+  const rawC = threeWay && totalViews6d > 0 ? Math.max(2, Math.round(((teamC.views_6d || 0) / totalViews6d) * 100)) : threeWay ? 33 : 0;
+  const pctA = rawA;
+  const pctC = rawC;
+  const pctB = Math.max(2, 100 - pctA - pctC);
   const tie = leaderKey === null;
 
   return (
@@ -815,33 +877,51 @@ function HeroScoreboard({
       )}
 
       {/* score row */}
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 sm:gap-6">
-        <TeamScorePanel
-          team={teamA}
-          isLeader={leaderKey === teamA.key}
-          align="right"
-          viewsPeriod={viewsPeriod}
-          viewsPeriodDays={viewsPeriodDays}
-        />
-        <div className="flex flex-col items-center gap-1">
-          <div className="text-[10px] uppercase tracking-[0.3em] text-zinc-500 font-bold">VS</div>
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1, rotate: [0, 5, -5, 0] }}
-            transition={{ type: "spring", stiffness: 200, damping: 12 }}
-            className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/30"
-          >
-            <Swords className="w-5 h-5 sm:w-6 sm:h-6 text-zinc-900" />
-          </motion.div>
+      {threeWay ? (
+        <div className="grid grid-cols-[1fr_auto_1fr_auto_1fr] items-center gap-2 sm:gap-4">
+          <TeamScorePanel
+            team={teamA}
+            isLeader={leaderKey === teamA.key}
+            align="right"
+            viewsPeriod={viewsPeriod}
+            viewsPeriodDays={viewsPeriodDays}
+          />
+          <VsBadge />
+          <TeamScorePanel
+            team={teamB}
+            isLeader={leaderKey === teamB.key}
+            align="center"
+            viewsPeriod={viewsPeriod}
+            viewsPeriodDays={viewsPeriodDays}
+          />
+          <VsBadge />
+          <TeamScorePanel
+            team={teamC}
+            isLeader={leaderKey === teamC.key}
+            align="left"
+            viewsPeriod={viewsPeriod}
+            viewsPeriodDays={viewsPeriodDays}
+          />
         </div>
-        <TeamScorePanel
-          team={teamB}
-          isLeader={leaderKey === teamB.key}
-          align="left"
-          viewsPeriod={viewsPeriod}
-          viewsPeriodDays={viewsPeriodDays}
-        />
-      </div>
+      ) : (
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 sm:gap-6">
+          <TeamScorePanel
+            team={teamA}
+            isLeader={leaderKey === teamA.key}
+            align="right"
+            viewsPeriod={viewsPeriod}
+            viewsPeriodDays={viewsPeriodDays}
+          />
+          <VsBadge />
+          <TeamScorePanel
+            team={teamB}
+            isLeader={leaderKey === teamB.key}
+            align="left"
+            viewsPeriod={viewsPeriod}
+            viewsPeriodDays={viewsPeriodDays}
+          />
+        </div>
+      )}
 
       {/* view split */}
       <div className="mt-7">
@@ -853,7 +933,7 @@ function HeroScoreboard({
         </div>
         <div className="h-4 rounded-full bg-zinc-900 overflow-hidden flex shadow-inner border border-zinc-800">
           <motion.div
-            initial={{ width: "50%" }}
+            initial={{ width: threeWay ? "34%" : "50%" }}
             animate={{ width: `${pctA}%` }}
             transition={{ type: "spring", stiffness: 100, damping: 20, delay: 0.3 }}
             className={`h-full bg-gradient-to-r ${teamSkin(teamA.key).grad} flex items-center justify-end pr-2`}
@@ -861,13 +941,23 @@ function HeroScoreboard({
             <span className="text-[10px] font-black text-zinc-900">{pctA}%</span>
           </motion.div>
           <motion.div
-            initial={{ width: "50%" }}
+            initial={{ width: threeWay ? "33%" : "50%" }}
             animate={{ width: `${pctB}%` }}
             transition={{ type: "spring", stiffness: 100, damping: 20, delay: 0.3 }}
-            className={`h-full bg-gradient-to-r ${teamSkin(teamB.key).grad} flex items-center justify-start pl-2`}
+            className={`h-full bg-gradient-to-r ${teamSkin(teamB.key).grad} flex items-center justify-center`}
           >
             <span className="text-[10px] font-black text-zinc-900">{pctB}%</span>
           </motion.div>
+          {threeWay && (
+            <motion.div
+              initial={{ width: "33%" }}
+              animate={{ width: `${pctC}%` }}
+              transition={{ type: "spring", stiffness: 100, damping: 20, delay: 0.3 }}
+              className={`h-full bg-gradient-to-r ${teamSkin(teamC.key).grad} flex items-center justify-start pl-2`}
+            >
+              <span className="text-[10px] font-black text-zinc-900">{pctC}%</span>
+            </motion.div>
+          )}
         </div>
         <p className="text-center text-[11px] text-zinc-500 mt-3">
           All-time views: <span className="text-white font-semibold">{formatViews(totalViewsAll)}</span>
@@ -886,7 +976,7 @@ function TeamScorePanel({
 }: {
   team: any;
   isLeader: boolean;
-  align: "left" | "right";
+  align: "left" | "right" | "center";
   viewsPeriod?: "calendar_month" | "rolling";
   viewsPeriodDays: number;
 }) {
@@ -907,12 +997,17 @@ function TeamScorePanel({
     });
   };
 
+  const alignClass =
+    align === "right" ? "items-end text-right" : align === "center" ? "items-center text-center" : "items-start text-left";
+  const emojiTitle =
+    team.key === "goofies" ? "Double-click me (woof)" : team.key === "sheruses" ? "Double-click me (roar)" : "Double-click me (meow)";
+
   return (
     <motion.div
-      initial={{ opacity: 0, x: align === "right" ? -20 : 20 }}
+      initial={{ opacity: 0, x: align === "right" ? -20 : align === "left" ? 20 : 0 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.5 }}
-      className={`flex flex-col ${align === "right" ? "items-end text-right" : "items-start text-left"}`}
+      className={`flex flex-col ${alignClass}`}
     >
       <div
         onDoubleClick={handleEasterEgg}
@@ -923,7 +1018,7 @@ function TeamScorePanel({
           (e.currentTarget as any)._lastTap = now;
           if (now - lastTap < 350) handleEasterEgg();
         }}
-        title={team.key === "goofies" ? "Double-click me (woof)" : "Double-click me (meow)"}
+        title={emojiTitle}
         className="relative cursor-pointer select-none"
       >
         <motion.div
