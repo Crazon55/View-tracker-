@@ -6,6 +6,9 @@ import { toast } from "sonner";
 import { ExternalLink, Newspaper, RefreshCw, Ticket, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+const EDGE_FN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/fetch-news`;
+const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
 type NewsArticle = {
   id: string;
   title: string;
@@ -153,21 +156,22 @@ export default function NewsFeed() {
 
   const refreshMut = useMutation({
     mutationFn: async () => {
-      const { articles, errors } = await fetchAllNews();
-      if (errors.length) toast.warning(`${errors.length} source(s) failed: ${errors.join(", ")}`);
-      if (!articles.length) throw new Error("No matching articles found from any source. Try again in a moment.");
-      const { error } = await supabase.from("news_articles").upsert(
-        articles,
-        { onConflict: "url", ignoreDuplicates: true }
-      );
-      if (error) throw new Error(`Database error: ${error.message}. Make sure you ran the SQL to create the news_articles table.`);
-      return articles.length;
+      const res = await fetch(EDGE_FN_URL, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${ANON_KEY}`,
+          "Content-Type": "application/json",
+        },
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || `Edge function error ${res.status}`);
+      return json as { inserted: number; sourceStats?: Record<string, number> };
     },
-    onSuccess: (count) => {
-      toast.success(`${count} articles loaded`);
+    onSuccess: ({ inserted }) => {
+      toast.success(`${inserted} articles fetched`);
       refetch();
     },
-    onError: (e: any) => toast.error(e?.message || "Fetch failed"),
+    onError: (e: any) => toast.error(e?.message || "Fetch failed — make sure the Edge Function is deployed"),
   });
 
   const ticketMut = useMutation({
