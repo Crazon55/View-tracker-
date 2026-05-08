@@ -1258,23 +1258,18 @@ export default function PostTracker(){
     if (!writerDirty.current) return;
     const next = String(writerDraft || "");
     writerDirty.current = false;
+    const currentNotes = (cd?.id === ideaId ? cd?.notes : null) as any;
+    const nextNotes = notesWithWriterComments(currentNotes, next);
     try {
-      const currentNotes = (cd?.id === ideaId ? cd?.notes : null) as any;
-      const nextNotes = notesWithWriterComments(currentNotes, next);
-      // Attempt the proper column write; also keep a notes backup.
+      // Always write notes as the guaranteed backup. writer_comments column is a bonus.
       await updateIdeaMut.mutateAsync({ id: ideaId, data: { writer_comments: next, notes: nextNotes } });
-      // Keep modal stable even if list refetch lags.
       setDetailIdea((cur: any)=>(cur && cur.id===ideaId ? {...cur, writer_comments: next, notes: nextNotes} : cur));
     } catch {
-      // Fallback: some deployments don't have the writer_comments column yet.
-      // Persist to `notes` (like assets) so the UI doesn't "poof" on close.
+      // writer_comments column may not exist on this deployment — save to notes only.
       try {
-        const currentNotes = (cd?.id === ideaId ? cd?.notes : null) as any;
-        const nextNotes = notesWithWriterComments(currentNotes, next);
         await updateIdeaMut.mutateAsync({ id: ideaId, data: { notes: nextNotes } });
         setDetailIdea((cur: any)=>(cur && cur.id===ideaId ? {...cur, writer_comments: next, notes: nextNotes} : cur));
       } catch {
-        // updateIdeaMut already toasts onError; keep draft dirty so user doesn't lose text.
         writerDirty.current = true;
       }
     }
@@ -1486,6 +1481,25 @@ export default function PostTracker(){
               ))}
             </div>
             {sa[cd.stage]?.length>0&&<div style={{display:"flex",gap:6}}>{sa[cd.stage].map(a=><button key={a.stage} onClick={()=>moveIdea(cd.id,a.stage)} style={a.style}>{a.label}</button>)}</div>}
+
+            {/* Writer comments — kept at top so they're never buried */}
+            <div>
+              <label style={ls}>Comments by the writer</label>
+              <textarea
+                value={writerDraft}
+                onChange={(e)=>{
+                  writerDirty.current = true;
+                  setWriterDraft(e.target.value);
+                }}
+                onBlur={()=>{
+                  if(cd?.id) flushWriterComments(cd.id);
+                }}
+                rows={4}
+                placeholder="Explain the idea briefly: why it matters, the angle, what the editor should watch for…"
+                style={{ ...is, resize: "vertical", minHeight: 90 }}
+              />
+            </div>
+
             {cd.format === "carousel" && (
               <button
                 type="button"
@@ -1610,23 +1624,6 @@ export default function PostTracker(){
             </div>
             <div><label style={ls}>{cd.source==="competitor" ? "Comp link" : "Original source / references"}</label><SafeTextInput value={cd.comp_link} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{comp_link:v}})} placeholder={cd.source==="competitor" ? "Competitor post URL" : "Reference links, articles, sources..."} style={is}/></div>
             {cd.comp_link&&<a href={cd.comp_link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.comp_link}</a>}
-
-            <div>
-              <label style={ls}>Comments by the writer</label>
-              <textarea
-                value={writerDraft}
-                onChange={(e)=>{
-                  writerDirty.current = true;
-                  setWriterDraft(e.target.value);
-                }}
-                onBlur={()=>{
-                  if(cd?.id) flushWriterComments(cd.id);
-                }}
-                rows={4}
-                placeholder="Explain the idea briefly: why it matters, the angle, what the editor should watch for…"
-                style={{ ...is, resize: "vertical", minHeight: 90 }}
-              />
-            </div>
 
             <div>
               <label style={ls}>Assets (photos / screenshots)</label>
