@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getDashboard, getAutoReels, getManualReels, getPosts, getSixDayMonth, getTrackerNiches } from "@/services/api";
+import TeamBattleScoreboard from "@/components/TeamBattleScoreboard";
 import { useNavigate } from "react-router-dom";
 import { Search, TrendingUp, MoreVertical } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -714,82 +715,88 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Leaderboard Podium */}
-        {allPages.length >= 3 && (() => {
-          const sortedForPodium = [...allPages].sort(
-            (a: any, b: any) => getPageViews(b, globalPeriod) - getPageViews(a, globalPeriod),
-          );
-          const top3 = sortedForPodium.slice(0, 3);
-          const podiumOrder = [top3[1], top3[0], top3[2]]; // 2nd, 1st, 3rd
-          const heights = [140, 180, 110]; // podium step heights
-          const medals = ["🥈", "🥇", "🥉"];
-          const ranks = [2, 1, 3];
-          // Solid podium colors to keep cards visible on dark background
-          const podiumBg = ["bg-[#6f6f6f]", "bg-[#b58b1a]", "bg-[#6b3f1f]"]; // silver, gold, bronze
-          const borderColors = ["border-white/10", "border-white/10", "border-white/10"];
-          const glowColors = ["shadow-[0_12px_45px_-20px_rgba(255,255,255,0.25)]", "shadow-[0_18px_60px_-22px_rgba(181,139,26,0.55)]", "shadow-[0_12px_45px_-20px_rgba(107,63,31,0.5)]"];
+        {/* Leaderboard + Arena — side by side */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-10 items-start">
+          {/* Leaderboard Podium */}
+          {allPages.length >= 3 && (() => {
+            const sortedForPodium = [...allPages].sort(
+              (a: any, b: any) => getPageViews(b, globalPeriod) - getPageViews(a, globalPeriod),
+            );
+            const top3 = sortedForPodium.slice(0, 3);
+            const podiumOrder = [top3[1], top3[0], top3[2]]; // 2nd, 1st, 3rd
+            const heights = [140, 180, 110]; // podium step heights
+            const medals = ["🥈", "🥇", "🥉"];
+            const ranks = [2, 1, 3];
+            // Solid podium colors to keep cards visible on dark background
+            const podiumBg = ["bg-[#6f6f6f]", "bg-[#b58b1a]", "bg-[#6b3f1f]"]; // silver, gold, bronze
+            const borderColors = ["border-white/10", "border-white/10", "border-white/10"];
+            const glowColors = ["shadow-[0_12px_45px_-20px_rgba(255,255,255,0.25)]", "shadow-[0_18px_60px_-22px_rgba(181,139,26,0.55)]", "shadow-[0_12px_45px_-20px_rgba(107,63,31,0.5)]"];
 
-          return (
-            <div className="mb-10">
-              <div className="flex items-center gap-2 mb-6">
-                <span className="text-2xl">🏆</span>
-                <h2 className="text-xl sm:text-2xl font-black text-white uppercase tracking-wider">Leaderboard</h2>
-              </div>
-              <div className="flex items-end justify-center gap-3 sm:gap-5">
-                {podiumOrder.map((page, i) => {
-                  const views = getPageViews(page, globalPeriod);
-                  const podiumCounts = getPageCounts(page, globalPeriod);
-                  return (
-                    <div
-                      key={page.id}
-                      onClick={() => navigate(`/page/${page.id}`)}
-                      className={`cursor-pointer transition-all duration-300 hover:scale-105 flex flex-col items-center ${ranks[i] === 1 ? "w-36 sm:w-44" : "w-28 sm:w-36"}`}
-                    >
-                      {/* Medal + Name */}
-                      <span className={`text-3xl sm:text-4xl mb-2 ${ranks[i] === 1 ? "animate-bounce" : ""}`} style={ranks[i] === 1 ? { animationDuration: "2s" } : {}}>
-                        {medals[i]}
-                      </span>
-                      <div className="w-full text-center mb-2">
-                        <p
-                          className={`px-1 font-black text-white uppercase tracking-wide leading-tight whitespace-normal break-words ${
-                            ranks[i] === 1 ? "text-xs sm:text-sm" : "text-[11px] sm:text-xs"
-                          } min-h-[2.2rem] flex items-center justify-center`}
-                          title={String(page.name || page.handle || "")}
-                        >
-                          {page.name || page.handle}
-                        </p>
-                        <p
-                          className="px-1 text-[10px] text-zinc-600 leading-tight min-h-[1rem] flex items-center justify-center truncate"
-                          title={`@${String(page.handle || "")}`}
-                        >
-                          @{page.handle}
-                        </p>
-                      </div>
-
-                      {/* Podium block */}
+            return (
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+                <div className="flex items-center gap-2 mb-6">
+                  <span className="text-2xl">🏆</span>
+                  <h2 className="text-xl sm:text-2xl font-black text-white uppercase tracking-wider">Leaderboard</h2>
+                </div>
+                <div className="flex items-end justify-center gap-3 sm:gap-5">
+                  {podiumOrder.map((page, i) => {
+                    const views = getPageViews(page, globalPeriod);
+                    const podiumCounts = getPageCounts(page, globalPeriod);
+                    return (
                       <div
-                        className={`w-full rounded-t-xl border ${borderColors[i]} ${podiumBg[i]} ${glowColors[i]} flex flex-col items-center justify-center transition-all`}
-                        style={{ height: heights[i] }}
+                        key={page.id}
+                        onClick={() => navigate(`/page/${page.id}`)}
+                        className={`cursor-pointer transition-all duration-300 hover:scale-105 flex flex-col items-center ${ranks[i] === 1 ? "w-36 sm:w-44" : "w-28 sm:w-36"}`}
                       >
-                        <span className={`font-black tabular-nums text-white ${ranks[i] === 1 ? "text-2xl sm:text-3xl" : "text-lg sm:text-xl"}`}>
-                          {formatCompact(views)}
+                        {/* Medal + Name */}
+                        <span className={`text-3xl sm:text-4xl mb-2 ${ranks[i] === 1 ? "animate-bounce" : ""}`} style={ranks[i] === 1 ? { animationDuration: "2s" } : {}}>
+                          {medals[i]}
                         </span>
-                        <span className="text-[9px] uppercase tracking-wider text-white/80 mt-1">views</span>
-                        <div className="mt-2 flex items-center gap-1 text-[10px] text-white/70">
-                          <span>{podiumCounts.reelsCount} reels</span>
-                          <span>·</span>
-                          <span>{podiumCounts.postsCount} posts</span>
+                        <div className="w-full text-center mb-2">
+                          <p
+                            className={`px-1 font-black text-white uppercase tracking-wide leading-tight whitespace-normal break-words ${
+                              ranks[i] === 1 ? "text-xs sm:text-sm" : "text-[11px] sm:text-xs"
+                            } min-h-[2.2rem] flex items-center justify-center`}
+                            title={String(page.name || page.handle || "")}
+                          >
+                            {page.name || page.handle}
+                          </p>
+                          <p
+                            className="px-1 text-[10px] text-zinc-600 leading-tight min-h-[1rem] flex items-center justify-center truncate"
+                            title={`@${String(page.handle || "")}`}
+                          >
+                            @{page.handle}
+                          </p>
+                        </div>
+
+                        {/* Podium block */}
+                        <div
+                          className={`w-full rounded-t-xl border ${borderColors[i]} ${podiumBg[i]} ${glowColors[i]} flex flex-col items-center justify-center transition-all`}
+                          style={{ height: heights[i] }}
+                        >
+                          <span className={`font-black tabular-nums text-white ${ranks[i] === 1 ? "text-2xl sm:text-3xl" : "text-lg sm:text-xl"}`}>
+                            {formatCompact(views)}
+                          </span>
+                          <span className="text-[9px] uppercase tracking-wider text-white/80 mt-1">views</span>
+                          <div className="mt-2 flex items-center gap-1 text-[10px] text-white/70">
+                            <span>{podiumCounts.reelsCount} reels</span>
+                            <span>·</span>
+                            <span>{podiumCounts.postsCount} posts</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
+                {/* Podium base */}
+                <div className="max-w-md mx-auto h-1 bg-gradient-to-r from-transparent via-violet-500/30 to-transparent rounded-full mt-0" />
               </div>
-              {/* Podium base */}
-              <div className="max-w-md mx-auto h-1 bg-gradient-to-r from-transparent via-violet-500/30 to-transparent rounded-full mt-0" />
-            </div>
-          );
-        })()}
+            );
+          })()}
+
+          {/* Team Battle */}
+          <TeamBattleScoreboard />
+        </div>
 
         {/* YOUR IP'S header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-5">
