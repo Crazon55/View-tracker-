@@ -23,7 +23,7 @@ const TEAM_META: Record<
     label: "The Sherus",
     emoji: "🦁",
     members: [],
-    nicheMatch: ["sheruses"],
+    nicheMatch: ["sheruses", "sherus"],
   },
 };
 

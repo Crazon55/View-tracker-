@@ -207,50 +207,64 @@ function playClip(src: string) {
 function playLionRoar() {
   try {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const duration = 1.8;
+    const t = ctx.currentTime;
+    const dur = 2.2;
 
-    const bufferSize = Math.floor(ctx.sampleRate * duration);
-    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const noiseData = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) noiseData[i] = Math.random() * 2 - 1;
+    // Sawtooth fundamental — descends from mid to low like a real roar
+    const osc1 = ctx.createOscillator();
+    osc1.type = "sawtooth";
+    osc1.frequency.setValueAtTime(130, t);
+    osc1.frequency.linearRampToValueAtTime(55, t + 0.6);
+    osc1.frequency.setValueAtTime(55, t + 0.6);
+    osc1.frequency.linearRampToValueAtTime(40, t + dur);
 
-    const noiseSource = ctx.createBufferSource();
-    noiseSource.buffer = noiseBuffer;
+    // LFO at ~9 Hz for the lion's vocal tremor / growl
+    const lfo = ctx.createOscillator();
+    lfo.type = "sine";
+    lfo.frequency.value = 9;
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 18;
+    lfo.connect(lfoGain);
+    lfoGain.connect(osc1.frequency);
 
-    const lowpass = ctx.createBiquadFilter();
-    lowpass.type = "lowpass";
-    lowpass.frequency.setValueAtTime(300, ctx.currentTime);
-    lowpass.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + duration * 0.7);
-    lowpass.Q.value = 3;
+    // Second harmonic layer for chest-filling richness
+    const osc2 = ctx.createOscillator();
+    osc2.type = "sawtooth";
+    osc2.frequency.setValueAtTime(260, t);
+    osc2.frequency.linearRampToValueAtTime(110, t + 0.6);
+    osc2.frequency.linearRampToValueAtTime(80, t + dur);
+    const g2 = ctx.createGain();
+    g2.gain.value = 0.25;
+    osc2.connect(g2);
 
-    const osc = ctx.createOscillator();
-    osc.type = "sawtooth";
-    osc.frequency.setValueAtTime(80, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(35, ctx.currentTime + duration);
+    // Bandpass to shape the "voice box" character
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = 350;
+    bp.Q.value = 1.5;
 
-    const masterGain = ctx.createGain();
-    masterGain.gain.setValueAtTime(0, ctx.currentTime);
-    masterGain.gain.linearRampToValueAtTime(0.4, ctx.currentTime + 0.15);
-    masterGain.gain.setValueAtTime(0.4, ctx.currentTime + 0.9);
-    masterGain.gain.linearRampToValueAtTime(0, ctx.currentTime + duration);
+    // Lowpass for the final bass warmth
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.setValueAtTime(1200, t);
+    lp.frequency.linearRampToValueAtTime(300, t + 0.7);
 
-    const oscGain = ctx.createGain();
-    oscGain.gain.value = 0.15;
-    const noiseGain = ctx.createGain();
-    noiseGain.gain.value = 0.5;
+    // Master gain envelope — fast attack, long sustain, decay tail
+    const master = ctx.createGain();
+    master.gain.setValueAtTime(0, t);
+    master.gain.linearRampToValueAtTime(0.45, t + 0.08);
+    master.gain.setValueAtTime(0.45, t + 1.1);
+    master.gain.linearRampToValueAtTime(0.15, t + 1.8);
+    master.gain.linearRampToValueAtTime(0, t + dur);
 
-    noiseSource.connect(lowpass);
-    lowpass.connect(noiseGain);
-    noiseGain.connect(masterGain);
-    osc.connect(oscGain);
-    oscGain.connect(masterGain);
-    masterGain.connect(ctx.destination);
+    osc1.connect(bp);
+    g2.connect(bp);
+    bp.connect(lp);
+    lp.connect(master);
+    master.connect(ctx.destination);
 
-    noiseSource.start();
-    noiseSource.stop(ctx.currentTime + duration);
-    osc.start();
-    osc.stop(ctx.currentTime + duration);
-    window.setTimeout(() => ctx.close(), (duration + 0.5) * 1000);
+    [osc1, osc2, lfo].forEach((n) => { n.start(t); n.stop(t + dur); });
+    window.setTimeout(() => ctx.close(), (dur + 0.5) * 1000);
   } catch {
     /* no-op */
   }
@@ -882,7 +896,7 @@ function HeroScoreboard({
           <TeamScorePanel
             team={teamA}
             isLeader={leaderKey === teamA.key}
-            align="right"
+            align="center"
             viewsPeriod={viewsPeriod}
             viewsPeriodDays={viewsPeriodDays}
           />
@@ -898,7 +912,7 @@ function HeroScoreboard({
           <TeamScorePanel
             team={teamC}
             isLeader={leaderKey === teamC.key}
-            align="left"
+            align="center"
             viewsPeriod={viewsPeriod}
             viewsPeriodDays={viewsPeriodDays}
           />
