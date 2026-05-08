@@ -1025,6 +1025,7 @@ export default function PostTracker(){
   const [writerDraft,setWriterDraft]=useState("");
   const writerDirty=useRef(false);
   const writerSaveTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
+  const prevDetailIdRef=useRef<string|null>(null);
   const nicheSaveTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const nicheSaveRef=useRef<string[]>([]);
   const saveNiches=useCallback((ideaId: string, next: string[])=>{
@@ -1242,16 +1243,20 @@ export default function PostTracker(){
   const cdNiches=cd?niches.filter((n: any)=>detailNicheIds.includes(n.id)):[];
   const cdPages=cdNiches.flatMap((n: any)=>n.pages||[]).filter((v: string,i: number,a: string[])=>a.indexOf(v)===i);
 
-  // Keep a stable draft for writer comments so closing the modal doesn't drop unsaved text.
+  // Sync draft when idea changes or server value updates.
   useEffect(() => {
-    if (!cd?.id) return;
+    if (!cd?.id) { prevDetailIdRef.current = null; return; }
     if (writerDirty.current) return;
-    // Never clobber a non-empty local draft with an empty server value.
     const incoming = String(cd.writer_comments || "");
-    setWriterDraft((prev) => {
-      if (prev && !incoming) return prev;
-      return incoming;
-    });
+    const ideaChanged = prevDetailIdRef.current !== cd.id;
+    prevDetailIdRef.current = cd.id;
+    if (ideaChanged) {
+      // Switching to a different idea — always load that idea's comments, not the previous one's.
+      setWriterDraft(incoming);
+    } else {
+      // Same idea — don't clobber an active local draft with an empty server value.
+      setWriterDraft((prev) => (prev && !incoming ? prev : incoming));
+    }
   }, [cd?.id, cd?.writer_comments]);
 
   const flushWriterComments = useCallback(async (ideaId: string) => {
