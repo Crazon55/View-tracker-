@@ -5,7 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { getDeadlines, getSixDayConfig, getSixDayDeadlines, getTickets } from "@/services/api";
 import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, BarChart3, Scissors, ClipboardList, Trophy, LayoutGrid, Ticket } from "lucide-react";
+import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, BarChart3, Scissors, ClipboardList, Trophy, LayoutGrid, Ticket, Newspaper } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -30,6 +30,7 @@ import TeamPerformance from "./pages/TeamPerformance";
 import ErrorBoundary from "./components/ErrorBoundary";
 import WeeklyWorkboard from "./pages/WeeklyWorkboard";
 import Tickets from "./pages/Tickets";
+import NewsFeed from "./pages/NewsFeed";
 import RoleSelect from "./pages/RoleSelect";
 import NotFound from "./pages/NotFound";
 import { MonthlyWrapRoot, MonthlyWrapOpenButton } from "./components/MonthlyWrapHost";
@@ -261,6 +262,7 @@ const navItems: NavItem[] = [
   { to: "/team-performance", label: "Teams", icon: Trophy },
   { to: "/workboard", label: "Bandwidth tracker workboard", icon: LayoutGrid },
   { to: "/tickets", label: "Tickets", icon: Ticket },
+  { to: "/news", label: "News Feed", icon: Newspaper },
   { to: "/growth", label: "Growth", icon: TrendingUp },
   { to: "/pages", label: "IP's", icon: Users },
   { to: "http://16.112.125.207:5173/", label: "Pintu", icon: Scissors, external: true },
@@ -361,6 +363,7 @@ function AppLayout() {
     location.pathname === "/team-performance" ||
     location.pathname === "/workboard" ||
     location.pathname === "/tickets" ||
+    location.pathname === "/news" ||
     location.pathname.startsWith("/post-ips/") ||
     location.pathname.startsWith("/page/");
 
@@ -405,6 +408,7 @@ function AppLayout() {
             />
             <Route path="/workboard" element={<WeeklyWorkboard />} />
             <Route path="/tickets" element={<Tickets />} />
+            <Route path="/news" element={<NewsFeed />} />
           </Routes>
         </div>
       ) : (
