@@ -761,7 +761,7 @@ export default function WeeklyWorkboard() {
       .filter((a) => dateFilter !== "today" || a.primary_tasks.length > 0 || a.interrupts.length > 0);
   }, [assignments, dateFilter, roleFilter]);
 
-  /** Week list columns need full `primary_tasks` for each day; `weekAssignments` may slice by “today” and breaks patches. */
+  /** Week list columns need full `primary_tasks` for each day; `weekAssignments` may slice by "today" and breaks patches. */
   const weekGridAssignments = useMemo(() => {
     return assignments
       .filter((a) => a.week_start === weekStart)
@@ -1025,8 +1025,8 @@ export default function WeeklyWorkboard() {
           <DialogHeader>
             <DialogTitle className="text-white">Which workboard card is yours?</DialogTitle>
             <DialogDescription className="text-zinc-400 text-[15px] leading-relaxed">
-              We use this to enlarge your role column (like a bento “hero” tile). This is stored for your account on this
-              device and we won’t ask again. To change it later, use <span className="text-zinc-300">My card</span> in the
+              We use this to enlarge your role column (like a bento "hero" tile). This is stored for your account on this
+              device and we won't ask again. To change it later, use <span className="text-zinc-300">My card</span> in the
               toolbar.
             </DialogDescription>
           </DialogHeader>
@@ -1566,7 +1566,7 @@ function AssignmentEditor({
                       <textarea
                         value={pt.title}
                         onChange={(e) => patchPrimaryTask(a.id, pt.id, { title: e.target.value })}
-                        placeholder="What you’re shipping this week…"
+                        placeholder="What you're shipping this week…"
                         rows={1}
                         ref={autoGrow220}
                         onInput={(e) => autoGrow220(e.currentTarget)}
@@ -1881,12 +1881,12 @@ function WeekGridListView({
 }: {
   weekStart: string;
   setWeekStart: React.Dispatch<React.SetStateAction<string>>;
-  /** Full tasks for this week (same week + role toolbar filter only). Not sliced by “today”. */
+  /** Full tasks for this week (same week + role toolbar filter only). Not sliced by "today". */
   weekAssignments: MainAssignment[];
   /** Same week, all departments — used for ticket cards by day and department editors when the toolbar hides a role. */
   weekAssignmentsAllRoles: MainAssignment[];
   myWorkboardRole: WorkboardRoleId | null;
-  roleFilter: WorkboardRoleId | “all”;
+  roleFilter: WorkboardRoleId | "all";
   addAssignment: (role_id: WorkboardRoleId) => void;
   removeAssignment: (id: string) => void;
   patchAssignment: (id: string, patch: Partial<MainAssignment>) => void;
@@ -2147,7 +2147,7 @@ function WeekGridListView({
                     for (const a of weekAssignments) {
                       for (const pt of a.primary_tasks || []) {
                         if (String(pt.due_date || "").slice(0, 10) !== dIso) continue;
-                        /** Hide legacy placeholder rows (empty title + no steps) so they don’t appear on Fri by mistake. */
+                        /** Hide legacy placeholder rows (empty title + no steps) so they don't appear on Fri by mistake. */
                         const hasContent =
                           Boolean(pt.title?.trim()) || (pt.chunks?.length ?? 0) > 0;
                         if (!hasContent) continue;
@@ -2675,7 +2675,7 @@ function GalleryView({
               )}
             >
               <span className="text-sm font-medium text-zinc-200">{r.label}</span>
-              <span className="text-xs text-zinc-500 mt-2">Add this week’s focus</span>
+              <span className="text-xs text-zinc-500 mt-2">Add this week's focus</span>
             </button>
           );
         }
