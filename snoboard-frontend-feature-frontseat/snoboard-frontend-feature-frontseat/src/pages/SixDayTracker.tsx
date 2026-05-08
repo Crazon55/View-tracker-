@@ -105,7 +105,7 @@ export default function SixDayTracker() {
       let bucket: "garfields" | "goofies" | "sheruses" | "tech" | null = null;
       if (nm.includes("garfields")) bucket = "garfields";
       else if (nm.includes("goofies")) bucket = "goofies";
-      else if (nm.includes("sheru")) bucket = "sheruses";
+      else if (nm.includes("sheerus") || nm.includes("sheru") || nm.includes("changing order")) bucket = "sheruses";
       else if (nm.includes("tech")) bucket = "tech";
       if (!bucket) continue;
       for (const h of n?.pages || []) {
