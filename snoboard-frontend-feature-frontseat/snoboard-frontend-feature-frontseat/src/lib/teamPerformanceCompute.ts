@@ -1,6 +1,6 @@
 /** Mirrors backend /api/v1/teams/performance so the dashboard works if that route is not deployed yet. */
 
-const TEAM_ORDER = ["garfields", "goofies"] as const;
+const TEAM_ORDER = ["garfields", "goofies", "sheruses"] as const;
 export type TeamKey = (typeof TEAM_ORDER)[number];
 
 const TEAM_META: Record<
@@ -18,6 +18,12 @@ const TEAM_META: Record<
     emoji: "🐶",
     members: ["Arohi", "Harish", "Pulkit"],
     nicheMatch: ["goofies"],
+  },
+  sheruses: {
+    label: "The Sherus",
+    emoji: "🦁",
+    members: [],
+    nicheMatch: ["sheruses"],
   },
 };
 
@@ -63,7 +69,7 @@ function computeTeamViews6dFromSixDay(
     }
   }
   if (entries.length === 0) return null;
-  const out: Record<TeamKey, number> = { garfields: 0, goofies: 0 };
+  const out: Record<TeamKey, number> = { garfields: 0, goofies: 0, sheruses: 0 };
   for (const e of entries) {
     const h = pidToH.get(String(e.page_id)) || "";
     const tk = handleToTeam[h];
@@ -241,6 +247,7 @@ export function buildTeamPerformanceFromTracker(
   const teamAccounts: Record<TeamKey, Set<string>> = {
     garfields: new Set(),
     goofies: new Set(),
+    sheruses: new Set(),
   };
   for (const n of niches) {
     const tid = nicheIdToTeam[n.id];
@@ -267,6 +274,7 @@ export function buildTeamPerformanceFromTracker(
   const stats: Record<TeamKey, ReturnType<typeof emptyStats>> = {
     garfields: emptyStats(),
     goofies: emptyStats(),
+    sheruses: emptyStats(),
   };
 
   // Views aggregation — match backend: month-to-date postings when six-day tracker
@@ -296,6 +304,7 @@ export function buildTeamPerformanceFromTracker(
   }> = {
     garfields: { views_total: 0, views_6d: 0, views_by_idea: new Map(), views_by_idea_6d: new Map(), views_by_creator: new Map() },
     goofies: { views_total: 0, views_6d: 0, views_by_idea: new Map(), views_by_idea_6d: new Map(), views_by_creator: new Map() },
+    sheruses: { views_total: 0, views_6d: 0, views_by_idea: new Map(), views_by_idea_6d: new Map(), views_by_creator: new Map() },
   };
   const ideaById: Record<string, any> = {};
   const ideaViewsTotal = new Map<string, number>();

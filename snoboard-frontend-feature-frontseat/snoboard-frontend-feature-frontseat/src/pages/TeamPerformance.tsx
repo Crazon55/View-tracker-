@@ -126,6 +126,15 @@ const TEAM_SKIN: Record<
     accent: "bg-indigo-500",
     tagline: "hyuck hyuck gang",
   },
+  sheruses: {
+    grad: "from-rose-500 via-pink-500 to-fuchsia-400",
+    glow: "shadow-rose-500/30",
+    ring: "ring-rose-500/40",
+    text: "text-rose-300",
+    bg: "bg-rose-500/10",
+    accent: "bg-rose-500",
+    tagline: "changing the order",
+  },
 };
 
 function teamSkin(key: string) {
@@ -305,7 +314,8 @@ export default function TeamPerformance() {
   // order teams in fixed slot order so the hero scoreboard is stable
   const teamA = teams.find((t: any) => t.key === "garfields");
   const teamB = teams.find((t: any) => t.key === "goofies");
-  const orderedTeams = [teamA, teamB].filter(Boolean);
+  const teamC = teams.find((t: any) => t.key === "sheruses");
+  const orderedTeams = [teamA, teamB, teamC].filter(Boolean);
 
   const totalViews6d = teams.reduce((s: number, t: any) => s + (t.views_6d || 0), 0);
   const totalViewsAll = teams.reduce((s: number, t: any) => s + (t.views_total || 0), 0);
@@ -543,10 +553,10 @@ export default function TeamPerformance() {
         </ScrollReveal>
 
         {/* ============================== HERO SCOREBOARD (no scroll-reveal: hero stays immediate) ============================== */}
-        {orderedTeams.length === 2 && (
+        {teamA && teamB && (
           <HeroScoreboard
-            teamA={orderedTeams[0]}
-            teamB={orderedTeams[1]}
+            teamA={teamA}
+            teamB={teamB}
             leaderKey={leaderKey}
             totalViews6d={totalViews6d}
             totalViewsAll={totalViewsAll}
@@ -872,7 +882,7 @@ function TeamScorePanel({
 
   const handleEasterEgg = () => {
     playTeamSound(team.key);
-    const poofChar = team.key === "goofies" ? "🐾" : "🐟";
+    const poofChar = team.key === "goofies" ? "🐾" : team.key === "sheruses" ? "🦁" : "🐟";
     setPoof({ id: Date.now(), char: poofChar });
     window.setTimeout(() => setPoof(null), 900);
     emojiControls.start({

@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getDashboard, getAutoReels, getManualReels, getPosts, getSixDayMonth } from "@/services/api";
+import { getDashboard, getAutoReels, getManualReels, getPosts, getSixDayMonth, getTrackerNiches } from "@/services/api";
 import { useNavigate } from "react-router-dom";
 import { Search, TrendingUp, MoreVertical } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -300,6 +300,7 @@ export default function Dashboard() {
   /** YYYY-MM for 6-day tracker; range is always the full selected calendar month. */
   const [trackerMonth, setTrackerMonth] = useState(() => normalizeTrackerMonth(readTrackerMonthFromStorage()));
   const [ipFilter, setIpFilter] = useState<"all" | "main" | "stage1">("all");
+  const [nicheFilter, setNicheFilter] = useState<string>("all");
 
   // Stage-based filtering (stage 3 = main/stage3, stage 1 = stage1)
 
@@ -312,8 +313,19 @@ export default function Dashboard() {
   const { data: autoReels = [] } = useQuery({ queryKey: ["reels", "auto"], queryFn: getAutoReels });
   const { data: manualReels = [] } = useQuery({ queryKey: ["reels", "manual"], queryFn: getManualReels });
   const { data: allPosts = [] } = useQuery({ queryKey: ["posts"], queryFn: getPosts });
+  const { data: trackerNiches = [] } = useQuery({ queryKey: ["tracker-niches"], queryFn: getTrackerNiches });
 
   const allReels = [...autoReels, ...manualReels];
+
+  const dashHandleToNicheId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const n of (trackerNiches as any[]) || []) {
+      for (const h of n?.pages || []) {
+        if (h) m.set(String(h).replace(/^@/, "").trim().toLowerCase(), n.id);
+      }
+    }
+    return m;
+  }, [trackerNiches]);
 
   // Fetch growth data for the growth chart
   const { data: growthData = [] } = useQuery({
@@ -512,12 +524,19 @@ export default function Dashboard() {
     return { reelsCount, postsCount };
   }
 
+  const filteredByNiche = nicheFilter === "all"
+    ? filteredByType
+    : filteredByType.filter((p: any) => {
+        const h = String(p.handle || "").replace(/^@/, "").trim().toLowerCase();
+        return dashHandleToNicheId.get(h) === nicheFilter;
+      });
+
   const pages = (search.trim()
-    ? filteredByType.filter((p: any) =>
+    ? filteredByNiche.filter((p: any) =>
         (p.handle ?? "").toLowerCase().includes(search.toLowerCase()) ||
         (p.name ?? "").toLowerCase().includes(search.toLowerCase())
       )
-    : filteredByType
+    : filteredByNiche
   ).sort((a: any, b: any) => getPageViews(b, globalPeriod) - getPageViews(a, globalPeriod));
   const currentMonth = stats?.current_month
     ? new Date(stats.current_month).toLocaleString("default", { month: "long", year: "numeric" })
@@ -788,6 +807,16 @@ export default function Dashboard() {
               value={ipFilter}
               onChange={(v) => setIpFilter(v as "all" | "main" | "stage1")}
             />
+            {(trackerNiches as any[]).length > 0 && (
+              <TogglePill
+                options={[
+                  { label: "All Teams", value: "all" },
+                  ...(trackerNiches as any[]).map((n: any) => ({ label: n.name, value: n.id })),
+                ]}
+                value={nicheFilter}
+                onChange={setNicheFilter}
+              />
+            )}
           </div>
           {/* Global period toggle */}
           <div className="flex items-center gap-3">

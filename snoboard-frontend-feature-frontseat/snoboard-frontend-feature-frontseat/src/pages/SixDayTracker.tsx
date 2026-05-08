@@ -87,7 +87,7 @@ export default function SixDayTracker() {
      Niches come from tracker_niches; we match by substring on the niche name.
      Multi-select: empty set == "All" (show everything). Otherwise show only
      pages whose niche is in the selected set. */
-  type NicheKey = "garfields" | "goofies" | "tech";
+  type NicheKey = "garfields" | "goofies" | "sheruses" | "tech";
   const [nicheFilters, setNicheFilters] = useState<NicheKey[]>([]);
   const nicheFilterSet = useMemo(() => new Set(nicheFilters), [nicheFilters]);
   const isAllActive = nicheFilters.length === 0;
@@ -99,12 +99,13 @@ export default function SixDayTracker() {
   const clearNiche = () => setNicheFilters([]);
 
   const handleToNiche = useMemo(() => {
-    const m = new Map<string, "garfields" | "goofies" | "tech">();
+    const m = new Map<string, "garfields" | "goofies" | "sheruses" | "tech">();
     for (const n of nichesRaw || []) {
       const nm = String(n?.name || "").toLowerCase();
-      let bucket: "garfields" | "goofies" | "tech" | null = null;
+      let bucket: "garfields" | "goofies" | "sheruses" | "tech" | null = null;
       if (nm.includes("garfields")) bucket = "garfields";
       else if (nm.includes("goofies")) bucket = "goofies";
+      else if (nm.includes("sheru")) bucket = "sheruses";
       else if (nm.includes("tech")) bucket = "tech";
       if (!bucket) continue;
       for (const h of n?.pages || []) {
@@ -115,11 +116,12 @@ export default function SixDayTracker() {
   }, [nichesRaw]);
 
   const nicheCounts = useMemo(() => {
-    const c = { all: allPages.length, garfields: 0, goofies: 0, tech: 0, none: 0 };
+    const c = { all: allPages.length, garfields: 0, goofies: 0, sheruses: 0, tech: 0, none: 0 };
     for (const p of allPages) {
       const key = handleToNiche.get(String(p.handle || "").replace(/^@/, "").trim().toLowerCase());
       if (key === "garfields") c.garfields += 1;
       else if (key === "goofies") c.goofies += 1;
+      else if (key === "sheruses") c.sheruses += 1;
       else if (key === "tech") c.tech += 1;
       else c.none += 1;
     }
@@ -337,6 +339,7 @@ export default function SixDayTracker() {
           {([
             { key: "garfields", label: "Garfields", emoji: "🐱", count: nicheCounts.garfields, active: "bg-gradient-to-r from-orange-500 to-amber-500 text-zinc-900 border-orange-400 shadow-lg shadow-orange-500/25" },
             { key: "goofies", label: "Goofies", emoji: "🐶", count: nicheCounts.goofies, active: "bg-gradient-to-r from-sky-500 to-indigo-500 text-white border-indigo-400 shadow-lg shadow-indigo-500/25" },
+            { key: "sheruses", label: "The Sherus", emoji: "🦁", count: nicheCounts.sheruses, active: "bg-gradient-to-r from-rose-500 to-pink-500 text-white border-rose-400 shadow-lg shadow-rose-500/25" },
             { key: "tech", label: "Tech", emoji: "💻", count: nicheCounts.tech, active: "bg-gradient-to-r from-emerald-500 to-teal-500 text-zinc-900 border-emerald-400 shadow-lg shadow-emerald-500/25" },
           ] as const).map((opt) => {
             const isActive = nicheFilterSet.has(opt.key);

@@ -14,7 +14,7 @@
  */
 
 export type PersonRole = "cs" | "cdi" | "cw" | "design" | "ai_automations" | "ops_manager" | "editors" | "content_creators";
-export type PersonNiche = "garfields" | "goofies";
+export type PersonNiche = "garfields" | "goofies" | "sheruses";
 
 export type SeedPerson = {
   name: string;
@@ -37,6 +37,7 @@ export const PEOPLE_SEED: SeedPerson[] = [
   { name: "Arohi",  role: "cs",  niche: "goofies", emoji: "🧠" },
   { name: "Harish", role: "cw",  niche: "goofies", aliases: ["Harish R"], emoji: "📝" },
   { name: "Pulkit", role: "cdi", niche: "goofies", emoji: "🎬" },
+  // The Sherus
 ];
 
 export const ROLE_LABEL: Record<PersonRole, string> = {
@@ -64,12 +65,14 @@ export const ROLE_COLOR: Record<PersonRole, { text: string; bg: string; border: 
 export const NICHE_LABEL: Record<PersonNiche | "unassigned", string> = {
   garfields: "Garfields",
   goofies: "Goofies",
+  sheruses: "The Sherus",
   unassigned: "Unassigned",
 };
 
 export const NICHE_EMOJI: Record<PersonNiche | "unassigned", string> = {
   garfields: "🐱",
   goofies: "🐶",
+  sheruses: "🦁",
   unassigned: "❓",
 };
 
