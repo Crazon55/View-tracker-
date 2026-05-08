@@ -156,22 +156,33 @@ export default function NewsFeed() {
 
   const refreshMut = useMutation({
     mutationFn: async () => {
-      const res = await fetch(EDGE_FN_URL, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${ANON_KEY}`,
-          "Content-Type": "application/json",
-        },
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || `Edge function error ${res.status}`);
-      return json as { inserted: number; sourceStats?: Record<string, number> };
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 60_000);
+      try {
+        const res = await fetch(EDGE_FN_URL, {
+          method: "POST",
+          signal: controller.signal,
+          headers: {
+            "Authorization": `Bearer ${ANON_KEY}`,
+            "Content-Type": "application/json",
+          },
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json?.error || `Edge function returned ${res.status}. Check Supabase → Edge Functions → fetch-news → Logs.`);
+        return json as { inserted: number; sourceStats?: Record<string, number> };
+      } catch (e: any) {
+        if (e?.name === "AbortError") throw new Error("Timed out after 60s — Supabase may be having issues, try again shortly.");
+        throw e;
+      } finally {
+        clearTimeout(timer);
+      }
     },
-    onSuccess: ({ inserted }) => {
-      toast.success(`${inserted} articles fetched`);
+    onSuccess: ({ inserted, sourceStats }) => {
+      const sources = sourceStats ? Object.entries(sourceStats).map(([k, v]) => `${k}: ${v}`).join(", ") : "";
+      toast.success(`${inserted} articles fetched${sources ? ` (${sources})` : ""}`);
       refetch();
     },
-    onError: (e: any) => toast.error(e?.message || "Fetch failed — make sure the Edge Function is deployed"),
+    onError: (e: any) => toast.error(e?.message || "Fetch failed"),
   });
 
   const ticketMut = useMutation({
