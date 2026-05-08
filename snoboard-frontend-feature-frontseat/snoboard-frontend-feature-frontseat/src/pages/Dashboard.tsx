@@ -716,7 +716,7 @@ export default function Dashboard() {
         </div>
 
         {/* Leaderboard + Arena — side by side */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-10 items-start">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-10">
           {/* Leaderboard Podium */}
           {allPages.length >= 3 && (() => {
             const sortedForPodium = [...allPages].sort(
@@ -733,12 +733,12 @@ export default function Dashboard() {
             const glowColors = ["shadow-[0_12px_45px_-20px_rgba(255,255,255,0.25)]", "shadow-[0_18px_60px_-22px_rgba(181,139,26,0.55)]", "shadow-[0_12px_45px_-20px_rgba(107,63,31,0.5)]"];
 
             return (
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 h-full flex flex-col">
                 <div className="flex items-center gap-2 mb-6">
                   <span className="text-2xl">🏆</span>
                   <h2 className="text-xl sm:text-2xl font-black text-white uppercase tracking-wider">Leaderboard</h2>
                 </div>
-                <div className="flex items-end justify-center gap-3 sm:gap-5">
+                <div className="flex-1 flex items-end justify-center gap-3 sm:gap-5">
                   {podiumOrder.map((page, i) => {
                     const views = getPageViews(page, globalPeriod);
                     const podiumCounts = getPageCounts(page, globalPeriod);

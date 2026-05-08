@@ -58,7 +58,7 @@ export default function TeamBattleScoreboard() {
 
   return (
     <div
-      className="rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 via-zinc-950 to-zinc-900 p-6 flex flex-col cursor-pointer hover:border-zinc-700 transition-colors group"
+      className="rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 via-zinc-950 to-zinc-900 p-6 flex flex-col h-full cursor-pointer hover:border-zinc-700 transition-colors group"
       onClick={() => navigate("/team-performance")}
     >
       {/* Header */}
