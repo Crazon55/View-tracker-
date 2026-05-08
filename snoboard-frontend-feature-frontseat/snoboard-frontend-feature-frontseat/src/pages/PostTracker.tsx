@@ -924,8 +924,24 @@ export default function PostTracker(){
   });
   const createPostingMut = useMutation({
     mutationFn: ({ ideaId, data }: { ideaId: string; data: any }) => createTrackerPosting(ideaId, data),
-    onSuccess: () => { invalidate(); toast.success("Posting added"); },
-    onError: () => toast.error("Failed to add posting"),
+    onMutate: async ({ ideaId, data }: { ideaId: string; data: any }) => {
+      await queryClient.cancelQueries({ queryKey: ["tracker-ideas-post"] });
+      const previous = queryClient.getQueryData(["tracker-ideas-post"]);
+      queryClient.setQueryData(["tracker-ideas-post"], (old: any) =>
+        (old || []).map((idea: any) =>
+          idea.id === ideaId
+            ? { ...idea, tracker_postings: [...(idea.tracker_postings || []), { id: `temp-${Date.now()}`, page: data.page, date: data.date, baseline_views: data.baseline_views || 0, views: null, perf_tag: null }] }
+            : idea
+        )
+      );
+      return { previous };
+    },
+    onError: (_err: any, _vars: any, ctx: any) => {
+      if (ctx?.previous) queryClient.setQueryData(["tracker-ideas-post"], ctx.previous);
+      toast.error("Failed to add posting");
+    },
+    onSuccess: () => { toast.success("Posting added"); },
+    onSettled: () => { invalidate(); },
   });
   const updatePostingMut = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => updateTrackerPosting(id, data),
@@ -934,8 +950,23 @@ export default function PostTracker(){
   });
   const deletePostingMut = useMutation({
     mutationFn: (id: string) => deleteTrackerPosting(id),
-    onSuccess: () => { invalidate(); toast.success("Posting removed"); },
-    onError: () => toast.error("Failed to remove posting"),
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: ["tracker-ideas-post"] });
+      const previous = queryClient.getQueryData(["tracker-ideas-post"]);
+      queryClient.setQueryData(["tracker-ideas-post"], (old: any) =>
+        (old || []).map((idea: any) => ({
+          ...idea,
+          tracker_postings: (idea.tracker_postings || []).filter((p: any) => p.id !== id),
+        }))
+      );
+      return { previous };
+    },
+    onError: (_err: any, _vars: any, ctx: any) => {
+      if (ctx?.previous) queryClient.setQueryData(["tracker-ideas-post"], ctx.previous);
+      toast.error("Failed to remove posting");
+    },
+    onSuccess: () => { toast.success("Posting removed"); },
+    onSettled: () => { invalidate(); },
   });
   const createNicheMut = useMutation({
     mutationFn: (data: { name: string; pages: string[] }) => createTrackerNiche(data),
@@ -1173,8 +1204,10 @@ export default function PostTracker(){
 
   // For the open modal, prefer the locally-updated `detailIdea` so newly uploaded
   // assets render immediately (list rows refetch async).
+  // postings always come from the live query so page checkboxes update optimistically.
+  const _liveIdea = detailIdea ? (ideas.find((i: any) => i.id === detailIdea.id) || {}) : null;
   const cd = detailIdea
-    ? { ...(ideas.find((i) => i.id === detailIdea.id) || {}), ...(detailIdea || {}) }
+    ? { ..._liveIdea, ...detailIdea, postings: (_liveIdea as any)?.postings ?? detailIdea?.postings ?? [] }
     : null;
   const cdNiches=cd?niches.filter((n: any)=>detailNicheIds.includes(n.id)):[];
   const cdPages=cdNiches.flatMap((n: any)=>n.pages||[]).filter((v: string,i: number,a: string[])=>a.indexOf(v)===i);
