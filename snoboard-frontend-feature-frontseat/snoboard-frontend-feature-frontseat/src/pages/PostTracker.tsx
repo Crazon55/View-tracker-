@@ -464,15 +464,45 @@ function SlidesContentEditor({
   );
 }
 
-function Modal({open,onClose,title,children,wide}: {open:boolean;onClose:()=>void;title:string;children:React.ReactNode;wide?:boolean}){
+function Modal({open,onClose,title,onTitleChange,children,wide}: {open:boolean;onClose:()=>void;title:string;onTitleChange?:(t:string)=>void;children:React.ReactNode;wide?:boolean}){
+  const [editing,setEditing]=useState(false);
+  const [draft,setDraft]=useState("");
+  const titleInputRef=useRef<HTMLInputElement>(null);
+
+  function startEdit(){setDraft(title);setEditing(true);setTimeout(()=>titleInputRef.current?.select(),0);}
+  function commitEdit(){
+    const t=draft.trim();
+    if(t&&t!==title&&onTitleChange) onTitleChange(t);
+    setEditing(false);
+  }
+
   if(!open) return null;
   return (
     <div style={{position:"fixed",inset:0,zIndex:999,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={onClose}>
       <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.6)",backdropFilter:"blur(4px)"}}/>
       <div onClick={e=>e.stopPropagation()} style={{position:"relative",background:"#18181b",borderRadius:16,padding:"24px 28px",maxWidth:wide?720:520,width:"94%",maxHeight:"88vh",overflowY:"auto",boxShadow:"0 24px 80px rgba(0,0,0,0.5)",border:"1px solid #27272a"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
-          <h2 style={{margin:0,fontSize:17,fontWeight:600,color:"#fff",letterSpacing:"-0.02em"}}>{title}</h2>
-          <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#71717a",padding:"4px 8px",borderRadius:6}}>✕</button>
+          {onTitleChange&&editing?(
+            <input
+              ref={titleInputRef}
+              value={draft}
+              onChange={e=>setDraft(e.target.value)}
+              onBlur={commitEdit}
+              onKeyDown={e=>{if(e.key==="Enter")commitEdit();if(e.key==="Escape"){setEditing(false);}}}
+              style={{flex:1,fontSize:17,fontWeight:600,color:"#fff",letterSpacing:"-0.02em",background:"transparent",border:"none",borderBottom:"1.5px solid #7c3aed",outline:"none",padding:"0 0 2px",marginRight:8}}
+            />
+          ):(
+            <div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}>
+              <h2 style={{margin:0,fontSize:17,fontWeight:600,color:"#fff",letterSpacing:"-0.02em",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{title}</h2>
+              {onTitleChange&&(
+                <button onClick={startEdit} title="Rename" style={{background:"none",border:"none",cursor:"pointer",color:"#52525b",padding:"2px 4px",borderRadius:5,lineHeight:1,flexShrink:0,display:"flex",alignItems:"center"}}
+                  onMouseEnter={e=>(e.currentTarget.style.color="#a1a1aa")} onMouseLeave={e=>(e.currentTarget.style.color="#52525b")}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+              )}
+            </div>
+          )}
+          <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#71717a",padding:"4px 8px",borderRadius:6,flexShrink:0}}>✕</button>
         </div>
         {children}
       </div>
@@ -1436,7 +1466,11 @@ export default function PostTracker(){
         }
         if(nicheSaveTimer.current){clearTimeout(nicheSaveTimer.current);nicheSaveTimer.current=null;if(cd)updateIdeaMut.mutate({id:cd.id,data:{niche_ids:nicheSaveRef.current}});}
         closeDetail();
-      }} title={cd?.title||""} wide>
+      }} title={cd?.title||""} onTitleChange={(t)=>{
+          if(!cd?.id) return;
+          setDetailIdea((cur: any)=>cur&&cur.id===cd.id?{...cur,title:t}:cur);
+          updateIdeaMut.mutate({id:cd.id,data:{title:t}});
+        }} wide>
         {cd&&(()=>{const pp=(cd.postings||[]).map((p: any)=>p.page);return(
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
             <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
