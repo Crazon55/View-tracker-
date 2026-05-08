@@ -506,11 +506,26 @@ export default function Tickets() {
 
   const patchMut = useMutation({
     mutationFn: async (args: { id: string; patch: Partial<Ticket> }) => patchTicket(args.id, args.patch as any),
+    onMutate: async (args) => {
+      // Optimistic update — reflect change instantly in the UI
+      await qc.cancelQueries({ queryKey: ["tickets"] });
+      const previous = qc.getQueryData(["tickets"]);
+      qc.setQueryData(["tickets"], (old: any) =>
+        Array.isArray(old)
+          ? old.map((t) => (t.id === args.id ? { ...t, ...args.patch } : t))
+          : old
+      );
+      return { previous };
+    },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["tickets"] });
       await qc.invalidateQueries({ queryKey: ["weekly-workboard"] });
+      toast.success("Saved");
     },
-    onError: (e: any) => toast.error(e?.message || "Failed to update ticket"),
+    onError: (e: any, _args, ctx: any) => {
+      if (ctx?.previous) qc.setQueryData(["tickets"], ctx.previous);
+      toast.error(e?.message || "Failed to update ticket");
+    },
   });
 
   const deleteMut = useMutation({
@@ -952,8 +967,8 @@ export default function Tickets() {
                     onBlur={() => {
                       setEditingTitle(false);
                       const t = titleDraft.trim();
-                      if (selectedTicket && t !== (selectedTicket.title || ""))
-                        patchMut.mutate({ id: selectedTicket.id, patch: { title: t || undefined } });
+                      if (selectedTicket && t)
+                        patchMut.mutate({ id: selectedTicket.id, patch: { title: t } });
                     }}
                     onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditingTitle(false); }}
                     className="flex-1 bg-transparent border-b border-violet-500 outline-none text-white text-base font-semibold"
@@ -1026,8 +1041,8 @@ export default function Tickets() {
                       <div className="flex gap-2">
                         <button
                           onClick={() => {
-                            if (descDraft.trim() !== selectedTicket.description)
-                              patchMut.mutate({ id: selectedTicket.id, patch: { description: descDraft.trim() } });
+                            const next = descDraft.trim();
+                            if (next) patchMut.mutate({ id: selectedTicket.id, patch: { description: next } });
                             setEditingDesc(false);
                           }}
                           className="text-xs px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white font-semibold transition-colors"
