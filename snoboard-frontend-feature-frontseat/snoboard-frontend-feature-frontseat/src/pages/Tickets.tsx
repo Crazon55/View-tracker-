@@ -298,6 +298,10 @@ export default function Tickets() {
   const [createOpen, setCreateOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  const [editingDesc, setEditingDesc] = useState(false);
+  const [descDraft, setDescDraft] = useState("");
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
 
   const appendFiles = (incoming: File[]) => {
     if (!incoming.length) return;
@@ -558,7 +562,7 @@ export default function Tickets() {
         transition={{ type: "spring", stiffness: 300, damping: 28 }}
         draggable
         onDragStart={() => { dragIdRef.current = t.id; }}
-        onClick={() => { setSelectedTicketId(t.id); setDetailOpen(true); }}
+        onClick={() => { setSelectedTicketId(t.id); setDetailOpen(true); setEditingDesc(false); setEditingTitle(false); }}
         className="relative shrink-0 cursor-pointer select-none"
         style={{ width: 188, transformOrigin: "top center" }}
       >
@@ -938,8 +942,31 @@ export default function Tickets() {
         >
           <DialogContent className="bg-zinc-950 border-white/10 text-white max-w-3xl">
             <DialogHeader>
-              <DialogTitle className="text-white">
-                Order #{selectedTicket?.ticket_number ?? "—"} {selectedTicket?.title ? `· ${selectedTicket.title}` : ""}
+              <DialogTitle className="text-white flex items-center gap-2">
+                <span className="text-zinc-500 shrink-0">#{selectedTicket?.ticket_number ?? "—"}</span>
+                {editingTitle ? (
+                  <input
+                    autoFocus
+                    value={titleDraft}
+                    onChange={e => setTitleDraft(e.target.value)}
+                    onBlur={() => {
+                      setEditingTitle(false);
+                      const t = titleDraft.trim();
+                      if (selectedTicket && t !== (selectedTicket.title || ""))
+                        patchMut.mutate({ id: selectedTicket.id, patch: { title: t || undefined } });
+                    }}
+                    onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditingTitle(false); }}
+                    className="flex-1 bg-transparent border-b border-violet-500 outline-none text-white text-base font-semibold"
+                  />
+                ) : (
+                  <button
+                    className="flex-1 text-left text-base font-semibold text-white hover:text-violet-300 transition-colors truncate"
+                    title="Click to edit title"
+                    onClick={() => { setTitleDraft(selectedTicket?.title || ""); setEditingTitle(true); }}
+                  >
+                    {selectedTicket?.title || <span className="text-zinc-500 italic">Add title…</span>}
+                  </button>
+                )}
               </DialogTitle>
               <DialogDescription className="text-zinc-500">
                 {selectedTicket?.assigned_to_email ? `Assigned to ${selectedTicket.assigned_to_email}` : "Unassigned"}
@@ -975,10 +1002,51 @@ export default function Tickets() {
                 </div>
 
                 <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Problem description</p>
-                  <p className="text-sm text-zinc-200 mt-2 whitespace-pre-wrap leading-relaxed">
-                    {selectedTicket.description}
-                  </p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Problem description</p>
+                    {!editingDesc && (
+                      <button
+                        onClick={() => { setDescDraft(selectedTicket.description); setEditingDesc(true); }}
+                        className="text-[11px] text-zinc-500 hover:text-violet-300 transition-colors flex items-center gap-1"
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        Edit
+                      </button>
+                    )}
+                  </div>
+                  {editingDesc ? (
+                    <div className="space-y-2">
+                      <Textarea
+                        autoFocus
+                        value={descDraft}
+                        onChange={e => setDescDraft(e.target.value)}
+                        rows={5}
+                        className="bg-zinc-900 border-zinc-700 text-zinc-100 text-sm resize-y"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            if (descDraft.trim() !== selectedTicket.description)
+                              patchMut.mutate({ id: selectedTicket.id, patch: { description: descDraft.trim() } });
+                            setEditingDesc(false);
+                          }}
+                          className="text-xs px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white font-semibold transition-colors"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setEditingDesc(false)}
+                          className="text-xs px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-zinc-300 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-zinc-200 whitespace-pre-wrap leading-relaxed">
+                      {selectedTicket.description}
+                    </p>
+                  )}
                 </div>
 
                 <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
@@ -1311,7 +1379,7 @@ export default function Tickets() {
                       draggable
                       onDragStart={() => { dragIdRef.current = t.id; }}
                       className="rounded-xl border border-white/10 bg-zinc-950/40 p-3 cursor-pointer hover:bg-zinc-950/60 transition-colors"
-                      onClick={() => { setSelectedTicketId(t.id); setDetailOpen(true); }}
+                      onClick={() => { setSelectedTicketId(t.id); setDetailOpen(true); setEditingDesc(false); setEditingTitle(false); }}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
