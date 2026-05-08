@@ -605,12 +605,26 @@ export default function TeamPerformance() {
           </div>
         </div>
 
+        {/* ============================== THE SHERUS — always visible ============================== */}
+        {teamC && (
+          <ScrollReveal delay={0.04} className="mt-6">
+            <div className="max-w-md">
+              <TeamCard
+                team={teamC}
+                isLeader={leaderKey === teamC.key}
+                viewsPeriod={data.views_period}
+                viewsPeriodDays={data.views_period_days ?? data.window_days ?? 7}
+              />
+            </div>
+          </ScrollReveal>
+        )}
+
         {showDetails && (
           <>
             {/* ============================== TEAM CARDS ============================== */}
             <ScrollReveal delay={0.08} className="mt-8">
               <div className="grid gap-5 md:grid-cols-2">
-                {orderedTeams.map((team: any) => (
+                {[teamA, teamB].filter(Boolean).map((team: any) => (
                   <TeamCard
                     key={team.key}
                     team={team}

@@ -1170,6 +1170,7 @@ export default function WeeklyWorkboard() {
               weekAssignments={weekGridAssignments}
               weekAssignmentsAllRoles={weekGridAssignmentsAllRoles}
               myWorkboardRole={myWorkboardRole}
+              roleFilter={roleFilter}
               addAssignment={addAssignment}
               removeAssignment={removeAssignment}
               patchAssignment={patchAssignment}
@@ -1864,6 +1865,7 @@ function WeekGridListView({
   weekAssignments,
   weekAssignmentsAllRoles,
   myWorkboardRole,
+  roleFilter,
   addAssignment,
   removeAssignment,
   patchAssignment,
@@ -1884,6 +1886,7 @@ function WeekGridListView({
   /** Same week, all departments — used for ticket cards by day and department editors when the toolbar hides a role. */
   weekAssignmentsAllRoles: MainAssignment[];
   myWorkboardRole: WorkboardRoleId | null;
+  roleFilter: WorkboardRoleId | “all”;
   addAssignment: (role_id: WorkboardRoleId) => void;
   removeAssignment: (id: string) => void;
   patchAssignment: (id: string, patch: Partial<MainAssignment>) => void;
@@ -2357,7 +2360,7 @@ function WeekGridListView({
                           </div>
                         )}
 
-                        {extrasForDay.length > 0 && aiDevAssignment && (
+                        {extrasForDay.length > 0 && aiDevAssignment && (roleFilter === "all" || roleFilter === "ai_dev") && (
                           <div
                             className={cn(
                               "space-y-2",
