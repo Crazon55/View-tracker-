@@ -45,9 +45,11 @@ function sourceName(url: string | null): string {
 }
 
 async function fetchArticles(): Promise<NewsArticle[]> {
+  const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from("news_articles")
     .select("*")
+    .gte("created_at", threeDaysAgo)
     .order("created_at", { ascending: false })
     .limit(100);
   if (error) throw new Error(error.message);

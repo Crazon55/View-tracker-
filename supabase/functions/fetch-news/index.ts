@@ -52,13 +52,22 @@ Deno.serve(async (req) => {
         const itemRegex = /<item>([\s\S]*?)<\/item>/g;
         let match;
         let count = 0;
+        const cutoff = Date.now() - 3 * 24 * 60 * 60 * 1000; // 3 days ago
         while ((match = itemRegex.exec(xml)) !== null) {
           const item = match[1];
           const title = cleanHtml(extractTag(item, "title"));
           const link = extractTag(item, "link") || extractTag(item, "guid");
           const desc = cleanHtml(extractTag(item, "description")).slice(0, 400);
+          const pubDateRaw = extractTag(item, "pubDate");
 
           if (!title || !link) continue;
+
+          // Skip articles older than 3 days
+          if (pubDateRaw) {
+            const pubDate = new Date(pubDateRaw);
+            if (!isNaN(pubDate.getTime()) && pubDate.getTime() < cutoff) continue;
+          }
+
           const combined = `${title} ${desc}`.toLowerCase();
           if (!KEYWORDS.some((kw) => combined.includes(kw))) continue;
 
