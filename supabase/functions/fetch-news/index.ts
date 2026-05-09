@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
         const itemRegex = /<item>([\s\S]*?)<\/item>/g;
         let match;
         let count = 0;
-        const cutoff = Date.now() - 3 * 24 * 60 * 60 * 1000; // 3 days ago
+        const cutoff = Date.now() - 3 * 24 * 60 * 60 * 1000;
         while ((match = itemRegex.exec(xml)) !== null) {
           const item = match[1];
           const title = cleanHtml(extractTag(item, "title"));
@@ -62,11 +62,10 @@ Deno.serve(async (req) => {
 
           if (!title || !link) continue;
 
-          // Skip articles older than 3 days
-          if (pubDateRaw) {
-            const pubDate = new Date(pubDateRaw);
-            if (!isNaN(pubDate.getTime()) && pubDate.getTime() < cutoff) continue;
-          }
+          // pubDate is required — skip anything undated or older than 3 days
+          if (!pubDateRaw) continue;
+          const pubDate = new Date(pubDateRaw);
+          if (isNaN(pubDate.getTime()) || pubDate.getTime() < cutoff) continue;
 
           const combined = `${title} ${desc}`.toLowerCase();
           if (!KEYWORDS.some((kw) => combined.includes(kw))) continue;
@@ -90,9 +89,13 @@ Deno.serve(async (req) => {
     return true;
   });
 
+  // Purge stale articles (older than 3 days) from DB on every run
+  const purgeCutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+  await supabase.from("news_articles").delete().lt("created_at", purgeCutoff);
+
   if (unique.length === 0) {
     return new Response(
-      JSON.stringify({ inserted: 0, message: "No matching articles found", sourceStats }),
+      JSON.stringify({ inserted: 0, message: "No articles within 3 days found", sourceStats }),
       { headers: { "Content-Type": "application/json", ...CORS } }
     );
   }
