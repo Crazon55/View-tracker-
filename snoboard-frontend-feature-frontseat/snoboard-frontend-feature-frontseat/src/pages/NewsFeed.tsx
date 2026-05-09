@@ -5,6 +5,9 @@ import { toast } from "sonner";
 import { ExternalLink, Newspaper, RefreshCw, Ticket, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+const TAVILY_API_KEY = import.meta.env.VITE_TAVILY_API_KEY as string;
+const TAVILY_URL = "https://api.tavily.com/search";
+
 type NewsArticle = {
   id: string;
   title: string;
@@ -14,102 +17,96 @@ type NewsArticle = {
   published_at: string;
 };
 
-const FILTER_KEYWORDS = ["All", "Startup", "Venture capital", "Funding", "Business"];
-const MATCH_KEYWORDS = ["startup", "venture capital", "funding", "business"];
+type TavilyResult = {
+  title: string;
+  url: string;
+  content: string;
+  published_date?: string;
+  score: number;
+};
 
-const RSS_FEEDS = [
-  { url: "https://inc42.com/feed/", label: "Inc42" },
-  { url: "https://techcrunch.com/feed/", label: "TechCrunch" },
-  { url: "https://www.business-standard.com/rss/companies/start-ups.rss", label: "Business Standard" },
-  { url: "https://www.moneycontrol.com/rss/business.xml", label: "Moneycontrol" },
-  { url: "https://www.newsbytesapp.com/feed", label: "NewsBytesApp" },
-  { url: "https://www.fortuneindia.com/feed", label: "Fortune India" },
-  { url: "https://news.google.com/rss/search?q=startup+india+funding+rounds&hl=en-IN&gl=IN&ceid=IN:en", label: "Google News" },
-  { url: "https://news.google.com/rss/search?q=venture+capital+india&hl=en-IN&gl=IN&ceid=IN:en", label: "Google News" },
-  { url: "https://news.google.com/rss/search?q=business+startup+India+funding&hl=en-IN&gl=IN&ceid=IN:en", label: "Google News" },
+const FILTER_KEYWORDS = ["All", "Startup", "Venture capital", "Funding", "Business"];
+
+const SEARCH_QUERIES = [
+  "India startup funding news",
+  "India venture capital investment news",
+  "India business startup news",
 ];
 
-async function fetchRSSWithProxy(url: string): Promise<string | null> {
-  const proxies = [
-    `https://corsproxy.io/?${encodeURIComponent(url)}`,
-    `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-  ];
-  for (const proxy of proxies) {
-    try {
-      const res = await fetch(proxy, { signal: AbortSignal.timeout(8000) });
-      if (!res.ok) continue;
-      const text = await res.text();
-      if (text.startsWith("{")) {
-        const json = JSON.parse(text);
-        return json.contents ?? null;
-      }
-      return text;
-    } catch {
-      continue;
+async function tavilySearch(query: string): Promise<TavilyResult[]> {
+  const res = await fetch(TAVILY_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      api_key: TAVILY_API_KEY,
+      query,
+      topic: "news",
+      days: 3,
+      max_results: 20,
+      include_answer: false,
+    }),
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!res.ok) throw new Error(`Tavily error: ${res.status}`);
+  const data = await res.json();
+  return (data.results ?? []) as TavilyResult[];
+}
+
+function sourceFromUrl(url: string): string {
+  try {
+    const host = new URL(url).hostname.replace("www.", "");
+    const map: Record<string, string> = {
+      "inc42.com": "Inc42",
+      "techcrunch.com": "TechCrunch",
+      "moneycontrol.com": "Moneycontrol",
+      "business-standard.com": "Business Standard",
+      "economictimes.indiatimes.com": "Economic Times",
+      "livemint.com": "Mint",
+      "yourstory.com": "YourStory",
+      "entrackr.com": "Entrackr",
+      "fortuneindia.com": "Fortune India",
+      "ndtv.com": "NDTV",
+      "hindustantimes.com": "Hindustan Times",
+    };
+    for (const [key, label] of Object.entries(map)) {
+      if (host.includes(key)) return label;
+    }
+    return host;
+  } catch {
+    return "News";
+  }
+}
+
+async function fetchTavilyNews(): Promise<NewsArticle[]> {
+  if (!TAVILY_API_KEY) throw new Error("VITE_TAVILY_API_KEY is not set in .env");
+
+  const results = await Promise.allSettled(SEARCH_QUERIES.map(tavilySearch));
+
+  const all: NewsArticle[] = [];
+  for (const r of results) {
+    if (r.status !== "fulfilled") continue;
+    for (const item of r.value) {
+      if (!item.title || !item.url) continue;
+      all.push({
+        id: item.url,
+        title: item.title,
+        summary: item.content?.slice(0, 400) || null,
+        url: item.url,
+        source: sourceFromUrl(item.url),
+        published_at: item.published_date ?? new Date().toISOString(),
+      });
     }
   }
-  return null;
-}
 
-function parseRSSItems(xml: string, label: string, cutoff: number): NewsArticle[] {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(xml, "text/xml");
-  const results: NewsArticle[] = [];
-
-  doc.querySelectorAll("item").forEach((item) => {
-    const title = item.querySelector("title")?.textContent?.trim() || "";
-    const url =
-      item.querySelector("link")?.textContent?.trim() ||
-      item.querySelector("link")?.getAttribute("href")?.trim() || "";
-    const pubDateRaw = item.querySelector("pubDate")?.textContent?.trim() || "";
-    const desc = item.querySelector("description")?.textContent || "";
-
-    if (!title || !url) return;
-
-    // Require a valid pubDate within the last 3 days
-    if (!pubDateRaw) return;
-    const pubDate = new Date(pubDateRaw);
-    if (isNaN(pubDate.getTime()) || pubDate.getTime() < cutoff) return;
-
-    const summary = desc
-      .replace(/<[^>]+>/g, "")
-      .replace(/&[a-z]+;/gi, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 400);
-
-    const combined = `${title} ${summary}`.toLowerCase();
-    if (!MATCH_KEYWORDS.some((kw) => combined.includes(kw))) return;
-
-    results.push({ id: url, title, summary: summary || null, url, source: label, published_at: pubDate.toISOString() });
-  });
-
-  return results;
-}
-
-async function fetchLiveNews(): Promise<NewsArticle[]> {
-  const cutoff = Date.now() - 3 * 24 * 60 * 60 * 1000;
-  const all: NewsArticle[] = [];
-
-  await Promise.allSettled(
-    RSS_FEEDS.map(async ({ url, label }) => {
-      const xml = await fetchRSSWithProxy(url);
-      if (!xml) return;
-      all.push(...parseRSSItems(xml, label, cutoff));
-    })
-  );
-
-  // Deduplicate by normalised title, sort newest first
+  // Deduplicate by URL, sort newest first
   const seen = new Set<string>();
   return all
     .filter((a) => {
-      const key = a.title.toLowerCase().replace(/\s+/g, " ").slice(0, 80);
-      if (seen.has(key)) return false;
-      seen.add(key);
+      if (seen.has(a.url)) return false;
+      seen.add(a.url);
       return true;
     })
-    .sort((a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime())
-    .slice(0, 60);
+    .sort((a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime());
 }
 
 export default function NewsFeed() {
@@ -118,10 +115,11 @@ export default function NewsFeed() {
   const [search, setSearch] = useState("");
   const [ticketedIds, setTicketedIds] = useState<Set<string>>(new Set());
 
-  const { data: articles = [], isLoading, isFetching, refetch } = useQuery({
-    queryKey: ["news-live"],
-    queryFn: fetchLiveNews,
+  const { data: articles = [], isLoading, isFetching, refetch, error } = useQuery({
+    queryKey: ["news-tavily"],
+    queryFn: fetchTavilyNews,
     staleTime: 30 * 60_000,
+    retry: 1,
   });
 
   const ticketMut = useMutation({
@@ -158,7 +156,7 @@ export default function NewsFeed() {
             <div>
               <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">News Feed</h1>
               <p className="text-sm text-zinc-500 mt-0.5">
-                Startup · VC · Funding · Business — last 3 days only
+                Startup · VC · Funding · Business — last 3 days
               </p>
             </div>
           </div>
@@ -207,13 +205,17 @@ export default function NewsFeed() {
         {isLoading ? (
           <div className="flex items-center justify-center py-20 text-zinc-500 gap-2">
             <RefreshCw className="w-4 h-4 animate-spin" />
-            Fetching live news…
+            Fetching news via Tavily…
+          </div>
+        ) : error ? (
+          <div className="rounded-2xl border border-red-800/50 bg-red-900/10 p-8 text-center">
+            <p className="text-red-400 text-sm font-semibold mb-1">Failed to load news</p>
+            <p className="text-zinc-500 text-xs">{(error as Error).message}</p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-12 text-center">
             <Newspaper className="w-8 h-8 text-zinc-700 mx-auto mb-3" />
-            <p className="text-zinc-500 text-sm">No articles from the last 3 days.</p>
-            <p className="text-zinc-600 text-xs mt-1">Try clicking Fetch Latest to pull directly from RSS.</p>
+            <p className="text-zinc-500 text-sm">No articles found in the last 3 days.</p>
           </div>
         ) : (
           <div className="grid gap-4">
