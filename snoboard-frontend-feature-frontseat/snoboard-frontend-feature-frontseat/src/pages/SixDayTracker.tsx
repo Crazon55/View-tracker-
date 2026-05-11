@@ -212,7 +212,7 @@ export default function SixDayTracker() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-4">
             <img
-              src="/rabbit.jpg"
+              src="/rabbit.webp"
               alt="late rabbit"
               className="w-14 h-14 rounded-full object-cover object-top opacity-90 shrink-0"
             />
