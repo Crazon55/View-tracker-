@@ -167,7 +167,7 @@ export default function NewsFeed() {
             </div>
             <div className="text-center flex-1 px-4">
               <h1 className="font-serif text-4xl sm:text-5xl font-black text-white tracking-tight leading-none">
-                The Startup Gazette
+                NEWS PIECES
               </h1>
               <p className="text-[9px] tracking-[0.35em] uppercase text-zinc-500 mt-2 font-sans">
                 India · Business · Venture Capital · Funding
