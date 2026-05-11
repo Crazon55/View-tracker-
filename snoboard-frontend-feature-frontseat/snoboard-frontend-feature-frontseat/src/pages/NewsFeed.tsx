@@ -109,6 +109,12 @@ async function fetchTavilyNews(): Promise<NewsArticle[]> {
     .sort((a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime());
 }
 
+function formatNewspaperDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString("en-IN", {
+    day: "numeric", month: "short", year: "numeric",
+  });
+}
+
 export default function NewsFeed() {
   const qc = useQueryClient();
   const [filter, setFilter] = useState("All");
@@ -150,120 +156,161 @@ export default function NewsFeed() {
     <div className="min-h-screen bg-zinc-950 pt-20 pb-16 px-4 sm:px-6">
       <div className="max-w-5xl mx-auto">
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-          <div className="flex items-center gap-3">
-            <Newspaper className="w-6 h-6 text-violet-400" />
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">News Feed</h1>
-              <p className="text-sm text-zinc-500 mt-0.5">
-                Startup · VC · Funding · Business — last 3 days
+        {/* ── Masthead ─────────────────────────────────────────── */}
+        <div className="mb-10">
+          <div className="h-[3px] bg-amber-50/80" />
+          <div className="h-px bg-amber-50/25 mt-0.5 mb-4" />
+          <div className="flex items-end justify-between px-1">
+            <div className="text-left pb-1">
+              <p className="text-[8px] tracking-[0.3em] uppercase text-zinc-600 font-sans leading-relaxed">Est. 2024</p>
+              <p className="text-[8px] tracking-[0.3em] uppercase text-zinc-600 font-sans">Vol. I</p>
+            </div>
+            <div className="text-center flex-1 px-4">
+              <h1 className="font-serif text-4xl sm:text-5xl font-black text-amber-50 tracking-tight leading-none">
+                The Startup Gazette
+              </h1>
+              <p className="text-[9px] tracking-[0.35em] uppercase text-zinc-500 mt-2 font-sans">
+                India · Business · Venture Capital · Funding
               </p>
             </div>
+            <div className="text-right pb-1">
+              <p className="text-[8px] tracking-[0.2em] uppercase text-zinc-600 font-sans">
+                {new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+              </p>
+              <button
+                onClick={() => refetch()}
+                disabled={isFetching}
+                className="inline-flex items-center gap-1 text-[8px] tracking-[0.2em] uppercase text-zinc-500 hover:text-amber-300 transition-colors disabled:opacity-40 mt-1 ml-auto font-sans"
+              >
+                <RefreshCw className={cn("w-2.5 h-2.5", isFetching && "animate-spin")} />
+                {isFetching ? "Fetching…" : "Fetch Edition"}
+              </button>
+            </div>
           </div>
-          <button
-            onClick={() => refetch()}
-            disabled={isFetching}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
-          >
-            <RefreshCw className={cn("w-4 h-4", isFetching && "animate-spin")} />
-            {isFetching ? "Fetching…" : "Fetch Latest"}
-          </button>
+          <div className="h-px bg-amber-50/25 mt-4 mb-0.5" />
+          <div className="h-[3px] bg-amber-50/80" />
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3 mb-6">
-          <div className="flex gap-2 flex-wrap">
+        {/* ── Section Nav ──────────────────────────────────────── */}
+        <div className="mb-6 border-b border-zinc-700">
+          <div className="flex items-center">
             {FILTER_KEYWORDS.map((kw) => (
               <button
                 key={kw}
                 onClick={() => setFilter(kw)}
                 className={cn(
-                  "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors",
+                  "px-4 py-2 text-[9px] tracking-[0.25em] uppercase font-black font-sans border-b-2 -mb-px transition-colors whitespace-nowrap",
                   filter === kw
-                    ? "bg-violet-600 border-violet-500 text-white"
-                    : "bg-white/[0.04] border-white/10 text-zinc-400 hover:text-white"
+                    ? "border-amber-400 text-amber-200"
+                    : "border-transparent text-zinc-500 hover:text-zinc-300"
                 )}
               >
                 {kw}
               </button>
             ))}
-          </div>
-          <div className="relative flex-1 max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search articles…"
-              className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-sm text-zinc-200 placeholder:text-zinc-600 outline-none focus:border-violet-500/50"
-            />
+            <div className="ml-auto relative pb-1">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-600" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search articles…"
+                className="pl-7 pr-3 py-1 text-[10px] bg-transparent border-0 text-zinc-400 placeholder:text-zinc-700 outline-none focus:text-zinc-200 w-44 font-sans"
+              />
+            </div>
           </div>
         </div>
 
-        <p className="text-xs text-zinc-600 mb-4">
-          {isLoading ? "Loading…" : `${filtered.length} article${filtered.length !== 1 ? "s" : ""}`}
-        </p>
+        {/* ── Circulation count ────────────────────────────────── */}
+        <div className="flex items-center gap-3 mb-6">
+          <div className="h-px flex-1 bg-zinc-800" />
+          <p className="text-[9px] tracking-[0.3em] uppercase text-zinc-600 font-sans shrink-0">
+            {isLoading ? "Loading edition…" : `${filtered.length} article${filtered.length !== 1 ? "s" : ""} in circulation`}
+          </p>
+          <div className="h-px flex-1 bg-zinc-800" />
+        </div>
 
+        {/* ── States ───────────────────────────────────────────── */}
         {isLoading ? (
-          <div className="flex items-center justify-center py-20 text-zinc-500 gap-2">
-            <RefreshCw className="w-4 h-4 animate-spin" />
-            Fetching news via Tavily…
+          <div className="flex flex-col items-center justify-center py-24 gap-3">
+            <RefreshCw className="w-5 h-5 animate-spin text-amber-50/30" />
+            <p className="text-[10px] tracking-[0.3em] uppercase text-zinc-600 font-sans">Fetching the latest edition…</p>
           </div>
         ) : error ? (
-          <div className="rounded-2xl border border-red-800/50 bg-red-900/10 p-8 text-center">
-            <p className="text-red-400 text-sm font-semibold mb-1">Failed to load news</p>
-            <p className="text-zinc-500 text-xs">{(error as Error).message}</p>
+          <div className="bg-stone-100 border border-stone-200 border-t-4 border-t-red-900 p-8 text-center shadow-[4px_4px_0_0_rgba(0,0,0,0.5)]">
+            <p className="font-serif text-xl font-black text-stone-900 mb-1">— CORRECTION —</p>
+            <p className="text-xs text-stone-600 font-sans">{(error as Error).message}</p>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-12 text-center">
-            <Newspaper className="w-8 h-8 text-zinc-700 mx-auto mb-3" />
-            <p className="text-zinc-500 text-sm">No articles found in the last 3 days.</p>
+          <div className="bg-stone-100 border border-stone-200 border-t-4 border-t-stone-900 p-12 text-center shadow-[4px_4px_0_0_rgba(0,0,0,0.5)]">
+            <Newspaper className="w-8 h-8 text-stone-400 mx-auto mb-3" />
+            <p className="font-serif text-xl font-black text-stone-900">No Articles in Circulation</p>
+            <p className="text-[11px] text-stone-500 mt-1 font-sans tracking-wide">No stories found in the last 3 days.</p>
           </div>
         ) : (
-          <div className="grid gap-4">
-            {filtered.map((article) => (
+          <div className="grid gap-5">
+            {filtered.map((article, idx) => (
               <div
                 key={article.id}
-                className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 hover:border-zinc-700 transition-colors"
+                className="bg-stone-100 border border-stone-200 border-t-4 border-t-stone-900 shadow-[4px_4px_0_0_rgba(0,0,0,0.45)] hover:shadow-[6px_6px_0_0_rgba(0,0,0,0.55)] hover:-translate-y-0.5 transition-all duration-150"
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2 flex-wrap">
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/20">
-                        {article.source}
-                      </span>
-                      <span className="text-[10px] text-zinc-600">
-                        {new Date(article.published_at).toLocaleDateString("en-IN", {
-                          day: "numeric", month: "short", year: "numeric",
-                        })}
-                      </span>
-                    </div>
-                    <h3 className="text-sm font-bold text-white leading-snug mb-2">{article.title}</h3>
-                    {article.summary && (
-                      <p className="text-xs text-zinc-400 leading-relaxed line-clamp-3">{article.summary}</p>
-                    )}
+                <div className="p-5 sm:p-6">
+                  {/* Byline row */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-[9px] font-black tracking-[0.3em] uppercase text-stone-900 font-sans">
+                      {article.source}
+                    </span>
+                    <div className="flex-1 h-px bg-stone-400" />
+                    <span className="text-[9px] tracking-[0.1em] text-stone-500 font-sans">
+                      {formatNewspaperDate(article.published_at)}
+                    </span>
                   </div>
-                  <div className="flex flex-col gap-2 shrink-0">
-                    <a
-                      href={article.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-xs text-zinc-300 hover:text-white hover:border-white/20 transition-colors"
-                    >
-                      <ExternalLink className="w-3 h-3" />
-                      Read
-                    </a>
-                    <button
-                      onClick={() => ticketMut.mutate(article)}
-                      disabled={ticketMut.isPending || ticketedIds.has(article.id)}
-                      className={cn(
-                        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors",
-                        ticketedIds.has(article.id)
-                          ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 cursor-default"
-                          : "bg-amber-500/10 border border-amber-500/20 text-amber-300 hover:bg-amber-500/20 disabled:opacity-50"
+
+                  <div className="flex items-start gap-5">
+                    <div className="flex-1 min-w-0">
+                      {/* Headline */}
+                      <h3 className={cn(
+                        "font-serif font-black text-stone-900 leading-tight mb-3",
+                        idx === 0 ? "text-2xl" : "text-xl"
+                      )}>
+                        {article.title}
+                      </h3>
+
+                      {/* Body */}
+                      {article.summary && (
+                        <>
+                          <div className="h-px bg-stone-300 mb-2" />
+                          <p className="text-[11px] text-stone-700 leading-relaxed line-clamp-3 font-sans">
+                            {article.summary}
+                          </p>
+                        </>
                       )}
-                    >
-                      <Ticket className="w-3 h-3" />
-                      {ticketedIds.has(article.id) ? "Ticketed" : "Add Ticket"}
-                    </button>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="shrink-0 flex flex-col gap-2.5 items-end border-l border-stone-300 pl-5">
+                      <a
+                        href={article.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-[9px] font-black tracking-[0.2em] uppercase text-stone-900 underline underline-offset-2 hover:text-stone-600 transition-colors font-sans"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        Read
+                      </a>
+                      <button
+                        onClick={() => ticketMut.mutate(article)}
+                        disabled={ticketMut.isPending || ticketedIds.has(article.id)}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 px-2.5 py-1 text-[9px] font-black tracking-[0.15em] uppercase border font-sans transition-colors whitespace-nowrap",
+                          ticketedIds.has(article.id)
+                            ? "border-emerald-700 text-emerald-700 cursor-default"
+                            : "border-stone-900 text-stone-900 hover:bg-stone-900 hover:text-stone-100 disabled:opacity-40"
+                        )}
+                      >
+                        <Ticket className="w-3 h-3" />
+                        {ticketedIds.has(article.id) ? "Filed" : "File Ticket"}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
