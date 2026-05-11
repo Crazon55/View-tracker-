@@ -214,7 +214,7 @@ export default function SixDayTracker() {
             <img
               src="/rabbit.webp"
               alt="late rabbit"
-              className="w-14 h-14 rounded-full object-cover object-top opacity-90 shrink-0"
+              className="w-24 h-24 rounded-full object-cover object-top opacity-90 shrink-0"
             />
             <div>
               <h1 className="text-2xl sm:text-3xl font-black text-white uppercase tracking-wider">
