@@ -394,55 +394,87 @@ export const getUserRole = (email: string) => fetchApi<any>(`/api/v1/user-role/$
 export const setUserRole = (data: { email: string; role: string; name?: string }) =>
   fetchApi<any>("/api/v1/user-role", { method: "POST", body: JSON.stringify(data) });
 
-// Blue Ocean Ideas
+// Blue Ocean Ideas — direct Supabase (bypasses backend, works without redeploy)
+import { supabase as _sb } from "@/lib/supabase";
+
 export const blueOceanGenerateArticles = (data: { niche?: string }) =>
   fetchApi<any[]>("/api/v1/blue-ocean/generate-articles", { method: "POST", body: JSON.stringify(data) });
 
 export const blueOceanGenerateInstagram = (data: { niche?: string }) =>
   fetchApi<any[]>("/api/v1/blue-ocean/generate-instagram", { method: "POST", body: JSON.stringify(data) });
 
-export const getBlueOceanIdeas = (params?: { type?: string; status?: string }) => {
-  const qs = new URLSearchParams();
-  if (params?.type) qs.set("type", params.type);
-  if (params?.status) qs.set("status", params.status);
-  const suffix = qs.toString() ? `?${qs.toString()}` : "";
-  return fetchApi<any[]>(`/api/v1/blue-ocean/ideas${suffix}`);
-};
+export async function getBlueOceanIdeas(params?: { type?: string; status?: string }): Promise<any[]> {
+  let q = _sb.from("blue_ocean_ideas").select("*").order("created_at", { ascending: false });
+  if (params?.type) q = q.eq("type", params.type);
+  if (params?.status) q = q.eq("status", params.status);
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
 
-export const createBlueOceanIdea = (data: {
+export async function createBlueOceanIdea(row: {
   type: string; source?: string; headline_or_hook: string;
   format_tag?: string; why_evergreen?: string; outline_or_slides?: any;
   hook_formula?: string; status?: string; source_account?: string; engagement_data?: any;
-}) => fetchApi<any>("/api/v1/blue-ocean/ideas", { method: "POST", body: JSON.stringify(data) });
+}): Promise<any> {
+  const insert: Record<string, any> = { status: "saved", ...row };
+  Object.keys(insert).forEach((k) => insert[k] === undefined && delete insert[k]);
+  const { data, error } = await _sb.from("blue_ocean_ideas").insert(insert).select().single();
+  if (error) throw new Error(error.message);
+  return data;
+}
 
-export const updateBlueOceanIdea = (id: string, data: Record<string, any>) =>
-  fetchApi<any>(`/api/v1/blue-ocean/ideas/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export async function updateBlueOceanIdea(id: string, updates: Record<string, any>): Promise<any> {
+  const { data, error } = await _sb
+    .from("blue_ocean_ideas")
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
+}
 
-export const deleteBlueOceanIdea = (id: string) =>
-  fetchApi<any>(`/api/v1/blue-ocean/ideas/${id}`, { method: "DELETE" });
+export async function deleteBlueOceanIdea(id: string): Promise<void> {
+  const { error } = await _sb.from("blue_ocean_ideas").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}
 
 export const blueOceanScrape = (data: {
   accounts: string[]; date_from?: string; date_to?: string;
   post_type?: string; results_limit?: number;
 }) => fetchApi<any>("/api/v1/blue-ocean/scrape", { method: "POST", body: JSON.stringify(data) });
 
-export const getBlueOceanScrapeJobs = () =>
-  fetchApi<any[]>("/api/v1/blue-ocean/scrape-jobs");
+export async function getBlueOceanScrapeJobs(): Promise<any[]> {
+  const { data, error } = await _sb
+    .from("blue_ocean_scrape_jobs")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
 
-export const getBlueOceanScrapedPosts = (params?: {
+export async function getBlueOceanScrapedPosts(params?: {
   job_id?: string; post_type?: string; is_blue_ocean?: boolean; sort?: string;
-}) => {
-  const qs = new URLSearchParams();
-  if (params?.job_id) qs.set("job_id", params.job_id);
-  if (params?.post_type) qs.set("post_type", params.post_type);
-  if (params?.is_blue_ocean !== undefined) qs.set("is_blue_ocean", String(params.is_blue_ocean));
-  if (params?.sort) qs.set("sort", params.sort);
-  const suffix = qs.toString() ? `?${qs.toString()}` : "";
-  return fetchApi<any[]>(`/api/v1/blue-ocean/scraped-posts${suffix}`);
-};
+}): Promise<any[]> {
+  const sortCol = (params?.sort && ["likes","comments","views","posted_at","created_at"].includes(params.sort))
+    ? params.sort : "likes";
+  let q = _sb.from("blue_ocean_scraped_posts").select("*").order(sortCol, { ascending: false }).limit(500);
+  if (params?.job_id) q = q.eq("job_id", params.job_id);
+  if (params?.post_type && params.post_type !== "all") q = q.eq("post_type", params.post_type);
+  if (params?.is_blue_ocean !== undefined) q = q.eq("is_blue_ocean", params.is_blue_ocean);
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
 
-export const updateBlueOceanScrapedPost = (id: string, data: { is_blue_ocean?: boolean; post_type?: string }) =>
-  fetchApi<any>(`/api/v1/blue-ocean/scraped-posts/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export async function updateBlueOceanScrapedPost(id: string, updates: { is_blue_ocean?: boolean; post_type?: string }): Promise<void> {
+  const { error } = await _sb.from("blue_ocean_scraped_posts").update(updates).eq("id", id);
+  if (error) throw new Error(error.message);
+}
 
-export const deleteBlueOceanScrapedPost = (id: string) =>
-  fetchApi<any>(`/api/v1/blue-ocean/scraped-posts/${id}`, { method: "DELETE" });
+export async function deleteBlueOceanScrapedPost(id: string): Promise<void> {
+  const { error } = await _sb.from("blue_ocean_scraped_posts").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}
