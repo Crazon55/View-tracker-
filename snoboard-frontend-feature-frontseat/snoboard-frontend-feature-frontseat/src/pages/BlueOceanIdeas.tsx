@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Waves, Search, BookOpen, Instagram, ChevronDown, ChevronUp, Trash2, CheckCircle, RotateCcw, ExternalLink, Loader2, AlertCircle, Heart, MessageCircle, Eye, Calendar, Globe } from "lucide-react";
+import { Waves, Search, BookOpen, Instagram, ChevronDown, ChevronUp, Trash2, CheckCircle, RotateCcw, ExternalLink, Loader2, AlertCircle, Heart, MessageCircle, Eye, Calendar, Globe, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import {
   getBlueOceanIdeas,
@@ -18,15 +18,50 @@ import {
 
 const TAVILY_API_KEY = import.meta.env.VITE_TAVILY_API_KEY as string;
 
-async function tavilySearchArticles(query: string): Promise<TavilyArticle[]> {
+// Predefined evergreen queries — auto-fetched on load, same pattern as NewsFeed
+const BLUE_OCEAN_AUTO_QUERIES = [
+  "how to start a company in India step by step guide",
+  "top 10 richest Indians net worth how they built wealth",
+  "Mukesh Ambani Reliance Industries wealth empire story",
+  "Byju's collapse failure story what went wrong",
+  "Zerodha bootstrapped profitable Indian startup story",
+  "top 5 Indian startups that failed lessons",
+  "Ratan Tata Tata Group legacy succession story",
+  "Gautam Adani rise billion dollar empire India",
+  "Narayana Murthy Infosys zero to billion founder story",
+  "how to raise angel funding India startup guide",
+];
+
+const INDIA_QUICK_SEARCHES = [
+  "how to start a company in India",
+  "how to register startup DPIIT India",
+  "how to raise angel funding India",
+  "how to build D2C brand India",
+  "top 10 richest Indians wealth",
+  "top 5 Indian startups that failed",
+  "top 10 Indian business podcasts",
+  "top 5 books Indian entrepreneur",
+  "top 10 Indian unicorns profitable",
+  "Ambani empire wealth breakdown",
+  "Adani rise billion dollar story",
+  "Byju's collapse inside story",
+  "Zerodha bootstrapped profitable",
+  "Dhirubhai Ambani rags to riches",
+  "OYO rise and fall story",
+  "Tata Group history Ratan Tata",
+  "Narayana Murthy Infosys story",
+  "Indian startup unicorn funding",
+];
+
+async function tavilySearch(query: string): Promise<TavilyArticle[]> {
   const res = await fetch("https://api.tavily.com/search", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       api_key: TAVILY_API_KEY,
-      query: `${query} India`,
+      query,
       topic: "general",
-      max_results: 15,
+      max_results: 10,
       include_answer: false,
       include_raw_content: false,
     }),
@@ -37,26 +72,21 @@ async function tavilySearchArticles(query: string): Promise<TavilyArticle[]> {
   return (data.results ?? []) as TavilyArticle[];
 }
 
-const INDIA_SUGGESTED_QUERIES = [
-  "how to start a company in India step by step",
-  "how to register startup India DPIIT 2025",
-  "how to raise angel funding India first time founder",
-  "how to build D2C brand India zero investment",
-  "how to get into Y Combinator India founder",
-  "top 10 richest Indians how they made money",
-  "top 5 Indian startups that failed and why",
-  "top 10 Indian business podcasts founders must listen",
-  "top 5 books every Indian entrepreneur must read",
-  "top 10 Indian unicorns profitable ranked",
-  "Mukesh Ambani Reliance empire wealth breakdown",
-  "Gautam Adani rise from scratch billion dollar",
-  "Byju's collapse what went wrong inside story",
-  "Zerodha Nithin Kamath bootstrapped profitable",
-  "Narayana Murthy Infosys ₹10000 to billion story",
-  "Dhirubhai Ambani rags to riches Reliance origin",
-  "OYO Ritesh Agarwal rise and fall story",
-  "Tata Group history succession Ratan Tata",
-];
+async function fetchBlueOceanArticles(): Promise<TavilyArticle[]> {
+  if (!TAVILY_API_KEY) throw new Error("VITE_TAVILY_API_KEY is not set");
+  const results = await Promise.allSettled(BLUE_OCEAN_AUTO_QUERIES.map(tavilySearch));
+  const all: TavilyArticle[] = [];
+  for (const r of results) {
+    if (r.status !== "fulfilled") continue;
+    all.push(...r.value.filter((a) => a.title && a.url));
+  }
+  const seen = new Set<string>();
+  return all.filter((a) => {
+    if (seen.has(a.url)) return false;
+    seen.add(a.url);
+    return true;
+  });
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -305,14 +335,22 @@ function TavilyArticleCard({ article, onSave }: { article: TavilyArticle; onSave
   );
 }
 
-// ─── Articles Tab (Tavily only) ───────────────────────────────────────────────
+// ─── Articles Tab (auto-fetch + manual search) ───────────────────────────────
 
 function ArticlesTab() {
   const qc = useQueryClient();
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<TavilyArticle[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<TavilyArticle[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
+
+  // Auto-fetch on mount — same pattern as NewsFeed
+  const { data: autoArticles = [], isLoading, isFetching, refetch, error: fetchError } = useQuery<TavilyArticle[]>({
+    queryKey: ["blue-ocean-tavily"],
+    queryFn: fetchBlueOceanArticles,
+    staleTime: 30 * 60_000,
+    retry: 1,
+  });
 
   const { data: savedIdeas = [] } = useQuery<SavedIdea[]>({
     queryKey: ["blue-ocean-ideas", "article"],
@@ -349,21 +387,26 @@ function ArticlesTab() {
   });
 
   async function runSearch(q?: string) {
-    const searchQuery = (q ?? query).trim();
-    if (!searchQuery) return;
-    if (q) setQuery(q);
-    setLoading(true);
-    setError("");
+    const query = (q ?? searchQuery).trim();
+    if (!query) return;
+    if (q) setSearchQuery(q);
+    setSearching(true);
+    setSearchError("");
+    setSearchResults(null);
     try {
-      const data = await tavilySearchArticles(searchQuery);
-      setResults(data);
+      const data = await tavilySearch(query);
+      setSearchResults(data);
       toast.success(`Found ${data.length} articles`);
     } catch (e: any) {
-      setError(e?.message || "Search failed");
+      setSearchError(e?.message || "Search failed");
     } finally {
-      setLoading(false);
+      setSearching(false);
     }
   }
+
+  // Show search results when a manual search ran, otherwise show auto-fetched
+  const displayArticles = searchResults ?? autoArticles;
+  const isSearchMode = searchResults !== null;
 
   return (
     <div className="space-y-6">
@@ -371,32 +414,40 @@ function ArticlesTab() {
       <div>
         <div className="flex gap-3 items-center">
           <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !loading && runSearch()}
-            placeholder="e.g. Ambani wealth story, how to start company India, top 10 richest Indians"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !searching && runSearch()}
+            placeholder="Search a specific topic, person, or company…"
             className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-violet-500"
           />
           <button
             onClick={() => runSearch()}
-            disabled={loading || !query.trim()}
+            disabled={searching || !searchQuery.trim()}
             className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors"
           >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
-            {loading ? "Searching…" : "Search Web"}
+            {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
+            {searching ? "Searching…" : "Search"}
           </button>
+          {isSearchMode && (
+            <button
+              onClick={() => { setSearchResults(null); setSearchQuery(""); }}
+              className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-400 hover:text-white text-sm rounded-lg transition-colors"
+            >
+              Clear
+            </button>
+          )}
         </div>
-        {error && (
+        {searchError && (
           <div className="mt-3 flex items-center gap-2 text-red-400 text-sm">
-            <AlertCircle className="w-4 h-4" />{error}
+            <AlertCircle className="w-4 h-4" />{searchError}
           </div>
         )}
         {/* Quick search pills */}
         <div className="mt-3">
           <p className="text-[10px] text-zinc-600 mb-2 uppercase tracking-wider">Quick searches</p>
           <div className="flex flex-wrap gap-1.5">
-            {INDIA_SUGGESTED_QUERIES.map((q) => (
-              <button key={q} onClick={() => runSearch(q)} disabled={loading}
+            {INDIA_QUICK_SEARCHES.map((q) => (
+              <button key={q} onClick={() => runSearch(q)} disabled={searching}
                 className="text-[11px] px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-600 text-zinc-400 hover:text-white rounded-lg transition-colors disabled:opacity-40">
                 {q}
               </button>
@@ -405,10 +456,42 @@ function ArticlesTab() {
         </div>
       </div>
 
-      {/* Results */}
-      {results.length > 0 && (
+      {/* Results header */}
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-zinc-500">
+          {isSearchMode
+            ? `${displayArticles.length} results for "${searchQuery}"`
+            : `${displayArticles.length} evergreen articles — auto-fetched`}
+        </p>
+        {!isSearchMode && (
+          <button onClick={() => refetch()} disabled={isFetching}
+            className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 disabled:opacity-40 transition-colors">
+            <RefreshCw className={`w-3 h-3 ${isFetching ? "animate-spin" : ""}`} />
+            {isFetching ? "Refreshing…" : "Refresh"}
+          </button>
+        )}
+      </div>
+
+      {/* Loading / error / results */}
+      {(isLoading || searching) ? (
+        <div className="flex items-center justify-center py-20">
+          <div className="text-center space-y-3">
+            <Loader2 className="w-6 h-6 animate-spin text-violet-400 mx-auto" />
+            <p className="text-xs text-zinc-500">
+              {searching ? "Searching Tavily…" : "Fetching evergreen articles…"}
+            </p>
+          </div>
+        </div>
+      ) : fetchError && !isSearchMode ? (
+        <div className="flex items-center gap-2 text-red-400 text-sm py-8 justify-center">
+          <AlertCircle className="w-4 h-4" />
+          {(fetchError as any)?.message || "Failed to fetch articles"}
+        </div>
+      ) : displayArticles.length === 0 ? (
+        <div className="text-center py-16 text-zinc-600 text-sm">No articles found.</div>
+      ) : (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-          {results.map((article, i) => (
+          {displayArticles.map((article, i) => (
             <TavilyArticleCard key={i} article={article} onSave={(a) => saveMut.mutate(a)} />
           ))}
         </div>
