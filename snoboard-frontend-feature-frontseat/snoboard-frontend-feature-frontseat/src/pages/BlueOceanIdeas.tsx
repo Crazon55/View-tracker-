@@ -53,6 +53,31 @@ const INDIA_QUICK_SEARCHES = [
   "Indian startup unicorn funding",
 ];
 
+// ─── Instagram account presets ────────────────────────────────────────────────
+
+const ACCOUNT_PRESETS: { label: string; color: string; accounts: string[] }[] = [
+  {
+    label: "Finance & Money",
+    color: "bg-green-500/10 border-green-700/40 text-green-400 hover:bg-green-500/20",
+    accounts: ["zerodhaonline", "groww_app", "upstox", "financewithsharan", "etmoney", "ankur_warikoo", "ca_rachnaranade"],
+  },
+  {
+    label: "Business & Founders",
+    color: "bg-violet-500/10 border-violet-700/40 text-violet-400 hover:bg-violet-500/20",
+    accounts: ["indianfoundersco", "101xfounders", "bizzindia", "startupbydog", "founderswtf", "therealfoundr", "richindianceo"],
+  },
+  {
+    label: "Startup Stories",
+    color: "bg-blue-500/10 border-blue-700/40 text-blue-400 hover:bg-blue-500/20",
+    accounts: ["indiastartupstory", "startupbydog", "startupcoded", "inc42media", "yourstory", "entrackr_in"],
+  },
+  {
+    label: "Wealth & Lifestyle",
+    color: "bg-amber-500/10 border-amber-700/40 text-amber-400 hover:bg-amber-500/20",
+    accounts: ["ishan.sharma0", "beerbiceps", "labmanofficial", "therisingfounder", "millionaire.founders"],
+  },
+];
+
 async function tavilySearch(query: string): Promise<TavilyArticle[]> {
   const res = await fetch("https://api.tavily.com/search", {
     method: "POST",
@@ -447,96 +472,102 @@ function ArticlesTab() {
 
   return (
     <div className="space-y-5">
-      {/* Filter bar — same pattern as News Feed section nav */}
-      <div className="border-b border-zinc-800">
-        <div className="flex items-center gap-0 overflow-x-auto scrollbar-none">
-          {ARTICLE_FILTERS.map((f) => (
-            <button
-              key={f.label}
-              onClick={() => setActiveFilter(f.label)}
-              className={`px-4 py-2.5 text-[11px] tracking-[0.15em] uppercase font-bold border-b-2 -mb-px transition-colors whitespace-nowrap flex items-center gap-1.5 ${
-                activeFilter === f.label
-                  ? "border-violet-500 text-violet-300"
-                  : "border-transparent text-zinc-600 hover:text-zinc-300"
-              }`}
-            >
-              {f.label}
-              {f.label !== "All" && filterCounts[f.label] > 0 && (
-                <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
-                  activeFilter === f.label ? "bg-violet-500/20 text-violet-400" : "bg-zinc-800 text-zinc-600"
-                }`}>
-                  {filterCounts[f.label]}
-                </span>
-              )}
-            </button>
-          ))}
-          {/* Inline text search */}
-          <div className="ml-auto flex items-center gap-2 pb-1 pl-4 shrink-0">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-600" />
-              <input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !searching) {
-                    if (isSearchMode || searchQuery.trim()) runSearch();
-                  }
-                }}
-                placeholder="Filter or search…"
-                className="pl-7 pr-3 py-1.5 text-xs bg-zinc-800/60 border border-zinc-700 text-zinc-300 placeholder-zinc-600 rounded-lg outline-none focus:border-violet-500 w-44"
-              />
-            </div>
-            <button
-              onClick={() => searchQuery.trim() ? runSearch() : undefined}
-              disabled={searching || !searchQuery.trim()}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-default text-white text-xs font-semibold rounded-lg transition-colors"
-            >
-              {searching ? <Loader2 className="w-3 h-3 animate-spin" /> : <Globe className="w-3 h-3" />}
-              {searching ? "…" : "Search Web"}
-            </button>
-            {isSearchMode && (
-              <button onClick={() => { setSearchResults(null); setSearchQuery(""); }}
-                className="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-400 hover:text-white rounded-lg transition-colors">
-                Clear
-              </button>
-            )}
-          </div>
+
+      {/* ── Prominent idea search (Tavily web search) ─── */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-3">
+        <div>
+          <p className="text-xs font-semibold text-white mb-0.5">Search for articles on any idea</p>
+          <p className="text-[11px] text-zinc-500">Type a person, company, topic or question — we'll pull real articles from the web</p>
         </div>
-      </div>
-
-      {/* Count + refresh row */}
-      <div className="flex items-center gap-3">
-        <div className="h-px flex-1 bg-zinc-800" />
-        <p className="text-[10px] tracking-[0.25em] uppercase text-zinc-600 shrink-0">
-          {isLoading ? "Fetching…" : `${displayArticles.length} article${displayArticles.length !== 1 ? "s" : ""}${isSearchMode ? ` for "${searchQuery}"` : " · evergreen"}`}
-        </p>
-        <div className="h-px flex-1 bg-zinc-800" />
-        {!isSearchMode && (
-          <button onClick={() => refetch()} disabled={isFetching}
-            className="flex items-center gap-1 text-[10px] text-zinc-600 hover:text-zinc-400 disabled:opacity-40 transition-colors shrink-0">
-            <RefreshCw className={`w-3 h-3 ${isFetching ? "animate-spin" : ""}`} />
-            {isFetching ? "Refreshing…" : "Refresh"}
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && !searching && runSearch()}
+              placeholder="e.g. Byju's collapse story, how to raise funding India, Ambani wealth breakdown…"
+              className="w-full pl-9 pr-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-violet-500"
+            />
+          </div>
+          <button
+            onClick={() => runSearch()}
+            disabled={searching || !searchQuery.trim()}
+            className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors shrink-0"
+          >
+            {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
+            {searching ? "Searching…" : "Search"}
           </button>
-        )}
-      </div>
-
-      {/* Quick search pills */}
-      {!isSearchMode && (
-        <div className="flex flex-wrap gap-1.5">
+          {isSearchMode && (
+            <button onClick={() => { setSearchResults(null); setSearchQuery(""); }}
+              className="px-4 py-2.5 text-sm bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-400 hover:text-white rounded-lg transition-colors shrink-0">
+              Clear
+            </button>
+          )}
+        </div>
+        {/* Quick search pills */}
+        <div className="flex flex-wrap gap-1.5 pt-1">
           {INDIA_QUICK_SEARCHES.map((q) => (
             <button key={q} onClick={() => runSearch(q)} disabled={searching}
-              className="text-[11px] px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-600 text-zinc-400 hover:text-white rounded-lg transition-colors disabled:opacity-40">
+              className="text-[11px] px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 hover:border-violet-700/50 text-zinc-400 hover:text-white rounded-lg transition-colors disabled:opacity-40">
               {q}
             </button>
           ))}
         </div>
-      )}
+        {searchError && (
+          <div className="flex items-center gap-2 text-red-400 text-sm">
+            <AlertCircle className="w-4 h-4" />{searchError}
+          </div>
+        )}
+      </div>
 
-      {searchError && (
-        <div className="flex items-center gap-2 text-red-400 text-sm">
-          <AlertCircle className="w-4 h-4" />{searchError}
+      {/* ── Category filter tabs (filter auto-fetched results) ── */}
+      {!isSearchMode && (
+        <div className="border-b border-zinc-800">
+          <div className="flex items-center overflow-x-auto scrollbar-none">
+            {ARTICLE_FILTERS.map((f) => (
+              <button
+                key={f.label}
+                onClick={() => setActiveFilter(f.label)}
+                className={`px-4 py-2.5 text-[11px] tracking-[0.15em] uppercase font-bold border-b-2 -mb-px transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+                  activeFilter === f.label
+                    ? "border-violet-500 text-violet-300"
+                    : "border-transparent text-zinc-600 hover:text-zinc-300"
+                }`}
+              >
+                {f.label}
+                {f.label !== "All" && filterCounts[f.label] > 0 && (
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
+                    activeFilter === f.label ? "bg-violet-500/20 text-violet-400" : "bg-zinc-800 text-zinc-600"
+                  }`}>
+                    {filterCounts[f.label]}
+                  </span>
+                )}
+              </button>
+            ))}
+            <div className="ml-auto pb-1 pl-4 shrink-0 flex items-center gap-2">
+              <button onClick={() => refetch()} disabled={isFetching}
+                className="flex items-center gap-1 text-[10px] text-zinc-600 hover:text-zinc-400 disabled:opacity-40 transition-colors">
+                <RefreshCw className={`w-3 h-3 ${isFetching ? "animate-spin" : ""}`} />
+                {isFetching ? "Refreshing…" : "Refresh"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
+
+      {/* Count row */}
+      <div className="flex items-center gap-3">
+        <div className="h-px flex-1 bg-zinc-800" />
+        <p className="text-[10px] tracking-[0.25em] uppercase text-zinc-600 shrink-0">
+          {isLoading || searching
+            ? "Fetching…"
+            : isSearchMode
+              ? `${displayArticles.length} result${displayArticles.length !== 1 ? "s" : ""} for "${searchQuery}"`
+              : `${displayArticles.length} article${displayArticles.length !== 1 ? "s" : ""} · ${activeFilter === "All" ? "evergreen" : activeFilter}`}
+        </p>
+        <div className="h-px flex-1 bg-zinc-800" />
+      </div>
 
       {/* Results */}
       {(isLoading || searching) ? (
@@ -743,6 +774,31 @@ function InstagramTab() {
     <div className="space-y-8">
       {/* Scrape form */}
       <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
+        {/* Account category presets */}
+        <div className="space-y-2">
+          <p className="text-xs text-zinc-400">Quick load accounts by category</p>
+          <div className="flex flex-wrap gap-2">
+            {ACCOUNT_PRESETS.map((preset) => (
+              <button
+                key={preset.label}
+                onClick={() => setAccountsText(preset.accounts.join("\n"))}
+                className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors ${preset.color}`}
+              >
+                {preset.label}
+                <span className="ml-1.5 opacity-60 font-normal">{preset.accounts.length} accounts</span>
+              </button>
+            ))}
+            {accountsText && (
+              <button
+                onClick={() => setAccountsText("")}
+                className="text-xs px-3 py-1.5 rounded-lg border border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-1">
             <label className="block text-xs text-zinc-400 mb-1.5">Instagram accounts to scrape</label>
