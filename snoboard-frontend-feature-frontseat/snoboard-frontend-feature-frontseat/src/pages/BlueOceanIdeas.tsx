@@ -335,10 +335,31 @@ function TavilyArticleCard({ article, onSave }: { article: TavilyArticle; onSave
   );
 }
 
+// ─── Article filter config ────────────────────────────────────────────────────
+
+const ARTICLE_FILTERS: { label: string; keywords: string[] }[] = [
+  { label: "All", keywords: [] },
+  { label: "How-To", keywords: ["how to", "guide", "step by step", "steps", "register", "incorporate", "launch"] },
+  { label: "Top Lists", keywords: ["top 10", "top 5", "top 3", "best ", "ranked", "list of", "richest"] },
+  { label: "Wealth", keywords: ["wealth", "net worth", "richest", "billionaire", "crore", "billion", "assets", "empire"] },
+  { label: "Rise", keywords: ["success", "growth", "zero to", "from scratch", "built", "bootstrapped", "profitable", "rise"] },
+  { label: "Fall", keywords: ["collapse", "failure", "failed", "crisis", "scandal", "downfall", "fall", "bankrupt"] },
+  { label: "Founders", keywords: ["founder", "entrepreneur", "startup", "ceo", "mindset", "ambani", "adani", "tata", "murthy"] },
+];
+
+function matchesFilter(article: TavilyArticle, filterLabel: string): boolean {
+  if (filterLabel === "All") return true;
+  const cfg = ARTICLE_FILTERS.find((f) => f.label === filterLabel);
+  if (!cfg) return true;
+  const text = `${article.title} ${article.content || ""}`.toLowerCase();
+  return cfg.keywords.some((kw) => text.includes(kw));
+}
+
 // ─── Articles Tab (auto-fetch + manual search) ───────────────────────────────
 
 function ArticlesTab() {
   const qc = useQueryClient();
+  const [activeFilter, setActiveFilter] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<TavilyArticle[] | null>(null);
   const [searching, setSearching] = useState(false);
@@ -405,90 +426,130 @@ function ArticlesTab() {
   }
 
   // Show search results when a manual search ran, otherwise show auto-fetched
-  const displayArticles = searchResults ?? autoArticles;
+  const baseArticles = searchResults ?? autoArticles;
   const isSearchMode = searchResults !== null;
 
+  // Apply category filter + inline text filter together
+  const displayArticles = baseArticles.filter((a) => {
+    if (!matchesFilter(a, activeFilter)) return false;
+    if (searchQuery.trim() && isSearchMode === false) {
+      const text = `${a.title} ${a.content || ""}`.toLowerCase();
+      if (!text.includes(searchQuery.toLowerCase())) return false;
+    }
+    return true;
+  });
+
+  // Count per filter for the badges
+  const filterCounts = ARTICLE_FILTERS.reduce<Record<string, number>>((acc, f) => {
+    acc[f.label] = baseArticles.filter((a) => matchesFilter(a, f.label)).length;
+    return acc;
+  }, {});
+
   return (
-    <div className="space-y-6">
-      {/* Search bar */}
-      <div>
-        <div className="flex gap-3 items-center">
-          <input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !searching && runSearch()}
-            placeholder="Search a specific topic, person, or company…"
-            className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-violet-500"
-          />
-          <button
-            onClick={() => runSearch()}
-            disabled={searching || !searchQuery.trim()}
-            className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors"
-          >
-            {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
-            {searching ? "Searching…" : "Search"}
-          </button>
-          {isSearchMode && (
+    <div className="space-y-5">
+      {/* Filter bar — same pattern as News Feed section nav */}
+      <div className="border-b border-zinc-800">
+        <div className="flex items-center gap-0 overflow-x-auto scrollbar-none">
+          {ARTICLE_FILTERS.map((f) => (
             <button
-              onClick={() => { setSearchResults(null); setSearchQuery(""); }}
-              className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-400 hover:text-white text-sm rounded-lg transition-colors"
+              key={f.label}
+              onClick={() => setActiveFilter(f.label)}
+              className={`px-4 py-2.5 text-[11px] tracking-[0.15em] uppercase font-bold border-b-2 -mb-px transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+                activeFilter === f.label
+                  ? "border-violet-500 text-violet-300"
+                  : "border-transparent text-zinc-600 hover:text-zinc-300"
+              }`}
             >
-              Clear
+              {f.label}
+              {f.label !== "All" && filterCounts[f.label] > 0 && (
+                <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
+                  activeFilter === f.label ? "bg-violet-500/20 text-violet-400" : "bg-zinc-800 text-zinc-600"
+                }`}>
+                  {filterCounts[f.label]}
+                </span>
+              )}
             </button>
-          )}
-        </div>
-        {searchError && (
-          <div className="mt-3 flex items-center gap-2 text-red-400 text-sm">
-            <AlertCircle className="w-4 h-4" />{searchError}
-          </div>
-        )}
-        {/* Quick search pills */}
-        <div className="mt-3">
-          <p className="text-[10px] text-zinc-600 mb-2 uppercase tracking-wider">Quick searches</p>
-          <div className="flex flex-wrap gap-1.5">
-            {INDIA_QUICK_SEARCHES.map((q) => (
-              <button key={q} onClick={() => runSearch(q)} disabled={searching}
-                className="text-[11px] px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-600 text-zinc-400 hover:text-white rounded-lg transition-colors disabled:opacity-40">
-                {q}
+          ))}
+          {/* Inline text search */}
+          <div className="ml-auto flex items-center gap-2 pb-1 pl-4 shrink-0">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-600" />
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !searching) {
+                    if (isSearchMode || searchQuery.trim()) runSearch();
+                  }
+                }}
+                placeholder="Filter or search…"
+                className="pl-7 pr-3 py-1.5 text-xs bg-zinc-800/60 border border-zinc-700 text-zinc-300 placeholder-zinc-600 rounded-lg outline-none focus:border-violet-500 w-44"
+              />
+            </div>
+            <button
+              onClick={() => searchQuery.trim() ? runSearch() : undefined}
+              disabled={searching || !searchQuery.trim()}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-default text-white text-xs font-semibold rounded-lg transition-colors"
+            >
+              {searching ? <Loader2 className="w-3 h-3 animate-spin" /> : <Globe className="w-3 h-3" />}
+              {searching ? "…" : "Search Web"}
+            </button>
+            {isSearchMode && (
+              <button onClick={() => { setSearchResults(null); setSearchQuery(""); }}
+                className="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-400 hover:text-white rounded-lg transition-colors">
+                Clear
               </button>
-            ))}
+            )}
           </div>
         </div>
       </div>
 
-      {/* Results header */}
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-zinc-500">
-          {isSearchMode
-            ? `${displayArticles.length} results for "${searchQuery}"`
-            : `${displayArticles.length} evergreen articles — auto-fetched`}
+      {/* Count + refresh row */}
+      <div className="flex items-center gap-3">
+        <div className="h-px flex-1 bg-zinc-800" />
+        <p className="text-[10px] tracking-[0.25em] uppercase text-zinc-600 shrink-0">
+          {isLoading ? "Fetching…" : `${displayArticles.length} article${displayArticles.length !== 1 ? "s" : ""}${isSearchMode ? ` for "${searchQuery}"` : " · evergreen"}`}
         </p>
+        <div className="h-px flex-1 bg-zinc-800" />
         {!isSearchMode && (
           <button onClick={() => refetch()} disabled={isFetching}
-            className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 disabled:opacity-40 transition-colors">
+            className="flex items-center gap-1 text-[10px] text-zinc-600 hover:text-zinc-400 disabled:opacity-40 transition-colors shrink-0">
             <RefreshCw className={`w-3 h-3 ${isFetching ? "animate-spin" : ""}`} />
             {isFetching ? "Refreshing…" : "Refresh"}
           </button>
         )}
       </div>
 
-      {/* Loading / error / results */}
+      {/* Quick search pills */}
+      {!isSearchMode && (
+        <div className="flex flex-wrap gap-1.5">
+          {INDIA_QUICK_SEARCHES.map((q) => (
+            <button key={q} onClick={() => runSearch(q)} disabled={searching}
+              className="text-[11px] px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-600 text-zinc-400 hover:text-white rounded-lg transition-colors disabled:opacity-40">
+              {q}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {searchError && (
+        <div className="flex items-center gap-2 text-red-400 text-sm">
+          <AlertCircle className="w-4 h-4" />{searchError}
+        </div>
+      )}
+
+      {/* Results */}
       {(isLoading || searching) ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="text-center space-y-3">
-            <Loader2 className="w-6 h-6 animate-spin text-violet-400 mx-auto" />
-            <p className="text-xs text-zinc-500">
-              {searching ? "Searching Tavily…" : "Fetching evergreen articles…"}
-            </p>
-          </div>
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <Loader2 className="w-5 h-5 animate-spin text-violet-400" />
+          <p className="text-xs text-zinc-500">{searching ? "Searching Tavily…" : "Fetching evergreen articles…"}</p>
         </div>
       ) : fetchError && !isSearchMode ? (
         <div className="flex items-center gap-2 text-red-400 text-sm py-8 justify-center">
-          <AlertCircle className="w-4 h-4" />
-          {(fetchError as any)?.message || "Failed to fetch articles"}
+          <AlertCircle className="w-4 h-4" />{(fetchError as any)?.message || "Failed to fetch articles"}
         </div>
       ) : displayArticles.length === 0 ? (
-        <div className="text-center py-16 text-zinc-600 text-sm">No articles found.</div>
+        <div className="text-center py-16 text-zinc-600 text-sm">No articles match this filter.</div>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
           {displayArticles.map((article, i) => (
