@@ -33,7 +33,6 @@ import Tickets from "./pages/Tickets";
 import NewsFeed from "./pages/NewsFeed";
 import BlueOceanIdeas from "./pages/BlueOceanIdeas";
 import PodcastAlerts from "./pages/PodcastAlerts";
-import NavHub from "./pages/NavHub";
 import RoleSelect from "./pages/RoleSelect";
 import NotFound from "./pages/NotFound";
 import { MonthlyWrapRoot, MonthlyWrapOpenButton } from "./components/MonthlyWrapHost";
@@ -63,7 +62,7 @@ const ANIMALS = [
   "\u{1F436}", "\u{1F431}", "\u{1F43B}", "\u{1F43C}", "\u{1F428}", "\u{1F437}",
   "\u{1F430}", "\u{1F98A}", "\u{1F981}", "\u{1F42F}", "\u{1F427}", "\u{1F438}",
   "\u{1F99C}", "\u{1F98E}", "\u{1F422}", "\u{1F98B}", "\u{1F41D}", "\u{1F433}",
-  "\u{1F984}", "\u{1F435}", "\u{1F989}", "\u{1F43F}\uFE0F", "\u{1F9A5}", "\u{1F9A7}",
+  "\u{1F984}", "\u{1F435}", "\u{1F989}", "\u{1F43F}️", "\u{1F9A5}", "\u{1F9A7}",
 ];
 
 function useAnimalAvatar(userId: string | undefined) {
@@ -172,7 +171,6 @@ function AnimalPicker({ userId }: { userId: string | undefined }) {
       </button>
       {showPanel && (
         <div className="absolute top-full right-0 mt-2 bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl z-[100] w-80 overflow-hidden">
-          {/* Tabs */}
           <div className="flex border-b border-zinc-800">
             <button
               onClick={() => setPanelTab("deadlines")}
@@ -256,7 +254,7 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/content-tracker", label: "Reel Tracker", icon: ClipboardList },
   { to: "/post-tracker", label: "Post Tracker", icon: Image },
   { to: "/post-ips", label: "Post IPs", icon: Image },
@@ -273,86 +271,234 @@ const navItems: NavItem[] = [
   { to: "http://16.112.125.207:5173/", label: "Pintu", icon: Scissors, external: true },
 ];
 
-function HomeButton() {
+function HamburgerMenu() {
+  const [open, setOpen] = useState(false);
   const navigate = useNavigate();
-  const location = useLocation();
+  const { user, signOut } = useAuth();
 
-  // Don't show on the NavHub itself
-  if (location.pathname === "/") return null;
+  const { data: assignedTickets = [] } = useQuery<any[]>({
+    queryKey: ["tickets-assigned-badge", (user?.email || "").toLowerCase()],
+    queryFn: () => getTickets({ assigned_to_email: user?.email || "" }),
+    enabled: !!user?.email,
+    refetchInterval: 20_000,
+  });
+
+  const ticketsBadgeCount = assignedTickets.filter((t: any) => (t?.status || "") !== "resolved").length;
 
   return (
     <div className="fixed top-5 left-5 z-50">
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={() => navigate("/")}
-        className="h-10 w-10 rounded-xl bg-zinc-900/80 border border-zinc-800 backdrop-blur-sm hover:bg-zinc-800 hover:border-violet-500/50"
-        title="Back to home"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-white">
-          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-          <polyline points="9 22 9 12 15 12 15 22"/>
-        </svg>
-      </Button>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 rounded-xl bg-zinc-900/80 border border-zinc-800 backdrop-blur-sm hover:bg-zinc-800 hover:border-violet-500/50"
+          >
+            <Menu className="w-5 h-5 text-white" />
+          </Button>
+        </SheetTrigger>
+        <SheetContent side="left" className="w-64 bg-zinc-950 border-zinc-800 p-0 flex flex-col">
+          <div className="px-5 py-6 border-b border-zinc-800">
+            <h1 className="text-lg font-bold text-white tracking-tight">FSBOARD</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">Frontseat Media</p>
+          </div>
+          <nav className="px-3 py-4 space-y-1 flex-1">
+            {navItems.map(({ to, label, icon: Icon, external }) => (
+              <button
+                key={to}
+                onClick={() => {
+                  if (external) {
+                    window.open(to, "_blank", "noopener,noreferrer");
+                  } else {
+                    navigate(to);
+                  }
+                  setOpen(false);
+                }}
+                className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors w-full text-left text-zinc-400 hover:text-white hover:bg-zinc-900"
+              >
+                <Icon className="w-4 h-4" />
+                <span className="flex-1">{label}</span>
+                {label === "Tickets" && ticketsBadgeCount > 0 ? (
+                  <span className="min-w-[18px] h-[18px] px-1.5 rounded-full bg-violet-500/20 border border-violet-500/30 text-[10px] font-black text-violet-100 flex items-center justify-center">
+                    {ticketsBadgeCount}
+                  </span>
+                ) : null}
+              </button>
+            ))}
+          </nav>
+          <div className="px-3 py-4 border-t border-zinc-800">
+            <p className="px-3 text-xs text-zinc-600 truncate mb-2">{user?.email}</p>
+            <button
+              onClick={signOut}
+              className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors w-full text-left text-red-400 hover:text-red-300 hover:bg-zinc-900"
+            >
+              <LogOut className="w-4 h-4" />
+              Sign out
+            </button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
 
 function AppLayout() {
+  const location = useLocation();
   const { user, signOut } = useAuth();
+
+  const { data: assignedTicketsSidebar = [] } = useQuery<any[]>({
+    queryKey: ["tickets-assigned-badge-sidebar", (user?.email || "").toLowerCase()],
+    queryFn: () => getTickets({ assigned_to_email: user?.email || "" }),
+    enabled: !!user?.email,
+    refetchInterval: 20_000,
+  });
+
+  const ticketsBadgeCount = assignedTicketsSidebar.filter((t: any) => (t?.status || "") !== "resolved").length;
+
+  const isFullScreen =
+    location.pathname === "/" ||
+    location.pathname === "/content-tracker" ||
+    location.pathname === "/post-tracker" ||
+    location.pathname === "/post-ips" ||
+    location.pathname === "/pipeline" ||
+    location.pathname === "/stage1-tracker" ||
+    location.pathname === "/six-day-tracker" ||
+    location.pathname === "/team-performance" ||
+    location.pathname === "/workboard" ||
+    location.pathname === "/tickets" ||
+    location.pathname === "/news" ||
+    location.pathname === "/blue-ocean" ||
+    location.pathname === "/podcast-alerts" ||
+    location.pathname.startsWith("/post-ips/") ||
+    location.pathname.startsWith("/page/");
 
   return (
     <MonthlyWrapRoot>
-      <div className="relative">
-        <HomeButton />
-        <div className="fixed top-5 right-5 z-50 flex items-center gap-2 sm:gap-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl px-3 sm:px-4 py-2 shadow-lg max-w-[min(100vw-1rem,420px)] flex-wrap justify-end">
-          <MonthlyWrapOpenButton className="shrink-0" />
-          <AnimalPicker userId={user?.id} />
-          <p className="text-sm text-zinc-400">
-            {getGreeting()}, <span className="text-white font-medium">{getFirstName(user)}</span>
-          </p>
-          <button
-            onClick={signOut}
-            className="h-7 w-7 rounded-lg hover:bg-white/10 flex items-center justify-center transition-colors shrink-0"
-            title="Sign out"
-          >
-            <LogOut className="w-3.5 h-3.5 text-zinc-400 hover:text-red-400" />
-          </button>
+      {isFullScreen ? (
+        <div className="relative">
+          <HamburgerMenu />
+          <div className="fixed top-5 right-5 z-50 flex items-center gap-2 sm:gap-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl px-3 sm:px-4 py-2 shadow-lg max-w-[min(100vw-1rem,420px)] flex-wrap justify-end">
+            <MonthlyWrapOpenButton className="shrink-0" />
+            <AnimalPicker userId={user?.id} />
+            <p className="text-sm text-zinc-400">
+              {getGreeting()}, <span className="text-white font-medium">{getFirstName(user)}</span>
+            </p>
+            <button
+              onClick={signOut}
+              className="h-7 w-7 rounded-lg hover:bg-white/10 flex items-center justify-center transition-colors shrink-0"
+              title="Sign out"
+            >
+              <LogOut className="w-3.5 h-3.5 text-zinc-400 hover:text-red-400" />
+            </button>
+          </div>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/content-tracker" element={<ContentTracker />} />
+            <Route path="/post-tracker" element={<PostTracker />} />
+            <Route path="/post-ips" element={<PostIPsView />} />
+            <Route path="/post-ips/:pageId" element={<PageDetail />} />
+            <Route path="/page/:pageId" element={<PageDetail />} />
+            <Route path="/pipeline" element={<PipelineView />} />
+            <Route path="/stage1-tracker" element={<Stage1Tracker />} />
+            <Route path="/six-day-tracker" element={<SixDayTracker />} />
+            <Route
+              path="/team-performance"
+              element={
+                <ErrorBoundary title="Team performance crashed">
+                  <TeamPerformance />
+                </ErrorBoundary>
+              }
+            />
+            <Route path="/workboard" element={<WeeklyWorkboard />} />
+            <Route path="/tickets" element={<Tickets />} />
+            <Route path="/news" element={<NewsFeed />} />
+            <Route path="/blue-ocean" element={<BlueOceanIdeas />} />
+            <Route path="/podcast-alerts" element={<PodcastAlerts />} />
+            <Route path="/ideas" element={<IdeaEngine />} />
+            <Route path="/competitor-ideas" element={<CompetitorIdeas />} />
+          </Routes>
         </div>
-        <Routes>
-          <Route path="/" element={<NavHub />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/content-tracker" element={<ContentTracker />} />
-          <Route path="/post-tracker" element={<PostTracker />} />
-          <Route path="/post-ips" element={<PostIPsView />} />
-          <Route path="/post-ips/:pageId" element={<PageDetail />} />
-          <Route path="/page/:pageId" element={<PageDetail />} />
-          <Route path="/stage1-tracker" element={<Stage1Tracker />} />
-          <Route path="/six-day-tracker" element={<SixDayTracker />} />
-          <Route
-            path="/team-performance"
-            element={
-              <ErrorBoundary title="Team performance crashed">
-                <TeamPerformance />
-              </ErrorBoundary>
-            }
-          />
-          <Route path="/workboard" element={<WeeklyWorkboard />} />
-          <Route path="/tickets" element={<Tickets />} />
-          <Route path="/news" element={<NewsFeed />} />
-          <Route path="/blue-ocean" element={<BlueOceanIdeas />} />
-          <Route path="/podcast-alerts" element={<PodcastAlerts />} />
-          <Route path="/pages" element={<PagesView />} />
-          <Route path="/posts" element={<PostsView />} />
-          <Route path="/reels/stage1" element={<ReelsStage1View />} />
-          <Route path="/reels/main" element={<MainReelsView />} />
-          <Route path="/growth" element={<GrowthView />} />
-          <Route path="/pipeline" element={<PipelineView />} />
-          <Route path="/ideas" element={<IdeaEngine />} />
-          <Route path="/competitor-ideas" element={<CompetitorIdeas />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </div>
+      ) : (
+        <div className="flex min-h-screen bg-zinc-950">
+          {/* Sidebar */}
+          <aside className="w-60 shrink-0 border-r border-zinc-800 bg-zinc-950 flex flex-col">
+            <div className="px-5 py-5 border-b border-zinc-800">
+              <h1 className="text-lg font-bold tracking-tight text-white">FSBOARD</h1>
+              <p className="text-xs text-zinc-500 mt-0.5">Frontseat Media</p>
+            </div>
+
+            <nav className="flex-1 px-3 py-4 space-y-1">
+              {navItems.map(({ to, label, icon: Icon, external }) => (
+                external ? (
+                  <a
+                    key={to}
+                    href={to}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-zinc-500 hover:text-white hover:bg-zinc-900"
+                  >
+                    <Icon className="w-4 h-4" />
+                    {label}
+                  </a>
+                ) : (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    end={to === "/"}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                        isActive
+                          ? "bg-violet-500/10 text-violet-400"
+                          : "text-zinc-500 hover:text-white hover:bg-zinc-900"
+                      }`
+                    }
+                  >
+                    <Icon className="w-4 h-4" />
+                    <span className="flex-1">{label}</span>
+                    {label === "Tickets" && ticketsBadgeCount > 0 ? (
+                      <span className="min-w-[18px] h-[18px] px-1.5 rounded-full bg-violet-500/20 border border-violet-500/30 text-[10px] font-black text-violet-100 flex items-center justify-center">
+                        {ticketsBadgeCount}
+                      </span>
+                    ) : null}
+                  </NavLink>
+                )
+              ))}
+            </nav>
+
+            <div className="px-3 py-4 border-t border-zinc-800">
+              <div className="px-3 mb-2">
+                <MonthlyWrapOpenButton className="w-full justify-center" />
+              </div>
+              <div className="flex items-center gap-2 px-3 mb-1">
+                <AnimalPicker userId={user?.id} />
+                <p className="text-sm text-zinc-400 truncate">
+                  {getGreeting()}, <span className="text-white font-medium">{getFirstName(user)}</span>
+                </p>
+              </div>
+              <p className="px-3 text-xs text-zinc-600 truncate mb-2">{user?.email}</p>
+              <button
+                onClick={signOut}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors w-full text-left text-red-400 hover:text-red-300 hover:bg-zinc-900"
+              >
+                <LogOut className="w-4 h-4" />
+                Sign out
+              </button>
+            </div>
+          </aside>
+
+          {/* Main content */}
+          <main className="flex-1 overflow-auto bg-zinc-950">
+            <Routes>
+              <Route path="/pages" element={<PagesView />} />
+              <Route path="/posts" element={<PostsView />} />
+              <Route path="/reels/stage1" element={<ReelsStage1View />} />
+              <Route path="/reels/main" element={<MainReelsView />} />
+              <Route path="/growth" element={<GrowthView />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </main>
+        </div>
+      )}
     </MonthlyWrapRoot>
   );
 }
