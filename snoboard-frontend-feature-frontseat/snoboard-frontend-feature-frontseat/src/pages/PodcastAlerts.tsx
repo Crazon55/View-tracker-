@@ -19,16 +19,29 @@ export type Episode = {
   matchedGuests: string[];
 };
 
+async function fetchRaw(url: string): Promise<string> {
+  // Try corsproxy.io first, fall back to allorigins.win
+  try {
+    const res = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`, {
+      signal: AbortSignal.timeout(12000),
+    });
+    if (res.ok) return res.text();
+  } catch {}
+
+  const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, {
+    signal: AbortSignal.timeout(12000),
+  });
+  if (!res.ok) throw new Error(`Both proxies failed (${res.status})`);
+  const { contents } = await res.json() as { contents: string };
+  return contents;
+}
+
 async function fetchChannelFeed(channelId: string, channelName: string): Promise<Episode[]> {
   const rssUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
-  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(rssUrl)}`;
+  const xml = await fetchRaw(rssUrl);
 
-  const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) });
-  if (!res.ok) throw new Error(`Feed fetch failed for ${channelName}: ${res.status}`);
-
-  const { contents } = await res.json() as { contents: string };
   const parser = new DOMParser();
-  const doc = parser.parseFromString(contents, "text/xml");
+  const doc = parser.parseFromString(xml, "text/xml");
 
   // Namespace-aware helpers
   const ns = (el: Element, local: string): string =>
@@ -73,31 +86,35 @@ async function fetchChannelFeed(channelId: string, channelName: string): Promise
   });
 }
 
-async function fetchAllPodcasts(): Promise<Episode[]> {
+async function fetchAllPodcasts(): Promise<{ episodes: Episode[]; failedCount: number }> {
   try {
     const cached = localStorage.getItem(CACHE_KEY);
     if (cached) {
       const { data, ts } = JSON.parse(cached) as { data: Episode[]; ts: number };
-      if (Date.now() - ts < CACHE_TTL) return data;
+      if (Date.now() - ts < CACHE_TTL) return { episodes: data, failedCount: 0 };
     }
   } catch {}
 
+  const channels = PODCAST_CHANNELS.filter((ch) => !ch.channelId.startsWith("REPLACE"));
   const results = await Promise.allSettled(
-    PODCAST_CHANNELS.filter((ch) => !ch.channelId.startsWith("REPLACE")).map((ch) =>
-      fetchChannelFeed(ch.channelId, ch.name)
-    )
+    channels.map((ch) => fetchChannelFeed(ch.channelId, ch.name))
   );
+
+  const failedCount = results.filter((r) => r.status === "rejected").length;
 
   const episodes = results
     .filter((r): r is PromiseFulfilledResult<Episode[]> => r.status === "fulfilled")
     .flatMap((r) => r.value)
     .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
 
-  try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ data: episodes, ts: Date.now() }));
-  } catch {}
+  // Only cache if we got something back
+  if (episodes.length > 0) {
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ data: episodes, ts: Date.now() }));
+    } catch {}
+  }
 
-  return episodes;
+  return { episodes, failedCount };
 }
 
 type Tab = "guest-alerts" | "new-episodes";
@@ -106,13 +123,15 @@ export default function PodcastAlerts() {
   const [tab, setTab] = useState<Tab>("guest-alerts");
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const { data: episodes = [], isLoading, isError } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["podcast-alerts", refreshKey],
     queryFn: fetchAllPodcasts,
     staleTime: CACHE_TTL,
     retry: 1,
   });
 
+  const episodes = data?.episodes ?? [];
+  const failedCount = data?.failedCount ?? 0;
   const guestAlerts = episodes.filter((e) => e.matchedGuests.length > 0);
   const displayed = tab === "guest-alerts" ? guestAlerts : episodes;
 
@@ -122,7 +141,7 @@ export default function PodcastAlerts() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white px-6 pt-20 pb-16 sm:pt-10">
+    <div className="min-h-screen bg-zinc-950 text-white px-6 pt-24 pb-16">
       <div className="max-w-5xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
@@ -147,6 +166,13 @@ export default function PodcastAlerts() {
             Refresh
           </button>
         </div>
+
+        {/* Failed channel warning */}
+        {!isLoading && failedCount > 0 && (
+          <p className="text-xs text-amber-500/80">
+            {failedCount} channel{failedCount > 1 ? "s" : ""} failed to load — try refreshing.
+          </p>
+        )}
 
         {/* Tabs */}
         <div className="flex gap-1 bg-zinc-900 border border-zinc-800 rounded-lg p-1 w-fit">
