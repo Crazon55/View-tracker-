@@ -302,7 +302,7 @@ function HamburgerMenu() {
             <h1 className="text-lg font-bold text-white tracking-tight">FSBOARD</h1>
             <p className="text-xs text-muted-foreground mt-0.5">Frontseat Media</p>
           </div>
-          <nav className="px-3 py-4 space-y-1 flex-1">
+          <nav className="px-3 py-4 space-y-1 flex-1 overflow-y-auto">
             {navItems.map(({ to, label, icon: Icon, external }) => (
               <button
                 key={to}
