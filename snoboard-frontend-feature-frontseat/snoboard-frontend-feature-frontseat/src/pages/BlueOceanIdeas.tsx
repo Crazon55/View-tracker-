@@ -53,30 +53,6 @@ const INDIA_QUICK_SEARCHES = [
   "Indian startup unicorn funding",
 ];
 
-// ─── Instagram account presets ────────────────────────────────────────────────
-
-const ACCOUNT_PRESETS: { label: string; color: string; accounts: string[] }[] = [
-  {
-    label: "Finance & Money",
-    color: "bg-green-500/10 border-green-700/40 text-green-400 hover:bg-green-500/20",
-    accounts: ["zerodhaonline", "groww_app", "upstox", "financewithsharan", "etmoney", "ankur_warikoo", "ca_rachnaranade"],
-  },
-  {
-    label: "Business & Founders",
-    color: "bg-violet-500/10 border-violet-700/40 text-violet-400 hover:bg-violet-500/20",
-    accounts: ["indianfoundersco", "101xfounders", "bizzindia", "startupbydog", "founderswtf", "therealfoundr", "richindianceo"],
-  },
-  {
-    label: "Startup Stories",
-    color: "bg-blue-500/10 border-blue-700/40 text-blue-400 hover:bg-blue-500/20",
-    accounts: ["indiastartupstory", "startupbydog", "startupcoded", "inc42media", "yourstory", "entrackr_in"],
-  },
-  {
-    label: "Wealth & Lifestyle",
-    color: "bg-amber-500/10 border-amber-700/40 text-amber-400 hover:bg-amber-500/20",
-    accounts: ["ishan.sharma0", "beerbiceps", "labmanofficial", "therisingfounder", "millionaire.founders"],
-  },
-];
 
 async function tavilySearch(query: string): Promise<TavilyArticle[]> {
   const res = await fetch("https://api.tavily.com/search", {
@@ -774,20 +750,9 @@ function InstagramTab() {
     <div className="space-y-8">
       {/* Scrape form */}
       <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
-        {/* Account category presets */}
+        {/* Account input */}
         <div className="space-y-2">
-          <p className="text-xs text-zinc-400">Quick load accounts by category</p>
           <div className="flex flex-wrap gap-2">
-            {ACCOUNT_PRESETS.map((preset) => (
-              <button
-                key={preset.label}
-                onClick={() => setAccountsText(preset.accounts.join("\n"))}
-                className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors ${preset.color}`}
-              >
-                {preset.label}
-                <span className="ml-1.5 opacity-60 font-normal">{preset.accounts.length} accounts</span>
-              </button>
-            ))}
             {accountsText && (
               <button
                 onClick={() => setAccountsText("")}
