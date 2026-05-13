@@ -393,3 +393,56 @@ export const getDeadlines = (role?: string) =>
 export const getUserRole = (email: string) => fetchApi<any>(`/api/v1/user-role/${encodeURIComponent(email)}`);
 export const setUserRole = (data: { email: string; role: string; name?: string }) =>
   fetchApi<any>("/api/v1/user-role", { method: "POST", body: JSON.stringify(data) });
+
+// Blue Ocean Ideas
+export const blueOceanGenerateArticles = (data: { niche?: string }) =>
+  fetchApi<any[]>("/api/v1/blue-ocean/generate-articles", { method: "POST", body: JSON.stringify(data) });
+
+export const blueOceanGenerateInstagram = (data: { niche?: string }) =>
+  fetchApi<any[]>("/api/v1/blue-ocean/generate-instagram", { method: "POST", body: JSON.stringify(data) });
+
+export const getBlueOceanIdeas = (params?: { type?: string; status?: string }) => {
+  const qs = new URLSearchParams();
+  if (params?.type) qs.set("type", params.type);
+  if (params?.status) qs.set("status", params.status);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return fetchApi<any[]>(`/api/v1/blue-ocean/ideas${suffix}`);
+};
+
+export const createBlueOceanIdea = (data: {
+  type: string; source?: string; headline_or_hook: string;
+  format_tag?: string; why_evergreen?: string; outline_or_slides?: any;
+  hook_formula?: string; status?: string; source_account?: string; engagement_data?: any;
+}) => fetchApi<any>("/api/v1/blue-ocean/ideas", { method: "POST", body: JSON.stringify(data) });
+
+export const updateBlueOceanIdea = (id: string, data: Record<string, any>) =>
+  fetchApi<any>(`/api/v1/blue-ocean/ideas/${id}`, { method: "PUT", body: JSON.stringify(data) });
+
+export const deleteBlueOceanIdea = (id: string) =>
+  fetchApi<any>(`/api/v1/blue-ocean/ideas/${id}`, { method: "DELETE" });
+
+export const blueOceanScrape = (data: {
+  accounts: string[]; date_from?: string; date_to?: string;
+  post_type?: string; results_limit?: number;
+}) => fetchApi<any>("/api/v1/blue-ocean/scrape", { method: "POST", body: JSON.stringify(data) });
+
+export const getBlueOceanScrapeJobs = () =>
+  fetchApi<any[]>("/api/v1/blue-ocean/scrape-jobs");
+
+export const getBlueOceanScrapedPosts = (params?: {
+  job_id?: string; post_type?: string; is_blue_ocean?: boolean; sort?: string;
+}) => {
+  const qs = new URLSearchParams();
+  if (params?.job_id) qs.set("job_id", params.job_id);
+  if (params?.post_type) qs.set("post_type", params.post_type);
+  if (params?.is_blue_ocean !== undefined) qs.set("is_blue_ocean", String(params.is_blue_ocean));
+  if (params?.sort) qs.set("sort", params.sort);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return fetchApi<any[]>(`/api/v1/blue-ocean/scraped-posts${suffix}`);
+};
+
+export const updateBlueOceanScrapedPost = (id: string, data: { is_blue_ocean?: boolean; post_type?: string }) =>
+  fetchApi<any>(`/api/v1/blue-ocean/scraped-posts/${id}`, { method: "PUT", body: JSON.stringify(data) });
+
+export const deleteBlueOceanScrapedPost = (id: string) =>
+  fetchApi<any>(`/api/v1/blue-ocean/scraped-posts/${id}`, { method: "DELETE" });
