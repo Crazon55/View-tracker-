@@ -658,7 +658,9 @@ function ScrapedPostCard({ post, onMarkBlueOcean, onDelete, onSaveToBank }: {
 function InstagramTab() {
   const qc = useQueryClient();
 
-  const [accountsText, setAccountsText] = useState("");
+  const [accountsText, setAccountsText] = useState(
+    "marketing.stories\nwealth\nrupees\nmarketing.growmatics\nonevisionmedia.in\nstartup.pedia\nresearchinandout"
+  );
   const [dateFrom, setDateFrom] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
