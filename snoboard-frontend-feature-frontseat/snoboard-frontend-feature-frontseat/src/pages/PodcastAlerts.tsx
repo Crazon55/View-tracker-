@@ -19,45 +19,48 @@ export type Episode = {
   matchedGuests: string[];
 };
 
+const INVIDIOUS_INSTANCES = [
+  "https://invidious.io",
+  "https://yewtu.be",
+  "https://invidious.tiekoetter.com",
+  "https://inv.riverside.rocks",
+];
+
 async function fetchChannelFeed(channelId: string, channelName: string): Promise<Episode[]> {
-  const rssUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
-  const apiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}&count=15`;
+  let lastError: Error = new Error("No Invidious instances available");
 
-  const res = await fetch(apiUrl, { signal: AbortSignal.timeout(15000) });
-  if (!res.ok) throw new Error(`rss2json failed for ${channelName}: ${res.status}`);
+  for (const instance of INVIDIOUS_INSTANCES) {
+    try {
+      const url = `${instance}/api/v1/channels/${channelId}/videos`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      if (!res.ok) throw new Error(`${res.status}`);
 
-  const data = await res.json() as { status: string; items: any[] };
-  if (data.status !== "ok") throw new Error(`Feed error for ${channelName}: ${data.status}`);
+      const data = await res.json() as { videos: any[] };
+      const videos = (data.videos ?? []).slice(0, 15);
 
-  return data.items
-    .map((item: any) => {
-      const videoId =
-        item.link?.split("v=")[1]?.split("&")[0] ||
-        item.guid?.split("v=")[1]?.split("&")[0] ||
-        "";
-      if (!videoId) return null;
+      return videos.map((v: any) => {
+        const publishedAt = v.published ? new Date(v.published * 1000).toISOString() : "";
+        const description: string = v.description ?? "";
+        const searchText = `${v.title ?? ""} ${description}`.toLowerCase();
+        const matchedGuests = GUEST_WATCHLIST.filter((g) => searchText.includes(g.toLowerCase()));
 
-      const publishedAt = item.pubDate ? new Date(item.pubDate).toISOString() : "";
-      const thumbnailUrl = item.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
-      const description = (item.description || item.content || "").replace(/<[^>]*>/g, "");
+        return {
+          videoId: v.videoId,
+          title: v.title ?? "",
+          channelName,
+          publishedAt,
+          thumbnailUrl: `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`,
+          url: `https://www.youtube.com/watch?v=${v.videoId}`,
+          description,
+          matchedGuests,
+        } satisfies Episode;
+      });
+    } catch (e) {
+      lastError = e instanceof Error ? e : new Error(String(e));
+    }
+  }
 
-      const searchText = `${item.title ?? ""} ${description}`.toLowerCase();
-      const matchedGuests = GUEST_WATCHLIST.filter((g) =>
-        searchText.includes(g.toLowerCase())
-      );
-
-      return {
-        videoId,
-        title: item.title || "",
-        channelName,
-        publishedAt,
-        thumbnailUrl,
-        url: item.link || `https://www.youtube.com/watch?v=${videoId}`,
-        description,
-        matchedGuests,
-      } satisfies Episode;
-    })
-    .filter((e): e is Episode => e !== null);
+  throw lastError;
 }
 
 async function fetchAllPodcasts(): Promise<{ episodes: Episode[]; failedCount: number }> {
