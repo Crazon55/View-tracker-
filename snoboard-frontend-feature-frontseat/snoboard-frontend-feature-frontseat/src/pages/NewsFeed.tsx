@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ExternalLink, Newspaper, RefreshCw, Bookmark, Search } from "lucide-react";
+import { ExternalLink, Newspaper, RefreshCw, Bookmark, BookmarkCheck, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const TAVILY_API_KEY = import.meta.env.VITE_TAVILY_API_KEY as string;
@@ -114,21 +114,27 @@ function formatNewspaperDate(dateStr: string): string {
   });
 }
 
-const SAVED_KEY = "news-saved-ids";
+const SAVED_KEY = "news-saved-articles";
 
-function loadSavedIds(): Set<string> {
+function loadSaved(): Map<string, NewsArticle> {
   try {
     const raw = localStorage.getItem(SAVED_KEY);
-    return new Set(raw ? JSON.parse(raw) : []);
+    if (!raw) return new Map();
+    const arr: NewsArticle[] = JSON.parse(raw);
+    return new Map(arr.map((a) => [a.id, a]));
   } catch {
-    return new Set();
+    return new Map();
   }
+}
+
+function persistSaved(map: Map<string, NewsArticle>) {
+  localStorage.setItem(SAVED_KEY, JSON.stringify([...map.values()]));
 }
 
 export default function NewsFeed() {
   const [filter, setFilter] = useState("All");
   const [search, setSearch] = useState("");
-  const [savedIds, setSavedIds] = useState<Set<string>>(loadSavedIds);
+  const [saved, setSaved] = useState<Map<string, NewsArticle>>(loadSaved);
 
   const { data: articles = [], isLoading, isFetching, refetch, error } = useQuery({
     queryKey: ["news-tavily"],
@@ -137,19 +143,30 @@ export default function NewsFeed() {
     retry: 1,
   });
 
-  function saveArticle(article: NewsArticle) {
-    setSavedIds((prev) => {
-      const next = new Set([...prev, article.id]);
-      localStorage.setItem(SAVED_KEY, JSON.stringify([...next]));
+  function toggleSave(article: NewsArticle) {
+    setSaved((prev) => {
+      const next = new Map(prev);
+      if (next.has(article.id)) {
+        next.delete(article.id);
+        persistSaved(next);
+        toast.success("Removed from saved");
+      } else {
+        next.set(article.id, article);
+        persistSaved(next);
+        toast.success("Article saved");
+      }
       return next;
     });
-    toast.success("Article saved");
   }
 
-  const filtered = articles.filter((a) => {
+  const baseList = filter === "Saved"
+    ? [...saved.values()]
+    : articles;
+
+  const filtered = baseList.filter((a) => {
     const text = `${a.title} ${a.summary || ""}`.toLowerCase();
     return (
-      (filter === "All" || text.includes(filter.toLowerCase())) &&
+      (filter === "Saved" || filter === "All" || text.includes(filter.toLowerCase())) &&
       (!search.trim() || text.includes(search.toLowerCase()))
     );
   });
@@ -210,6 +227,19 @@ export default function NewsFeed() {
                 {kw}
               </button>
             ))}
+            <div className="w-px h-4 bg-zinc-700 mx-2 self-center" />
+            <button
+              onClick={() => setFilter("Saved")}
+              className={cn(
+                "inline-flex items-center gap-1 px-4 py-2 text-[9px] tracking-[0.25em] uppercase font-black font-sans border-b-2 -mb-px transition-colors whitespace-nowrap",
+                filter === "Saved"
+                  ? "border-emerald-400 text-emerald-300"
+                  : "border-transparent text-zinc-600 hover:text-zinc-300"
+              )}
+            >
+              <BookmarkCheck className="w-3 h-3" />
+              Saved {saved.size > 0 && `(${saved.size})`}
+            </button>
             <div className="ml-auto relative pb-1">
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-600" />
               <input
@@ -226,7 +256,7 @@ export default function NewsFeed() {
         <div className="flex items-center gap-3 mb-6">
           <div className="h-px flex-1 bg-zinc-800" />
           <p className="text-[9px] tracking-[0.3em] uppercase text-zinc-600 font-sans shrink-0">
-            {isLoading ? "Loading edition…" : `${filtered.length} article${filtered.length !== 1 ? "s" : ""} in circulation`}
+            {isLoading ? "Loading edition…" : filter === "Saved" ? `${filtered.length} saved article${filtered.length !== 1 ? "s" : ""}` : `${filtered.length} article${filtered.length !== 1 ? "s" : ""} in circulation`}
           </p>
           <div className="h-px flex-1 bg-zinc-800" />
         </div>
@@ -244,9 +274,19 @@ export default function NewsFeed() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 border-t-2 border-t-amber-500/30 p-12 text-center">
-            <Newspaper className="w-8 h-8 text-zinc-700 mx-auto mb-3" />
-            <p className="font-serif text-xl font-black text-white">No Articles in Circulation</p>
-            <p className="text-[11px] text-zinc-600 mt-1 font-sans tracking-wide">No stories found in the last 3 days.</p>
+            {filter === "Saved" ? (
+              <>
+                <BookmarkCheck className="w-8 h-8 text-zinc-700 mx-auto mb-3" />
+                <p className="font-serif text-xl font-black text-white">No Saved Articles</p>
+                <p className="text-[11px] text-zinc-600 mt-1 font-sans tracking-wide">Hit Save on any article to bookmark it here.</p>
+              </>
+            ) : (
+              <>
+                <Newspaper className="w-8 h-8 text-zinc-700 mx-auto mb-3" />
+                <p className="font-serif text-xl font-black text-white">No Articles in Circulation</p>
+                <p className="text-[11px] text-zinc-600 mt-1 font-sans tracking-wide">No stories found in the last 3 days.</p>
+              </>
+            )}
           </div>
         ) : (
           <div className="grid gap-4">
@@ -300,17 +340,18 @@ export default function NewsFeed() {
                         Read
                       </a>
                       <button
-                        onClick={() => saveArticle(article)}
-                        disabled={savedIds.has(article.id)}
+                        onClick={() => toggleSave(article)}
                         className={cn(
                           "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors",
-                          savedIds.has(article.id)
-                            ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 cursor-default"
-                            : "bg-amber-500/10 border border-amber-500/20 text-amber-300 hover:bg-amber-500/20 disabled:opacity-50"
+                          saved.has(article.id)
+                            ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-red-500/10 hover:border-red-500/20 hover:text-red-400"
+                            : "bg-amber-500/10 border border-amber-500/20 text-amber-300 hover:bg-amber-500/20"
                         )}
                       >
-                        <Bookmark className="w-3 h-3" />
-                        {savedIds.has(article.id) ? "Saved" : "Save"}
+                        {saved.has(article.id)
+                          ? <><BookmarkCheck className="w-3 h-3" /> Saved</>
+                          : <><Bookmark className="w-3 h-3" /> Save</>
+                        }
                       </button>
                     </div>
                   </div>
