@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, ClipboardList, Image, BarChart3, Radio,
-  Trophy, LayoutGrid, Newspaper, Waves, TrendingUp,
+  Trophy, LayoutGrid, Ticket, Newspaper, Waves, TrendingUp,
   Users, Scissors, ChevronRight, Bell,
 } from "lucide-react";
 
@@ -14,6 +14,7 @@ const pages = [
   { to: "/six-day-tracker", label: "6-Day Tracker",         icon: Radio,           external: false },
   { to: "/team-performance",label: "Teams",                 icon: Trophy,          external: false },
   { to: "/workboard",       label: "Bandwidth Workboard",   icon: LayoutGrid,      external: false },
+  { to: "/tickets",         label: "Tickets",               icon: Ticket,          external: false },
   { to: "/news",            label: "News Feed",             icon: Newspaper,       external: false },
   { to: "/blue-ocean",      label: "Blue Ocean Ideas",      icon: Waves,           external: false },
   { to: "/podcast-alerts",  label: "Podcast Alerts",        icon: Bell,            external: false },
