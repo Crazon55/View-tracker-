@@ -19,71 +19,45 @@ export type Episode = {
   matchedGuests: string[];
 };
 
-async function fetchRaw(url: string): Promise<string> {
-  // Try corsproxy.io first, fall back to allorigins.win
-  try {
-    const res = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`, {
-      signal: AbortSignal.timeout(12000),
-    });
-    if (res.ok) return res.text();
-  } catch {}
-
-  const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, {
-    signal: AbortSignal.timeout(12000),
-  });
-  if (!res.ok) throw new Error(`Both proxies failed (${res.status})`);
-  const { contents } = await res.json() as { contents: string };
-  return contents;
-}
-
 async function fetchChannelFeed(channelId: string, channelName: string): Promise<Episode[]> {
   const rssUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
-  const xml = await fetchRaw(rssUrl);
+  const apiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}&count=15`;
 
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(xml, "text/xml");
+  const res = await fetch(apiUrl, { signal: AbortSignal.timeout(15000) });
+  if (!res.ok) throw new Error(`rss2json failed for ${channelName}: ${res.status}`);
 
-  // Namespace-aware helpers
-  const ns = (el: Element, local: string): string =>
-    el.getElementsByTagNameNS("http://www.youtube.com/xml/schemas/2015", local)[0]?.textContent
-    || el.getElementsByTagName(`yt:${local}`)[0]?.textContent
-    || el.getElementsByTagName(local)[0]?.textContent
-    || "";
+  const data = await res.json() as { status: string; items: any[] };
+  if (data.status !== "ok") throw new Error(`Feed error for ${channelName}: ${data.status}`);
 
-  const mediaNs = (el: Element, local: string): Element | null =>
-    el.getElementsByTagNameNS("http://search.yahoo.com/mrss/", local)[0]
-    || el.getElementsByTagName(`media:${local}`)[0]
-    || null;
+  return data.items
+    .map((item: any) => {
+      const videoId =
+        item.link?.split("v=")[1]?.split("&")[0] ||
+        item.guid?.split("v=")[1]?.split("&")[0] ||
+        "";
+      if (!videoId) return null;
 
-  return Array.from(doc.querySelectorAll("entry")).slice(0, 15).map((entry) => {
-    const videoId = ns(entry, "videoId");
-    const title = entry.querySelector("title")?.textContent || "";
-    const publishedAt = entry.querySelector("published")?.textContent || "";
-    const mediaGroup = mediaNs(entry, "group");
-    const description = mediaGroup
-      ? (mediaNs(mediaGroup as Element, "description")?.textContent || "")
-      : "";
-    const thumbnailEl = mediaGroup ? mediaNs(mediaGroup as Element, "thumbnail") : null;
-    const thumbnailUrl =
-      thumbnailEl?.getAttribute("url") ||
-      `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+      const publishedAt = item.pubDate ? new Date(item.pubDate).toISOString() : "";
+      const thumbnailUrl = item.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+      const description = (item.description || item.content || "").replace(/<[^>]*>/g, "");
 
-    const searchText = `${title} ${description}`.toLowerCase();
-    const matchedGuests = GUEST_WATCHLIST.filter((g) =>
-      searchText.includes(g.toLowerCase())
-    );
+      const searchText = `${item.title ?? ""} ${description}`.toLowerCase();
+      const matchedGuests = GUEST_WATCHLIST.filter((g) =>
+        searchText.includes(g.toLowerCase())
+      );
 
-    return {
-      videoId,
-      title,
-      channelName,
-      publishedAt,
-      thumbnailUrl,
-      url: `https://www.youtube.com/watch?v=${videoId}`,
-      description,
-      matchedGuests,
-    };
-  });
+      return {
+        videoId,
+        title: item.title || "",
+        channelName,
+        publishedAt,
+        thumbnailUrl,
+        url: item.link || `https://www.youtube.com/watch?v=${videoId}`,
+        description,
+        matchedGuests,
+      } satisfies Episode;
+    })
+    .filter((e): e is Episode => e !== null);
 }
 
 async function fetchAllPodcasts(): Promise<{ episodes: Episode[]; failedCount: number }> {
