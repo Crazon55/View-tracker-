@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { PODCAST_CHANNELS, GUEST_WATCHLIST } from "@/config/podcastChannels";
 import PodcastCard from "@/components/PodcastCard";
 
-const CACHE_KEY = "podcast_alerts_cache_v1";
+const CACHE_KEY = "podcast_alerts_cache_v2";
 const CACHE_TTL = 2 * 60 * 60 * 1000; // 2 hours
 
 export type Episode = {
@@ -17,9 +17,41 @@ export type Episode = {
   url: string;
   description: string;
   matchedGuests: string[];
+  isShort: boolean;
 };
 
 const YT_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY as string;
+
+function parseDurationSeconds(iso: string): number {
+  const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!m) return 0;
+  return (parseInt(m[1] ?? "0") * 3600) + (parseInt(m[2] ?? "0") * 60) + parseInt(m[3] ?? "0");
+}
+
+async function enrichWithShortFlag(episodes: Episode[]): Promise<Episode[]> {
+  const durationMap = new Map<string, number>();
+  const ids = episodes.map((e) => e.videoId);
+  for (let i = 0; i < ids.length; i += 50) {
+    const batch = ids.slice(i, i + 50);
+    try {
+      const res = await fetch(
+        `https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${batch.join(",")}&key=${YT_API_KEY}`,
+        { signal: AbortSignal.timeout(15000) }
+      );
+      if (res.ok) {
+        const data = await res.json() as { items: any[] };
+        for (const item of data.items ?? []) {
+          durationMap.set(item.id, parseDurationSeconds(item.contentDetails?.duration ?? ""));
+        }
+      }
+    } catch {}
+  }
+  return episodes.map((e) => {
+    const secs = durationMap.get(e.videoId) ?? Infinity;
+    const hasShortTag = /#shorts?\b/i.test(`${e.title} ${e.description}`);
+    return { ...e, isShort: secs <= 60 || hasShortTag };
+  });
+}
 
 async function fetchChannelFeed(channelId: string, channelName: string): Promise<Episode[]> {
   // Uploads playlist ID = channel ID with "UC" → "UU"
@@ -54,6 +86,7 @@ async function fetchChannelFeed(channelId: string, channelName: string): Promise
       url: `https://www.youtube.com/watch?v=${videoId}`,
       description,
       matchedGuests,
+      isShort: false,
     } satisfies Episode;
   }).filter((e): e is Episode => e !== null);
 }
@@ -74,12 +107,13 @@ async function fetchAllPodcasts(): Promise<{ episodes: Episode[]; failedCount: n
 
   const failedCount = results.filter((r) => r.status === "rejected").length;
 
-  const episodes = results
+  const raw = results
     .filter((r): r is PromiseFulfilledResult<Episode[]> => r.status === "fulfilled")
     .flatMap((r) => r.value)
     .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
 
-  // Only cache if we got something back
+  const episodes = await enrichWithShortFlag(raw);
+
   if (episodes.length > 0) {
     try {
       localStorage.setItem(CACHE_KEY, JSON.stringify({ data: episodes, ts: Date.now() }));
@@ -90,9 +124,11 @@ async function fetchAllPodcasts(): Promise<{ episodes: Episode[]; failedCount: n
 }
 
 type Tab = "guest-alerts" | "new-episodes";
+type EpisodeFilter = "all" | "podcasts" | "shorts";
 
 export default function PodcastAlerts() {
   const [tab, setTab] = useState<Tab>("guest-alerts");
+  const [episodeFilter, setEpisodeFilter] = useState<EpisodeFilter>("all");
   const [refreshKey, setRefreshKey] = useState(0);
 
   const { data, isLoading, isError } = useQuery({
@@ -105,7 +141,13 @@ export default function PodcastAlerts() {
   const episodes = data?.episodes ?? [];
   const failedCount = data?.failedCount ?? 0;
   const guestAlerts = episodes.filter((e) => e.matchedGuests.length > 0);
-  const displayed = tab === "guest-alerts" ? guestAlerts : episodes;
+
+  const filteredEpisodes =
+    episodeFilter === "podcasts" ? episodes.filter((e) => !e.isShort) :
+    episodeFilter === "shorts"   ? episodes.filter((e) => e.isShort) :
+    episodes;
+
+  const displayed = tab === "guest-alerts" ? guestAlerts : filteredEpisodes;
 
   function handleRefresh() {
     localStorage.removeItem(CACHE_KEY);
@@ -189,6 +231,32 @@ export default function PodcastAlerts() {
             )}
           </button>
         </div>
+
+        {/* Episode type filter — only for New Episodes tab */}
+        {tab === "new-episodes" && !isLoading && (
+          <div className="flex gap-2">
+            {(["all", "podcasts", "shorts"] as EpisodeFilter[]).map((f) => {
+              const count =
+                f === "all" ? episodes.length :
+                f === "podcasts" ? episodes.filter((e) => !e.isShort).length :
+                episodes.filter((e) => e.isShort).length;
+              return (
+                <button
+                  key={f}
+                  onClick={() => setEpisodeFilter(f)}
+                  className={cn(
+                    "px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors capitalize",
+                    episodeFilter === f
+                      ? "bg-violet-600 text-white"
+                      : "bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                  )}
+                >
+                  {f} <span className="opacity-60">({count})</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Loading skeletons */}
         {isLoading && (
