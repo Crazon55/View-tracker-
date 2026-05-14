@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { createTicket } from "@/services/api";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ExternalLink, Newspaper, RefreshCw, Ticket, Search } from "lucide-react";
+import { ExternalLink, Newspaper, RefreshCw, Bookmark, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const TAVILY_API_KEY = import.meta.env.VITE_TAVILY_API_KEY as string;
@@ -115,11 +114,21 @@ function formatNewspaperDate(dateStr: string): string {
   });
 }
 
+const SAVED_KEY = "news-saved-ids";
+
+function loadSavedIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(SAVED_KEY);
+    return new Set(raw ? JSON.parse(raw) : []);
+  } catch {
+    return new Set();
+  }
+}
+
 export default function NewsFeed() {
-  const qc = useQueryClient();
   const [filter, setFilter] = useState("All");
   const [search, setSearch] = useState("");
-  const [ticketedIds, setTicketedIds] = useState<Set<string>>(new Set());
+  const [savedIds, setSavedIds] = useState<Set<string>>(loadSavedIds);
 
   const { data: articles = [], isLoading, isFetching, refetch, error } = useQuery({
     queryKey: ["news-tavily"],
@@ -128,21 +137,14 @@ export default function NewsFeed() {
     retry: 1,
   });
 
-  const ticketMut = useMutation({
-    mutationFn: async (article: NewsArticle) =>
-      createTicket({
-        title: article.title,
-        description: `${article.summary || ""}\n\nSource: ${article.url}`.trim(),
-        urgency: "normal",
-        tags: ["news", "auto"],
-      }),
-    onSuccess: (_, article) => {
-      setTicketedIds((prev) => new Set([...prev, article.id]));
-      toast.success("Ticket created");
-      qc.invalidateQueries({ queryKey: ["tickets"] });
-    },
-    onError: (e: any) => toast.error(e?.message || "Failed to create ticket"),
-  });
+  function saveArticle(article: NewsArticle) {
+    setSavedIds((prev) => {
+      const next = new Set([...prev, article.id]);
+      localStorage.setItem(SAVED_KEY, JSON.stringify([...next]));
+      return next;
+    });
+    toast.success("Article saved");
+  }
 
   const filtered = articles.filter((a) => {
     const text = `${a.title} ${a.summary || ""}`.toLowerCase();
@@ -298,17 +300,17 @@ export default function NewsFeed() {
                         Read
                       </a>
                       <button
-                        onClick={() => ticketMut.mutate(article)}
-                        disabled={ticketMut.isPending || ticketedIds.has(article.id)}
+                        onClick={() => saveArticle(article)}
+                        disabled={savedIds.has(article.id)}
                         className={cn(
                           "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors",
-                          ticketedIds.has(article.id)
+                          savedIds.has(article.id)
                             ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 cursor-default"
                             : "bg-amber-500/10 border border-amber-500/20 text-amber-300 hover:bg-amber-500/20 disabled:opacity-50"
                         )}
                       >
-                        <Ticket className="w-3 h-3" />
-                        {ticketedIds.has(article.id) ? "Filed" : "Add Ticket"}
+                        <Bookmark className="w-3 h-3" />
+                        {savedIds.has(article.id) ? "Saved" : "Save"}
                       </button>
                     </div>
                   </div>
