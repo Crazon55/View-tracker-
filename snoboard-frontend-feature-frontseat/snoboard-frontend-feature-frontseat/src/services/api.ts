@@ -440,10 +440,144 @@ export async function deleteBlueOceanIdea(id: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
-export const blueOceanScrape = (data: {
+const APIFY_TOKEN = import.meta.env.VITE_APIFY_TOKEN as string;
+const APIFY_ACTOR_ID = import.meta.env.VITE_APIFY_ACTOR_ID as string;
+
+function apifyPostType(rawType: string): "carousel" | "static" | "reel" {
+  const t = (rawType || "").toLowerCase();
+  if (t.includes("sidecar") || t.includes("carousel")) return "carousel";
+  if (t.includes("video") || t.includes("reel")) return "reel";
+  return "static";
+}
+
+export async function blueOceanScrape(data: {
   accounts: string[]; date_from?: string; date_to?: string;
   post_type?: string; results_limit?: number;
-}) => fetchApi<any>("/api/v1/blue-ocean/scrape", { method: "POST", body: JSON.stringify(data) });
+}): Promise<{ job_id: string; posts_found: number }> {
+  if (!APIFY_TOKEN || !APIFY_ACTOR_ID) throw new Error("Apify credentials not configured");
+
+  // Create job record in Supabase
+  const { data: jobRow, error: jobErr } = await _sb
+    .from("blue_ocean_scrape_jobs")
+    .insert({
+      accounts: data.accounts,
+      date_from: data.date_from,
+      date_to: data.date_to,
+      post_type: data.post_type || "all",
+      status: "running",
+    })
+    .select()
+    .single();
+  if (jobErr) throw new Error(jobErr.message);
+  const jobId = jobRow.id;
+
+  try {
+    // Build Apify input — direct profile URLs
+    const directUrls = data.accounts.map((a) => `https://www.instagram.com/${a}/`);
+    const apifyInput: Record<string, any> = {
+      directUrls,
+      resultsType: "posts",
+      resultsLimit: data.results_limit ?? 50,
+      addParentData: false,
+    };
+    if (data.date_from) apifyInput.onlyPostsNewerThan = data.date_from;
+    if (data.date_to) apifyInput.onlyPostsOlderThan = data.date_to;
+
+    // Start the Apify run
+    const startRes = await fetch(
+      `https://api.apify.com/v2/acts/${APIFY_ACTOR_ID}/runs?token=${APIFY_TOKEN}`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(apifyInput) }
+    );
+    if (!startRes.ok) {
+      const err = await startRes.text();
+      throw new Error(`Apify start failed: ${startRes.status} — ${err}`);
+    }
+    const startData = await startRes.json();
+    const runId: string = startData.data?.id;
+    const defaultDatasetId: string = startData.data?.defaultDatasetId;
+    if (!runId) throw new Error("Apify did not return a run ID");
+
+    // Poll for completion (max 6 min, 5s intervals)
+    let status = startData.data?.status ?? "RUNNING";
+    let datasetId = defaultDatasetId;
+    let elapsed = 0;
+    while (!["SUCCEEDED", "FAILED", "ABORTED", "TIMED-OUT"].includes(status) && elapsed < 360_000) {
+      await new Promise((r) => setTimeout(r, 5000));
+      elapsed += 5000;
+      const statusRes = await fetch(
+        `https://api.apify.com/v2/acts/${APIFY_ACTOR_ID}/runs/${runId}?token=${APIFY_TOKEN}`
+      );
+      if (statusRes.ok) {
+        const sd = await statusRes.json();
+        status = sd.data?.status ?? status;
+        datasetId = sd.data?.defaultDatasetId ?? datasetId;
+      }
+    }
+
+    if (status !== "SUCCEEDED") {
+      await _sb.from("blue_ocean_scrape_jobs").update({ status: "failed", error: `Apify run status: ${status}` }).eq("id", jobId);
+      throw new Error(`Apify run did not succeed (status: ${status})`);
+    }
+
+    // Fetch dataset items
+    const itemsRes = await fetch(
+      `https://api.apify.com/v2/datasets/${datasetId}/items?token=${APIFY_TOKEN}&limit=500`
+    );
+    if (!itemsRes.ok) throw new Error(`Failed to fetch Apify results: ${itemsRes.status}`);
+    const items: any[] = await itemsRes.json();
+
+    // Normalise & filter
+    const wantType = data.post_type || "all";
+    const posts = items
+      .map((item) => {
+        const rawType = item.type || item.productType || item.mediaType || "";
+        const postType = apifyPostType(rawType);
+        const handle =
+          item.ownerUsername || item.owner?.username || item.username ||
+          (item.url || "").match(/instagram\.com\/([^/]+)/)?.[1] || "unknown";
+        return {
+          job_id: jobId,
+          account_handle: handle,
+          url: item.url || (item.shortCode ? `https://www.instagram.com/p/${item.shortCode}/` : ""),
+          caption: item.caption || item.captionText || item.text || "",
+          thumbnail_url: item.displayUrl || item.thumbnailUrl || item.imageUrl || item.previewUrl || "",
+          post_type: postType,
+          likes: item.likesCount ?? item.likes ?? 0,
+          comments: item.commentsCount ?? item.comments ?? 0,
+          views: item.videoViewCount ?? item.videoPlayCount ?? item.viewCount ?? 0,
+          posted_at: item.timestamp
+            ? new Date(item.timestamp).toISOString().slice(0, 10)
+            : item.takenAtTimestamp
+            ? new Date(item.takenAtTimestamp * 1000).toISOString().slice(0, 10)
+            : null,
+          is_blue_ocean: false,
+        };
+      })
+      .filter((p) => {
+        if (wantType === "carousels") return p.post_type === "carousel";
+        if (wantType === "statics") return p.post_type === "static";
+        return true;
+      });
+
+    // Bulk insert posts
+    if (posts.length > 0) {
+      const { error: insertErr } = await _sb.from("blue_ocean_scraped_posts").insert(posts);
+      if (insertErr) throw new Error(insertErr.message);
+    }
+
+    // Mark job done
+    await _sb.from("blue_ocean_scrape_jobs").update({
+      status: "done",
+      posts_found: posts.length,
+      completed_at: new Date().toISOString(),
+    }).eq("id", jobId);
+
+    return { job_id: jobId, posts_found: posts.length };
+  } catch (err: any) {
+    await _sb.from("blue_ocean_scrape_jobs").update({ status: "failed", error: err?.message }).eq("id", jobId);
+    throw err;
+  }
+}
 
 export async function getBlueOceanScrapeJobs(): Promise<any[]> {
   const { data, error } = await _sb
