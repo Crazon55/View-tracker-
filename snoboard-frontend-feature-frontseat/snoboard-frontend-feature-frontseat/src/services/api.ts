@@ -472,10 +472,9 @@ export async function blueOceanScrape(data: {
   const jobId = jobRow.id;
 
   try {
-    // Build Apify input — direct profile URLs
-    const directUrls = data.accounts.map((a) => `https://www.instagram.com/${a}/`);
+    // Build Apify input — actor expects "username" array
     const apifyInput: Record<string, any> = {
-      directUrls,
+      username: data.accounts,
       resultsType: "posts",
       resultsLimit: data.results_limit ?? 50,
       addParentData: false,
