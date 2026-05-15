@@ -874,7 +874,8 @@ function InstagramTab() {
               <option value="likes">Most liked</option>
               <option value="comments">Most commented</option>
               <option value="views">Most viewed</option>
-              <option value="posted_at">Most recent</option>
+              <option value="posted_at">Newest first</option>
+              <option value="posted_at_asc">Oldest first</option>
             </select>
           </div>
         </div>

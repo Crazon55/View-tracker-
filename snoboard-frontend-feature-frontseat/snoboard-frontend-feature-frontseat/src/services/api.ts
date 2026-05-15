@@ -591,9 +591,10 @@ export async function getBlueOceanScrapeJobs(): Promise<any[]> {
 export async function getBlueOceanScrapedPosts(params?: {
   job_id?: string; post_type?: string; is_blue_ocean?: boolean; sort?: string;
 }): Promise<any[]> {
-  const sortCol = (params?.sort && ["likes","comments","views","posted_at","created_at"].includes(params.sort))
-    ? params.sort : "likes";
-  let q = _sb.from("blue_ocean_scraped_posts").select("*").order(sortCol, { ascending: false }).limit(500);
+  const ascending = params?.sort === "posted_at_asc";
+  const rawCol = params?.sort?.replace("_asc", "") ?? "likes";
+  const sortCol = ["likes","comments","views","posted_at","created_at"].includes(rawCol) ? rawCol : "likes";
+  let q = _sb.from("blue_ocean_scraped_posts").select("*").order(sortCol, { ascending }).limit(500);
   if (params?.job_id) q = q.eq("job_id", params.job_id);
   if (params?.post_type && params.post_type !== "all") q = q.eq("post_type", params.post_type);
   if (params?.is_blue_ocean !== undefined) q = q.eq("is_blue_ocean", params.is_blue_ocean);
