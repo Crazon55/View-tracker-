@@ -884,49 +884,42 @@ function InstagramTab() {
           </div>
         </div>
 
-        {/* Account filter tabs */}
+        {/* Account filter pills */}
         {uniqueAccounts.length > 0 && (
-          <div className="border-b border-zinc-800 mb-4">
-            <div className="flex items-center overflow-x-auto scrollbar-none">
-              {/* All tab */}
-              <button
-                onClick={() => setAccountFilter("all")}
-                className={`px-4 py-2.5 text-[11px] tracking-[0.12em] uppercase font-bold border-b-2 -mb-px transition-colors whitespace-nowrap flex items-center gap-1.5 ${
-                  accountFilter === "all"
-                    ? "border-violet-500 text-violet-300"
-                    : "border-transparent text-zinc-600 hover:text-zinc-300"
-                }`}
-              >
-                All
-                <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
-                  accountFilter === "all" ? "bg-violet-500/20 text-violet-400" : "bg-zinc-800 text-zinc-600"
-                }`}>
-                  {allPosts.length}
-                </span>
-              </button>
-              {uniqueAccounts.map((handle) => {
-                const count = allPosts.filter((p) => p.account_handle === handle).length;
-                const isActive = accountFilter === handle;
-                return (
-                  <button
-                    key={handle}
-                    onClick={() => setAccountFilter(handle)}
-                    className={`px-4 py-2.5 text-[11px] tracking-[0.12em] uppercase font-bold border-b-2 -mb-px transition-colors whitespace-nowrap flex items-center gap-1.5 ${
-                      isActive
-                        ? "border-violet-500 text-violet-300"
-                        : "border-transparent text-zinc-600 hover:text-zinc-300"
-                    }`}
-                  >
-                    @{handle}
-                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
-                      isActive ? "bg-violet-500/20 text-violet-400" : "bg-zinc-800 text-zinc-600"
-                    }`}>
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+          <div className="flex items-center gap-1.5 flex-wrap mb-4">
+            <button
+              onClick={() => setAccountFilter("all")}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors whitespace-nowrap ${
+                accountFilter === "all"
+                  ? "bg-violet-500/20 text-violet-300 ring-1 ring-violet-500/40"
+                  : "bg-zinc-800/60 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+              }`}
+            >
+              All
+              <span className={`text-[10px] font-semibold ${accountFilter === "all" ? "text-violet-400/80" : "text-zinc-600"}`}>
+                {allPosts.length}
+              </span>
+            </button>
+            {uniqueAccounts.map((handle) => {
+              const count = allPosts.filter((p) => p.account_handle === handle).length;
+              const isActive = accountFilter === handle;
+              return (
+                <button
+                  key={handle}
+                  onClick={() => setAccountFilter(handle)}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors whitespace-nowrap ${
+                    isActive
+                      ? "bg-violet-500/20 text-violet-300 ring-1 ring-violet-500/40"
+                      : "bg-zinc-800/60 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+                  }`}
+                >
+                  @{handle}
+                  <span className={`text-[10px] font-semibold ${isActive ? "text-violet-400/80" : "text-zinc-600"}`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
 
