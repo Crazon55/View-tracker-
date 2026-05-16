@@ -390,16 +390,44 @@ function SlidesContentEditor({
   const [slides, setSlides] = useState<string[]>(() => norm(value));
   const [sel, setSel] = useState(0);
   const dirty = useRef(false);
+  // Track the JSON of what we last sent to the server so we can detect when the
+  // server confirms our save (valueKey matches pendingKey). Until that happens we
+  // refuse to let a background refetch overwrite local state.
+  const pendingKey = useRef<string | null>(null);
+  const prevInstanceKey = useRef(instanceKey);
   const valueKey = JSON.stringify(value ?? []);
+
   useEffect(() => {
-    if (dirty.current) return;
+    // Switching to a different card → always hydrate fresh
+    if (prevInstanceKey.current !== instanceKey) {
+      prevInstanceKey.current = instanceKey;
+      dirty.current = false;
+      pendingKey.current = null;
+      const n = norm(value);
+      setSlides(n);
+      setSel(0);
+      return;
+    }
+    if (dirty.current) {
+      // Server confirmed our save when valueKey matches what we last sent
+      if (pendingKey.current !== null && valueKey === pendingKey.current) {
+        dirty.current = false;
+        pendingKey.current = null;
+      } else {
+        // Mutation still in flight or server returned stale data — keep local state
+        return;
+      }
+    }
     const n = norm(value);
     setSlides(n);
     setSel((i) => Math.min(i, Math.max(0, n.length - 1)));
   }, [instanceKey, valueKey]);
+
   const push = (rows: string[]) => {
+    // Stay dirty until the server echoes back exactly what we saved
+    dirty.current = true;
+    pendingKey.current = JSON.stringify(rows);
     setSlides(rows);
-    dirty.current = false;
     onSave(rows);
   };
   return (
