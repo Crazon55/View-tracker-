@@ -1034,107 +1034,113 @@ function ReconcileView({
   const totalDrift = totalActual - totalCycle;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+
+      {/* ── Stat cards ── */}
       <div className="grid grid-cols-3 gap-3">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-          <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Cycle Sum</p>
-          <p className="text-2xl font-black text-white tabular-nums">{fmt(totalCycle)}</p>
-          <p className="text-xs text-zinc-600 mt-1">from all 5 cycles</p>
+        <div className="relative bg-zinc-900 border border-zinc-800 rounded-2xl p-5 overflow-hidden">
+          <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-zinc-600" />
+          <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Cycle Sum</p>
+          <p className="text-3xl font-black text-white tabular-nums leading-none">{fmt(totalCycle)}</p>
+          <p className="text-xs text-zinc-600 mt-2">from all 5 cycles</p>
         </div>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-          <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">IG Dashboard</p>
-          <p className="text-2xl font-black text-white tabular-nums">{totalActual > 0 ? fmt(totalActual) : "—"}</p>
-          <p className="text-xs text-zinc-600 mt-1">actual monthly views</p>
+        <div className="relative bg-zinc-900 border border-violet-500/20 rounded-2xl p-5 overflow-hidden">
+          <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-violet-500" />
+          <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-2">IG Dashboard</p>
+          <p className="text-3xl font-black text-white tabular-nums leading-none">{totalActual > 0 ? fmt(totalActual) : "—"}</p>
+          <p className="text-xs text-zinc-600 mt-2">actual monthly views</p>
         </div>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-          <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Drift</p>
-          <p className={`text-2xl font-black tabular-nums ${
-            totalDrift > 0 ? "text-emerald-400" : totalDrift < 0 ? "text-red-400" : "text-zinc-500"
+        <div className={`relative bg-zinc-900 rounded-2xl p-5 overflow-hidden border ${
+          totalActual === 0 ? "border-zinc-800" : totalDrift > 0 ? "border-emerald-500/20" : totalDrift < 0 ? "border-red-500/20" : "border-zinc-800"
+        }`}>
+          <div className={`absolute left-0 top-0 bottom-0 w-[3px] ${
+            totalActual === 0 ? "bg-zinc-700" : totalDrift > 0 ? "bg-emerald-500" : totalDrift < 0 ? "bg-red-500" : "bg-zinc-600"
+          }`} />
+          <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Drift</p>
+          <p className={`text-3xl font-black tabular-nums leading-none ${
+            totalActual === 0 ? "text-zinc-600" : totalDrift > 0 ? "text-emerald-400" : totalDrift < 0 ? "text-red-400" : "text-zinc-400"
           }`}>
             {totalActual > 0 ? (totalDrift > 0 ? "+" : "") + fmt(totalDrift) : "—"}
           </p>
-          <p className="text-xs text-zinc-600 mt-1">dashboard vs cycles</p>
+          <p className="text-xs text-zinc-600 mt-2">dashboard vs cycles</p>
         </div>
       </div>
 
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 sm:p-6">
-        <div className="flex items-center justify-between mb-4">
+      {/* ── Reconciliation rows ── */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
           <div>
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider">Monthly Reconciliation</h3>
-            <p className="text-xs text-zinc-500 mt-1">
-              Enter the actual IG dashboard views to correct any drift from viral content
-            </p>
+            <h3 className="text-sm font-bold text-white tracking-wide">Monthly Reconciliation</h3>
+            <p className="text-xs text-zinc-500 mt-0.5">Enter actual IG dashboard totals — drift feeds the Growth chart</p>
           </div>
           <Button
             size="sm"
             onClick={saveAll}
             disabled={actualMut.isPending}
-            className="gap-1.5 text-xs bg-violet-600 hover:bg-violet-700"
+            className="gap-1.5 text-xs bg-violet-600 hover:bg-violet-700 shadow-lg shadow-violet-600/20"
           >
             <Save className="w-3 h-3" /> Save All
           </Button>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-[10px] uppercase tracking-wider text-zinc-500 border-b border-zinc-800">
-                <th className="text-left py-2 pr-3">IP</th>
-                <th className="text-right py-2 px-2">Cycle Sum</th>
-                <th className="text-left py-2 px-2 w-36">Actual (IG Dashboard)</th>
-                <th className="text-right py-2 px-2">Drift</th>
-                <th className="py-2 pl-2 w-16"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {reconcileRows.map((p: any) => {
-                const actual = drafts[p.page_id] !== "" ? Number(drafts[p.page_id]) : null;
-                const drift = actual != null ? actual - (p.cycle_views_sum || 0) : null;
-                return (
-                  <tr key={p.page_id} className="border-b border-zinc-800/50 hover:bg-zinc-800/20 transition-colors">
-                    <td className="py-2.5 pr-3">
-                      <span className="text-white font-medium">{p.name || p.handle}</span>
-                      <span className="text-zinc-600 text-xs ml-2">@{p.handle}</span>
-                    </td>
-                    <td className="py-2.5 px-2 text-right text-zinc-400 tabular-nums">
-                      {fmt(p.cycle_views_sum || 0)}
-                    </td>
-                    <td className="py-2.5 px-2">
-                      <Input
-                        type="number"
-                        value={drafts[p.page_id] ?? ""}
-                        onChange={(e) => setDrafts((prev) => ({ ...prev, [p.page_id]: e.target.value }))}
-                        onKeyDown={(e) => { if (e.key === "Enter") saveSingle(p.page_id); }}
-                        placeholder="Enter actual views"
-                        className="h-8 w-32 text-xs bg-zinc-800 border-zinc-700 text-white tabular-nums"
-                      />
-                    </td>
-                    <td className="py-2.5 px-2 text-right">
-                      {drift != null ? (
-                        <span className={`text-xs font-bold flex items-center justify-end gap-1 ${
-                          drift > 0 ? "text-emerald-400" : drift < 0 ? "text-red-400" : "text-zinc-500"
-                        }`}>
-                          {drift > 0 ? <TrendingUp className="w-3 h-3" /> : drift < 0 ? <TrendingDown className="w-3 h-3" /> : null}
-                          {drift > 0 ? "+" : ""}{fmt(drift)}
-                        </span>
-                      ) : <span className="text-zinc-600 text-xs">—</span>}
-                    </td>
-                    <td className="py-2.5 pl-2">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => saveSingle(p.page_id)}
-                        disabled={actualMut.isPending}
-                        className="h-7 text-[10px] text-zinc-400 hover:text-white"
-                      >
-                        Save
-                      </Button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        {/* Column headers */}
+        <div className="grid grid-cols-[1fr_auto_auto_auto] gap-4 items-center px-5 py-2.5 border-b border-zinc-800/60">
+          <p className="text-[10px] uppercase tracking-widest text-zinc-600">Page</p>
+          <p className="text-[10px] uppercase tracking-widest text-zinc-600 text-right w-20">Cycle Sum</p>
+          <p className="text-[10px] uppercase tracking-widest text-zinc-600 w-44">IG Dashboard</p>
+          <p className="text-[10px] uppercase tracking-widest text-zinc-600 text-right w-24">Drift</p>
+        </div>
+
+        <div className="divide-y divide-zinc-800/50">
+          {reconcileRows.map((p: any) => {
+            const actual = drafts[p.page_id] !== "" ? Number(drafts[p.page_id]) : null;
+            const drift = actual != null ? actual - (p.cycle_views_sum || 0) : null;
+            const hasDraft = drafts[p.page_id] !== "" && drafts[p.page_id] !== undefined;
+
+            return (
+              <div key={p.page_id} className="grid grid-cols-[1fr_auto_auto_auto] gap-4 items-center px-5 py-3.5 hover:bg-white/[0.02] transition-colors group">
+                {/* Page name */}
+                <div className="min-w-0">
+                  <span className="text-white font-semibold text-sm">{p.name || p.handle}</span>
+                  <span className="text-zinc-600 text-xs ml-2">@{p.handle}</span>
+                </div>
+
+                {/* Cycle sum */}
+                <div className="w-20 text-right">
+                  <span className="text-zinc-400 text-sm tabular-nums font-medium">{fmt(p.cycle_views_sum || 0)}</span>
+                </div>
+
+                {/* Actual input */}
+                <div className="w-44">
+                  <Input
+                    type="number"
+                    value={drafts[p.page_id] ?? ""}
+                    onChange={(e) => setDrafts((prev) => ({ ...prev, [p.page_id]: e.target.value }))}
+                    onKeyDown={(e) => { if (e.key === "Enter") saveSingle(p.page_id); }}
+                    onBlur={() => { if (hasDraft) saveSingle(p.page_id); }}
+                    placeholder="Enter views…"
+                    className="h-8 w-full text-xs bg-zinc-800 border-zinc-600 text-white tabular-nums placeholder-zinc-600 focus:border-violet-500"
+                  />
+                </div>
+
+                {/* Drift */}
+                <div className="w-24 text-right">
+                  {drift != null ? (
+                    <span className={`inline-flex items-center gap-1 text-xs font-bold tabular-nums px-2.5 py-1 rounded-full ${
+                      drift > 0 ? "bg-emerald-500/10 text-emerald-400"
+                      : drift < 0 ? "bg-red-500/10 text-red-400"
+                      : "text-zinc-500"
+                    }`}>
+                      {drift > 0 ? <TrendingUp className="w-3 h-3" /> : drift < 0 ? <TrendingDown className="w-3 h-3" /> : null}
+                      {drift > 0 ? "+" : ""}{fmt(drift)}
+                    </span>
+                  ) : (
+                    <span className="text-zinc-700 text-xs">—</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
