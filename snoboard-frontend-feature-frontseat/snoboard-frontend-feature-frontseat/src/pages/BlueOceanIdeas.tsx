@@ -671,6 +671,7 @@ function InstagramTab() {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState("likes");
   const [viewFilter, setViewFilter] = useState("all");
+  const [accountFilter, setAccountFilter] = useState("all");
 
   const { data: jobs = [] } = useQuery<any[]>({
     queryKey: ["blue-ocean-scrape-jobs"],
@@ -746,7 +747,10 @@ function InstagramTab() {
     },
   });
 
-  const blueOceanCount = (postsQuery.data || []).filter((p) => p.is_blue_ocean).length;
+  const allPosts = postsQuery.data || [];
+  const uniqueAccounts = [...new Set(allPosts.map((p) => p.account_handle))].sort();
+  const visiblePosts = accountFilter === "all" ? allPosts : allPosts.filter((p) => p.account_handle === accountFilter);
+  const blueOceanCount = allPosts.filter((p) => p.is_blue_ocean).length;
 
   return (
     <div className="space-y-8">
@@ -853,12 +857,12 @@ function InstagramTab() {
 
       {/* Scraped results */}
       <section>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-white">
             Scraped Posts
-            {postsQuery.data && (
+            {allPosts.length > 0 && (
               <span className="ml-2 text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full">
-                {postsQuery.data.length} posts
+                {allPosts.length} posts
                 {blueOceanCount > 0 && ` · ${blueOceanCount} blue ocean`}
               </span>
             )}
@@ -880,15 +884,63 @@ function InstagramTab() {
           </div>
         </div>
 
+        {/* Account filter tabs */}
+        {uniqueAccounts.length > 0 && (
+          <div className="border-b border-zinc-800 mb-4">
+            <div className="flex items-center overflow-x-auto scrollbar-none">
+              {/* All tab */}
+              <button
+                onClick={() => setAccountFilter("all")}
+                className={`px-4 py-2.5 text-[11px] tracking-[0.12em] uppercase font-bold border-b-2 -mb-px transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+                  accountFilter === "all"
+                    ? "border-violet-500 text-violet-300"
+                    : "border-transparent text-zinc-600 hover:text-zinc-300"
+                }`}
+              >
+                All
+                <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
+                  accountFilter === "all" ? "bg-violet-500/20 text-violet-400" : "bg-zinc-800 text-zinc-600"
+                }`}>
+                  {allPosts.length}
+                </span>
+              </button>
+              {uniqueAccounts.map((handle) => {
+                const count = allPosts.filter((p) => p.account_handle === handle).length;
+                const isActive = accountFilter === handle;
+                return (
+                  <button
+                    key={handle}
+                    onClick={() => setAccountFilter(handle)}
+                    className={`px-4 py-2.5 text-[11px] tracking-[0.12em] uppercase font-bold border-b-2 -mb-px transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+                      isActive
+                        ? "border-violet-500 text-violet-300"
+                        : "border-transparent text-zinc-600 hover:text-zinc-300"
+                    }`}
+                  >
+                    @{handle}
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
+                      isActive ? "bg-violet-500/20 text-violet-400" : "bg-zinc-800 text-zinc-600"
+                    }`}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {postsQuery.isLoading ? (
           <div className="flex items-center justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-zinc-500" /></div>
-        ) : !postsQuery.data?.length ? (
+        ) : !allPosts.length ? (
           <div className="text-center py-16 text-zinc-600 text-sm">
             No scraped posts yet. Add accounts above and run a scrape.
           </div>
+        ) : visiblePosts.length === 0 ? (
+          <div className="text-center py-16 text-zinc-600 text-sm">No posts for this account.</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
-            {postsQuery.data.map((post) => (
+            {visiblePosts.map((post) => (
               <ScrapedPostCard key={post.id} post={post}
                 onMarkBlueOcean={(id, val) => markMut.mutate({ id, val })}
                 onDelete={(id) => deleteScrapePostMut.mutate(id)}
