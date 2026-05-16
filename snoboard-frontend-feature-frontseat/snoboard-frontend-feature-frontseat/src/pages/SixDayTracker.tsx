@@ -654,9 +654,12 @@ function IPDropdown({
     );
   }
 
-  /** Auto-save on collapse so no data is lost when row closes */
+  /** Auto-save on collapse — only if dirty AND there's actual data worth persisting */
   function handleToggle() {
-    if (open && isDirty()) saveEntry();
+    if (open && isDirty()) {
+      const hasActualData = Number(weekViews) > 0 || reelPctStr !== "" || postPctStr !== "" || reelPerfStr !== "" || postPerfStr !== "";
+      if (hasActualData) saveEntry();
+    }
     setOpen(!open);
   }
 
@@ -687,7 +690,9 @@ function IPDropdown({
     });
   }
 
-  const hasData = !!entry || toplineItems.length > 0;
+  const hasData = (
+    !!entry && ((entry.views ?? 0) > 0 || entry.reel_pct != null || entry.post_pct != null || entry.reel_perf != null || entry.post_perf != null)
+  ) || toplineItems.length > 0;
   const views = entry?.views || 0;
 
   return (
