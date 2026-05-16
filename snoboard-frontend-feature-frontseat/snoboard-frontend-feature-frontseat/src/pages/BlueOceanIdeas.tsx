@@ -848,30 +848,6 @@ function InstagramTab() {
           </div>
         )}
 
-        {jobs.length > 0 && (
-          <div>
-            <p className="text-[10px] text-zinc-600 uppercase tracking-widest mb-2">Past jobs</p>
-            <div className="flex flex-wrap gap-1.5">
-              {jobs.slice(0, 8).map((job) => (
-                <button key={job.id}
-                  onClick={() => setSelectedJobId(selectedJobId === job.id ? null : job.id)}
-                  className={`text-[11px] px-2.5 py-1 rounded-lg border transition-colors ${
-                    selectedJobId === job.id
-                      ? "bg-violet-500/20 border-violet-500/50 text-violet-300"
-                      : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white"
-                  }`}
-                >
-                  {(job.accounts || []).slice(0, 2).map((a: string) => `@${a}`).join(", ")}
-                  {(job.accounts || []).length > 2 && ` +${job.accounts.length - 2}`}
-                  {" · "}
-                  <span className={job.status === "done" ? "text-green-400" : job.status === "failed" ? "text-red-400" : "text-amber-400"}>
-                    {job.status === "done" ? `${job.posts_found} posts` : job.status}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
       </section>
 
       {/* Scraped results */}
