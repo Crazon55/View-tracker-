@@ -435,14 +435,18 @@ function CycleCard({
     : allEntries;
   const totalViews = entries.reduce((s: number, e: any) => s + (e.views || 0), 0);
   const filledCount = (() => {
-    if (!allowedPageIds) {
-      return typeof cycle.filled_count === "number" ? cycle.filled_count : allEntries.length;
-    }
-    // Filtered view: an IP is "filled" if it has an entry OR any top-content row in this cycle
+    // An entry only counts as "filled" if it has actual data — same rule as the green dot
+    const meaningful = (e: any) =>
+      (e.views ?? 0) > 0 || e.reel_pct != null || e.post_pct != null || e.reel_perf != null || e.post_perf != null;
+
     const filled = new Set<string>();
-    for (const e of entries) if (e.page_id) filled.add(e.page_id);
+    for (const e of allEntries) {
+      if (e.page_id && meaningful(e) && (!allowedPageIds || allowedPageIds.has(e.page_id))) {
+        filled.add(e.page_id);
+      }
+    }
     for (const t of allTopContent) {
-      if (t.page_id && allowedPageIds.has(t.page_id)) filled.add(t.page_id);
+      if (t.page_id && (!allowedPageIds || allowedPageIds.has(t.page_id))) filled.add(t.page_id);
     }
     return filled.size;
   })();
