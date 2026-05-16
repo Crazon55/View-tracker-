@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Waves, Search, BookOpen, Instagram, ChevronDown, ChevronUp, Trash2, CheckCircle, RotateCcw, ExternalLink, Loader2, AlertCircle, Heart, MessageCircle, Eye, Calendar, Globe, RefreshCw } from "lucide-react";
+import { Waves, Search, BookOpen, Instagram, ChevronDown, ChevronUp, Trash2, CheckCircle, RotateCcw, ExternalLink, Loader2, AlertCircle, Heart, MessageCircle, Eye, Calendar, Globe, RefreshCw, X, Plus } from "lucide-react";
 import { toast } from "sonner";
 import {
   getBlueOceanIdeas,
@@ -661,6 +661,20 @@ function InstagramTab() {
   const [accountsText, setAccountsText] = useState(
     "marketing.stories\nwealth\nrupees\nmarketing.growmatics\nonevisionmedia.in\nstartup.pedia\nresearchinandout"
   );
+  const [newAccountInput, setNewAccountInput] = useState("");
+  const accountsList = accountsText.split("\n").map((a) => a.trim().replace(/^@/, "")).filter(Boolean);
+
+  function addAccount() {
+    const handle = newAccountInput.trim().replace(/^@/, "");
+    if (!handle || accountsList.includes(handle)) return;
+    setAccountsText([...accountsList, handle].join("\n"));
+    setNewAccountInput("");
+  }
+
+  function removeAccount(handle: string) {
+    setAccountsText(accountsList.filter((a) => a !== handle).join("\n"));
+  }
+
   const [dateFrom, setDateFrom] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
@@ -755,65 +769,70 @@ function InstagramTab() {
   return (
     <div className="space-y-8">
       {/* Scrape form */}
-      <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
-        {/* Account input */}
-        <div className="space-y-2">
-          <div className="flex flex-wrap gap-2">
-            {accountsText && (
-              <button
-                onClick={() => setAccountsText("")}
-                className="text-xs px-3 py-1.5 rounded-lg border border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
-              >
-                Clear
+      <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-3">
+
+        {/* Accounts row */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[10px] text-zinc-600 uppercase tracking-widest mr-1 shrink-0">Accounts</span>
+          {accountsList.map((handle) => (
+            <span key={handle} className="flex items-center gap-1 pl-2.5 pr-1.5 py-1 bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs rounded-full">
+              @{handle}
+              <button onClick={() => removeAccount(handle)} className="text-zinc-600 hover:text-red-400 transition-colors ml-0.5">
+                <X className="w-3 h-3" />
               </button>
-            )}
+            </span>
+          ))}
+          {/* Inline add */}
+          <div className="flex items-center gap-1 bg-zinc-800 border border-zinc-700 rounded-full pl-3 pr-1.5 py-1">
+            <input
+              value={newAccountInput}
+              onChange={(e) => setNewAccountInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addAccount()}
+              placeholder="add account…"
+              className="bg-transparent text-xs text-white placeholder-zinc-600 outline-none w-24"
+            />
+            <button onClick={addAccount} disabled={!newAccountInput.trim()}
+              className="text-zinc-600 hover:text-violet-400 disabled:opacity-30 transition-colors">
+              <Plus className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-1">
-            <label className="block text-xs text-zinc-400 mb-1.5">Instagram accounts to scrape</label>
-            <textarea
-              value={accountsText}
-              onChange={(e) => setAccountsText(e.target.value)}
-              placeholder={"@zerodhaonline\n@financewithsharan\n@thefinancestory"}
-              rows={5}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-violet-500 resize-none"
-            />
-            <p className="text-[10px] text-zinc-600 mt-1">One handle per line, @ optional</p>
+        {/* Controls row */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Date range */}
+          <div className="flex items-center gap-1.5 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5">
+            <span className="text-[10px] text-zinc-500 shrink-0">From</span>
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+              className="bg-transparent text-xs text-white focus:outline-none" />
           </div>
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs text-zinc-400 mb-1.5">From date</label>
-              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500" />
-            </div>
-            <div>
-              <label className="block text-xs text-zinc-400 mb-1.5">To date</label>
-              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500" />
-            </div>
+          <div className="flex items-center gap-1.5 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5">
+            <span className="text-[10px] text-zinc-500 shrink-0">To</span>
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+              className="bg-transparent text-xs text-white focus:outline-none" />
           </div>
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs text-zinc-400 mb-1.5">Post type</label>
-              <select value={postTypeFilter} onChange={(e) => setPostTypeFilter(e.target.value)}
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none">
-                <option value="all">All</option>
-                <option value="carousels">Carousels only</option>
-                <option value="statics">Statics only</option>
-              </select>
-            </div>
-            <button
-              onClick={() => scrapeMut.mutate()}
-              disabled={scrapeMut.isPending || !accountsText.trim()}
-              className="w-full flex items-center justify-center gap-2 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors"
-            >
-              {scrapeMut.isPending
-                ? <><Loader2 className="w-4 h-4 animate-spin" />Running on Apify…</>
-                : <><Search className="w-4 h-4" />Run Scrape</>}
-            </button>
+
+          {/* Post type segment */}
+          <div className="flex items-center bg-zinc-800 border border-zinc-700 rounded-lg p-0.5">
+            {([["all", "All"], ["carousels", "Carousels"], ["statics", "Statics"]] as const).map(([val, label]) => (
+              <button key={val} onClick={() => setPostTypeFilter(val)}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                  postTypeFilter === val ? "bg-zinc-700 text-white" : "text-zinc-500 hover:text-zinc-300"
+                }`}>
+                {label}
+              </button>
+            ))}
           </div>
+
+          <button
+            onClick={() => scrapeMut.mutate()}
+            disabled={scrapeMut.isPending || !accountsText.trim()}
+            className="ml-auto flex items-center gap-2 px-4 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold rounded-lg transition-colors"
+          >
+            {scrapeMut.isPending
+              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Running…</>
+              : <><Search className="w-3.5 h-3.5" />Run Scrape</>}
+          </button>
         </div>
 
         {scrapeMut.isPending && (
@@ -824,19 +843,19 @@ function InstagramTab() {
         )}
 
         {scrapeMut.isError && (
-          <div className="flex items-center gap-2 text-red-400 text-sm">
-            <AlertCircle className="w-4 h-4" />{(scrapeMut.error as any)?.message || "Scrape failed"}
+          <div className="flex items-center gap-2 text-red-400 text-xs">
+            <AlertCircle className="w-3.5 h-3.5" />{(scrapeMut.error as any)?.message || "Scrape failed"}
           </div>
         )}
 
         {jobs.length > 0 && (
           <div>
-            <p className="text-xs text-zinc-500 mb-2">Past scrape jobs</p>
-            <div className="flex flex-wrap gap-2">
+            <p className="text-[10px] text-zinc-600 uppercase tracking-widest mb-2">Past jobs</p>
+            <div className="flex flex-wrap gap-1.5">
               {jobs.slice(0, 8).map((job) => (
                 <button key={job.id}
                   onClick={() => setSelectedJobId(selectedJobId === job.id ? null : job.id)}
-                  className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                  className={`text-[11px] px-2.5 py-1 rounded-lg border transition-colors ${
                     selectedJobId === job.id
                       ? "bg-violet-500/20 border-violet-500/50 text-violet-300"
                       : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white"
