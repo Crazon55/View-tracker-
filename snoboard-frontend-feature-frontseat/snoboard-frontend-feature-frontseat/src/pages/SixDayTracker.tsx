@@ -541,7 +541,7 @@ function CycleCard({
 }
 
 
-/* ──────── IP row: weekly inputs + topline links (same card) ──────── */
+/* ──────── IP row: collapsible accordion per page ──────── */
 function IPDropdown({
   page, cycle, monthDate, selectedMonth, qc, userEmail, onDataChange,
 }: {
@@ -553,6 +553,7 @@ function IPDropdown({
   userEmail: string;
   onDataChange: () => void;
 }) {
+  const [open, setOpen] = useState(false);
   const [addMode, setAddMode] = useState(false);
   const [newLink, setNewLink] = useState("");
   const [newViews, setNewViews] = useState("");
@@ -571,29 +572,31 @@ function IPDropdown({
 
   const rowKey = `${selectedMonth}|${cycle.cycle}|${page.id}`;
   const rowKeyRef = useRef("");
-  /** True once we've seen a server row for this IP/cycle — used to ignore brief `entry === undefined` during refetch. */
   const sawServerEntryRef = useRef(false);
+  // Track last-hydrated values so we can detect unsaved changes on collapse
+  const savedValRef = useRef({ weekViews: "0", reelPctStr: "", postPctStr: "", reelPerfStr: "", postPerfStr: "" });
 
-  /**
-   * Hydrate inputs from `entry` when switching IP/cycle/month, or when a row first appears.
-   * Do not reset when `entry` flickers undefined mid-refetch (same row) — that was clearing Reel/Post %.
-   */
   useEffect(() => {
     if (rowKeyRef.current !== rowKey) {
       rowKeyRef.current = rowKey;
       sawServerEntryRef.current = false;
     }
-
-    if (sawServerEntryRef.current && !entry) {
-      return;
-    }
+    if (sawServerEntryRef.current && !entry) return;
     if (entry) sawServerEntryRef.current = true;
 
-    setWeekViews(String((entry?.views as number | undefined) ?? 0));
-    setReelPctStr(entry?.reel_pct != null && entry.reel_pct !== "" ? String(entry.reel_pct) : "");
-    setPostPctStr(entry?.post_pct != null && entry.post_pct !== "" ? String(entry.post_pct) : "");
-    setReelPerfStr(entry?.reel_perf != null && entry.reel_perf !== "" ? String(entry.reel_perf) : "");
-    setPostPerfStr(entry?.post_perf != null && entry.post_perf !== "" ? String(entry.post_perf) : "");
+    const vals = {
+      weekViews: String((entry?.views as number | undefined) ?? 0),
+      reelPctStr: entry?.reel_pct != null && entry.reel_pct !== "" ? String(entry.reel_pct) : "",
+      postPctStr: entry?.post_pct != null && entry.post_pct !== "" ? String(entry.post_pct) : "",
+      reelPerfStr: entry?.reel_perf != null && entry.reel_perf !== "" ? String(entry.reel_perf) : "",
+      postPerfStr: entry?.post_perf != null && entry.post_perf !== "" ? String(entry.post_perf) : "",
+    };
+    setWeekViews(vals.weekViews);
+    setReelPctStr(vals.reelPctStr);
+    setPostPctStr(vals.postPctStr);
+    setReelPerfStr(vals.reelPerfStr);
+    setPostPerfStr(vals.postPerfStr);
+    savedValRef.current = vals;
   }, [rowKey, entry, page.id, cycle.cycle, selectedMonth]);
 
   function parseOptionalPct(s: string): number | null {
@@ -615,9 +618,7 @@ function IPDropdown({
   const upsertEntryMut = useMutation({
     mutationFn: (data: Record<string, any>) => upsertSixDayEntry(data),
     onSuccess: (saved: any) => {
-      // Instant UI: merge row locally so inputs don’t blank during refetch.
       patchSixDayEntryInCache(qc, selectedMonth, saved);
-      // Restore full refresh (was dropped briefly): month totals, page_summaries, reconcile tab, growth charts.
       onDataChange();
     },
   });
@@ -641,217 +642,237 @@ function IPDropdown({
     upsertEntryMut.mutate(entryPayload(overrides));
   }
 
+  /** Detect if local state diverges from last-saved server state */
+  function isDirty() {
+    const s = savedValRef.current;
+    return (
+      weekViews !== s.weekViews ||
+      reelPctStr !== s.reelPctStr ||
+      postPctStr !== s.postPctStr ||
+      reelPerfStr !== s.reelPerfStr ||
+      postPerfStr !== s.postPerfStr
+    );
+  }
+
+  /** Auto-save on collapse so no data is lost when row closes */
+  function handleToggle() {
+    if (open && isDirty()) saveEntry();
+    setOpen(!open);
+  }
+
   const createMut = useMutation({
     mutationFn: createSixDayTopContent,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["six-day-month"] });
       onDataChange();
-      setNewLink("");
-      setNewViews("");
-      setNewType("reel");
-      setAddMode(false);
+      setNewLink(""); setNewViews(""); setNewType("reel"); setAddMode(false);
     },
   });
 
   const updateMut = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Record<string, any> }) =>
-      updateSixDayTopContent(id, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["six-day-month"] });
-      onDataChange();
-    },
+    mutationFn: ({ id, data }: { id: string; data: Record<string, any> }) => updateSixDayTopContent(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["six-day-month"] }); onDataChange(); },
   });
 
   const deleteMut = useMutation({
     mutationFn: deleteSixDayTopContent,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["six-day-month"] });
-      onDataChange();
-    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["six-day-month"] }); onDataChange(); },
   });
 
   function handleAdd() {
     if (!newLink) return;
     createMut.mutate({
-      month: monthDate,
-      cycle_number: cycle.cycle,
-      link: newLink,
-      views: Number(newViews) || 0,
-      page_id: page.id,
-      page_handle: page.handle,
-      content_type: newType,
+      month: monthDate, cycle_number: cycle.cycle, link: newLink,
+      views: Number(newViews) || 0, page_id: page.id, page_handle: page.handle, content_type: newType,
     });
   }
 
   const hasData = !!entry || toplineItems.length > 0;
+  const views = entry?.views || 0;
 
   return (
-    <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/30">
-      <div className="p-3 sm:p-4 space-y-3">
-        <div className="flex flex-col xl:flex-row xl:items-end gap-3 xl:gap-2">
-          <div className="flex items-center gap-2 min-w-0 xl:w-[200px] shrink-0">
-            <div className={`w-2 h-2 rounded-full shrink-0 ${hasData ? "bg-emerald-400" : "bg-zinc-700"}`} />
-            <div className="min-w-0">
-              <span className="text-white font-semibold text-sm truncate block">{page.name || page.handle}</span>
-              <span className="text-zinc-600 text-[10px]">@{page.handle}</span>
-            </div>
-          </div>
+    <div className={`border rounded-xl overflow-hidden transition-all ${
+      open ? "border-zinc-700" : hasData ? "border-zinc-800/80" : "border-zinc-800/40"
+    } bg-zinc-900/40`}>
 
-          <div className="flex flex-wrap items-end gap-x-2 gap-y-2 flex-1 xl:justify-end">
-            <div className="w-[7.5rem] shrink-0">
-              <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Total</p>
-              <Input
-                type="number"
-                min={0}
-                value={weekViews}
-                onChange={(e) => setWeekViews(e.target.value)}
-                onBlur={() => saveEntry()}
-                disabled={upsertEntryMut.isPending}
-                className="h-7 text-xs bg-zinc-800 border-zinc-700 text-white tabular-nums px-2"
-              />
-            </div>
-            <div className="w-[3.75rem] shrink-0">
-              <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Reel %</p>
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                value={reelPctStr}
-                onChange={(e) => setReelPctStr(e.target.value)}
-                onBlur={() => saveEntry()}
-                disabled={upsertEntryMut.isPending}
-                className="h-7 text-xs bg-zinc-800 border-zinc-700 text-purple-300 tabular-nums px-2"
-              />
-            </div>
-            <div className="w-[3.75rem] shrink-0">
-              <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Post %</p>
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                value={postPctStr}
-                onChange={(e) => setPostPctStr(e.target.value)}
-                onBlur={() => saveEntry()}
-                disabled={upsertEntryMut.isPending}
-                className="h-7 text-xs bg-zinc-800 border-zinc-700 text-emerald-300 tabular-nums px-2"
-              />
-            </div>
-            <div className="w-[5.5rem] shrink-0">
-              <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Reel baseline</p>
-              <Input
-                type="number"
-                step="0.01"
-                value={reelPerfStr}
-                onChange={(e) => setReelPerfStr(e.target.value)}
-                onBlur={() => saveEntry()}
-                disabled={upsertEntryMut.isPending}
-                className="h-7 text-xs bg-zinc-800 border-zinc-700 text-white tabular-nums px-2"
-              />
-            </div>
-            <div className="w-[5.5rem] shrink-0">
-              <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Post baseline</p>
-              <Input
-                type="number"
-                step="0.01"
-                value={postPerfStr}
-                onChange={(e) => setPostPerfStr(e.target.value)}
-                onBlur={() => saveEntry()}
-                disabled={upsertEntryMut.isPending}
-                className="h-7 text-xs bg-zinc-800 border-zinc-700 text-white tabular-nums px-2"
-              />
-            </div>
-          </div>
+      {/* ── Collapsed header row ── */}
+      <button
+        onClick={handleToggle}
+        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.02] transition-colors group"
+      >
+        {/* Status dot */}
+        <div className={`w-2 h-2 rounded-full shrink-0 transition-colors ${
+          hasData ? "bg-emerald-400" : "bg-zinc-700 group-hover:bg-zinc-600"
+        }`} />
+
+        {/* Name + handle */}
+        <div className="flex-1 min-w-0 flex items-center gap-2.5">
+          <span className="text-white font-semibold text-sm truncate">{page.name || page.handle}</span>
+          <span className="text-zinc-600 text-xs shrink-0">@{page.handle}</span>
         </div>
 
-        <div className="border-t border-zinc-800/90 pt-3 space-y-2">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <p className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">
-              Topline posts / reels
-            </p>
-            {toplineItems.length > 0 && (
-              <span className="text-[10px] text-zinc-500">
-                Sum of link views: <span className="text-zinc-300 font-bold tabular-nums">{fmt(toplineViewsSum)}</span>
+        {/* Summary stats (only when collapsed) */}
+        {!open && (
+          <div className="flex items-center gap-3 shrink-0">
+            {views > 0 && (
+              <span className="text-white font-bold text-sm tabular-nums">{fmt(views)}</span>
+            )}
+            {reelPctStr && (
+              <span className="text-[10px] bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded-full tabular-nums">
+                R {reelPctStr}%
               </span>
             )}
+            {postPctStr && (
+              <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full tabular-nums">
+                P {postPctStr}%
+              </span>
+            )}
+            {toplineItems.length > 0 && (
+              <span className="text-[10px] bg-zinc-800 text-zinc-500 px-2 py-0.5 rounded-full">
+                {toplineItems.length} link{toplineItems.length !== 1 ? "s" : ""}
+              </span>
+            )}
+            {upsertEntryMut.isPending && (
+              <span className="text-[10px] text-violet-400">saving…</span>
+            )}
           </div>
+        )}
 
-          {toplineItems.length > 0 && (
-            <div className="space-y-1.5 rounded-lg border border-zinc-800/80 bg-zinc-950/40 p-2">
-              {toplineItems
-                .slice()
-                .sort((a: any, b: any) => (b.views || 0) - (a.views || 0))
-                .map((item: any) => (
-                  <ContentItemRow
-                    key={item.id}
-                    item={item}
-                    onUpdate={(data) => updateMut.mutate({ id: item.id, data })}
-                    onDelete={() => deleteMut.mutate(item.id)}
+        <ChevronDown className={`w-4 h-4 text-zinc-600 shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {/* ── Expanded content ── */}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="overflow-hidden"
+          >
+            <div className="border-t border-zinc-800 px-4 py-4 space-y-4">
+
+              {/* Input grid */}
+              <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
+                <div className="w-[7.5rem] shrink-0">
+                  <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Total</p>
+                  <Input type="number" min={0} value={weekViews}
+                    onChange={(e) => setWeekViews(e.target.value)}
+                    onBlur={() => saveEntry()}
+                    disabled={upsertEntryMut.isPending}
+                    className="h-7 text-xs bg-zinc-800 border-zinc-700 text-white tabular-nums px-2"
                   />
-                ))}
-            </div>
-          )}
-
-          {toplineItems.length === 0 && !addMode && (
-            <p className="text-xs text-zinc-600 text-center py-1">No topline links yet — add Instagram URLs below.</p>
-          )}
-
-          {addMode ? (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 space-y-2">
-              <div className="flex flex-wrap gap-2">
-                <Input
-                  value={newLink}
-                  onChange={(e) => setNewLink(e.target.value)}
-                  placeholder="Instagram link…"
-                  className="h-8 text-xs bg-zinc-800 border-zinc-700 text-white flex-1 min-w-[160px]"
-                />
-                <Input
-                  type="number"
-                  min={0}
-                  value={newViews}
-                  onChange={(e) => setNewViews(e.target.value)}
-                  placeholder="Views"
-                  className="h-8 w-32 text-xs bg-zinc-800 border-zinc-700 text-white tabular-nums"
-                />
-                <Select value={newType} onValueChange={setNewType}>
-                  <SelectTrigger className="h-8 w-[5.5rem] text-xs bg-zinc-800 border-zinc-700 text-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-zinc-800 border-zinc-700">
-                    <SelectItem value="reel" className="text-white text-xs">Reel</SelectItem>
-                    <SelectItem value="post" className="text-white text-xs">Post</SelectItem>
-                  </SelectContent>
-                </Select>
+                </div>
+                <div className="w-[3.75rem] shrink-0">
+                  <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Reel %</p>
+                  <Input type="number" min={0} max={100} value={reelPctStr}
+                    onChange={(e) => setReelPctStr(e.target.value)}
+                    onBlur={() => saveEntry()}
+                    disabled={upsertEntryMut.isPending}
+                    className="h-7 text-xs bg-zinc-800 border-zinc-700 text-purple-300 tabular-nums px-2"
+                  />
+                </div>
+                <div className="w-[3.75rem] shrink-0">
+                  <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Post %</p>
+                  <Input type="number" min={0} max={100} value={postPctStr}
+                    onChange={(e) => setPostPctStr(e.target.value)}
+                    onBlur={() => saveEntry()}
+                    disabled={upsertEntryMut.isPending}
+                    className="h-7 text-xs bg-zinc-800 border-zinc-700 text-emerald-300 tabular-nums px-2"
+                  />
+                </div>
+                <div className="w-[5.5rem] shrink-0">
+                  <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Reel baseline</p>
+                  <Input type="number" step="0.01" value={reelPerfStr}
+                    onChange={(e) => setReelPerfStr(e.target.value)}
+                    onBlur={() => saveEntry()}
+                    disabled={upsertEntryMut.isPending}
+                    className="h-7 text-xs bg-zinc-800 border-zinc-700 text-white tabular-nums px-2"
+                  />
+                </div>
+                <div className="w-[5.5rem] shrink-0">
+                  <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Post baseline</p>
+                  <Input type="number" step="0.01" value={postPerfStr}
+                    onChange={(e) => setPostPerfStr(e.target.value)}
+                    onBlur={() => saveEntry()}
+                    disabled={upsertEntryMut.isPending}
+                    className="h-7 text-xs bg-zinc-800 border-zinc-700 text-white tabular-nums px-2"
+                  />
+                </div>
+                {upsertEntryMut.isPending && (
+                  <span className="text-[10px] text-violet-400 self-end pb-1">saving…</span>
+                )}
               </div>
-              <div className="flex justify-end gap-2">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => { setAddMode(false); setNewLink(""); setNewViews(""); }}
-                  className="h-7 text-xs text-zinc-400"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={handleAdd}
-                  disabled={!newLink || createMut.isPending}
-                  className="h-7 text-xs bg-violet-600 hover:bg-violet-700"
-                >
-                  {createMut.isPending ? "Adding…" : "Add link"}
-                </Button>
+
+              {/* Topline links */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] uppercase tracking-wider text-zinc-600 font-semibold">Topline posts / reels</p>
+                  {toplineItems.length > 0 && (
+                    <span className="text-[10px] text-zinc-500">
+                      Sum: <span className="text-zinc-300 font-bold tabular-nums">{fmt(toplineViewsSum)}</span>
+                    </span>
+                  )}
+                </div>
+
+                {toplineItems.length > 0 && (
+                  <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/40 p-2 space-y-1.5">
+                    {toplineItems.slice().sort((a: any, b: any) => (b.views || 0) - (a.views || 0)).map((item: any) => (
+                      <ContentItemRow key={item.id} item={item}
+                        onUpdate={(data) => updateMut.mutate({ id: item.id, data })}
+                        onDelete={() => deleteMut.mutate(item.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {addMode ? (
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 space-y-2">
+                    <div className="flex flex-wrap gap-2">
+                      <Input value={newLink} onChange={(e) => setNewLink(e.target.value)}
+                        placeholder="Instagram link…"
+                        className="h-8 text-xs bg-zinc-800 border-zinc-700 text-white flex-1 min-w-[160px]"
+                      />
+                      <Input type="number" min={0} value={newViews} onChange={(e) => setNewViews(e.target.value)}
+                        placeholder="Views"
+                        className="h-8 w-32 text-xs bg-zinc-800 border-zinc-700 text-white tabular-nums"
+                      />
+                      <Select value={newType} onValueChange={setNewType}>
+                        <SelectTrigger className="h-8 w-[5.5rem] text-xs bg-zinc-800 border-zinc-700 text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-zinc-800 border-zinc-700">
+                          <SelectItem value="reel" className="text-white text-xs">Reel</SelectItem>
+                          <SelectItem value="post" className="text-white text-xs">Post</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button size="sm" variant="ghost"
+                        onClick={() => { setAddMode(false); setNewLink(""); setNewViews(""); }}
+                        className="h-7 text-xs text-zinc-400"
+                      >Cancel</Button>
+                      <Button size="sm" onClick={handleAdd}
+                        disabled={!newLink || createMut.isPending}
+                        className="h-7 text-xs bg-violet-600 hover:bg-violet-700"
+                      >
+                        {createMut.isPending ? "Adding…" : "Add link"}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => setAddMode(true)}
+                    className="flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add topline link
+                  </button>
+                )}
               </div>
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setAddMode(true)}
-              className="flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" /> Add topline link
-            </button>
-          )}
-        </div>
-      </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
