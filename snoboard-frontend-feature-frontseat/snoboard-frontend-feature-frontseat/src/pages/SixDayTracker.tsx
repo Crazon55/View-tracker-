@@ -209,29 +209,32 @@ export default function SixDayTracker() {
   return (
     <div className="min-h-screen bg-zinc-950 pt-20 pb-12 px-4 sm:px-6">
       <div className="max-w-6xl mx-auto">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-          <div className="flex items-center gap-4">
-            <img
-              src="/rabbit.webp"
-              alt="late rabbit"
-              className="w-24 h-24 rounded-full object-cover object-top opacity-90 shrink-0"
-            />
+
+        {/* ── Header ── */}
+        <div className="flex items-start justify-between gap-4 mb-8">
+          <div className="flex items-center gap-5">
+            <div className="relative shrink-0">
+              <img
+                src="/rabbit.webp"
+                alt="late rabbit"
+                className="w-20 h-20 rounded-2xl object-cover object-top"
+              />
+              <div className="absolute inset-0 rounded-2xl ring-1 ring-white/10" />
+            </div>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-black text-white uppercase tracking-wider">
+              <h1 className="text-3xl font-black text-white uppercase tracking-tight leading-none">
                 6-Day Tracker
               </h1>
-              <p className="text-sm text-zinc-500 mt-1">
-                Auto-cycles from the 1st of every month
-              </p>
+              <p className="text-sm text-zinc-500 mt-1.5">Auto-cycles from the 1st of every month</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="inline-flex items-center bg-zinc-800/80 rounded-full p-0.5 gap-0.5">
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="inline-flex items-center bg-zinc-900 border border-zinc-800 rounded-xl p-1 gap-0.5">
               {(["cycles", "reconcile"] as TabMode[]).map((v) => (
                 <button
                   key={v}
                   onClick={() => setTab(v)}
-                  className={`text-[10px] uppercase tracking-wider px-4 py-1.5 rounded-full font-medium transition-all ${
+                  className={`text-[11px] uppercase tracking-wider px-4 py-2 rounded-lg font-semibold transition-all ${
                     tab === v
                       ? "bg-violet-600 text-white shadow-lg shadow-violet-600/25"
                       : "text-zinc-500 hover:text-zinc-300"
@@ -244,14 +247,18 @@ export default function SixDayTracker() {
           </div>
         </div>
 
+        {/* ── Overdue warning ── */}
         {overdueCycles.length > 0 && (
-          <div className="mb-5 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+          <div className="mb-5 bg-amber-500/8 border border-amber-500/25 rounded-2xl px-5 py-4 flex items-center gap-4">
+            <div className="relative shrink-0">
+              <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+              <div className="absolute inset-0 rounded-full bg-amber-500 animate-ping opacity-60" />
+            </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-amber-300">
                 {overdueCycles.length} cycle{overdueCycles.length > 1 ? "s" : ""} overdue
               </p>
-              <p className="text-xs text-amber-400/70 mt-0.5">
+              <p className="text-xs text-amber-500/70 mt-0.5">
                 {overdueCycles.map((c: any) =>
                   `Cycle ${c.cycle} (${fmtShort(c.start)}–${fmtShort(c.end)}): ${c.missing_count} IPs unfilled`
                 ).join(" · ")}
@@ -260,45 +267,53 @@ export default function SixDayTracker() {
           </div>
         )}
 
-        <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => shiftMonth(-1)} className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors">
-            <ChevronLeft className="w-5 h-5" />
+        {/* ── Month nav + total views ── */}
+        <div className="flex items-center gap-0 mb-6">
+          <button onClick={() => shiftMonth(-1)} className="p-2.5 rounded-xl hover:bg-zinc-800 text-zinc-500 hover:text-white transition-colors">
+            <ChevronLeft className="w-4 h-4" />
           </button>
-          <h2 className="text-lg font-bold text-white min-w-[180px] text-center">{monthLabel}</h2>
-          <button onClick={() => shiftMonth(1)} className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors">
-            <ChevronRight className="w-5 h-5" />
+          <h2 className="text-base font-bold text-white w-40 text-center">{monthLabel}</h2>
+          <button onClick={() => shiftMonth(1)} className="p-2.5 rounded-xl hover:bg-zinc-800 text-zinc-500 hover:text-white transition-colors">
+            <ChevronRight className="w-4 h-4" />
           </button>
-          <Badge variant="outline" className="border-zinc-700 text-zinc-400 text-xs ml-2">
-            {fmt(totalCycleViews)} total views
-          </Badge>
-          {monthFetching && (
-            <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Updating…</span>
-          )}
+          <div className="ml-4 flex items-baseline gap-1.5">
+            <span className="text-2xl font-black text-white tabular-nums">{fmt(totalCycleViews)}</span>
+            <span className="text-xs text-zinc-500 font-medium">total views</span>
+            {monthFetching && <span className="text-[10px] text-zinc-600 ml-2">updating…</span>}
+          </div>
+          {/* Month-end action — right side */}
+          <button
+            onClick={() => setTab("reconcile")}
+            className={`ml-auto text-xs font-semibold px-4 py-2 rounded-xl border transition-all ${
+              tab === "reconcile"
+                ? "bg-violet-600/20 border-violet-500/40 text-violet-300"
+                : "border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-700"
+            }`}
+          >
+            Month-end correction
+          </button>
         </div>
 
-        {/* Niche filter (multi-select: click to toggle, All clears) */}
+        {/* ── Niche filter ── */}
         <div className="mb-5 flex flex-wrap items-center gap-2">
-          <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold mr-1">
+          <span className="text-[10px] uppercase tracking-widest text-zinc-600 font-semibold mr-1">
             Filter by niche
           </span>
           <button
             onClick={clearNiche}
-            className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-full border text-xs font-bold transition-all ${
+            className={`inline-flex items-center gap-1.5 h-7 px-3 rounded-full text-xs font-bold transition-all ${
               isAllActive
-                ? "bg-violet-600 text-white border-violet-500 shadow-lg shadow-violet-600/20"
-                : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700"
+                ? "bg-violet-600 text-white shadow-md shadow-violet-600/30"
+                : "bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white"
             }`}
           >
-            <span>All</span>
-            <span className={`text-[10px] tabular-nums ${isAllActive ? "opacity-80" : "text-zinc-500"}`}>
-              {nicheCounts.all}
-            </span>
+            All <span className={`tabular-nums text-[10px] ${isAllActive ? "opacity-75" : "text-zinc-600"}`}>{nicheCounts.all}</span>
           </button>
           {([
-            { key: "garfields", label: "Garfields", emoji: "🐱", count: nicheCounts.garfields, active: "bg-gradient-to-r from-orange-500 to-amber-500 text-zinc-900 border-orange-400 shadow-lg shadow-orange-500/25" },
-            { key: "goofies", label: "Goofies", emoji: "🐶", count: nicheCounts.goofies, active: "bg-gradient-to-r from-sky-500 to-indigo-500 text-white border-indigo-400 shadow-lg shadow-indigo-500/25" },
-            { key: "sheruses", label: "The Sherus", emoji: "🦁", count: nicheCounts.sheruses, active: "bg-gradient-to-r from-rose-500 to-pink-500 text-white border-rose-400 shadow-lg shadow-rose-500/25" },
-            { key: "tech", label: "Tech", emoji: "💻", count: nicheCounts.tech, active: "bg-gradient-to-r from-emerald-500 to-teal-500 text-zinc-900 border-emerald-400 shadow-lg shadow-emerald-500/25" },
+            { key: "garfields", label: "Garfields", emoji: "🐱", count: nicheCounts.garfields, active: "bg-gradient-to-r from-orange-500 to-amber-500 text-zinc-900 shadow-md shadow-orange-500/30" },
+            { key: "goofies", label: "Goofies", emoji: "🐶", count: nicheCounts.goofies, active: "bg-gradient-to-r from-sky-500 to-indigo-500 text-white shadow-md shadow-indigo-500/30" },
+            { key: "sheruses", label: "The Sherus", emoji: "🦁", count: nicheCounts.sheruses, active: "bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-md shadow-rose-500/30" },
+            { key: "tech", label: "Tech", emoji: "💻", count: nicheCounts.tech, active: "bg-gradient-to-r from-emerald-500 to-teal-500 text-zinc-900 shadow-md shadow-emerald-500/30" },
           ] as const).map((opt) => {
             const isActive = nicheFilterSet.has(opt.key);
             return (
@@ -306,53 +321,21 @@ export default function SixDayTracker() {
                 key={opt.key}
                 onClick={() => toggleNiche(opt.key)}
                 aria-pressed={isActive}
-                className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-full border text-xs font-bold transition-all ${
-                  isActive
-                    ? opt.active
-                    : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700"
+                className={`inline-flex items-center gap-1.5 h-7 px-3 rounded-full text-xs font-bold transition-all ${
+                  isActive ? opt.active : "bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white"
                 }`}
               >
-                {opt.emoji && <span aria-hidden>{opt.emoji}</span>}
-                <span>{opt.label}</span>
-                <span className={`text-[10px] tabular-nums ${isActive ? "opacity-80" : "text-zinc-500"}`}>
-                  {opt.count}
-                </span>
+                <span aria-hidden>{opt.emoji}</span>
+                {opt.label}
+                <span className={`tabular-nums text-[10px] ${isActive ? "opacity-75" : "text-zinc-600"}`}>{opt.count}</span>
               </button>
             );
           })}
-          {!isAllActive && (
-            <span className="text-[11px] text-zinc-500 ml-1">
-              Showing <span className="text-white font-semibold">{pages.length}</span> account{pages.length === 1 ? "" : "s"}
-              <button
-                onClick={clearNiche}
-                className="ml-2 text-[10px] uppercase tracking-wider text-zinc-500 hover:text-white underline-offset-2 hover:underline"
-              >
-                Clear
-              </button>
-            </span>
-          )}
           {nicheCounts.none > 0 && isAllActive && (
-            <span className="text-[10px] text-zinc-600 ml-auto italic">
-              {nicheCounts.none} account{nicheCounts.none === 1 ? "" : "s"} not in a niche yet
+            <span className="text-[10px] text-zinc-700 ml-auto">
+              {nicheCounts.none} not in a niche yet
             </span>
           )}
-        </div>
-
-        <div className="mb-5 rounded-xl border border-zinc-800 bg-zinc-900/80 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <p className="text-sm text-zinc-400">
-            <span className="text-white font-medium">Month-end:</span> Enter Instagram dashboard totals to fix drift vs cycle sums. Same numbers feed the <span className="text-violet-400">Growth</span> chart after you save.
-          </p>
-          <Button
-            type="button"
-            variant="default"
-            size="sm"
-            className={`shrink-0 border-0 bg-violet-600 text-white shadow-lg shadow-violet-600/20 hover:bg-violet-700 ${
-              tab === "reconcile" ? "ring-2 ring-violet-400/40" : ""
-            }`}
-            onClick={() => setTab("reconcile")}
-          >
-            Open month-end correction
-          </Button>
         </div>
 
         {pagesPending && pages.length === 0 ? (
@@ -464,58 +447,66 @@ function CycleCard({
     return filled.size;
   })();
 
-  const statusIcon = cycle.status === "done"
-    ? <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+  const accent = cycle.status === "done"
+    ? { bar: "bg-emerald-500", glow: "shadow-emerald-500/10", border: "border-emerald-500/15", badge: "bg-emerald-500/15 text-emerald-400", progress: "bg-emerald-500" }
     : cycle.status === "active"
-      ? <Clock className="w-4 h-4 text-amber-400" />
-      : <Clock className="w-4 h-4 text-zinc-600" />;
+      ? { bar: "bg-amber-500", glow: "shadow-amber-500/10", border: "border-amber-500/20", badge: "bg-amber-500/15 text-amber-400", progress: "bg-amber-500" }
+      : { bar: "bg-zinc-700", glow: "", border: "border-zinc-800", badge: "bg-zinc-800 text-zinc-500", progress: "bg-zinc-700" };
 
-  const statusColor = cycle.status === "done"
-    ? "border-emerald-500/20"
-    : cycle.status === "active"
-      ? "border-amber-500/30"
-      : "border-zinc-800";
+  const fillPct = pages.length > 0 ? Math.round((filledCount / pages.length) * 100) : 0;
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`bg-zinc-900 border ${statusColor} rounded-2xl overflow-hidden`}
+      className={`relative bg-zinc-900 border ${accent.border} rounded-2xl overflow-hidden shadow-lg ${accent.glow}`}
     >
+      {/* Left accent bar */}
+      <div className={`absolute left-0 top-0 bottom-0 w-[3px] ${accent.bar}`} />
+
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between p-5 sm:p-6 text-left hover:bg-zinc-800/30 transition-colors"
+        className="w-full flex items-center justify-between pl-6 pr-5 py-5 text-left hover:bg-white/[0.02] transition-colors"
       >
-        <div className="flex items-center gap-3">
-          {statusIcon}
+        <div className="flex items-center gap-4">
+          {cycle.status === "done"
+            ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            : cycle.status === "active"
+              ? <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+              : <Clock className="w-4 h-4 text-zinc-600 shrink-0" />}
           <div>
-            <span className="text-white font-bold text-sm sm:text-base">
-              Cycle {cycle.cycle}
-            </span>
-            <span className="text-zinc-500 text-sm ml-3">
-              {fmtShort(cycle.start)} — {fmtShort(cycle.end)}
-            </span>
+            <span className="text-white font-bold text-base">Cycle {cycle.cycle}</span>
+            <span className="text-zinc-500 text-xs ml-3">{fmtShort(cycle.start)} — {fmtShort(cycle.end)}</span>
           </div>
-          <Badge variant="outline" className={`text-[10px] ml-2 ${
-            cycle.status === "done" ? "border-emerald-500/30 text-emerald-400"
-              : cycle.status === "active" ? "border-amber-500/30 text-amber-400"
-                : "border-zinc-700 text-zinc-500"
-          }`}>
+          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${accent.badge}`}>
             {cycle.status === "done" ? "Done" : cycle.status === "active" ? "Active" : "Upcoming"}
-          </Badge>
+          </span>
         </div>
-        <div className="flex items-center gap-5">
+
+        <div className="flex items-center gap-8">
+          {/* Views */}
           <div className="text-right hidden sm:block">
-            <p className="text-xs text-zinc-500">Views</p>
-            <p className="text-lg font-black text-white tabular-nums">{fmt(totalViews)}</p>
+            <p className="text-[10px] uppercase tracking-wider text-zinc-600 mb-0.5">Views</p>
+            <p className="text-xl font-black text-white tabular-nums leading-none">{fmt(totalViews)}</p>
           </div>
-          <div className="hidden sm:block text-right">
-            <p className="text-xs text-zinc-500">IPs Filled</p>
-            <p className="text-sm font-bold text-zinc-300">
-              {filledCount}/{pages.length}
+
+          {/* IPs Filled + progress bar */}
+          <div className="hidden sm:block text-right min-w-[80px]">
+            <p className="text-[10px] uppercase tracking-wider text-zinc-600 mb-0.5">IPs Filled</p>
+            <p className="text-sm font-bold text-white leading-none">
+              {filledCount}<span className="text-zinc-600">/{pages.length}</span>
             </p>
+            <div className="mt-2 h-1 w-20 bg-zinc-800 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${accent.progress}`}
+                style={{ width: `${fillPct}%` }}
+              />
+            </div>
           </div>
-          {expanded ? <ChevronUp className="w-5 h-5 text-zinc-500" /> : <ChevronDown className="w-5 h-5 text-zinc-500" />}
+
+          {expanded
+            ? <ChevronUp className="w-4 h-4 text-zinc-500 shrink-0" />
+            : <ChevronDown className="w-4 h-4 text-zinc-500 shrink-0" />}
         </div>
       </button>
 
