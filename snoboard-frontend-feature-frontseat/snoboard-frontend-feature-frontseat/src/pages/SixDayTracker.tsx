@@ -756,48 +756,48 @@ function IPDropdown({
               {/* Input grid */}
               <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
                 <div className="w-[7.5rem] shrink-0">
-                  <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Total</p>
+                  <p className="text-[9px] uppercase tracking-wider text-zinc-500 mb-1">Total</p>
                   <Input type="number" min={0} value={weekViews}
                     onChange={(e) => setWeekViews(e.target.value)}
                     onBlur={() => saveEntry()}
                     disabled={upsertEntryMut.isPending}
-                    className="h-7 text-xs bg-zinc-800 border-zinc-700 text-white tabular-nums px-2"
+                    className="h-8 text-xs bg-zinc-800 border-zinc-600 text-white tabular-nums px-2 focus:border-violet-500"
                   />
                 </div>
                 <div className="w-[3.75rem] shrink-0">
-                  <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Reel %</p>
+                  <p className="text-[9px] uppercase tracking-wider text-zinc-500 mb-1">Reel %</p>
                   <Input type="number" min={0} max={100} value={reelPctStr}
                     onChange={(e) => setReelPctStr(e.target.value)}
                     onBlur={() => saveEntry()}
                     disabled={upsertEntryMut.isPending}
-                    className="h-7 text-xs bg-zinc-800 border-zinc-700 text-purple-300 tabular-nums px-2"
+                    className="h-8 text-xs bg-zinc-800 border-zinc-600 text-purple-300 tabular-nums px-2 focus:border-purple-500"
                   />
                 </div>
                 <div className="w-[3.75rem] shrink-0">
-                  <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Post %</p>
+                  <p className="text-[9px] uppercase tracking-wider text-zinc-500 mb-1">Post %</p>
                   <Input type="number" min={0} max={100} value={postPctStr}
                     onChange={(e) => setPostPctStr(e.target.value)}
                     onBlur={() => saveEntry()}
                     disabled={upsertEntryMut.isPending}
-                    className="h-7 text-xs bg-zinc-800 border-zinc-700 text-emerald-300 tabular-nums px-2"
+                    className="h-8 text-xs bg-zinc-800 border-zinc-600 text-emerald-300 tabular-nums px-2 focus:border-emerald-500"
                   />
                 </div>
                 <div className="w-[5.5rem] shrink-0">
-                  <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Reel baseline</p>
+                  <p className="text-[9px] uppercase tracking-wider text-zinc-500 mb-1">Reel baseline</p>
                   <Input type="number" step="0.01" value={reelPerfStr}
                     onChange={(e) => setReelPerfStr(e.target.value)}
                     onBlur={() => saveEntry()}
                     disabled={upsertEntryMut.isPending}
-                    className="h-7 text-xs bg-zinc-800 border-zinc-700 text-white tabular-nums px-2"
+                    className="h-8 text-xs bg-zinc-800 border-zinc-600 text-white tabular-nums px-2 focus:border-violet-500"
                   />
                 </div>
                 <div className="w-[5.5rem] shrink-0">
-                  <p className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">Post baseline</p>
+                  <p className="text-[9px] uppercase tracking-wider text-zinc-500 mb-1">Post baseline</p>
                   <Input type="number" step="0.01" value={postPerfStr}
                     onChange={(e) => setPostPerfStr(e.target.value)}
                     onBlur={() => saveEntry()}
                     disabled={upsertEntryMut.isPending}
-                    className="h-7 text-xs bg-zinc-800 border-zinc-700 text-white tabular-nums px-2"
+                    className="h-8 text-xs bg-zinc-800 border-zinc-600 text-white tabular-nums px-2 focus:border-violet-500"
                   />
                 </div>
                 {upsertEntryMut.isPending && (
