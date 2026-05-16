@@ -372,6 +372,26 @@ function IdeaAssetsEditor({
   );
 }
 
+const SLIDES_BK = "slides_bk_";
+
+function readBackup(key: string): string[] | null {
+  try {
+    const raw = localStorage.getItem(SLIDES_BK + key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map((s: unknown) => String(s ?? "")) : null;
+  } catch { return null; }
+}
+
+function writeBackup(key: string, rows: string[]) {
+  try { localStorage.setItem(SLIDES_BK + key, JSON.stringify(rows)); } catch {}
+}
+
+/** True if `local` has content in a slide where `server` is empty — i.e. backup is richer. */
+function backupIsRicher(local: string[], server: string[]): boolean {
+  return local.some((s, i) => s.trim().length > 0 && !(server[i] ?? "").trim().length);
+}
+
 /** Carousel: slide dropdown + per-slide copy; saves full `slides_content` array. */
 function SlidesContentEditor({
   instanceKey,
@@ -387,34 +407,71 @@ function SlidesContentEditor({
   ls: React.CSSProperties;
 }) {
   const norm = (v: string[] | null | undefined) => (v && v.length > 0 ? v.map((s) => String(s)) : [""]);
-  const [slides, setSlides] = useState<string[]>(() => norm(value));
+  const isNew = instanceKey === "new-idea";
+
+  // Init: prefer localStorage backup over server if backup has content the server is missing
+  const [slides, setSlides] = useState<string[]>(() => {
+    const server = norm(value);
+    if (isNew) return server;
+    const bk = readBackup(instanceKey);
+    if (bk && backupIsRicher(bk, server)) return bk;
+    return server;
+  });
+
   const [sel, setSel] = useState(0);
+  const [restored, setRestored] = useState(false); // shows banner when backup was used
   const dirty = useRef(false);
-  // Track the JSON of what we last sent to the server so we can detect when the
-  // server confirms our save (valueKey matches pendingKey). Until that happens we
-  // refuse to let a background refetch overwrite local state.
   const pendingKey = useRef<string | null>(null);
   const prevInstanceKey = useRef(instanceKey);
+  const onSaveRef = useRef(onSave);
+  useEffect(() => { onSaveRef.current = onSave; });
   const valueKey = JSON.stringify(value ?? []);
 
+  // If we booted from backup, show banner and immediately re-push to server
   useEffect(() => {
-    // Switching to a different card → always hydrate fresh
+    if (isNew) return;
+    const server = norm(value);
+    const bk = readBackup(instanceKey);
+    if (bk && backupIsRicher(bk, server)) {
+      setRestored(true);
+      dirty.current = true;
+      pendingKey.current = JSON.stringify(bk);
+      onSaveRef.current(bk);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist every change to localStorage immediately
+  useEffect(() => {
+    if (!isNew) writeBackup(instanceKey, slides);
+  }, [instanceKey, slides, isNew]);
+
+  // Sync from server — same race-safe logic as before
+  useEffect(() => {
     if (prevInstanceKey.current !== instanceKey) {
       prevInstanceKey.current = instanceKey;
       dirty.current = false;
       pendingKey.current = null;
-      const n = norm(value);
-      setSlides(n);
+      const server = norm(value);
+      const bk = readBackup(instanceKey);
+      const initial = (!isNew && bk && backupIsRicher(bk, server)) ? bk : server;
+      setSlides(initial);
       setSel(0);
+      if (!isNew && bk && backupIsRicher(bk, server)) {
+        setRestored(true);
+        dirty.current = true;
+        pendingKey.current = JSON.stringify(initial);
+        setTimeout(() => onSaveRef.current(initial), 0);
+      } else {
+        setRestored(false);
+      }
       return;
     }
     if (dirty.current) {
-      // Server confirmed our save when valueKey matches what we last sent
       if (pendingKey.current !== null && valueKey === pendingKey.current) {
         dirty.current = false;
         pendingKey.current = null;
       } else {
-        // Mutation still in flight or server returned stale data — keep local state
         return;
       }
     }
@@ -424,14 +481,19 @@ function SlidesContentEditor({
   }, [instanceKey, valueKey]);
 
   const push = (rows: string[]) => {
-    // Stay dirty until the server echoes back exactly what we saved
     dirty.current = true;
     pendingKey.current = JSON.stringify(rows);
     setSlides(rows);
+    writeBackup(instanceKey, rows);
     onSave(rows);
   };
   return (
     <div>
+      {restored && (
+        <div style={{ marginBottom: 8, padding: "6px 10px", borderRadius: 8, background: "rgba(123,97,196,0.15)", border: "1px solid rgba(123,97,196,0.4)", color: "#B49EFF", fontSize: 11, fontWeight: 600 }}>
+          ↩ Restored from browser backup — saved to server automatically.
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
         <span style={ls}>Slides content</span>
         <select
