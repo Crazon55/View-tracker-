@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import {
   getSixDayMonth, upsertSixDayEntry,
@@ -110,40 +110,64 @@ export default function SixDayTracker() {
     return m;
   }, [nichesRaw]);
 
-  /* Historical months: show whatever pages the server recorded data for (preserves
-     April and May weeks 1–2 views for old pages). Fresh months (no server data yet):
-     only show pages in active niches so new cycles start with the updated roster. */
-  const allPages = useMemo(() => {
+  /* Roster changed at the start of Cycle 3, May 2026. Everything before this date
+     uses the full historical page list; from this date forward only the 11 active
+     niche pages are shown. */
+  const ROSTER_CUTOFF = "2026-05-13";
+
+  /* Full server page list — used for pre-cutoff cycles so old page views remain visible. */
+  const allServerPages = useMemo(() => {
     const sp = monthData?.pages || [];
     if (sp.length > 0) return sp;
-    const raw = allPagesRaw || [];
-    if (handleToNiche.size === 0) {
-      return raw.map((p: any) => ({ id: p.id, handle: p.handle, name: p.name, stage: p.stage ?? 1 }));
-    }
-    return raw
-      .filter((p: any) => handleToNiche.has(String(p.handle || "").replace(/^@/, "").trim().toLowerCase()))
-      .map((p: any) => ({ id: p.id, handle: p.handle, name: p.name, stage: p.stage ?? 1 }));
-  }, [monthData, allPagesRaw, handleToNiche]);
+    return (allPagesRaw || []).map((p: any) => ({ id: p.id, handle: p.handle, name: p.name, stage: p.stage ?? 1 }));
+  }, [monthData, allPagesRaw]);
+
+  /* Niche-filtered pages — used for post-cutoff cycles and all niche UI. */
+  const nichePages = useMemo(() => {
+    if (handleToNiche.size === 0) return allServerPages;
+    return allServerPages.filter((p: any) =>
+      handleToNiche.has(String(p.handle || "").replace(/^@/, "").trim().toLowerCase())
+    );
+  }, [allServerPages, handleToNiche]);
+
+  /* allPages drives the niche filter pill counts — always the niche list. */
+  const allPages = nichePages;
 
   const nicheCounts = useMemo(() => {
-    const c = { all: allPages.length, garfields: 0, goofies: 0, sheruses: 0 };
-    for (const p of allPages) {
+    const c = { all: nichePages.length, garfields: 0, goofies: 0, sheruses: 0 };
+    for (const p of nichePages) {
       const key = handleToNiche.get(String(p.handle || "").replace(/^@/, "").trim().toLowerCase());
       if (key === "garfields") c.garfields += 1;
       else if (key === "goofies") c.goofies += 1;
       else if (key === "sheruses") c.sheruses += 1;
     }
     return c;
-  }, [allPages, handleToNiche]);
+  }, [nichePages, handleToNiche]);
 
+  /* pages = niche pages optionally filtered by active team pill (Garfields / Goofies / Sherus). */
   const pages = useMemo(() => {
-    if (isAllActive) return allPages;
-    return allPages.filter((p: any) => {
+    if (isAllActive) return nichePages;
+    return nichePages.filter((p: any) => {
       const key = handleToNiche.get(String(p.handle || "").replace(/^@/, "").trim().toLowerCase());
       return !!key && nicheFilterSet.has(key);
     });
-  }, [allPages, handleToNiche, nicheFilterSet, isAllActive]);
+  }, [nichePages, handleToNiche, nicheFilterSet, isAllActive]);
 
+  /* Per-cycle page list: pre-cutoff cycles show all server pages (historical),
+     post-cutoff cycles show only the active niche pages. */
+  const getCyclePages = useCallback((cycle: any): any[] => {
+    const isHistorical = String(cycle?.start || "") < ROSTER_CUTOFF;
+    if (isHistorical) {
+      if (isAllActive) return allServerPages;
+      return allServerPages.filter((p: any) => {
+        const key = handleToNiche.get(String(p.handle || "").replace(/^@/, "").trim().toLowerCase());
+        return !!key && nicheFilterSet.has(key);
+      });
+    }
+    return pages;
+  }, [allServerPages, pages, handleToNiche, nicheFilterSet, isAllActive]);
+
+  /* allowedPageIds is only needed for the reconcile/summary filter — keep as niche-based. */
   const allowedPageIds = useMemo(
     () => (isAllActive ? null : new Set(pages.map((p: any) => p.id))),
     [pages, isAllActive],
@@ -360,12 +384,17 @@ export default function SixDayTracker() {
                 No accounts in this niche yet. Switch the filter above or add handles to the niche.
               </div>
             ) : null}
-            {pages.length > 0 && cycles.map((cycle: any) => (
+            {pages.length > 0 && cycles.map((cycle: any) => {
+              const cyclePages = getCyclePages(cycle);
+              const cycleAllowedIds = String(cycle?.start || "") >= ROSTER_CUTOFF && isAllActive
+                ? new Set<string>(cyclePages.map((p: any) => p.id))
+                : allowedPageIds;
+              return (
               <CycleCard
                 key={cycle.cycle}
                 cycle={cycle}
-                pages={pages}
-                allowedPageIds={allowedPageIds}
+                pages={cyclePages}
+                allowedPageIds={cycleAllowedIds}
                 monthDate={monthDate}
                 expanded={expandedCycle === cycle.cycle}
                 onToggle={() => setExpandedCycle(expandedCycle === cycle.cycle ? null : cycle.cycle)}
@@ -374,7 +403,8 @@ export default function SixDayTracker() {
                 selectedMonth={selectedMonth}
                 onDataChange={invalidateSixDayAndGrowth}
               />
-            ))}
+              );
+            })}
           </div>
         ) : (
           <ReconcileView
