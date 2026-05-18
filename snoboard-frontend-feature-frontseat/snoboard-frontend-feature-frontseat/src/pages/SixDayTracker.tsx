@@ -76,18 +76,14 @@ export default function SixDayTracker() {
   });
 
   const overdueCycles = deadlineData?.overdue_cycles || [];
-  const serverPages = monthData?.pages || [];
-  const allPages = serverPages.length > 0
-    ? serverPages
-    : (allPagesRaw || []).map((p: any) => ({ id: p.id, handle: p.handle, name: p.name, stage: p.stage ?? 1 }));
   const pageSummaries = monthData?.page_summaries || [];
   const monthDate = monthData?.month_date || `${selectedMonth}-01`;
 
-  /* Niche filter: map each page handle to a niche bucket (garfields / goofies / tech).
+  /* Niche filter: map each page handle to a niche bucket (garfields / goofies / sheruses).
      Niches come from tracker_niches; we match by substring on the niche name.
      Multi-select: empty set == "All" (show everything). Otherwise show only
      pages whose niche is in the selected set. */
-  type NicheKey = "garfields" | "goofies" | "sheruses" | "tech";
+  type NicheKey = "garfields" | "goofies" | "sheruses";
   const [nicheFilters, setNicheFilters] = useState<NicheKey[]>([]);
   const nicheFilterSet = useMemo(() => new Set(nicheFilters), [nicheFilters]);
   const isAllActive = nicheFilters.length === 0;
@@ -99,14 +95,13 @@ export default function SixDayTracker() {
   const clearNiche = () => setNicheFilters([]);
 
   const handleToNiche = useMemo(() => {
-    const m = new Map<string, "garfields" | "goofies" | "sheruses" | "tech">();
+    const m = new Map<string, "garfields" | "goofies" | "sheruses">();
     for (const n of nichesRaw || []) {
       const nm = String(n?.name || "").toLowerCase();
-      let bucket: "garfields" | "goofies" | "sheruses" | "tech" | null = null;
+      let bucket: "garfields" | "goofies" | "sheruses" | null = null;
       if (nm.includes("garfields")) bucket = "garfields";
       else if (nm.includes("goofies")) bucket = "goofies";
       else if (nm.includes("sheerus") || nm.includes("sheru") || nm.includes("changing order")) bucket = "sheruses";
-      else if (nm.includes("tech")) bucket = "tech";
       if (!bucket) continue;
       for (const h of n?.pages || []) {
         if (h) m.set(String(h).replace(/^@/, "").trim().toLowerCase(), bucket);
@@ -115,15 +110,28 @@ export default function SixDayTracker() {
     return m;
   }, [nichesRaw]);
 
+  /* For fresh months (no server data yet) only show pages in active niches.
+     For historical months the server returns whatever pages had data that month,
+     so old pages' views remain visible in past cycles. */
+  const allPages = useMemo(() => {
+    const sp = monthData?.pages || [];
+    if (sp.length > 0) return sp;
+    const raw = allPagesRaw || [];
+    if (handleToNiche.size === 0) {
+      return raw.map((p: any) => ({ id: p.id, handle: p.handle, name: p.name, stage: p.stage ?? 1 }));
+    }
+    return raw
+      .filter((p: any) => handleToNiche.has(String(p.handle || "").replace(/^@/, "").trim().toLowerCase()))
+      .map((p: any) => ({ id: p.id, handle: p.handle, name: p.name, stage: p.stage ?? 1 }));
+  }, [monthData, allPagesRaw, handleToNiche]);
+
   const nicheCounts = useMemo(() => {
-    const c = { all: allPages.length, garfields: 0, goofies: 0, sheruses: 0, tech: 0, none: 0 };
+    const c = { all: allPages.length, garfields: 0, goofies: 0, sheruses: 0 };
     for (const p of allPages) {
       const key = handleToNiche.get(String(p.handle || "").replace(/^@/, "").trim().toLowerCase());
       if (key === "garfields") c.garfields += 1;
       else if (key === "goofies") c.goofies += 1;
       else if (key === "sheruses") c.sheruses += 1;
-      else if (key === "tech") c.tech += 1;
-      else c.none += 1;
     }
     return c;
   }, [allPages, handleToNiche]);
@@ -313,7 +321,6 @@ export default function SixDayTracker() {
             { key: "garfields", label: "Garfields", emoji: "🐱", count: nicheCounts.garfields, active: "bg-gradient-to-r from-orange-500 to-amber-500 text-zinc-900 shadow-md shadow-orange-500/30" },
             { key: "goofies", label: "Goofies", emoji: "🐶", count: nicheCounts.goofies, active: "bg-gradient-to-r from-sky-500 to-indigo-500 text-white shadow-md shadow-indigo-500/30" },
             { key: "sheruses", label: "The Sherus", emoji: "🦁", count: nicheCounts.sheruses, active: "bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-md shadow-rose-500/30" },
-            { key: "tech", label: "Tech", emoji: "💻", count: nicheCounts.tech, active: "bg-gradient-to-r from-emerald-500 to-teal-500 text-zinc-900 shadow-md shadow-emerald-500/30" },
           ] as const).map((opt) => {
             const isActive = nicheFilterSet.has(opt.key);
             return (

@@ -1,15 +1,8 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getPages, getAllContentEntries } from "@/services/api";
+import { getPages, getAllContentEntries, getTrackerNiches } from "@/services/api";
 import type { Page } from "@/types";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-
-function classifyNiche(handle: string): "tech" | "fbs" {
-  const lower = handle.toLowerCase();
-  if (lower.includes("tech")) return "tech";
-  if (lower === "ai.cracked" || lower.includes("goodai") || lower === "indianaipage" || lower === "neworderai") return "tech";
-  return "fbs";
-}
 
 function formatCompact(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
@@ -58,17 +51,35 @@ export default function Stage1Tracker() {
     queryFn: getPages,
   });
 
+  const { data: nichesRaw = [] } = useQuery<any[]>({
+    queryKey: ["tracker-niches"],
+    queryFn: getTrackerNiches,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+
   const { data: entries = [], isLoading } = useQuery<any[]>({
     queryKey: ["content-entries", "all"],
     queryFn: () => getAllContentEntries(),
   });
 
-  const stage1Pages = allPages
-    .filter((p) => (p.stage ?? 1) === 1)
-    .sort((a, b) => a.handle.localeCompare(b.handle));
+  const nicheHandleSet = useMemo(() => {
+    const s = new Set<string>();
+    for (const n of nichesRaw) {
+      for (const h of n?.pages || []) {
+        if (h) s.add(String(h).replace(/^@/, "").trim().toLowerCase());
+      }
+    }
+    return s;
+  }, [nichesRaw]);
 
-  const fbsPages = stage1Pages.filter((p) => classifyNiche(p.handle) === "fbs");
-  const techPages = stage1Pages.filter((p) => classifyNiche(p.handle) === "tech");
+  const fbsPages = useMemo(() => {
+    const stage1 = allPages.filter((p) => (p.stage ?? 1) === 1);
+    if (nicheHandleSet.size === 0) return stage1.sort((a, b) => a.handle.localeCompare(b.handle));
+    return stage1
+      .filter((p) => nicheHandleSet.has(p.handle.replace(/^@/, "").trim().toLowerCase()))
+      .sort((a, b) => a.handle.localeCompare(b.handle));
+  }, [allPages, nicheHandleSet]);
 
   const weekDays = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart);
@@ -121,8 +132,7 @@ export default function Stage1Tracker() {
   }
 
   const fbsTotal = fbsPages.reduce((s, p) => s + getRowTotal(p.id), 0);
-  const techTotal = techPages.reduce((s, p) => s + getRowTotal(p.id), 0);
-  const grandTotal = fbsTotal + techTotal;
+  const grandTotal = fbsTotal;
 
   const renderTable = (
     label: string,
@@ -277,11 +287,6 @@ export default function Stage1Tracker() {
               <span className="text-[11px] text-zinc-500 font-medium">FBS</span>
               <span className="text-sm font-black text-white tabular-nums">{fbsTotal > 0 ? formatCompact(fbsTotal) : "—"}</span>
             </div>
-            <div className="flex items-center gap-2.5 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5">
-              <span className="w-2 h-2 rounded-full bg-cyan-400 shrink-0" />
-              <span className="text-[11px] text-zinc-500 font-medium">Tech</span>
-              <span className="text-sm font-black text-white tabular-nums">{techTotal > 0 ? formatCompact(techTotal) : "—"}</span>
-            </div>
             <div className="flex items-center gap-2.5 bg-violet-500/10 border border-violet-500/20 rounded-xl px-4 py-2.5">
               <span className="text-[11px] text-violet-400 font-medium">Week</span>
               <span className="text-sm font-black text-violet-200 tabular-nums">{grandTotal > 0 ? formatCompact(grandTotal) : "—"}</span>
@@ -316,7 +321,6 @@ export default function Stage1Tracker() {
         </div>
 
         {renderTable("FBS", fbsPages, "bg-amber-500", "bg-amber-500/10", "text-amber-300", fbsTotal)}
-        {renderTable("AI / Tech", techPages, "bg-cyan-500", "bg-cyan-500/10", "text-cyan-300", techTotal)}
       </div>
     </div>
   );

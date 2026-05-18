@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getPages, updatePage } from "@/services/api";
+import { getPages, updatePage, getTrackerNiches } from "@/services/api";
 import type { Page } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Home, ExternalLink } from "lucide-react";
@@ -19,10 +19,28 @@ export default function PostIPsView() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropStage, setDropStage] = useState<number | null>(null);
 
-  const { data: pages = [], isLoading } = useQuery<Page[]>({
+  const { data: allPages = [], isLoading } = useQuery<Page[]>({
     queryKey: ["pages"],
     queryFn: getPages,
   });
+
+  const { data: nichesRaw = [] } = useQuery<any[]>({
+    queryKey: ["tracker-niches"],
+    queryFn: getTrackerNiches,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const pages = useMemo<Page[]>(() => {
+    const s = new Set<string>();
+    for (const n of nichesRaw) {
+      for (const h of n?.pages || []) {
+        if (h) s.add(String(h).replace(/^@/, "").trim().toLowerCase());
+      }
+    }
+    if (s.size === 0) return allPages;
+    return allPages.filter((p) => s.has(p.handle.replace(/^@/, "").trim().toLowerCase()));
+  }, [allPages, nichesRaw]);
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => updatePage(id, data),
