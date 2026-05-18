@@ -321,6 +321,8 @@ export default function Dashboard() {
   const dashHandleToNicheId = useMemo(() => {
     const m = new Map<string, string>();
     for (const n of (trackerNiches as any[]) || []) {
+      const nm = String(n?.name || "").toLowerCase();
+      if (!nm.includes("garfields") && !nm.includes("goofies") && !nm.includes("sheru")) continue;
       for (const h of n?.pages || []) {
         if (h) m.set(String(h).replace(/^@/, "").trim().toLowerCase(), n.id);
       }
