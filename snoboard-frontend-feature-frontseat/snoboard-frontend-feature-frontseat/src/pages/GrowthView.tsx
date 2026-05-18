@@ -175,11 +175,13 @@ export default function GrowthView() {
     refetchOnWindowFocus: false,
   });
 
-  const nicheHandleSet = useMemo(() => {
+  /* Build a set of TECH handles to exclude — all other pages (old FBS, new FBS,
+     Sherus) keep their historical views intact in the Growth chart. */
+  const techHandleSet = useMemo(() => {
     const s = new Set<string>();
     for (const n of nichesRaw) {
       const nm = String(n?.name || "").toLowerCase();
-      if (!nm.includes("garfields") && !nm.includes("goofies") && !nm.includes("sheru")) continue;
+      if (!nm.includes("tech")) continue;
       for (const h of n?.pages || []) {
         if (h) s.add(String(h).replace(/^@/, "").trim().toLowerCase());
       }
@@ -187,11 +189,12 @@ export default function GrowthView() {
     return s;
   }, [nichesRaw]);
 
+  /* Page dropdown: exclude tech pages, but show ALL FBS pages (old and new). */
   const allPages = useMemo(() =>
-    nicheHandleSet.size > 0
-      ? allPagesRaw.filter((p) => nicheHandleSet.has(p.handle.replace(/^@/, "").trim().toLowerCase()))
+    techHandleSet.size > 0
+      ? allPagesRaw.filter((p) => !techHandleSet.has(p.handle.replace(/^@/, "").trim().toLowerCase()))
       : allPagesRaw,
-  [allPagesRaw, nicheHandleSet]);
+  [allPagesRaw, techHandleSet]);
 
   // Group by month
   const months = new Set<string>();
@@ -200,15 +203,17 @@ export default function GrowthView() {
   }
   const sortedMonths = [...months].sort().reverse();
 
-  // Filter views by selected page AND active niches
+  /* Filter views: exclude tech pages from all months, keep all other FBS pages
+     so April and previous months show their full historical views. */
   const filteredViews = useMemo(() => {
-    const nicheFiltered = nicheHandleSet.size > 0
-      ? growthData.filter((v: any) => v.handle !== "total" && nicheHandleSet.has(String(v.handle || "").replace(/^@/, "").trim().toLowerCase()))
-      : growthData.filter((v: any) => v.handle !== "total");
-    if (selectedPage === "all") return nicheFiltered;
+    const nonTech = growthData.filter((v: any) =>
+      v.handle !== "total" &&
+      !techHandleSet.has(String(v.handle || "").replace(/^@/, "").trim().toLowerCase())
+    );
+    if (selectedPage === "all") return nonTech;
     const sel = allPages.find((p) => p.id === selectedPage)?.handle || "";
-    return nicheFiltered.filter((v: any) => v.handle === sel);
-  }, [growthData, nicheHandleSet, selectedPage, allPages]);
+    return nonTech.filter((v: any) => v.handle === sel);
+  }, [growthData, techHandleSet, selectedPage, allPages]);
 
   // Chart data — total views + reels + posts + followers per month
   const chartData = [...months].sort().map((month) => {
