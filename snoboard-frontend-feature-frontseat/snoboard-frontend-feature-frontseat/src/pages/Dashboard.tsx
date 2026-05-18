@@ -438,7 +438,9 @@ export default function Dashboard() {
   const stats = data;
   const totalViews = stats?.total_views ?? 0;
   const allPagesRaw = stats?.pages ?? [];
-  const allPages = [...allPagesRaw];
+  const allPages = dashHandleToNicheId.size > 0
+    ? allPagesRaw.filter((p: any) => dashHandleToNicheId.has(String(p.handle || "").replace(/^@/, "").trim().toLowerCase()))
+    : [...allPagesRaw];
   const filteredByType = ipFilter === "all"
     ? allPages
     : ipFilter === "main"

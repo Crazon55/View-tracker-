@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getPages, createPage, deletePage, updatePage } from "@/services/api";
+import { getPages, createPage, deletePage, updatePage, getTrackerNiches } from "@/services/api";
 import type { Page } from "@/types";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -32,10 +32,28 @@ export default function PagesView() {
   const [newName, setNewName] = useState("");
   const [newStage, setNewStage] = useState("1");
 
-  const { data: pages = [], isLoading } = useQuery<Page[]>({
+  const { data: allPagesRaw = [], isLoading } = useQuery<Page[]>({
     queryKey: ["pages"],
     queryFn: getPages,
   });
+
+  const { data: nichesRaw = [] } = useQuery<any[]>({
+    queryKey: ["tracker-niches"],
+    queryFn: getTrackerNiches,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const pages = useMemo<Page[]>(() => {
+    const s = new Set<string>();
+    for (const n of nichesRaw) {
+      for (const h of n?.pages || []) {
+        if (h) s.add(String(h).replace(/^@/, "").trim().toLowerCase());
+      }
+    }
+    if (s.size === 0) return allPagesRaw;
+    return allPagesRaw.filter((p) => s.has(p.handle.replace(/^@/, "").trim().toLowerCase()));
+  }, [allPagesRaw, nichesRaw]);
 
   const addMutation = useMutation({
     mutationFn: createPage,

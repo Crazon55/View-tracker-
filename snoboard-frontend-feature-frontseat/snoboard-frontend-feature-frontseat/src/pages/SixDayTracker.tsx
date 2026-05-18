@@ -110,19 +110,19 @@ export default function SixDayTracker() {
     return m;
   }, [nichesRaw]);
 
-  /* For fresh months (no server data yet) only show pages in active niches.
-     For historical months the server returns whatever pages had data that month,
-     so old pages' views remain visible in past cycles. */
+  /* Only show pages that belong to an active niche — applies to both historical
+     months (serverPages) and fresh months (allPagesRaw fallback). Old/tech pages
+     stay in the DB but are hidden from all views. */
   const allPages = useMemo(() => {
     const sp = monthData?.pages || [];
-    if (sp.length > 0) return sp;
     const raw = allPagesRaw || [];
-    if (handleToNiche.size === 0) {
-      return raw.map((p: any) => ({ id: p.id, handle: p.handle, name: p.name, stage: p.stage ?? 1 }));
-    }
-    return raw
-      .filter((p: any) => handleToNiche.has(String(p.handle || "").replace(/^@/, "").trim().toLowerCase()))
-      .map((p: any) => ({ id: p.id, handle: p.handle, name: p.name, stage: p.stage ?? 1 }));
+    const source = sp.length > 0
+      ? sp
+      : raw.map((p: any) => ({ id: p.id, handle: p.handle, name: p.name, stage: p.stage ?? 1 }));
+    if (handleToNiche.size === 0) return source;
+    return source.filter((p: any) =>
+      handleToNiche.has(String(p.handle || "").replace(/^@/, "").trim().toLowerCase())
+    );
   }, [monthData, allPagesRaw, handleToNiche]);
 
   const nicheCounts = useMemo(() => {

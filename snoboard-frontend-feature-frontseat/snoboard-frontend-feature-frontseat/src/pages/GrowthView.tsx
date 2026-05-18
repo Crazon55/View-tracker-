@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getPages } from "@/services/api";
+import { getPages, getTrackerNiches } from "@/services/api";
 import type { Page } from "@/types";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, LineChart, Line, Legend,
@@ -161,7 +161,13 @@ export default function GrowthView() {
   const [selectedPage, setSelectedPage] = useState<string>("all");
   const [drillMonth, setDrillMonth] = useState<string | null>(null);
 
-  const { data: allPages = [] } = useQuery<Page[]>({ queryKey: ["pages"], queryFn: getPages });
+  const { data: allPagesRaw = [] } = useQuery<Page[]>({ queryKey: ["pages"], queryFn: getPages });
+  const { data: nichesRaw = [] } = useQuery<any[]>({
+    queryKey: ["tracker-niches"],
+    queryFn: getTrackerNiches,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
   const { data: growthData = [], isLoading } = useQuery({
     queryKey: ["growth-data"],
     queryFn: fetchGrowthData,
@@ -169,19 +175,38 @@ export default function GrowthView() {
     refetchOnWindowFocus: false,
   });
 
+  const nicheHandleSet = useMemo(() => {
+    const s = new Set<string>();
+    for (const n of nichesRaw) {
+      for (const h of n?.pages || []) {
+        if (h) s.add(String(h).replace(/^@/, "").trim().toLowerCase());
+      }
+    }
+    return s;
+  }, [nichesRaw]);
+
+  const allPages = useMemo(() =>
+    nicheHandleSet.size > 0
+      ? allPagesRaw.filter((p) => nicheHandleSet.has(p.handle.replace(/^@/, "").trim().toLowerCase()))
+      : allPagesRaw,
+  [allPagesRaw, nicheHandleSet]);
+
   // Group by month
   const months = new Set<string>();
-  const handleSet = new Set<string>();
   for (const v of growthData) {
     if (v.month) months.add(v.month.slice(0, 7));
-    if (v.handle && v.handle !== "total") handleSet.add(v.handle);
   }
   const sortedMonths = [...months].sort().reverse();
 
-  // Filter views by selected page
-  const filteredViews = selectedPage === "all"
-    ? growthData.filter((v: any) => v.handle !== "total")
-    : growthData.filter((v: any) => v.handle === (allPages.find((p) => p.id === selectedPage)?.handle || ""));
+  // Filter views by selected page AND active niches
+  const filteredViews = useMemo(() => {
+    const nicheFiltered = nicheHandleSet.size > 0
+      ? growthData.filter((v: any) => v.handle !== "total" && nicheHandleSet.has(String(v.handle || "").replace(/^@/, "").trim().toLowerCase()))
+      : growthData.filter((v: any) => v.handle !== "total");
+    if (selectedPage === "all") return nicheFiltered;
+    const sel = allPages.find((p) => p.id === selectedPage)?.handle || "";
+    return nicheFiltered.filter((v: any) => v.handle === sel);
+  }, [growthData, nicheHandleSet, selectedPage, allPages]);
 
   // Chart data — total views + reels + posts + followers per month
   const chartData = [...months].sort().map((month) => {
