@@ -19,17 +19,19 @@ export default function PostIPsView() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropStage, setDropStage] = useState<number | null>(null);
 
-  const { data: allPages = [], isLoading } = useQuery<Page[]>({
+  const { data: allPages = [], isLoading: pagesLoading } = useQuery<Page[]>({
     queryKey: ["pages"],
     queryFn: getPages,
   });
 
-  const { data: nichesRaw = [] } = useQuery<any[]>({
+  const { data: nichesRaw = [], isLoading: nichesLoading } = useQuery<any[]>({
     queryKey: ["tracker-niches"],
     queryFn: getTrackerNiches,
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
   });
+
+  const isLoading = pagesLoading || nichesLoading;
 
   const pages = useMemo<Page[]>(() => {
     const s = new Set<string>();
@@ -38,7 +40,7 @@ export default function PostIPsView() {
         if (h) s.add(String(h).replace(/^@/, "").trim().toLowerCase());
       }
     }
-    if (s.size === 0) return allPages;
+    if (s.size === 0) return [];
     return allPages.filter((p) => s.has(p.handle.replace(/^@/, "").trim().toLowerCase()));
   }, [allPages, nichesRaw]);
 

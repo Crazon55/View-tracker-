@@ -32,17 +32,19 @@ export default function PagesView() {
   const [newName, setNewName] = useState("");
   const [newStage, setNewStage] = useState("1");
 
-  const { data: allPagesRaw = [], isLoading } = useQuery<Page[]>({
+  const { data: allPagesRaw = [], isLoading: pagesLoading } = useQuery<Page[]>({
     queryKey: ["pages"],
     queryFn: getPages,
   });
 
-  const { data: nichesRaw = [] } = useQuery<any[]>({
+  const { data: nichesRaw = [], isLoading: nichesLoading } = useQuery<any[]>({
     queryKey: ["tracker-niches"],
     queryFn: getTrackerNiches,
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
   });
+
+  const isLoading = pagesLoading || nichesLoading;
 
   const pages = useMemo<Page[]>(() => {
     const s = new Set<string>();
@@ -51,7 +53,7 @@ export default function PagesView() {
         if (h) s.add(String(h).replace(/^@/, "").trim().toLowerCase());
       }
     }
-    if (s.size === 0) return allPagesRaw;
+    if (s.size === 0) return [];
     return allPagesRaw.filter((p) => s.has(p.handle.replace(/^@/, "").trim().toLowerCase()));
   }, [allPagesRaw, nichesRaw]);
 
