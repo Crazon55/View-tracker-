@@ -595,6 +595,8 @@ export default function WeeklyWorkboard() {
     queryKey: ["weekly-workboard", weekStart],
     queryFn: () => getWorkboardWeek(weekStart),
     staleTime: 10_000,
+    // Avoid background refetches constantly resetting `assignments` via hydrate (drops drag/move UX).
+    refetchOnWindowFocus: false,
   });
 
   /** Same list as the Tickets page — all tickets sync to AI Developer extra work (no assignee filter). */
@@ -658,6 +660,9 @@ export default function WeeklyWorkboard() {
 
   useEffect(() => {
     // Hydrate from server; fall back to local if server not ready.
+    // IMPORTANT: do not depend on `workboardQ.data.assignments`. React Query returns a new array
+    // reference on many refetches; re-running `setAssignments(server)` would wipe optimistic UI
+    // (e.g. tasks dragged to another day) until the debounced save lands.
     if (workboardQ.data?.week_start === weekStart) {
       const rows = Array.isArray(workboardQ.data.assignments) ? workboardQ.data.assignments : [];
       const serverRows = normalizeAssignments(rows as any);
@@ -682,7 +687,7 @@ export default function WeeklyWorkboard() {
       setAssignments(loadStore().filter((a) => a.week_start === weekStart));
       hydratedWeekStartRef.current = weekStart;
     }
-  }, [workboardQ.data?.week_start, workboardQ.data?.assignments, workboardQ.isError, weekStart]);
+  }, [weekStart, workboardQ.isError, workboardQ.data?.week_start, workboardQ.status]);
 
   /** Mirror all Tickets into AI Developer → Extra work & blockers (bidirectional via updateInterrupt). */
   useEffect(() => {
