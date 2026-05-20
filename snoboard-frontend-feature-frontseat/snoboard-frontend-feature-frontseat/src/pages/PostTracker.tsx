@@ -32,6 +32,14 @@ const PT: Record<string,{label:string;color:string;bg:string}> = {
 };
 const SOURCES = ["original","competitor"];
 
+/** Normalize API stage strings for board + modal (handles casing; legacy reel `posted` → uploaded). */
+function normalizePostTrackerStage(stage: unknown): string {
+  const s = String(stage ?? "").trim().toLowerCase();
+  if (s === "posted") return "uploaded";
+  if (STAGES.includes(s)) return s;
+  return s || "new";
+}
+
 const PILLAR_OPTIONS = ["News","Static - Quote","Memes","Informational","MM","Blue Ocean","Client Post"];
 const BUCKET_OPTIONS = [
   "Events in India","Stories","Merger","Before & After Comparison","Charts/Tables/Stats","Tips/Business Ideas",
@@ -105,6 +113,18 @@ const toLocalISO = (d: Date) => {
   const dd = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${dd}`;
 };
+
+/** Local calendar YYYY-MM-DD from a DB timestamp (avoid naive UTC ISO slice). */
+function toLocalDateKeyFromTimestamp(raw: string | null | undefined): string {
+  if (raw == null || raw === "") return "";
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) {
+    const m = /^(\d{4}-\d{2}-\d{2})/.exec(String(raw).trim());
+    return m ? m[1] : "";
+  }
+  return toLocalISO(d);
+}
+
 const today = () => toLocalISO(new Date());
 const fmtD = (d: string) => { const dt=new Date(d+"T00:00:00"); return dt.toLocaleDateString("en-US",{month:"short",day:"numeric"}); };
 const fmtDFull = (d: string) => { const dt=new Date(d+"T00:00:00"); return dt.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}); };
@@ -200,6 +220,73 @@ function mapIdea(raw: any): any {
       perf_tag: p.perf_tag || null,
     })),
   };
+}
+
+/** Small bounded Levenshtein for typo-tolerant suggestion ranking. */
+function levenshtein(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i]![0] = i;
+  for (let j = 0; j <= n; j++) dp[0]![j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i]![j] = Math.min(
+        (dp[i - 1]?.[j] ?? 0) + 1,
+        (dp[i]?.[j - 1] ?? 0) + 1,
+        (dp[i - 1]?.[j - 1] ?? 0) + cost,
+      );
+    }
+  }
+  return dp[m]?.[n] ?? n;
+}
+
+/** Fuzzy-match post ideas: titles, captions, hooks, writer notes, pillars, slide text. */
+function fuzzyScoreForPostIdea(query: string, idea: any): number {
+  const q = query.trim().toLowerCase();
+  if (!q) return 0;
+  const title = String(idea.title || "").toLowerCase();
+  const notes = String(idea.notes || "").toLowerCase();
+  const hooks = (Array.isArray(idea.hook_variations) ? idea.hook_variations : [])
+    .map((x: string) => String(x).toLowerCase())
+    .join(" ");
+  const caption = String(idea.caption || "").toLowerCase();
+  const hookText = String(idea.hook_text || "").toLowerCase();
+  const mainHook = String(idea.main_page_hook || "").toLowerCase();
+  const writer = String(idea.writer_comments || "").toLowerCase();
+  const pillar = splitPillarBucket(idea.content_pillar).join(" ").toLowerCase();
+  const bucket = splitPillarBucket(idea.content_bucket).join(" ").toLowerCase();
+  const slides = (Array.isArray(idea.slides_content) ? idea.slides_content : [])
+    .map((x: string) => String(x).toLowerCase())
+    .join(" ");
+  const hay = `${title} ${notes} ${hooks} ${caption} ${hookText} ${mainHook} ${writer} ${pillar} ${bucket} ${slides}`.trim();
+  if (!hay) return 0;
+  if (hay.includes(q)) return 1200;
+  const toks = q.split(/\s+/).filter(Boolean);
+  if (toks.length >= 2 && toks.every((t) => hay.includes(t))) return 950;
+  let pi = 0;
+  let matched = 0;
+  for (let i = 0; i < hay.length && pi < q.length; i++) {
+    if (hay[i] === q[pi]) {
+      matched++;
+      pi++;
+    }
+  }
+  if (pi === q.length && q.length >= 2) return 500 + matched;
+  if (q.length <= 22 && title.length <= 160) {
+    const slice = title.slice(0, Math.min(title.length, 96));
+    const d = levenshtein(q, slice);
+    const maxDist = Math.max(2, Math.floor(q.length / 5));
+    if (d <= maxDist) return 380 - d * 35;
+  }
+  return 0;
+}
+
+function fuzzyMatchesPostIdea(query: string, idea: any): boolean {
+  return fuzzyScoreForPostIdea(query, idea) > 0;
 }
 
 function PB({tag}: {tag: string|null}){ if(!tag||!PT[tag]) return null; const t=PT[tag]; return <span style={{display:"inline-block",fontSize:10,fontWeight:600,padding:"1px 7px",borderRadius:99,background:t.bg,color:t.color}}>{t.label}</span>; }
@@ -1195,17 +1282,64 @@ export default function PostTracker(){
     };
   }, [detailIdea?.id, user?.email, user?.id, ideas, updateIdeaMut]);
 
-  const nicheFiltered=nicheFilter==="all"?ideas:ideas.filter(i=>(i.nicheIds||[]).includes(nicheFilter));
-  const sourceFiltered=sourceFilter==="all"?nicheFiltered:nicheFiltered.filter(i=>i.source===sourceFilter);
-  const compFiltered=compResearchFilter?sourceFiltered.filter(i=>i.tags?.includes("comp_research")):sourceFiltered;
-  const filteredIdeas=(filterDateFrom||filterDateTo)?compFiltered.filter(i=>{
-    const d=i.created_at ? i.created_at.slice(0,10) : "";
-    if(!d) return false;
-    if(filterDateFrom && d<filterDateFrom) return false;
-    if(filterDateTo && d>filterDateTo) return false;
-    return true;
-  }):compFiltered;
-  const allPagesForFilter=nicheFilter==="all"?niches.flatMap((n: any)=>n.pages):(niches.find((n: any)=>n.id===nicheFilter)?.pages||[]);
+  const ideasAfterBoardFilters = useMemo(() => {
+    let x = nicheFilter === "all" ? ideas : ideas.filter((i) => (i.nicheIds || []).includes(nicheFilter));
+    x = sourceFilter === "all" ? x : x.filter((i) => i.source === sourceFilter);
+    x = compResearchFilter ? x.filter((i) => i.tags?.includes("comp_research")) : x;
+    return x;
+  }, [ideas, nicheFilter, sourceFilter, compResearchFilter]);
+
+  const filteredIdeas = useMemo(() => {
+    if (!(filterDateFrom || filterDateTo)) return ideasAfterBoardFilters;
+    return ideasAfterBoardFilters.filter((i) => {
+      const d = toLocalDateKeyFromTimestamp(i.created_at);
+      if (!d) return false;
+      if (filterDateFrom && d < filterDateFrom) return false;
+      if (filterDateTo && d > filterDateTo) return false;
+      return true;
+    });
+  }, [ideasAfterBoardFilters, filterDateFrom, filterDateTo]);
+
+  /** Toolbar search — fuzzy-match among ideas passing niche/source/comp + created-date filters. */
+  const [ideaSearchQuery, setIdeaSearchQuery] = useState("");
+  const [ideaSearchDebounced, setIdeaSearchDebounced] = useState("");
+  const [ideaSearchFocused, setIdeaSearchFocused] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setIdeaSearchDebounced(ideaSearchQuery), 220);
+    return () => window.clearTimeout(t);
+  }, [ideaSearchQuery]);
+
+  const searchFilteredIdeas = useMemo(() => {
+    const q = ideaSearchDebounced.trim();
+    if (!q) return filteredIdeas;
+    return filteredIdeas.filter((i) => fuzzyMatchesPostIdea(q, i));
+  }, [filteredIdeas, ideaSearchDebounced]);
+
+  const ideaSearchSuggestions = useMemo(() => {
+    const q = ideaSearchQuery.trim().toLowerCase();
+    if (q.length < 1 || !ideaSearchFocused) return [] as any[];
+    return ideasAfterBoardFilters
+      .map((idea: any) => ({ idea, score: fuzzyScoreForPostIdea(q, idea) }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score || Number(b.idea.createdAt || 0) - Number(a.idea.createdAt || 0))
+      .slice(0, 14)
+      .map((x) => x.idea);
+  }, [ideaSearchQuery, ideaSearchFocused, ideasAfterBoardFilters]);
+
+  const ideaStageCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    STAGES.forEach((s) => {
+      counts[s] = 0;
+    });
+    searchFilteredIdeas.forEach((i: any) => {
+      const st = normalizePostTrackerStage(i.stage);
+      if (st in counts) counts[st] = (counts[st] ?? 0) + 1;
+    });
+    return counts;
+  }, [searchFilteredIdeas]);
+
+  const allPagesForFilter =
+    nicheFilter === "all" ? niches.flatMap((n: any) => n.pages) : (niches.find((n: any) => n.id === nicheFilter)?.pages || []);
 
   // ---- Actions wired to mutations ----
   function addIdeaFn(){
@@ -1395,7 +1529,6 @@ export default function PostTracker(){
     uploaded:[],
   };
 
-  const counts: Record<string,number>={};STAGES.forEach(s=>{counts[s]=filteredIdeas.filter(i=>i.stage===s).length;});
   // openDetail / closeDetail are defined above to keep URL in sync
 
   // ---- Loading spinner ----
@@ -1446,6 +1579,81 @@ export default function PostTracker(){
             ))}
           </div>
           <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <div style={{ position: "relative", minWidth: 160, maxWidth: 280, flex: "1 1 160px" }}>
+              <input
+                type="search"
+                value={ideaSearchQuery}
+                onChange={(e) => setIdeaSearchQuery(e.target.value)}
+                onFocus={() => setIdeaSearchFocused(true)}
+                onBlur={() => window.setTimeout(() => setIdeaSearchFocused(false), 200)}
+                placeholder="Search ideas…"
+                aria-autocomplete="list"
+                aria-expanded={ideaSearchSuggestions.length > 0}
+                style={{
+                  width: "100%",
+                  boxSizing: "border-box",
+                  padding: "6px 10px",
+                  borderRadius: 7,
+                  border: "1.5px solid #3f3f46",
+                  fontSize: 12,
+                  background: "#09090b",
+                  color: "#e4e4e7",
+                }}
+              />
+              {ideaSearchSuggestions.length > 0 && (
+                <ul
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    right: 0,
+                    top: "100%",
+                    margin: "4px 0 0",
+                    padding: 4,
+                    listStyle: "none",
+                    background: "#18181b",
+                    border: "1px solid #3f3f46",
+                    borderRadius: 8,
+                    maxHeight: 280,
+                    overflowY: "auto",
+                    zIndex: 50,
+                    boxShadow: "0 12px 40px rgba(0,0,0,0.45)",
+                  }}
+                  role="listbox"
+                >
+                  {ideaSearchSuggestions.map((idea: any) => (
+                    <li key={idea.id} role="option">
+                      <button
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setIdeaSearchFocused(false);
+                          openDetail(idea);
+                        }}
+                        style={{
+                          display: "block",
+                          width: "100%",
+                          textAlign: "left",
+                          padding: "8px 10px",
+                          margin: 0,
+                          border: "none",
+                          borderRadius: 6,
+                          background: "transparent",
+                          color: "#e4e4e7",
+                          fontSize: 12,
+                          cursor: "pointer",
+                          lineHeight: 1.35,
+                        }}
+                      >
+                        <span style={{ fontWeight: 600 }}>{idea.title || "(untitled)"}</span>
+                        <span style={{ display: "block", fontSize: 10, color: "#71717a", marginTop: 2 }}>
+                          {SL[normalizePostTrackerStage(idea.stage)] || idea.stage}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             <div style={{display:"flex",alignItems:"center",gap:4}}>
               <input type="date" value={filterDateFrom} onChange={e=>setFilterDateFrom(e.target.value)} title="From" style={{padding:"5px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:11,background:"#09090b",color:"#a1a1aa",cursor:"pointer"}}/>
               <span style={{fontSize:10,color:"#52525b"}}>→</span>
@@ -1471,15 +1679,15 @@ export default function PostTracker(){
               <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 4px 8px"}}>
                 <span style={{width:7,height:7,borderRadius:"50%",background:SC[stage].dot}}/>
                 <span style={{fontSize:11,fontWeight:600,color:SC[stage].text}}>{SL[stage]}</span>
-                <span style={{fontSize:10,color:"#52525b",fontWeight:500}}>{counts[stage]}</span>
+                <span style={{fontSize:10,color:"#52525b",fontWeight:500}}>{ideaStageCounts[stage] ?? 0}</span>
               </div>
               <div style={{minHeight:50,padding:1,borderRadius:9,transition:"all 0.15s",border:dropStage===stage?"2px solid #7c3aed":"2px solid transparent",background:dropStage===stage?"rgba(124,58,237,0.05)":"transparent"}}>
-                {filteredIdeas.filter(i=>i.stage===stage).sort((a,b)=>b.createdAt-a.createdAt).map(idea=>(
+                {searchFilteredIdeas.filter(i=>normalizePostTrackerStage(i.stage)===stage).sort((a,b)=>b.createdAt-a.createdAt).map(idea=>(
                   <div key={idea.id} draggable onDragStart={e=>{setDraggingId(idea.id);e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain",idea.id);}} onDragEnd={()=>{setDraggingId(null);setDropStage(null);}} style={{opacity:draggingId===idea.id?0.4:1,transition:"opacity 0.15s"}}>
                     <IdeaCard idea={idea} niches={niches} onClick={()=>openDetail(idea)}/>
                   </div>
                 ))}
-                {counts[stage]===0&&<div style={{padding:"24px 12px",textAlign:"center",color:"#3f3f46",fontSize:11,border:"1.5px dashed #3f3f46",borderRadius:9}}>Empty</div>}
+                {(ideaStageCounts[stage] ?? 0)===0&&<div style={{padding:"24px 12px",textAlign:"center",color:"#3f3f46",fontSize:11,border:"1.5px dashed #3f3f46",borderRadius:9}}>Empty</div>}
               </div>
             </div>
           ))}
@@ -1487,10 +1695,10 @@ export default function PostTracker(){
       )}
 
       {/* Calendar */}
-      {viewMode==="calendar"&&<CalendarView ideas={ideas} niches={niches} nicheFilter={nicheFilter} pageFilter={pageFilter} onClickIdea={openDetail} weekStart={weekStart} setWeekStart={setWeekStart}/>}
+      {viewMode==="calendar"&&<CalendarView ideas={searchFilteredIdeas} niches={niches} nicheFilter={nicheFilter} pageFilter={pageFilter} onClickIdea={openDetail} weekStart={weekStart} setWeekStart={setWeekStart}/>}
 
       {/* Analytics */}
-      {viewMode==="analytics"&&<AnalyticsView ideas={ideas} niches={niches} nicheFilter={nicheFilter} pageFilter={pageFilter} dateFrom={dateFrom} dateTo={dateTo} setDateFrom={setDateFrom} setDateTo={setDateTo} setPageFilter={setPageFilter} onClickIdea={openDetail}/>}
+      {viewMode==="analytics"&&<AnalyticsView ideas={searchFilteredIdeas} niches={niches} nicheFilter={nicheFilter} pageFilter={pageFilter} dateFrom={dateFrom} dateTo={dateTo} setDateFrom={setDateFrom} setDateTo={setDateTo} setPageFilter={setPageFilter} onClickIdea={openDetail}/>}
 
       {/* Add Idea */}
       <Modal open={addOpen} onClose={()=>setAddOpen(false)} title="Add new post idea">
@@ -1561,10 +1769,10 @@ export default function PostTracker(){
           setDetailIdea((cur: any)=>cur&&cur.id===cd.id?{...cur,title:t}:cur);
           updateIdeaMut.mutate({id:cd.id,data:{title:t}});
         }} wide>
-        {cd&&(()=>{const pp=(cd.postings||[]).map((p: any)=>p.page);return(
+        {cd&&(()=>{const cdStage=normalizePostTrackerStage(cd.stage);const pp=(cd.postings||[]).map((p: any)=>p.page);return(
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
             <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-              <span style={{fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:99,background:SC[cd.stage].bg,color:SC[cd.stage].text}}>{SL[cd.stage]}</span>
+              <span style={{fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:99,background:(SC[cdStage]||SC.new).bg,color:(SC[cdStage]||SC.new).text}}>{SL[cdStage]||cdStage}</span>
               <span style={{fontSize:11,padding:"3px 9px",borderRadius:99,background:cd.source==="competitor"?"#EEEDFE":"#E8F5EE",color:cd.source==="competitor"?"#534AB7":"#1A5E3A",fontWeight:500}}>{cd.source==="competitor"?"Competitor":"Original"}</span>
               {cd.format&&<span style={{fontSize:11,padding:"3px 9px",borderRadius:99,background:"#18181b",color:"#a1a1aa",fontWeight:500,textTransform:"capitalize",border:"1px solid #3f3f46"}}>{cd.format}</span>}
               {cdNiches.map((n: any)=><span key={n.id} style={{fontSize:11,padding:"3px 9px",borderRadius:99,background:"#27272a",color:"#a1a1aa",fontWeight:500}}>{n.name}</span>)}
@@ -1575,7 +1783,7 @@ export default function PostTracker(){
                 <span key={t} style={{fontSize:10,padding:"2px 8px",borderRadius:99,background:"rgba(212,149,42,0.15)",color:"#F0C060",fontWeight:500}}>{t}</span>
               ))}
             </div>
-            {sa[cd.stage]?.length>0&&<div style={{display:"flex",gap:6}}>{sa[cd.stage].map(a=><button key={a.stage} onClick={()=>moveIdea(cd.id,a.stage)} style={a.style}>{a.label}</button>)}</div>}
+            {(sa[cdStage]??[]).length>0&&<div style={{display:"flex",gap:6}}>{sa[cdStage]?.map(a=><button key={a.stage} onClick={()=>moveIdea(cd.id,a.stage)} style={a.style}>{a.label}</button>)}</div>}
 
             {/* Writer comments — kept at top so they're never buried */}
             <div>
@@ -1630,7 +1838,7 @@ export default function PostTracker(){
               </button>
             )}
 
-            {cd.stage==="uploaded"&&(
+            {cdStage==="uploaded"&&(
               <PostedDateEditor
                 ideaId={cd.id}
                 label="Uploaded date"
@@ -1740,16 +1948,16 @@ export default function PostTracker(){
             </div>
 
             {/* Page checklist — from testing stage onwards */}
-            {cdPages.length>0&&!["new","approved","design_approval","scripted"].includes(cd.stage)&&(
+            {cdPages.length>0&&!["new","approved","design_approval","scripted"].includes(cdStage)&&(
               <div>
                 <label style={{...ls,marginBottom:8}}>Pages ({cdNiches.map((n: any)=>n.name).join(", ")}) — select, schedule & track</label>
                 {cdPages.map((page: string)=>{const isP=pp.includes(page);const pi=(cd.postings||[]).findIndex((p: any)=>p.page===page);const po=pi>=0?cd.postings[pi]:null;const dk=`${cd.id}_${page}`;
-                  const sBorder=isP?(cd.stage==="testing"?"1.5px solid rgba(212,149,42,0.4)":(cd.stage==="scheduled"||cd.stage==="uploaded")?"1.5px solid rgba(34,197,94,0.4)":"1.5px solid #3f3f46"):"1px solid #27272a";
-                  const sBg=isP?(cd.stage==="testing"?"rgba(212,149,42,0.04)":(cd.stage==="scheduled"||cd.stage==="uploaded")?"rgba(34,197,94,0.04)":"#1a1a2e"):"#18181b";
+                  const sBorder=isP?(cdStage==="testing"?"1.5px solid rgba(212,149,42,0.4)":(cdStage==="scheduled"||cdStage==="uploaded")?"1.5px solid rgba(34,197,94,0.4)":"1.5px solid #3f3f46"):"1px solid #27272a";
+                  const sBg=isP?(cdStage==="testing"?"rgba(212,149,42,0.04)":(cdStage==="scheduled"||cdStage==="uploaded")?"rgba(34,197,94,0.04)":"#1a1a2e"):"#18181b";
                   return(
                   <div key={page} style={{padding:"10px 12px",background:sBg,borderRadius:8,marginBottom:4,border:sBorder}}>
                     {isP&&po?(
-                      <PostingCard key={po.id} po={po} page={page} fmtD={fmtD} PT={PT} updatePostingMut={updatePostingMut} onRemove={()=>togglePage(cd.id,page,0,"")} stage={cd.stage}/>
+                      <PostingCard key={po.id} po={po} page={page} fmtD={fmtD} PT={PT} updatePostingMut={updatePostingMut} onRemove={()=>togglePage(cd.id,page,0,"")} stage={cdStage}/>
                     ):(
                       <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                         <div onClick={()=>{const sd=scheduleDate[dk];togglePage(cd.id,page,sd?.baseline||0,sd?.date||today());setScheduleDate(p=>{const n={...p};delete n[dk];return n;});}} style={{width:20,height:20,borderRadius:5,border:"1.5px solid #3f3f46",background:"#18181b",cursor:"pointer",flexShrink:0}}/>
