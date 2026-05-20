@@ -1,4 +1,14 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type MutableRefObject,
+  type DragEvent,
+} from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, useInView } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
@@ -30,7 +40,23 @@ import { mapChunkStatusToTicket, mergeAssignedTicketsIntoInterrupts } from "@/li
 import type { WorkboardMentionPerson } from "@/services/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { LayoutGrid, List, ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Plus, Trash2, Link2, AtSign, User, UserCircle2, GripVertical, CheckCircle2 } from "lucide-react";
+import {
+  LayoutGrid,
+  List,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  ChevronRight as ChevronRightIcon,
+  Plus,
+  Trash2,
+  Link2,
+  AtSign,
+  User,
+  UserCircle2,
+  GripVertical,
+  CheckCircle2,
+  History,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -40,6 +66,123 @@ import {
 } from "@/components/ui/dialog";
 
 const STORAGE_KEY = "fsboard-weekly-workboard-v1";
+
+/** Local snapshots before debounced saves (recovery if drag/sync loses cards). Not encrypted; this device only. */
+const REVISIONS_KEY = "fsboard-weekly-workboard-revisions-v1";
+
+/** Prefix for native DnD `text/plain`; many browsers refuse drops unless `setData` ran on dragstart. */
+const WEEK_LIST_DD_PREFIX = "__FS_BOARD_LIST_DD__:";
+
+type WeekListDragPayload =
+  | { kind: "task"; assignmentId: string; taskId: string; fromDay: string }
+  | { kind: "chunk"; assignmentId: string; taskId: string; chunkId: string; fromDay: string };
+
+function serializeWeekListDragForTransfer(payload: WeekListDragPayload): string {
+  return `${WEEK_LIST_DD_PREFIX}${JSON.stringify(payload)}`;
+}
+
+function deserializeWeekListDragFromTransfer(raw: string | undefined | null): WeekListDragPayload | null {
+  if (!raw || !raw.startsWith(WEEK_LIST_DD_PREFIX)) return null;
+  try {
+    const o = JSON.parse(raw.slice(WEEK_LIST_DD_PREFIX.length));
+    if (!o || typeof o !== "object") return null;
+    if (
+      typeof o.kind !== "string" ||
+      typeof o.assignmentId !== "string" ||
+      typeof o.taskId !== "string" ||
+      typeof o.fromDay !== "string"
+    ) {
+      return null;
+    }
+    if (o.kind === "task") return { kind: "task", assignmentId: o.assignmentId, taskId: o.taskId, fromDay: o.fromDay };
+    if (o.kind === "chunk") {
+      if (typeof (o as { chunkId?: string }).chunkId !== "string") return null;
+      return {
+        kind: "chunk",
+        assignmentId: o.assignmentId,
+        taskId: o.taskId,
+        chunkId: (o as { chunkId: string }).chunkId,
+        fromDay: o.fromDay,
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function peekWeekListDropPayload(ref: WeekListDragPayload | null, e: DragEvent): WeekListDragPayload | null {
+  if (ref) return ref;
+  try {
+    return deserializeWeekListDragFromTransfer(e.dataTransfer?.getData("text/plain"));
+  } catch {
+    return null;
+  }
+}
+
+function attachWeekListNativeDragPayload(e: DragEvent, dragRefPayload: MutableRefObject<WeekListDragPayload | null>, p: WeekListDragPayload) {
+  dragRefPayload.current = p;
+  e.dataTransfer.effectAllowed = "move";
+  try {
+    e.dataTransfer.setData("text/plain", serializeWeekListDragForTransfer(p));
+  } catch {
+    /* Ignore (some environments restrict drag data types). Ref + deferred clear still fixes most cases. */
+  }
+}
+
+function scheduleClearWeekListDragRef(dragRefPayload: MutableRefObject<WeekListDragPayload | null>) {
+  window.setTimeout(() => {
+    dragRefPayload.current = null;
+  }, 0);
+}
+
+type WorkboardRevision = { ts: number; week_start: string; assignments: MainAssignment[] };
+
+function readWorkboardRevisions(): WorkboardRevision[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(REVISIONS_KEY);
+    if (!raw) return [];
+    const p = JSON.parse(raw);
+    if (!Array.isArray(p)) return [];
+    return p as WorkboardRevision[];
+  } catch {
+    return [];
+  }
+}
+
+function pushWorkboardWeekRevision(rows: MainAssignment[], maxStored = 32) {
+  if (typeof window === "undefined" || !rows.length) return;
+  const wk = rows[0]?.week_start;
+  if (!wk || rows.some((r) => r.week_start !== wk)) return;
+  try {
+    const norm = normalizeAssignments(JSON.parse(JSON.stringify(rows)) as MainAssignment[]);
+    const list = readWorkboardRevisions();
+    list.unshift({ ts: Date.now(), week_start: wk, assignments: norm });
+    localStorage.setItem(REVISIONS_KEY, JSON.stringify(list.slice(0, maxStored)));
+  } catch {
+    /* ignore */
+  }
+}
+
+function revisionsForWeek(weekStartIso: string): WorkboardRevision[] {
+  return readWorkboardRevisions()
+    .filter((r) => r.week_start === weekStartIso)
+    .slice(0, 12);
+}
+
+function countPrimariesInAssignments(rows: MainAssignment[]): number {
+  return rows.reduce((n, a) => n + (a.primary_tasks?.length ?? 0), 0);
+}
+
+function loadStoreSliceForWeek(weekStartIso: string): MainAssignment[] {
+  try {
+    const slice = loadStore().filter((a) => a.week_start === weekStartIso);
+    return slice.length ? normalizeAssignments(JSON.parse(JSON.stringify(slice)) as MainAssignment[]) : [];
+  } catch {
+    return [];
+  }
+}
 
 const MY_WORKBOARD_ROLE_STORAGE = "fsboard-workboard-my-role-v1";
 
@@ -590,6 +733,34 @@ export default function WeeklyWorkboard() {
   const [myRoleDialogOpen, setMyRoleDialogOpen] = useState(false);
   const [myRoleDialogForced, setMyRoleDialogForced] = useState(false);
   const hydratedWeekStartRef = useRef<string | null>(null);
+  /** Skip duplicate snapshots in `pushWorkboardWeekRevision`. */
+  const lastRevisionFingerprintRef = useRef<string>("");
+  const [backupPickerOpen, setBackupPickerOpen] = useState(false);
+
+  const workboardWeekRevisions = useMemo(() => {
+    if (!backupPickerOpen) return [];
+    return revisionsForWeek(weekStart);
+  }, [weekStart, backupPickerOpen]);
+
+  const restoreWorkboardFromRevision = useCallback((rev: WorkboardRevision) => {
+    const merged = normalizeAssignments(JSON.parse(JSON.stringify(rev.assignments)) as MainAssignment[]);
+    lastRevisionFingerprintRef.current = "";
+    setAssignments(merged);
+    setBackupPickerOpen(false);
+    hydratedWeekStartRef.current = rev.week_start;
+    toast.success(
+      `Restored local snapshot from ${new Date(rev.ts).toLocaleString()} (${countPrimariesInAssignments(merged)} cards). Saves in a moment.`,
+    );
+  }, []);
+
+  const restoreWeekFromBrowserMainKey = useCallback(() => {
+    const slice = loadStoreSliceForWeek(weekStart);
+    if (!slice.length) {
+      toast.message(`No data in fsboard-weekly-workboard-v1 for the week starting ${weekStart}.`);
+      return;
+    }
+    restoreWorkboardFromRevision({ ts: Date.now(), week_start: weekStart, assignments: slice });
+  }, [weekStart, restoreWorkboardFromRevision]);
 
   const workboardQ = useQuery({
     queryKey: ["weekly-workboard", weekStart],
@@ -742,6 +913,11 @@ export default function WeeklyWorkboard() {
       // If we haven't loaded the server data yet, don't overwrite it with empty.
       const serverLen = Array.isArray(workboardQ.data?.assignments) ? workboardQ.data!.assignments.length : 0;
       if (assignments.length === 0 && serverLen > 0) return;
+      const fingerprint = JSON.stringify(normalizeAssignments(assignments));
+      if (fingerprint !== lastRevisionFingerprintRef.current) {
+        lastRevisionFingerprintRef.current = fingerprint;
+        pushWorkboardWeekRevision(assignments);
+      }
       saveMut.mutate(assignments);
     }, 600);
     return () => clearTimeout(t);
@@ -1055,6 +1231,62 @@ export default function WeeklyWorkboard() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={backupPickerOpen} onOpenChange={setBackupPickerOpen}>
+        <DialogContent className="sm:max-w-lg border border-white/10 bg-zinc-950/98 text-zinc-100 backdrop-blur-2xl max-h-[min(80vh,560px)] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-white">Recover this week (this browser)</DialogTitle>
+            <DialogDescription className="text-zinc-400 text-[15px] leading-relaxed">
+              We keep a few automatic snapshots on this device before each save. If cards vanished after dragging, pick a time below
+              to restore. This overwrites the visible week and re-saves to the team.
+            </DialogDescription>
+          </DialogHeader>
+          {workboardWeekRevisions.length === 0 ? (
+            <p className="text-sm text-zinc-500 py-2">
+              No snapshots stored yet for this week—they are created when the board auto-saves (~600ms after you stop editing).
+              You can also open DevTools → Application → Local Storage and inspect{" "}
+              <code className="text-violet-300/90">fsboard-weekly-workboard-v1</code> for raw JSON backups.
+            </p>
+          ) : (
+            <ul className="space-y-2 pt-1">
+              {workboardWeekRevisions.map((rev) => (
+                <li
+                  key={String(rev.ts)}
+                  className="rounded-xl border border-white/10 bg-white/[0.04] p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
+                >
+                  <div className="text-sm">
+                    <div className="text-zinc-200 font-medium">{new Date(rev.ts).toLocaleString()}</div>
+                    <div className="text-xs text-zinc-500 mt-0.5">
+                      {countPrimariesInAssignments(rev.assignments)} main card
+                      {countPrimariesInAssignments(rev.assignments) === 1 ? "" : "s"} ·{" "}
+                      {rev.assignments.map((a) => WORKBOARD_ROLES.find((r) => r.id === a.role_id)?.short ?? a.role_id).join(", ")}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => restoreWorkboardFromRevision(rev)}
+                    className="shrink-0 rounded-lg border border-violet-500/40 bg-violet-600/20 px-3 py-2 text-xs font-semibold text-violet-100 hover:bg-violet-600/35"
+                  >
+                    Restore
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="mt-4 pt-3 border-t border-white/10 flex flex-col gap-2">
+            <p className="text-xs text-zinc-500">
+              If the snapshots above miss your cards, try the aggregated browser cache — it often still holds older merged weeks as JSON.
+            </p>
+            <button
+              type="button"
+              onClick={restoreWeekFromBrowserMainKey}
+              className="self-start rounded-lg border border-white/15 bg-white/[0.06] px-3 py-2 text-xs font-medium text-zinc-200 hover:bg-white/10"
+            >
+              Try restore from main local cache ({countPrimariesInAssignments(loadStoreSliceForWeek(weekStart)) || 0} cards)
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <div className="pl-[70px] pr-6 pt-8 pb-12 max-w-[min(100%,1520px)] mx-auto">
         <ScrollReveal delay={0.05}>
           <div className="flex flex-wrap items-center justify-start gap-3 mb-8">
@@ -1122,6 +1354,18 @@ export default function WeeklyWorkboard() {
               >
                 <LayoutGrid className="w-4 h-4" />
                 Gallery
+              </button>
+            </div>
+
+            <div className={`inline-flex ${BENTO_SURFACE} p-1`}>
+              <button
+                type="button"
+                onClick={() => setBackupPickerOpen(true)}
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-xl text-zinc-300 hover:text-white hover:bg-violet-500/10 transition-colors"
+                title="Restore from automatic local snapshots (this browser)"
+              >
+                <History className="w-4 h-4 text-violet-300/80" />
+                Recover week
               </button>
             </div>
             {user?.email && (
@@ -1946,10 +2190,7 @@ function WeekGridListView({
   } | null>(null);
   const commitDialogBusyRef = useRef(false);
 
-  type DragPayload =
-    | { kind: "task"; assignmentId: string; taskId: string; fromDay: string }
-    | { kind: "chunk"; assignmentId: string; taskId: string; chunkId: string; fromDay: string };
-  const dragRef = useRef<DragPayload | null>(null);
+  const dragRef = useRef<WeekListDragPayload | null>(null);
 
   const missingRoles = WORKBOARD_ROLES.filter((r) => !weekAssignments.some((a) => a.role_id === r.id));
 
@@ -2114,20 +2355,25 @@ function WeekGridListView({
               onDrop={(e) => {
                 e.preventDefault();
                 setDragOverDay(null);
-                const payload = dragRef.current;
+                const payload = peekWeekListDropPayload(dragRef.current, e);
                 dragRef.current = null;
                 if (!payload) return;
                 // Only handle cross-day moves.
                 if (payload.fromDay === dIso) return;
                 const a = weekAssignments.find((x) => x.id === payload.assignmentId);
                 const pt = a?.primary_tasks?.find((x) => x.id === payload.taskId);
-                if (!a || !pt) return;
+                if (!a || !pt) {
+                  toast.error("Couldn't apply move — refresh the page and try again.");
+                  return;
+                }
+                const dayBits = `${dayLabel(dIso)} ${daySub(dIso)}`;
                 if (payload.kind === "task") {
                   const origin = (pt as any).origin_due_date || pt.due_date;
                   patchPrimaryTask(payload.assignmentId, payload.taskId, {
                     due_date: dIso,
                     origin_due_date: origin,
                   } as any);
+                  toast.success(`Moved to ${dayBits}`);
                   return;
                 }
                 const ch = pt.chunks?.find((c) => c.id === payload.chunkId);
@@ -2137,6 +2383,7 @@ function WeekGridListView({
                   scheduled_for: dIso,
                   origin_scheduled_for: origin,
                 } as any);
+                toast.success(`Step moved to ${dayBits}`);
               }}
             >
               <div className="mb-2 shrink-0">
@@ -2229,11 +2476,16 @@ function WeekGridListView({
                                 <div
                                   className="shrink-0 w-8 flex items-center justify-center cursor-grab active:cursor-grabbing text-zinc-600 hover:text-zinc-400 border-r border-white/[0.06] bg-black/20"
                                   draggable
-                                  onDragStart={() => {
-                                    dragRef.current = { kind: "task", assignmentId: a.id, taskId: pt.id, fromDay: dIso };
-                                  }}
+                                  onDragStart={(e) =>
+                                    attachWeekListNativeDragPayload(e, dragRef, {
+                                      kind: "task",
+                                      assignmentId: a.id,
+                                      taskId: pt.id,
+                                      fromDay: dIso,
+                                    })
+                                  }
                                   onDragEnd={() => {
-                                    dragRef.current = null;
+                                    scheduleClearWeekListDragRef(dragRef);
                                     setDragOverDay(null);
                                   }}
                                   title="Drag to another day"
@@ -2284,11 +2536,17 @@ function WeekGridListView({
                                         >
                                           <div
                                             draggable
-                                            onDragStart={() => {
-                                              dragRef.current = { kind: "chunk", assignmentId: a.id, taskId: pt.id, chunkId: c.id, fromDay: dIso };
-                                            }}
+                                            onDragStart={(e) =>
+                                              attachWeekListNativeDragPayload(e, dragRef, {
+                                                kind: "chunk",
+                                                assignmentId: a.id,
+                                                taskId: pt.id,
+                                                chunkId: c.id,
+                                                fromDay: dIso,
+                                              })
+                                            }
                                             onDragEnd={() => {
-                                              dragRef.current = null;
+                                              scheduleClearWeekListDragRef(dragRef);
                                               setDragOverDay(null);
                                             }}
                                             title="Drag step to another day"
@@ -2332,17 +2590,17 @@ function WeekGridListView({
                                 >
                                   <div
                                     draggable
-                                    onDragStart={() => {
-                                      dragRef.current = {
+                                    onDragStart={(e) =>
+                                      attachWeekListNativeDragPayload(e, dragRef, {
                                         kind: "chunk",
                                         assignmentId: a.id,
                                         taskId: pt.id,
                                         chunkId: c.id,
                                         fromDay: dIso,
-                                      };
-                                    }}
+                                      })
+                                    }
                                     onDragEnd={() => {
-                                      dragRef.current = null;
+                                      scheduleClearWeekListDragRef(dragRef);
                                       setDragOverDay(null);
                                     }}
                                     title="Drag step to another day"
