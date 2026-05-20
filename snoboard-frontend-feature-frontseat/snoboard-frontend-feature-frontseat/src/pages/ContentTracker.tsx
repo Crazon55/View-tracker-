@@ -31,6 +31,14 @@ const PT: Record<string,{label:string;color:string;bg:string}> = {
 };
 const SOURCES = ["original","competitor"];
 
+/** Normalize API stage strings for boards + stats (handles casing / legacy "killed"). */
+function normalizePipelineStage(stage: unknown): string {
+  const s = String(stage ?? "").trim().toLowerCase();
+  if (s === "killed") return "kill";
+  if (STAGES.includes(s)) return s;
+  return s || "new";
+}
+
 // All date math here is intentionally LOCAL. `toISOString().slice(0,10)` is
 // poison on any machine east of UTC (e.g. IST = UTC+5:30) — midnight local
 // converts to 18:30 the previous day in UTC, and the slice gives you
@@ -42,6 +50,18 @@ const toLocalISO = (d: Date) => {
   const dd = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${dd}`;
 };
+
+/** Local calendar YYYY-MM-DD from a DB timestamp (never use raw ISO slice for "today"). */
+function toLocalDateKeyFromTimestamp(raw: string | null | undefined): string {
+  if (raw == null || raw === "") return "";
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) {
+    const m = /^(\d{4}-\d{2}-\d{2})/.exec(String(raw).trim());
+    return m ? m[1] : "";
+  }
+  return toLocalISO(d);
+}
+
 const today = () => toLocalISO(new Date());
 const fmtD = (d: string) => { const dt=new Date(d+"T00:00:00"); return dt.toLocaleDateString("en-US",{month:"short",day:"numeric"}); };
 const fmtDFull = (d: string) => { const dt=new Date(d+"T00:00:00"); return dt.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}); };
@@ -130,29 +150,50 @@ function filterIdeasByCreatedDateRange(ideas: any[], from: string, to: string): 
   const lo = from <= to ? from : to;
   const hi = from <= to ? to : from;
   return ideas.filter((i) => {
-    const d = (i.created_at || "").slice(0, 10);
+    const d = toLocalDateKeyFromTimestamp(i.created_at);
     if (!d) return false;
     return d >= lo && d <= hi;
   });
 }
 
-/** Content tracker header stats (reel ideas). Scaled = ideas currently in Proven, Scheduled, or Posted. */
-function contentTrackerLifecycleStats(ideas: any[]) {
+function killCountsForStatWindow(fullBoardIdeas: any[], mode: "today" | "all" | "custom", statFrom: string, statTo: string): number {
+  if (mode === "all") return fullBoardIdeas.filter((i) => normalizePipelineStage(i.stage) === "kill").length;
+  const lo = statFrom <= statTo ? statFrom : statTo;
+  const hi = statFrom <= statTo ? statTo : statFrom;
+  return fullBoardIdeas.filter((i) => {
+    if (normalizePipelineStage(i.stage) !== "kill") return false;
+    const kd = toLocalDateKeyFromTimestamp(i.killed_at);
+    if (kd && kd >= lo && kd <= hi) return true;
+    if (!i.killed_at && !kd) {
+      const cd = toLocalDateKeyFromTimestamp(i.created_at);
+      return !!(cd && cd >= lo && cd <= hi);
+    }
+    return false;
+  }).length;
+}
+
+/** Header stats — Source/Scaled stay tied to creation-date scope; Killed counts current kill-column rows landed in window (via killed_at, else legacy created date). */
+function contentTrackerLifecycleStats(
+  scopedByCreatedAt: any[],
+  fullBoardIdeas: any[],
+  statMode: "today" | "all" | "custom",
+  statFrom: string,
+  statTo: string,
+) {
   let nComp = 0;
   let nOrig = 0;
   let nOther = 0;
   let scaled = 0;
-  let killed = 0;
-  for (const i of ideas) {
+  for (const i of scopedByCreatedAt) {
     const src = (i.source || "original") as string;
     if (src === "competitor") nComp += 1;
     else if (src === "original") nOrig += 1;
     else nOther += 1;
-    const st = (i.stage || "") as string;
+    const st = normalizePipelineStage(i.stage);
     if (SCALED_STAGES.has(st)) scaled += 1;
-    if (st === "kill") killed += 1;
   }
-  const denom = ideas.length;
+  const killed = killCountsForStatWindow(fullBoardIdeas, statMode, statFrom, statTo);
+  const denom = scopedByCreatedAt.length;
   const pct = (c: number) => (denom > 0 ? (100 * c) / denom : 0);
   return {
     nComp,
@@ -164,6 +205,63 @@ function contentTrackerLifecycleStats(ideas: any[]) {
     scaled,
     killed,
   };
+}
+
+/** Small bounded Levenshtein for typo-tolerant suggestion ranking. */
+function levenshtein(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i]![0] = i;
+  for (let j = 0; j <= n; j++) dp[0]![j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i]![j] = Math.min(
+        (dp[i - 1]?.[j] ?? 0) + 1,
+        (dp[i]?.[j - 1] ?? 0) + 1,
+        (dp[i - 1]?.[j - 1] ?? 0) + cost,
+      );
+    }
+  }
+  return dp[m]?.[n] ?? n;
+}
+
+function fuzzyScoreForIdea(query: string, idea: any): number {
+  const q = query.trim().toLowerCase();
+  if (!q) return 0;
+  const title = String(idea.title || "").toLowerCase();
+  const notes = String(idea.notes || "").toLowerCase();
+  const hooks = (Array.isArray(idea.hook_variations) ? idea.hook_variations : [])
+    .map((x: string) => String(x).toLowerCase())
+    .join(" ");
+  const hay = `${title} ${notes} ${hooks}`.trim();
+  if (!hay) return 0;
+  if (hay.includes(q)) return 1200;
+  const toks = q.split(/\s+/).filter(Boolean);
+  if (toks.length >= 2 && toks.every((t) => hay.includes(t))) return 950;
+  let pi = 0;
+  let matched = 0;
+  for (let i = 0; i < hay.length && pi < q.length; i++) {
+    if (hay[i] === q[pi]) {
+      matched++;
+      pi++;
+    }
+  }
+  if (pi === q.length && q.length >= 2) return 500 + matched;
+  if (q.length <= 22 && title.length <= 160) {
+    const slice = title.slice(0, Math.min(title.length, 96));
+    const d = levenshtein(q, slice);
+    const maxDist = Math.max(2, Math.floor(q.length / 5));
+    if (d <= maxDist) return 380 - d * 35;
+  }
+  return 0;
+}
+
+function fuzzyMatchesIdea(query: string, idea: any): boolean {
+  return fuzzyScoreForIdea(query, idea) > 0;
 }
 
 function PB({tag}: {tag: string|null}){ if(!tag||!PT[tag]) return null; const t=PT[tag]; return <span style={{display:"inline-block",fontSize:10,fontWeight:600,padding:"1px 7px",borderRadius:99,background:t.bg,color:t.color}}>{t.label}</span>; }
@@ -641,18 +739,6 @@ export default function ContentTracker(){
   const [statFilterMode, setStatFilterMode] = useState<"today" | "all" | "custom">("today");
   const [statFrom, setStatFrom] = useState(() => today());
   const [statTo, setStatTo] = useState(() => today());
-  const ideasForHeaderStats = useMemo(() => {
-    if (statFilterMode === "all") return ideas;
-    if (statFilterMode === "today") {
-      const t = today();
-      return filterIdeasByCreatedDateRange(ideas, t, t);
-    }
-    if (statFilterMode === "custom" && statFrom && statTo) {
-      return filterIdeasByCreatedDateRange(ideas, statFrom, statTo);
-    }
-    return [];
-  }, [ideas, statFilterMode, statFrom, statTo]);
-  const lifecycleStats = useMemo(() => contentTrackerLifecycleStats(ideasForHeaderStats), [ideasForHeaderStats]);
   const isLoading = nichesLoading || ideasLoading;
   const ideasRef = useRef(ideas);
   ideasRef.current = ideas;
@@ -761,16 +847,78 @@ export default function ContentTracker(){
   const [filterDateTo,setFilterDateTo]=useState("");
   const [collapsedStages,setCollapsedStages]=useState<Record<string,boolean>>({});
 
-  const nicheFiltered=nicheFilter==="all"?ideas:ideas.filter(i=>(i.nicheIds||[]).includes(nicheFilter));
-  const sourceFiltered=sourceFilter==="all"?nicheFiltered:nicheFiltered.filter(i=>i.source===sourceFilter);
-  const compFiltered=compResearchFilter?sourceFiltered.filter(i=>i.tags?.includes("comp_research")):sourceFiltered;
-  const filteredIdeas=(filterDateFrom||filterDateTo)?compFiltered.filter(i=>{
-    const d=i.created_at ? i.created_at.slice(0,10) : "";
-    if(!d) return false;
-    if(filterDateFrom && d<filterDateFrom) return false;
-    if(filterDateTo && d>filterDateTo) return false;
-    return true;
-  }):compFiltered;
+  const ideasAfterBoardFilters = useMemo(() => {
+    let x = nicheFilter === "all" ? ideas : ideas.filter((i) => (i.nicheIds || []).includes(nicheFilter));
+    x = sourceFilter === "all" ? x : x.filter((i) => i.source === sourceFilter);
+    x = compResearchFilter ? x.filter((i) => i.tags?.includes("comp_research")) : x;
+    return x;
+  }, [ideas, nicheFilter, sourceFilter, compResearchFilter]);
+
+  const filteredIdeas = useMemo(() => {
+    if (!(filterDateFrom || filterDateTo)) return ideasAfterBoardFilters;
+    return ideasAfterBoardFilters.filter((i) => {
+      const d = toLocalDateKeyFromTimestamp(i.created_at);
+      if (!d) return false;
+      if (filterDateFrom && d < filterDateFrom) return false;
+      if (filterDateTo && d > filterDateTo) return false;
+      return true;
+    });
+  }, [ideasAfterBoardFilters, filterDateFrom, filterDateTo]);
+
+  /** Reel-tracker toolbar search — fuzzy-match titles/notes/hooks among ideas matching niche/source/comp chips. */
+  const [ideaSearchQuery, setIdeaSearchQuery] = useState("");
+  const [ideaSearchDebounced, setIdeaSearchDebounced] = useState("");
+  const [ideaSearchFocused, setIdeaSearchFocused] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setIdeaSearchDebounced(ideaSearchQuery), 220);
+    return () => window.clearTimeout(t);
+  }, [ideaSearchQuery]);
+
+  const searchFilteredIdeas = useMemo(() => {
+    const q = ideaSearchDebounced.trim();
+    if (!q) return filteredIdeas;
+    return filteredIdeas.filter((i) => fuzzyMatchesIdea(q, i));
+  }, [filteredIdeas, ideaSearchDebounced]);
+
+  const ideaSearchSuggestions = useMemo(() => {
+    const q = ideaSearchQuery.trim().toLowerCase();
+    if (q.length < 1 || !ideaSearchFocused) return [] as any[];
+    return ideasAfterBoardFilters
+      .map((idea: any) => ({ idea, score: fuzzyScoreForIdea(q, idea) }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score || Number(b.idea.createdAt || 0) - Number(a.idea.createdAt || 0))
+      .slice(0, 14)
+      .map((x) => x.idea);
+  }, [ideaSearchQuery, ideaSearchFocused, ideasAfterBoardFilters]);
+
+  const ideaStageCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    STAGES.forEach((s) => {
+      counts[s] = 0;
+    });
+    searchFilteredIdeas.forEach((i: any) => {
+      const st = normalizePipelineStage(i.stage);
+      if (st in counts) counts[st] = (counts[st] ?? 0) + 1;
+    });
+    return counts;
+  }, [searchFilteredIdeas]);
+
+  const ideasForHeaderStats = useMemo(() => {
+    if (statFilterMode === "all") return ideasAfterBoardFilters;
+    if (statFilterMode === "today") {
+      const t = today();
+      return filterIdeasByCreatedDateRange(ideasAfterBoardFilters, t, t);
+    }
+    if (statFilterMode === "custom" && statFrom && statTo) {
+      return filterIdeasByCreatedDateRange(ideasAfterBoardFilters, statFrom, statTo);
+    }
+    return [];
+  }, [ideasAfterBoardFilters, statFilterMode, statFrom, statTo]);
+  const lifecycleStats = useMemo(
+    () => contentTrackerLifecycleStats(ideasForHeaderStats, ideasAfterBoardFilters, statFilterMode, statFrom, statTo),
+    [ideasAfterBoardFilters, ideasForHeaderStats, statFilterMode, statFrom, statTo],
+  );
+
   const allPagesForFilter=nicheFilter==="all"?niches.flatMap((n: any)=>n.pages):(niches.find((n: any)=>n.id===nicheFilter)?.pages||[]);
 
   // ---- Actions wired to mutations ----
@@ -913,10 +1061,9 @@ export default function ContentTracker(){
     testing:[{label:"Proven / Batch edit",stage:"proven_ideas",style:{...bp,background:"#1D9E75"}},{label:"Kill it",stage:"kill",style:{...bs,color:"#C93B3B"}}],
     proven_ideas:[{label:"Schedule",stage:"scheduled",style:{...bp,background:"#534AB7"}}],
     scheduled:[{label:"Mark posted",stage:"posted",style:{...bp,background:"#2D9E5F"}}],
-    posted:[],kill:[],
+    posted:[],    kill:[],
   };
 
-  const counts: Record<string,number>={};STAGES.forEach(s=>{counts[s]=filteredIdeas.filter(i=>i.stage===s).length;});
   // openDetail / closeDetail are defined above to keep URL in sync
 
   // ---- Loading spinner ----
@@ -1019,7 +1166,7 @@ export default function ContentTracker(){
             </div>
             <p
               style={{ margin: "6px 0 0", fontSize: 11, color: "#a1a1aa", lineHeight: 1.5, maxWidth: 920 }}
-              title="Uses ideas whose created date falls in the scope above. Source % = share within that set. Scaled = those ideas currently in Proven, Scheduled, or Posted. Killed = those in the Killed column."
+              title="In-scope = ideas created in the STATS SCOPE above. Source % is within that set. Scaled = those ideas currently in Proven, Scheduled, or Posted. Killed = ideas currently in Killed whose killed date falls in scope (or legacy: created in scope if killed date is missing)."
             >
               <span style={{ color: "#a1a1aa" }}>
                 {ideasForHeaderStats.length} in scope
@@ -1046,7 +1193,7 @@ export default function ContentTracker(){
                 Scaled (past testing): {lifecycleStats.scaled}
               </span>
               <span style={{ color: "#3f3f46" }}> · </span>
-              <span style={{ color: "#FF7070" }} title="Among in-scope ideas: in the Killed column">
+              <span style={{ color: "#FF7070" }} title="Ideas in Killed with killed date in scope (see tooltip on the line above)">
                 {lifecycleStats.killed} killed
               </span>
             </p>
@@ -1069,7 +1216,82 @@ export default function ContentTracker(){
             </select>
           )}
           {/* View mode switch removed (List/Calendar not used) */}
-          <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ position: "relative", minWidth: 160, maxWidth: 280, flex: "1 1 160px" }}>
+              <input
+                type="search"
+                value={ideaSearchQuery}
+                onChange={(e) => setIdeaSearchQuery(e.target.value)}
+                onFocus={() => setIdeaSearchFocused(true)}
+                onBlur={() => window.setTimeout(() => setIdeaSearchFocused(false), 200)}
+                placeholder="Search ideas…"
+                aria-autocomplete="list"
+                aria-expanded={ideaSearchSuggestions.length > 0}
+                style={{
+                  width: "100%",
+                  boxSizing: "border-box",
+                  padding: "6px 10px",
+                  borderRadius: 7,
+                  border: "1.5px solid #3f3f46",
+                  fontSize: 12,
+                  background: "#09090b",
+                  color: "#e4e4e7",
+                }}
+              />
+              {ideaSearchSuggestions.length > 0 && (
+                <ul
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    right: 0,
+                    top: "100%",
+                    margin: "4px 0 0",
+                    padding: 4,
+                    listStyle: "none",
+                    background: "#18181b",
+                    border: "1px solid #3f3f46",
+                    borderRadius: 8,
+                    maxHeight: 280,
+                    overflowY: "auto",
+                    zIndex: 50,
+                    boxShadow: "0 12px 40px rgba(0,0,0,0.45)",
+                  }}
+                  role="listbox"
+                >
+                  {ideaSearchSuggestions.map((idea: any) => (
+                    <li key={idea.id} role="option">
+                      <button
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setIdeaSearchFocused(false);
+                          openDetail(idea);
+                        }}
+                        style={{
+                          display: "block",
+                          width: "100%",
+                          textAlign: "left",
+                          padding: "8px 10px",
+                          margin: 0,
+                          border: "none",
+                          borderRadius: 6,
+                          background: "transparent",
+                          color: "#e4e4e7",
+                          fontSize: 12,
+                          cursor: "pointer",
+                          lineHeight: 1.35,
+                        }}
+                      >
+                        <span style={{ fontWeight: 600 }}>{idea.title || "(untitled)"}</span>
+                        <span style={{ display: "block", fontSize: 10, color: "#71717a", marginTop: 2 }}>
+                          {SL[normalizePipelineStage(idea.stage)] || idea.stage}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             <div style={{display:"flex",alignItems:"center",gap:4}}>
               <input type="date" value={filterDateFrom} onChange={e=>setFilterDateFrom(e.target.value)} title="From" style={{padding:"5px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:11,background:"#09090b",color:"#a1a1aa",cursor:"pointer"}}/>
               <span style={{fontSize:10,color:"#52525b"}}>→</span>
@@ -1095,15 +1317,15 @@ export default function ContentTracker(){
               <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 4px 8px"}}>
                 <span style={{width:7,height:7,borderRadius:"50%",background:SC[stage].dot}}/>
                 <span style={{fontSize:11,fontWeight:600,color:SC[stage].text}}>{SL[stage]}</span>
-                <span style={{fontSize:10,color:"#52525b",fontWeight:500}}>{counts[stage]}</span>
+                <span style={{fontSize:10,color:"#52525b",fontWeight:500}}>{ideaStageCounts[stage] ?? 0}</span>
               </div>
               <div style={{minHeight:50,padding:1,borderRadius:9,transition:"all 0.15s",border:dropStage===stage?"2px solid #7c3aed":"2px solid transparent",background:dropStage===stage?"rgba(124,58,237,0.05)":"transparent"}}>
-                {filteredIdeas.filter(i=>i.stage===stage).sort((a,b)=>b.createdAt-a.createdAt).map(idea=>(
+                {searchFilteredIdeas.filter(i=>normalizePipelineStage(i.stage)===stage).sort((a,b)=>b.createdAt-a.createdAt).map(idea=>(
                   <div key={idea.id} draggable onDragStart={e=>{setDraggingId(idea.id);e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain",idea.id);}} onDragEnd={()=>{setDraggingId(null);setDropStage(null);}} style={{opacity:draggingId===idea.id?0.4:1,transition:"opacity 0.15s"}}>
                     <IdeaCard idea={idea} niches={niches} onClick={()=>openDetail(idea)}/>
                   </div>
                 ))}
-                {counts[stage]===0&&<div style={{padding:"24px 12px",textAlign:"center",color:"#3f3f46",fontSize:11,border:"1.5px dashed #3f3f46",borderRadius:9}}>Empty</div>}
+                {(ideaStageCounts[stage] ?? 0)===0&&<div style={{padding:"24px 12px",textAlign:"center",color:"#3f3f46",fontSize:11,border:"1.5px dashed #3f3f46",borderRadius:9}}>Empty</div>}
               </div>
             </div>
           ))}
@@ -1153,26 +1375,26 @@ export default function ContentTracker(){
         }
         closeDetail();
       }} title={cd?.title||""} wide>
-        {cd&&(()=>{const pp=(cd.postings||[]).map((p: any)=>p.page);return(
+        {cd&&(()=>{const cdStage=normalizePipelineStage(cd.stage);const pp=(cd.postings||[]).map((p: any)=>p.page);return(
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
             <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-              <span style={{fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:99,background:SC[cd.stage].bg,color:SC[cd.stage].text}}>{SL[cd.stage]}</span>
+              <span style={{fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:99,background:(SC[cdStage]||SC.new).bg,color:(SC[cdStage]||SC.new).text}}>{SL[cdStage]||cdStage}</span>
               <span style={{fontSize:11,padding:"3px 9px",borderRadius:99,background:cd.source==="competitor"?"#EEEDFE":"#E8F5EE",color:cd.source==="competitor"?"#534AB7":"#1A5E3A",fontWeight:500}}>{cd.source==="competitor"?"Competitor":"Original"}</span>
               {cdNiches.map((n: any)=><span key={n.id} style={{fontSize:11,padding:"3px 9px",borderRadius:99,background:"#27272a",color:"#a1a1aa",fontWeight:500}}>{n.name}</span>)}
             </div>
-            {sa[cd.stage]?.length>0&&(
+            {(sa[cdStage]??[]).length>0&&(
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                {sa[cd.stage]?.map(a=><button key={a.stage} onClick={()=>moveIdea(cd.id,a.stage)} style={a.style}>{a.label}</button>)}
+                {sa[cdStage]?.map(a=><button key={a.stage} onClick={()=>moveIdea(cd.id,a.stage)} style={a.style}>{a.label}</button>)}
               </div>
             )}
-            {["testing","proven_ideas","scheduled","posted"].includes(cd.stage) && Array.isArray(cd.approvedForPages) && cd.approvedForPages.length > 0 && (
+            {["testing","proven_ideas","scheduled","posted"].includes(cdStage) && Array.isArray(cd.approvedForPages) && cd.approvedForPages.length > 0 && (
               <p style={{fontSize:11,color:"#71717a",margin:0,lineHeight:1.5}}>
                 <span style={{fontWeight:600,color:"#52525b"}}>Scoped to </span>
                 {cd.approvedForPages.map((h: string) => "@" + String(h).replace(/^@/,"")).join(" · ")}
               </p>
             )}
 
-            {cd.stage==="posted"&&(
+            {cdStage==="posted"&&(
               <PostedDateEditor
                 ideaId={cd.id}
                 label="Posted date"
@@ -1183,7 +1405,7 @@ export default function ContentTracker(){
 
             {/* Editable fields */}
             <div><label style={ls}>Niches</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{niches.map((n: any)=>{const sel=detailNicheIds.includes(n.id);return <button key={n.id} onClick={()=>{const next=sel?detailNicheIds.filter((x: string)=>x!==n.id):[...detailNicheIds,n.id];setDetailNicheIds(next);saveNiches(cd.id,next);const newCdPages=niches.filter((nn: any)=>next.includes(nn.id)).flatMap((nn: any)=>nn.pages||[]).filter((v: string,i: number,a: string[])=>a.indexOf(v)===i);setDetailApprovedPages((prev: string[])=>{const pr=prev.filter(p=>newCdPages.some((np: string)=>normH(np)===normH(p)));if(pr.length!==prev.length) saveApprovedPages(cd.id,pr);return pr;});}} style={{padding:"6px 12px",borderRadius:8,border:sel?"2px solid #7c3aed":"1.5px solid #3f3f46",background:sel?"#27272a":"#18181b",fontSize:12,fontWeight:600,cursor:"pointer",color:sel?"#fff":"#71717a"}}>{n.name}</button>;})}</div></div>
-            {cdPages.length>0 && (cd.stage==="approved" || cd.stage==="base_edit") && (
+            {cdPages.length>0 && (cdStage==="approved" || cdStage==="base_edit") && (
               <div>
                 <label style={ls}>Approved for pages</label>
                 <p style={{fontSize:11,color:"#52525b",margin:"0 0 8px",lineHeight:1.45}}>Pick which @handles this idea is approved to run on (under the niches above). Leave <strong style={{color:"#a1a1aa"}}>none</strong> selected to use <strong style={{color:"#a1a1aa"}}>all</strong> of those pages when you start testing.</p>
@@ -1219,14 +1441,14 @@ export default function ContentTracker(){
             </div>
             <div><label style={ls}>Frame link</label><SafeTextInput value={cd.frame_link} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{frame_link:v}})} placeholder="Google Drive / reference frames link" style={is}/></div>
             {cd.frame_link&&<a href={cd.frame_link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.frame_link}</a>}
-            {cd.stage==="base_edit"&&(
+            {cdStage==="base_edit"&&(
               <div>
                 <label style={ls}>Kalakar link</label>
                 <SafeTextInput value={cd.kalakar_link} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{kalakar_link:v}})} placeholder="Paste Kalakar project or edit link" style={is}/>
                 {!!cd.kalakar_link && <a href={cd.kalakar_link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all",display:"block",marginTop:4}}>{cd.kalakar_link}</a>}
               </div>
             )}
-            {cd.stage!=="base_edit" && cd.kalakar_link && (
+            {cdStage!=="base_edit" && cd.kalakar_link && (
               <div>
                 <label style={ls}>Kalakar link</label>
                 <a href={cd.kalakar_link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.kalakar_link}</a>
@@ -1241,16 +1463,16 @@ export default function ContentTracker(){
             {cd.comp_link&&<a href={cd.comp_link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.comp_link}</a>}
 
             {/* Page checklist — from testing stage onwards */}
-            {effectiveCdPages.length>0&&!["new","approved","base_edit"].includes(cd.stage)&&(
+            {effectiveCdPages.length>0&&!["new","approved","base_edit"].includes(cdStage)&&(
               <div>
                 <label style={{...ls,marginBottom:8}}>Pages ({cdNiches.map((n: any)=>n.name).join(", ")}) — select, schedule & track</label>
                 {effectiveCdPages.map((page: string)=>{const isP=pp.includes(page);const pi=(cd.postings||[]).findIndex((p: any)=>p.page===page);const po=pi>=0?cd.postings[pi]:null;const dk=`${cd.id}_${page}`;
-                  const sBorder=isP?(cd.stage==="testing"?"1.5px solid rgba(212,149,42,0.4)":cd.stage==="proven_ideas"?"1.5px solid rgba(29,158,117,0.4)":cd.stage==="kill"?"1.5px solid rgba(201,59,59,0.4)":(cd.stage==="scheduled"||cd.stage==="posted")?"1.5px solid rgba(34,197,94,0.4)":"1.5px solid #3f3f46"):"1px solid #27272a";
-                  const sBg=isP?(cd.stage==="testing"?"rgba(212,149,42,0.04)":cd.stage==="proven_ideas"?"rgba(29,158,117,0.04)":cd.stage==="kill"?"rgba(201,59,59,0.04)":(cd.stage==="scheduled"||cd.stage==="posted")?"rgba(34,197,94,0.04)":"#1a1a2e"):"#18181b";
+                  const sBorder=isP?(cdStage==="testing"?"1.5px solid rgba(212,149,42,0.4)":cdStage==="proven_ideas"?"1.5px solid rgba(29,158,117,0.4)":cdStage==="kill"?"1.5px solid rgba(201,59,59,0.4)":(cdStage==="scheduled"||cdStage==="posted")?"1.5px solid rgba(34,197,94,0.4)":"1.5px solid #3f3f46"):"1px solid #27272a";
+                  const sBg=isP?(cdStage==="testing"?"rgba(212,149,42,0.04)":cdStage==="proven_ideas"?"rgba(29,158,117,0.04)":cdStage==="kill"?"rgba(201,59,59,0.04)":(cdStage==="scheduled"||cdStage==="posted")?"rgba(34,197,94,0.04)":"#1a1a2e"):"#18181b";
                   return(
                   <div key={page} style={{padding:"10px 12px",background:sBg,borderRadius:8,marginBottom:4,border:sBorder}}>
                     {isP&&po?(
-                      <PostingCard key={po.id} po={po} page={page} fmtD={fmtD} PT={PT} updatePostingMut={updatePostingMut} onRemove={()=>togglePage(cd.id,page,0,"")} stage={cd.stage}/>
+                      <PostingCard key={po.id} po={po} page={page} fmtD={fmtD} PT={PT} updatePostingMut={updatePostingMut} onRemove={()=>togglePage(cd.id,page,0,"")} stage={cdStage}/>
                     ):(
                       <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                         <div onClick={()=>{const sd=scheduleDate[dk];togglePage(cd.id,page,sd?.baseline||0,sd?.date||today());setScheduleDate(p=>{const n={...p};delete n[dk];return n;});}} style={{width:20,height:20,borderRadius:5,border:"1.5px solid #3f3f46",background:"#18181b",cursor:"pointer",flexShrink:0}}/>
