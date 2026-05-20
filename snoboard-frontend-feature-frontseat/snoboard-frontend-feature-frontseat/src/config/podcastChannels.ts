@@ -80,6 +80,12 @@ export const GUEST_WATCHLIST: string[] = [
 /** Guest Alerts: only videos at least this long (full episodes, not shorts/clips). */
 export const MIN_GUEST_ALERT_DURATION_SECONDS = 40 * 60;
 
+/** Guest Alerts: max age of upload (freshness window). */
+export const GUEST_ALERT_MAX_AGE_DAYS = 14;
+
+/** “New Episodes” → Podcasts chip: only uploads newer than this. */
+export const NEW_EPISODES_PODCAST_MAX_AGE_DAYS = 7;
+
 /**
  * Extra lowercase phrases to match beyond the exact display name (YouTube titles often
  * abbreviate: first name only, no space, etc.). Only add distinctive tokens to limit false positives.

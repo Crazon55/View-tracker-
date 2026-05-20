@@ -5,7 +5,7 @@ function formatVideoDuration(seconds: number): string {
   if (!seconds || seconds < 60) return "";
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
-  if (h > 0) return `${h}:${String(m).padStart(2, "0")}`;
+  if (h > 0) return `${h}h ${m}m`;
   return `${m} min`;
 }
 
