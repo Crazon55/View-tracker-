@@ -7,11 +7,12 @@ import {
   MIN_GUEST_ALERT_DURATION_SECONDS,
   GUEST_ALERT_MAX_AGE_DAYS,
   NEW_EPISODES_PODCAST_MAX_AGE_DAYS,
+  SHORT_FORM_MAX_DURATION_SECONDS,
   matchGuestsInText,
 } from "@/config/podcastChannels";
 import PodcastCard from "@/components/PodcastCard";
 
-const CACHE_KEY = "podcast_alerts_cache_v7";
+const CACHE_KEY = "podcast_alerts_cache_v8";
 const CACHE_TTL = 2 * 60 * 60 * 1000; // 2 hours
 
 export type Episode = {
@@ -74,7 +75,8 @@ async function enrichWithVideoDetails(episodes: Episode[]): Promise<Episode[]> {
     const hasShortTag = /#shorts?\b/i.test(`${e.title} ${fullDesc}`);
     const durationSeconds = secs ?? 0;
     const isShort =
-      hasShortTag || (secs != null && secs > 0 ? secs <= 60 : false);
+      hasShortTag ||
+      (secs != null && secs > 0 ? secs < SHORT_FORM_MAX_DURATION_SECONDS : false);
     return { ...e, description: fullDesc, matchedGuests, durationSeconds, isShort };
   });
 }
@@ -162,7 +164,8 @@ type EpisodeFilter = "all" | "podcasts";
 
 export default function PodcastAlerts() {
   const [tab, setTab] = useState<Tab>("guest-alerts");
-  const [episodeFilter, setEpisodeFilter] = useState<EpisodeFilter>("all");
+  /** Default to last 7 days so counts match what "new" means. */
+  const [episodeFilter, setEpisodeFilter] = useState<EpisodeFilter>("podcasts");
   const [refreshKey, setRefreshKey] = useState(0);
 
   const { data, isLoading, isError } = useQuery({
@@ -176,9 +179,12 @@ export default function PodcastAlerts() {
   const failedCount = data?.failedCount ?? 0;
 
   const nonShortEpisodes = episodes.filter((e) => !e.isShort);
+  const recentNonShortEpisodes = nonShortEpisodes.filter((e) =>
+    publishedWithinDays(e.publishedAt, NEW_EPISODES_PODCAST_MAX_AGE_DAYS),
+  );
 
   /**
-   * Guest tab: watchlisted guest, not Short (≤60s), uploaded within 14 days, and ≥40 minutes
+   * Guest tab: watchlisted guest, not short-form clip, uploaded within 14 days, and ≥40 minutes
    * when duration is known (or unknown duration when the API omits length).
    */
   const guestAlerts = episodes.filter((e) => {
@@ -190,7 +196,8 @@ export default function PodcastAlerts() {
   });
 
   /**
-   * New Episodes: never show Shorts (≤60s). "All" = non-Short only. "Podcasts" = non-Short + ≤7 days.
+   * New Episodes: no short-form (see SHORT_FORM_MAX_DURATION_SECONDS). "Full list" = all loaded
+   * long-form. "Last 7 days" = long-form published in the last week.
    */
   const filteredEpisodes =
     episodeFilter === "podcasts"
@@ -222,7 +229,8 @@ export default function PodcastAlerts() {
             </p>
             <p className="text-zinc-600 text-xs mt-1 max-w-xl">
               Guest alerts: watchlisted founders & CEOs, <span className="text-zinc-500">40+ min</span>,{" "}
-              <span className="text-zinc-500">≤{GUEST_ALERT_MAX_AGE_DAYS} days</span> old. Shorts (≤60s) are not shown on this page.
+              <span className="text-zinc-500">≤{GUEST_ALERT_MAX_AGE_DAYS} days</span> old. Clips under{" "}
+              <span className="text-zinc-500">{SHORT_FORM_MAX_DURATION_SECONDS}s</span> and #shorts are hidden here.
             </p>
           </div>
           <button
@@ -275,12 +283,12 @@ export default function PodcastAlerts() {
           >
             <Mic className="w-3.5 h-3.5" />
             New Episodes
-            {!isLoading && nonShortEpisodes.length > 0 && (
+            {!isLoading && recentNonShortEpisodes.length > 0 && (
               <span className={cn(
                 "text-[10px] font-bold px-1.5 py-0.5 rounded-full",
                 tab === "new-episodes" ? "bg-white/20 text-white" : "bg-zinc-700 text-zinc-400"
               )}>
-                {nonShortEpisodes.length}
+                {recentNonShortEpisodes.length}
               </span>
             )}
           </button>
@@ -289,30 +297,33 @@ export default function PodcastAlerts() {
         {/* Episode type filter — only for New Episodes tab */}
         {tab === "new-episodes" && !isLoading && (
           <p className="text-zinc-600 text-xs">
-            Videos ≤60s (Shorts) are excluded from this page.
+            Under-{SHORT_FORM_MAX_DURATION_SECONDS}s clips and #shorts are excluded. Default view is{" "}
+            <span className="text-zinc-500">last {NEW_EPISODES_PODCAST_MAX_AGE_DAYS} days</span>; switch to{" "}
+            <span className="text-zinc-500">full list</span> to include older uploads we still have loaded.
           </p>
         )}
         {tab === "new-episodes" && !isLoading && (
-          <div className="flex gap-2">
-            {(["all", "podcasts"] as EpisodeFilter[]).map((f) => {
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                { id: "podcasts" as const, label: `Last ${NEW_EPISODES_PODCAST_MAX_AGE_DAYS} days` },
+                { id: "all" as const, label: "Full list" },
+              ] as const
+            ).map(({ id, label }) => {
               const count =
-                f === "all"
-                  ? nonShortEpisodes.length
-                  : nonShortEpisodes.filter((e) =>
-                      publishedWithinDays(e.publishedAt, NEW_EPISODES_PODCAST_MAX_AGE_DAYS),
-                    ).length;
+                id === "all" ? nonShortEpisodes.length : recentNonShortEpisodes.length;
               return (
                 <button
-                  key={f}
-                  onClick={() => setEpisodeFilter(f)}
+                  key={id}
+                  onClick={() => setEpisodeFilter(id)}
                   className={cn(
-                    "px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors capitalize",
-                    episodeFilter === f
+                    "px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors",
+                    episodeFilter === id
                       ? "bg-violet-600 text-white"
                       : "bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
                   )}
                 >
-                  {f} <span className="opacity-60">({count})</span>
+                  {label} <span className="opacity-60">({count})</span>
                 </button>
               );
             })}
@@ -351,10 +362,10 @@ export default function PodcastAlerts() {
             <Mic className="w-10 h-10 text-zinc-700 mx-auto mb-3" />
             <p className="text-zinc-400 text-sm font-medium">
               {tab === "guest-alerts"
-                ? `No guest alerts in the last ${GUEST_ALERT_MAX_AGE_DAYS} days matching your criteria (40+ min, watchlisted guest, no Shorts)`
+                ? `No guest alerts in the last ${GUEST_ALERT_MAX_AGE_DAYS} days matching your criteria (40+ min, watchlisted guest, no clips under ${SHORT_FORM_MAX_DURATION_SECONDS}s)`
                 : episodeFilter === "podcasts"
-                  ? `No podcast-length uploads in the last ${NEW_EPISODES_PODCAST_MAX_AGE_DAYS} days`
-                  : "No episodes loaded"}
+                  ? `No long-form uploads in the last ${NEW_EPISODES_PODCAST_MAX_AGE_DAYS} days`
+                  : "No long-form episodes in the loaded feed"}
             </p>
             <p className="text-zinc-600 text-xs mt-1">Try refreshing or check back later</p>
           </div>

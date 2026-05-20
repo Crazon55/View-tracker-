@@ -87,6 +87,12 @@ export const GUEST_ALERT_MAX_AGE_DAYS = 14;
 export const NEW_EPISODES_PODCAST_MAX_AGE_DAYS = 7;
 
 /**
+ * Exclude clips shorter than this (when duration is known). YouTube surfaces 61–119s as “1 min”
+ * in the player while a naive ≤60s rule misses them. #shorts in title/description is handled in code too.
+ */
+export const SHORT_FORM_MAX_DURATION_SECONDS = 120;
+
+/**
  * Extra lowercase phrases to match beyond the exact display name (YouTube titles often
  * abbreviate: first name only, no space, etc.). Only add distinctive tokens to limit false positives.
  */
