@@ -81,6 +81,52 @@ export const GUEST_WATCHLIST: string[] = [
 export const MIN_GUEST_ALERT_DURATION_SECONDS = 40 * 60;
 
 /**
+ * Extra lowercase phrases to match beyond the exact display name (YouTube titles often
+ * abbreviate: first name only, no space, etc.). Only add distinctive tokens to limit false positives.
+ */
+export const GUEST_TITLE_ALIASES: Partial<Record<string, string[]>> = {
+  "Aman Gupta": ["amangupta", "boAt", "boat "],
+  "Mukesh Ambani": ["mukesh d."],
+  "Nikhil Kamath": ["nikhil &"],
+  "Deepinder Goyal": ["deepinder goyal", "deepinder"],
+  "Ashneer Grover": ["ashneer grover", "ashneer"],
+  "Ritesh Agarwal": ["ritesh agarwal", "ritesh &", "oyo"],
+  "Vijay Shekhar Sharma": ["vijay shekhar", "vijay shekhar sharma", "vss"],
+  "Kunal Shah": ["kunal shah", "kunal ("],
+  "Peyush Bansal": ["peyush bansal", "peyush "],
+  "Namita Thapar": ["namita thapar"],
+  "Vineeta Singh": ["vineeta singh"],
+  "Anupam Mittal": ["anupam mittal"],
+  "Ratan Tata": ["ratan tata"],
+  "Nithin Kamath": ["nithin kamath", "nithin "],
+  "Varun Dua": ["varun dua", "acko"],
+  "Harsh Jain": ["harsh jain", "dream11"],
+  "Ghazal Alagh": ["ghazal alagh", "ghazal"],
+  "Bhavish Aggarwal": ["bhavish aggarwal", "bhavish"],
+  "Nandan Nilekani": ["nandan nilekani"],
+  "Sanjeev Bikhchandani": ["sanjeev bikhchandani", "bikhchandani"],
+};
+
+/**
+ * Return canonical watchlist names whose full name or aliases appear in title + description.
+ */
+export function matchGuestsInText(title: string, description: string): string[] {
+  const hay = `${title} ${description}`.toLowerCase();
+  const seen = new Set<string>();
+  for (const name of GUEST_WATCHLIST) {
+    if (seen.has(name)) continue;
+    if (hay.includes(name.toLowerCase())) {
+      seen.add(name);
+      continue;
+    }
+    const aliases = GUEST_TITLE_ALIASES[name];
+    if (!aliases) continue;
+    if (aliases.some((a) => hay.includes(a.toLowerCase()))) seen.add(name);
+  }
+  return [...seen];
+}
+
+/**
  * Broad India tech / business brand tokens (lowercase). Used if no per-guest company hit.
  * Keeps alerts tied to notable companies, not random name drops.
  */

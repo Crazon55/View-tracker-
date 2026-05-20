@@ -4,12 +4,12 @@ import { RefreshCw, Bell, Mic } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   PODCAST_CHANNELS,
-  GUEST_WATCHLIST,
   MIN_GUEST_ALERT_DURATION_SECONDS,
+  matchGuestsInText,
 } from "@/config/podcastChannels";
 import PodcastCard from "@/components/PodcastCard";
 
-const CACHE_KEY = "podcast_alerts_cache_v4";
+const CACHE_KEY = "podcast_alerts_cache_v5";
 const CACHE_TTL = 2 * 60 * 60 * 1000; // 2 hours
 
 export type Episode = {
@@ -36,52 +36,64 @@ function parseDurationSeconds(iso: string): number {
 
 async function enrichWithVideoDetails(episodes: Episode[]): Promise<Episode[]> {
   const durationMap = new Map<string, number>();
+  const descriptionMap = new Map<string, string>();
   const ids = episodes.map((e) => e.videoId);
   for (let i = 0; i < ids.length; i += 50) {
     const batch = ids.slice(i, i + 50);
     try {
       const res = await fetch(
-        `https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${batch.join(",")}&key=${YT_API_KEY}`,
+        `https://www.googleapis.com/youtube/v3/videos?part=contentDetails,snippet&id=${batch.join(",")}&key=${YT_API_KEY}`,
         { signal: AbortSignal.timeout(15000) }
       );
       if (res.ok) {
         const data = await res.json() as { items: any[] };
         for (const item of data.items ?? []) {
-          durationMap.set(item.id, parseDurationSeconds(item.contentDetails?.duration ?? ""));
+          const id = item.id as string;
+          durationMap.set(id, parseDurationSeconds(item.contentDetails?.duration ?? ""));
+          descriptionMap.set(id, String(item.snippet?.description ?? ""));
         }
       }
     } catch {}
   }
   return episodes.map((e) => {
+    const fullDesc = descriptionMap.get(e.videoId) ?? e.description;
+    const matchedGuests = matchGuestsInText(e.title, fullDesc);
     const secs = durationMap.get(e.videoId);
-    const hasShortTag = /#shorts?\b/i.test(`${e.title} ${e.description}`);
+    const hasShortTag = /#shorts?\b/i.test(`${e.title} ${fullDesc}`);
     const durationSeconds = secs ?? 0;
     const isShort =
       hasShortTag || (secs != null && secs > 0 ? secs <= 60 : false);
-    return { ...e, durationSeconds, isShort };
+    return { ...e, description: fullDesc, matchedGuests, durationSeconds, isShort };
   });
 }
 
 async function fetchChannelFeed(channelId: string, channelName: string): Promise<Episode[]> {
-  // Uploads playlist ID = channel ID with "UC" → "UU"
   const playlistId = "UU" + channelId.slice(2);
-  const url =
-    `https://www.googleapis.com/youtube/v3/playlistItems` +
-    `?part=snippet&maxResults=50&playlistId=${playlistId}&key=${YT_API_KEY}`;
+  const rawItems: any[] = [];
+  let pageToken: string | undefined;
+  for (let page = 0; page < 3; page++) {
+    const u = new URL("https://www.googleapis.com/youtube/v3/playlistItems");
+    u.searchParams.set("part", "snippet");
+    u.searchParams.set("maxResults", "50");
+    u.searchParams.set("playlistId", playlistId);
+    u.searchParams.set("key", YT_API_KEY);
+    if (pageToken) u.searchParams.set("pageToken", pageToken);
 
-  const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
-  if (!res.ok) throw new Error(`YouTube API error for ${channelName}: ${res.status}`);
+    const res = await fetch(u.toString(), { signal: AbortSignal.timeout(20000) });
+    if (!res.ok) throw new Error(`YouTube API error for ${channelName}: ${res.status}`);
 
-  const data = await res.json() as { items: any[] };
+    const data = await res.json() as { items?: any[]; nextPageToken?: string };
+    rawItems.push(...(data.items ?? []));
+    pageToken = data.nextPageToken;
+    if (!pageToken) break;
+  }
 
-  return (data.items ?? []).map((item: any) => {
+  return rawItems.map((item: any) => {
     const s = item.snippet;
     const videoId: string = s.resourceId?.videoId ?? "";
     if (!videoId) return null;
 
     const description: string = s.description ?? "";
-    const searchText = `${s.title ?? ""} ${description}`.toLowerCase();
-    const matchedGuests = GUEST_WATCHLIST.filter((g) => searchText.includes(g.toLowerCase()));
 
     return {
       videoId,
@@ -94,7 +106,7 @@ async function fetchChannelFeed(channelId: string, channelName: string): Promise
         `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
       url: `https://www.youtube.com/watch?v=${videoId}`,
       description,
-      matchedGuests,
+      matchedGuests: [] as string[],
       isShort: false,
       durationSeconds: 0,
     } satisfies Episode;
