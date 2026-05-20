@@ -6,11 +6,10 @@ import {
   PODCAST_CHANNELS,
   GUEST_WATCHLIST,
   MIN_GUEST_ALERT_DURATION_SECONDS,
-  episodeHasIndianBrandContext,
 } from "@/config/podcastChannels";
 import PodcastCard from "@/components/PodcastCard";
 
-const CACHE_KEY = "podcast_alerts_cache_v3";
+const CACHE_KEY = "podcast_alerts_cache_v4";
 const CACHE_TTL = 2 * 60 * 60 * 1000; // 2 hours
 
 export type Episode = {
@@ -68,7 +67,7 @@ async function fetchChannelFeed(channelId: string, channelName: string): Promise
   const playlistId = "UU" + channelId.slice(2);
   const url =
     `https://www.googleapis.com/youtube/v3/playlistItems` +
-    `?part=snippet&maxResults=15&playlistId=${playlistId}&key=${YT_API_KEY}`;
+    `?part=snippet&maxResults=50&playlistId=${playlistId}&key=${YT_API_KEY}`;
 
   const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
   if (!res.ok) throw new Error(`YouTube API error for ${channelName}: ${res.status}`);
@@ -152,12 +151,15 @@ export default function PodcastAlerts() {
   const episodes = data?.episodes ?? [];
   const failedCount = data?.failedCount ?? 0;
 
-  /** Guest tab: long-form (≥40m) + watchlist name + India company/brand context in title or description. */
+  /**
+   * Guest tab: watchlisted name, not a Short, and ≥40 minutes (or unknown duration if the
+   * videos API didn’t return length — then we trust the non-Short heuristic only).
+   */
   const guestAlerts = episodes.filter((e) => {
-    if (e.matchedGuests.length === 0) return false;
-    if (e.durationSeconds < MIN_GUEST_ALERT_DURATION_SECONDS) return false;
-    const blob = `${e.title} ${e.description}`.toLowerCase();
-    return episodeHasIndianBrandContext(blob, e.matchedGuests);
+    if (e.matchedGuests.length === 0 || e.isShort) return false;
+    if (e.durationSeconds >= MIN_GUEST_ALERT_DURATION_SECONDS) return true;
+    if (e.durationSeconds === 0) return true;
+    return false;
   });
 
   const filteredEpisodes =
@@ -189,9 +191,8 @@ export default function PodcastAlerts() {
               )}
             </p>
             <p className="text-zinc-600 text-xs mt-1 max-w-xl">
-              Guest alerts only show episodes about{" "}
-              <span className="text-zinc-500">40+ minutes</span> with a watchlisted guest and a{" "}
-              <span className="text-zinc-500">known India company / brand</span> mention (see config).
+              Guest alerts list <span className="text-zinc-500">watchlisted founders & CEOs</span> on{" "}
+              <span className="text-zinc-500">episodes of 40+ minutes</span> (Shorts excluded). Use Refresh to bust the cache after updates.
             </p>
           </div>
           <button
@@ -313,7 +314,7 @@ export default function PodcastAlerts() {
             <Mic className="w-10 h-10 text-zinc-700 mx-auto mb-3" />
             <p className="text-zinc-400 text-sm font-medium">
               {tab === "guest-alerts"
-                ? "No guest alerts match (40+ min + guest + India brand keywords)"
+                ? "No guest alerts yet — no recent uploads matched a watchlisted name (40+ min, not Shorts)"
                 : "No new episodes in the last 7 days"}
             </p>
             <p className="text-zinc-600 text-xs mt-1">Try refreshing or check back later</p>
