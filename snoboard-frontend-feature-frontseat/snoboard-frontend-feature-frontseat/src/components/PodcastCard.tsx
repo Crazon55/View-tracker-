@@ -1,6 +1,14 @@
 import { ExternalLink, Calendar } from "lucide-react";
 import type { Episode } from "@/pages/PodcastAlerts";
 
+function formatVideoDuration(seconds: number): string {
+  if (!seconds || seconds < 60) return "";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}`;
+  return `${m} min`;
+}
+
 function relativeTime(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
@@ -46,6 +54,11 @@ export default function PodcastCard({ episode }: Props) {
               `https://i.ytimg.com/vi/${episode.videoId}/hqdefault.jpg`;
           }}
         />
+        {episode.durationSeconds >= 60 && (
+          <div className="absolute bottom-2 right-2 rounded bg-black/75 px-1.5 py-0.5 text-[10px] font-semibold text-white tabular-nums">
+            {formatVideoDuration(episode.durationSeconds)}
+          </div>
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-end p-2">
           <ExternalLink className="w-4 h-4 text-white drop-shadow" />
         </div>

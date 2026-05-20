@@ -2,10 +2,15 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw, Bell, Mic } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { PODCAST_CHANNELS, GUEST_WATCHLIST } from "@/config/podcastChannels";
+import {
+  PODCAST_CHANNELS,
+  GUEST_WATCHLIST,
+  MIN_GUEST_ALERT_DURATION_SECONDS,
+  episodeHasIndianBrandContext,
+} from "@/config/podcastChannels";
 import PodcastCard from "@/components/PodcastCard";
 
-const CACHE_KEY = "podcast_alerts_cache_v2";
+const CACHE_KEY = "podcast_alerts_cache_v3";
 const CACHE_TTL = 2 * 60 * 60 * 1000; // 2 hours
 
 export type Episode = {
@@ -18,6 +23,8 @@ export type Episode = {
   description: string;
   matchedGuests: string[];
   isShort: boolean;
+  /** From YouTube contentDetails; 0 if unknown. */
+  durationSeconds: number;
 };
 
 const YT_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY as string;
@@ -28,7 +35,7 @@ function parseDurationSeconds(iso: string): number {
   return (parseInt(m[1] ?? "0") * 3600) + (parseInt(m[2] ?? "0") * 60) + parseInt(m[3] ?? "0");
 }
 
-async function enrichWithShortFlag(episodes: Episode[]): Promise<Episode[]> {
+async function enrichWithVideoDetails(episodes: Episode[]): Promise<Episode[]> {
   const durationMap = new Map<string, number>();
   const ids = episodes.map((e) => e.videoId);
   for (let i = 0; i < ids.length; i += 50) {
@@ -47,9 +54,12 @@ async function enrichWithShortFlag(episodes: Episode[]): Promise<Episode[]> {
     } catch {}
   }
   return episodes.map((e) => {
-    const secs = durationMap.get(e.videoId) ?? Infinity;
+    const secs = durationMap.get(e.videoId);
     const hasShortTag = /#shorts?\b/i.test(`${e.title} ${e.description}`);
-    return { ...e, isShort: secs <= 60 || hasShortTag };
+    const durationSeconds = secs ?? 0;
+    const isShort =
+      hasShortTag || (secs != null && secs > 0 ? secs <= 60 : false);
+    return { ...e, durationSeconds, isShort };
   });
 }
 
@@ -87,6 +97,7 @@ async function fetchChannelFeed(channelId: string, channelName: string): Promise
       description,
       matchedGuests,
       isShort: false,
+      durationSeconds: 0,
     } satisfies Episode;
   }).filter((e): e is Episode => e !== null);
 }
@@ -112,7 +123,7 @@ async function fetchAllPodcasts(): Promise<{ episodes: Episode[]; failedCount: n
     .flatMap((r) => r.value)
     .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
 
-  const episodes = await enrichWithShortFlag(raw);
+  const episodes = await enrichWithVideoDetails(raw);
 
   if (episodes.length > 0) {
     try {
@@ -140,7 +151,14 @@ export default function PodcastAlerts() {
 
   const episodes = data?.episodes ?? [];
   const failedCount = data?.failedCount ?? 0;
-  const guestAlerts = episodes.filter((e) => e.matchedGuests.length > 0);
+
+  /** Guest tab: long-form (≥40m) + watchlist name + India company/brand context in title or description. */
+  const guestAlerts = episodes.filter((e) => {
+    if (e.matchedGuests.length === 0) return false;
+    if (e.durationSeconds < MIN_GUEST_ALERT_DURATION_SECONDS) return false;
+    const blob = `${e.title} ${e.description}`.toLowerCase();
+    return episodeHasIndianBrandContext(blob, e.matchedGuests);
+  });
 
   const filteredEpisodes =
     episodeFilter === "podcasts" ? episodes.filter((e) => !e.isShort) :
@@ -169,6 +187,11 @@ export default function PodcastAlerts() {
               {!isLoading && guestAlerts.length > 0 && (
                 <> · <span className="text-violet-400 font-medium">{guestAlerts.length} guest alert{guestAlerts.length !== 1 ? "s" : ""}</span></>
               )}
+            </p>
+            <p className="text-zinc-600 text-xs mt-1 max-w-xl">
+              Guest alerts only show episodes about{" "}
+              <span className="text-zinc-500">40+ minutes</span> with a watchlisted guest and a{" "}
+              <span className="text-zinc-500">known India company / brand</span> mention (see config).
             </p>
           </div>
           <button
@@ -289,7 +312,9 @@ export default function PodcastAlerts() {
           <div className="text-center py-20">
             <Mic className="w-10 h-10 text-zinc-700 mx-auto mb-3" />
             <p className="text-zinc-400 text-sm font-medium">
-              {tab === "guest-alerts" ? "No notable guest episodes found" : "No new episodes in the last 7 days"}
+              {tab === "guest-alerts"
+                ? "No guest alerts match (40+ min + guest + India brand keywords)"
+                : "No new episodes in the last 7 days"}
             </p>
             <p className="text-zinc-600 text-xs mt-1">Try refreshing or check back later</p>
           </div>
