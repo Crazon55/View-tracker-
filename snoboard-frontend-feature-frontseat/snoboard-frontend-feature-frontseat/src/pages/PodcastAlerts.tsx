@@ -11,7 +11,7 @@ import {
 } from "@/config/podcastChannels";
 import PodcastCard from "@/components/PodcastCard";
 
-const CACHE_KEY = "podcast_alerts_cache_v6";
+const CACHE_KEY = "podcast_alerts_cache_v7";
 const CACHE_TTL = 2 * 60 * 60 * 1000; // 2 hours
 
 export type Episode = {
@@ -158,7 +158,7 @@ async function fetchAllPodcasts(): Promise<{ episodes: Episode[]; failedCount: n
 }
 
 type Tab = "guest-alerts" | "new-episodes";
-type EpisodeFilter = "all" | "podcasts" | "shorts";
+type EpisodeFilter = "all" | "podcasts";
 
 export default function PodcastAlerts() {
   const [tab, setTab] = useState<Tab>("guest-alerts");
@@ -190,14 +190,12 @@ export default function PodcastAlerts() {
   });
 
   /**
-   * New Episodes: "All" = everything except Shorts (≤60s). "Podcasts" = non-Short and ≤7 days.
+   * New Episodes: never show Shorts (≤60s). "All" = non-Short only. "Podcasts" = non-Short + ≤7 days.
    */
   const filteredEpisodes =
     episodeFilter === "podcasts"
       ? nonShortEpisodes.filter((e) => publishedWithinDays(e.publishedAt, NEW_EPISODES_PODCAST_MAX_AGE_DAYS))
-      : episodeFilter === "shorts"
-        ? episodes.filter((e) => e.isShort)
-        : nonShortEpisodes;
+      : nonShortEpisodes;
 
   const displayed = tab === "guest-alerts" ? guestAlerts : filteredEpisodes;
 
@@ -224,7 +222,7 @@ export default function PodcastAlerts() {
             </p>
             <p className="text-zinc-600 text-xs mt-1 max-w-xl">
               Guest alerts: watchlisted founders & CEOs, <span className="text-zinc-500">40+ min</span>,{" "}
-              <span className="text-zinc-500">≤{GUEST_ALERT_MAX_AGE_DAYS} days</span> old, Shorts (≤60s) excluded.
+              <span className="text-zinc-500">≤{GUEST_ALERT_MAX_AGE_DAYS} days</span> old. Shorts (≤60s) are not shown on this page.
             </p>
           </div>
           <button
@@ -277,12 +275,12 @@ export default function PodcastAlerts() {
           >
             <Mic className="w-3.5 h-3.5" />
             New Episodes
-            {!isLoading && episodes.length > 0 && (
+            {!isLoading && nonShortEpisodes.length > 0 && (
               <span className={cn(
                 "text-[10px] font-bold px-1.5 py-0.5 rounded-full",
                 tab === "new-episodes" ? "bg-white/20 text-white" : "bg-zinc-700 text-zinc-400"
               )}>
-                {episodes.length}
+                {nonShortEpisodes.length}
               </span>
             )}
           </button>
@@ -291,20 +289,18 @@ export default function PodcastAlerts() {
         {/* Episode type filter — only for New Episodes tab */}
         {tab === "new-episodes" && !isLoading && (
           <p className="text-zinc-600 text-xs">
-            All / Podcasts hide videos ≤60s. Podcasts = uploads from the last {NEW_EPISODES_PODCAST_MAX_AGE_DAYS} days.
+            Videos ≤60s (Shorts) are excluded from this page.
           </p>
         )}
         {tab === "new-episodes" && !isLoading && (
           <div className="flex gap-2">
-            {(["all", "podcasts", "shorts"] as EpisodeFilter[]).map((f) => {
+            {(["all", "podcasts"] as EpisodeFilter[]).map((f) => {
               const count =
                 f === "all"
                   ? nonShortEpisodes.length
-                  : f === "podcasts"
-                    ? nonShortEpisodes.filter((e) =>
-                        publishedWithinDays(e.publishedAt, NEW_EPISODES_PODCAST_MAX_AGE_DAYS),
-                      ).length
-                    : episodes.filter((e) => e.isShort).length;
+                  : nonShortEpisodes.filter((e) =>
+                      publishedWithinDays(e.publishedAt, NEW_EPISODES_PODCAST_MAX_AGE_DAYS),
+                    ).length;
               return (
                 <button
                   key={f}
@@ -358,9 +354,7 @@ export default function PodcastAlerts() {
                 ? `No guest alerts in the last ${GUEST_ALERT_MAX_AGE_DAYS} days matching your criteria (40+ min, watchlisted guest, no Shorts)`
                 : episodeFilter === "podcasts"
                   ? `No podcast-length uploads in the last ${NEW_EPISODES_PODCAST_MAX_AGE_DAYS} days`
-                  : episodeFilter === "shorts"
-                    ? "No Shorts in the loaded feed"
-                    : "No episodes loaded (excluding ≤60s videos in All)"}
+                  : "No episodes loaded"}
             </p>
             <p className="text-zinc-600 text-xs mt-1">Try refreshing or check back later</p>
           </div>
