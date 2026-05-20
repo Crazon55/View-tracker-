@@ -2103,6 +2103,19 @@ function fmtDateDMY(iso: string): string {
   return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : iso;
 }
 
+/** Calendar day as YYYY-MM-DD (handles date-only strings and ISO timestamps from the API without bad slice(0,10) across TZ). */
+function isoDateCalendarKey(raw: unknown): string {
+  if (raw == null) return "";
+  const s = typeof raw === "string" ? raw.trim() : String(raw).trim();
+  if (!s) return "";
+  const head = /^(\d{4}-\d{2}-\d{2})/.exec(s);
+  if (head) return head[1];
+  const ms = Date.parse(s);
+  if (!Number.isFinite(ms)) return "";
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function todayISO() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -2398,7 +2411,7 @@ function WeekGridListView({
                     const stepMovesForDay: { a: MainAssignment; pt: WorkboardPrimaryTask; c: WorkboardChunk }[] = [];
                     for (const a of weekAssignments) {
                       for (const pt of a.primary_tasks || []) {
-                        if (String(pt.due_date || "").slice(0, 10) !== dIso) continue;
+                        if (isoDateCalendarKey(pt.due_date) !== dIso) continue;
                         /** Hide legacy placeholder rows (empty title + no steps) so they don't appear on Fri by mistake. */
                         const hasContent =
                           Boolean(pt.title?.trim()) || (pt.chunks?.length ?? 0) > 0;
@@ -2408,9 +2421,9 @@ function WeekGridListView({
                     }
                     for (const a of weekAssignments) {
                       for (const pt of a.primary_tasks || []) {
-                        const ptDay = String(pt.due_date || "").slice(0, 10);
+                        const ptDay = isoDateCalendarKey(pt.due_date);
                         for (const c of pt.chunks || []) {
-                          const cDay = String((c as any).scheduled_for || ptDay || "").slice(0, 10);
+                          const cDay = isoDateCalendarKey((c as any).scheduled_for) || ptDay;
                           if (!cDay || cDay !== dIso) continue;
                           // Only show in this "moved steps" lane when it doesn't naturally belong to the task's day.
                           if (ptDay === dIso && !(c as any).scheduled_for) continue;
@@ -2454,14 +2467,14 @@ function WeekGridListView({
                       extrasForDay.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
                     }
 
-                    if (tasksForDay.length === 0 && extrasForDay.length === 0) {
-                      return (
-                        <p className="text-[11px] text-zinc-600 py-1 px-0.5">No tasks — add one below.</p>
-                      );
-                    }
+                    const nothingForDay =
+                      tasksForDay.length === 0 && stepMovesForDay.length === 0 && extrasForDay.length === 0;
 
                     return (
                       <>
+                        {nothingForDay && (
+                          <p className="text-[11px] text-zinc-600 py-1 px-0.5">No tasks — add one below.</p>
+                        )}
                         {tasksForDay.map(({ a, pt }) => {
                           const expandKey = `${a.id}:${pt.id}`;
                           const stepsOpen = expandedDayTasks[expandKey] === true;
@@ -2526,7 +2539,8 @@ function WeekGridListView({
                                     <ul className="mt-2 space-y-1.5">
                                       {pt.chunks
                                         .filter((c) => {
-                                          const cDay = String((c as any).scheduled_for || pt.due_date || "").slice(0, 10);
+                                          const cDay =
+                                            isoDateCalendarKey((c as any).scheduled_for) || isoDateCalendarKey(pt.due_date);
                                           return cDay === dIso;
                                         })
                                         .map((c) => (
@@ -2627,7 +2641,7 @@ function WeekGridListView({
                           <div
                             className={cn(
                               "space-y-2",
-                              tasksForDay.length > 0 && "pt-1 mt-1 border-t border-white/[0.08]",
+                              (tasksForDay.length > 0 || stepMovesForDay.length > 0) && "pt-1 mt-1 border-t border-white/[0.08]",
                             )}
                           >
                             <div className="text-[10px] font-semibold uppercase tracking-wider text-orange-300/90 px-0.5">
