@@ -5,10 +5,10 @@ import TeamBattleScoreboard from "@/components/TeamBattleScoreboard";
 import { useNavigate } from "react-router-dom";
 import { Search, TrendingUp, MoreVertical } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { motion, AnimatePresence } from "framer-motion";
 import { addDaysISO } from "@/lib/workboardTypes";
+import { cn } from "@/lib/utils";
 
 function formatCompact(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
@@ -268,28 +268,64 @@ function getSixDayTrackerBreakdownForPage(
   }));
 }
 
-function TogglePill({ options, value, onChange }: {
-  options: { label: string; value: string }[];
+function TogglePill({
+  options,
+  value,
+  onChange,
+  scrollable = false,
+}: {
+  options: { label: string; value: string; title?: string }[];
   value: string;
   onChange: (v: string) => void;
+  /** Many segments: keep one row height and scroll horizontally */
+  scrollable?: boolean;
 }) {
-  return (
-    <div className="inline-flex items-center bg-zinc-800/80 rounded-full p-0.5 gap-0.5">
+  const track = (
+    <div
+      role="tablist"
+      className={cn(
+        "flex flex-nowrap items-stretch gap-0.5 rounded-full bg-zinc-900/95 p-1 ring-1 ring-zinc-700/70 shadow-inner shadow-black/20",
+        scrollable ? "w-max min-w-0" : "inline-flex",
+      )}
+    >
       {options.map((opt) => (
         <button
           key={opt.value}
-          onClick={(e) => { e.stopPropagation(); onChange(opt.value); }}
-          className={`text-[10px] uppercase tracking-wider px-3 py-1 rounded-full font-medium transition-all ${
+          type="button"
+          role="tab"
+          aria-selected={value === opt.value}
+          title={opt.title ?? opt.label}
+          onClick={(e) => {
+            e.stopPropagation();
+            onChange(opt.value);
+          }}
+          className={cn(
+            "flex min-h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-full px-3.5 text-[10px] font-semibold uppercase tracking-wide transition-colors leading-none",
             value === opt.value
-              ? "bg-violet-600 text-white shadow-lg shadow-violet-600/25"
-              : "text-zinc-500 hover:text-zinc-300"
-          }`}
+              ? "bg-violet-600 text-white shadow-md shadow-violet-950/50 ring-1 ring-white/10"
+              : "text-zinc-500 hover:bg-zinc-800/90 hover:text-zinc-200",
+          )}
         >
           {opt.label}
         </button>
       ))}
     </div>
   );
+
+  if (scrollable) {
+    return (
+      <div
+        className={cn(
+          "max-w-full min-w-0 rounded-full",
+          "[scrollbar-width:thin] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-600",
+        )}
+      >
+        <div className="overflow-x-auto overflow-y-hidden pb-0.5">{track}</div>
+      </div>
+    );
+  }
+
+  return track;
 }
 
 export default function Dashboard() {
@@ -802,70 +838,101 @@ export default function Dashboard() {
           <TeamBattleScoreboard />
         </div>
 
-        {/* YOUR IP'S header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-5">
-          <div className="flex items-center gap-3">
-            <h2 className="text-xl sm:text-2xl font-black text-white uppercase tracking-wider">Your IP's</h2>
-            <Badge variant="outline" className="border-zinc-700 text-zinc-400 text-xs font-mono">
-              {pages.length} total
-            </Badge>
-            <TogglePill
-              options={[
-                { label: "All", value: "all" },
-                { label: "Stage 3", value: "main" },
-                { label: "Stage 1", value: "stage1" },
-              ]}
-              value={ipFilter}
-              onChange={(v) => setIpFilter(v as "all" | "main" | "stage1")}
-            />
-            {(trackerNiches as any[]).length > 0 && (
+        {/* YOUR IP'S — toolbar (aligned pill height, teams scroll if needed) */}
+        <div className="mb-4 space-y-3 sm:mb-5">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:flex-wrap">
+              <div className="flex shrink-0 items-center gap-2.5">
+                <h2 className="text-xl font-black uppercase tracking-wider text-white sm:text-2xl">Your IP&apos;s</h2>
+                <span
+                  className={cn(
+                    "inline-flex h-9 items-center rounded-full px-3.5 font-mono text-[10px] font-semibold uppercase tracking-wider",
+                    "border border-zinc-700/80 bg-zinc-900/95 text-zinc-400 ring-1 ring-zinc-800 shadow-inner shadow-black/15",
+                  )}
+                >
+                  {pages.length} total
+                </span>
+              </div>
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <TogglePill
+                  options={[
+                    { label: "All", value: "all" },
+                    { label: "Stage 3", value: "main" },
+                    { label: "Stage 1", value: "stage1" },
+                  ]}
+                  value={ipFilter}
+                  onChange={(v) => setIpFilter(v as "all" | "main" | "stage1")}
+                />
+                {(trackerNiches as any[]).length > 0 && (
+                  <div className="min-w-0 max-w-full basis-[min(100%,42rem)] lg:max-w-[min(100%,44rem)]">
+                    <TogglePill
+                      scrollable
+                      options={[
+                        { label: "All Teams", value: "all" },
+                        ...(trackerNiches as any[]).map((n: any) => ({
+                          label: n.name,
+                          value: n.id,
+                          title: n.name,
+                        })),
+                      ]}
+                      value={nicheFilter}
+                      onChange={setNicheFilter}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
               <TogglePill
                 options={[
-                  { label: "All Teams", value: "all" },
-                  ...(trackerNiches as any[]).map((n: any) => ({ label: n.name, value: n.id })),
+                  { label: "All Time", value: "all" },
+                  { label: "Monthly", value: "monthly" },
+                  {
+                    label: "6-day tracker",
+                    value: "custom",
+                    title: "Views by official 6-day cycles for the selected calendar month",
+                  },
                 ]}
-                value={nicheFilter}
-                onChange={setNicheFilter}
+                value={globalPeriod}
+                onChange={(v) => {
+                  const next = v as TimePeriod;
+                  if (next === "custom" && !trackerMonth.trim()) {
+                    const now = new Date();
+                    setTrackerMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
+                  }
+                  setGlobalPeriod(next);
+                }}
               />
-            )}
-          </div>
-          {/* Global period toggle */}
-          <div className="flex items-center gap-3">
-            <TogglePill
-              options={[
-                { label: "All Time", value: "all" },
-                { label: "Monthly", value: "monthly" },
-                { label: "6 day tracker wise", value: "custom" },
-              ]}
-              value={globalPeriod}
-              onChange={(v) => {
-                const next = v as TimePeriod;
-                if (next === "custom" && !trackerMonth.trim()) {
-                  const now = new Date();
-                  setTrackerMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
-                }
-                setGlobalPeriod(next);
-              }}
-            />
-            {globalPeriod === "custom" && (
-              <div className="flex flex-col items-end gap-1">
-                <label className="flex items-center gap-2">
-                  <span className="text-[10px] uppercase tracking-wider text-zinc-500 shrink-0">Month</span>
+              {globalPeriod === "custom" && (
+                <label
+                  className={cn(
+                    "inline-flex h-9 cursor-pointer items-center gap-2 rounded-full border border-zinc-700/80 bg-zinc-900/95 px-3 ring-1 ring-zinc-800",
+                    "shadow-inner shadow-black/15",
+                  )}
+                >
+                  <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                    Month
+                  </span>
                   <input
                     type="month"
                     value={trackerYmNormalized || trackerMonth}
                     onChange={(e) => setTrackerMonth(normalizeTrackerMonth(e.target.value))}
-                    className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500/50 cursor-pointer min-w-[10rem]"
+                    className={cn(
+                      "h-7 min-w-[9.5rem] cursor-pointer rounded-full border border-zinc-700/60 bg-zinc-800/90 px-2.5 text-xs text-white",
+                      "focus:border-violet-500/50 focus:outline-none focus:ring-1 focus:ring-violet-500/30",
+                    )}
                   />
                 </label>
-                {customTrackerWeeks.length > 0 && (
-                  <p className="text-[10px] text-zinc-500 max-w-[min(100vw-2rem,300px)] text-right leading-snug">
-                    Same window as 6-Day Tracker: official cycles (e.g. Apr 1–6) and per-page views load from the tracker month API. Cards fall back to reels/growth only if that page has no tracker row.
-                  </p>
-                )}
-              </div>
-            )}
+              )}
+            </div>
           </div>
+          {globalPeriod === "custom" && customTrackerWeeks.length > 0 && (
+            <p className="text-[10px] leading-snug text-zinc-500 xl:text-right">
+              Same window as 6-Day Tracker: official cycles (e.g. Apr 1–6) and per-page views load from the
+              tracker month API. Cards fall back to reels/growth only if that page has no tracker row.
+            </p>
+          )}
         </div>
 
         {/* Search */}
