@@ -767,10 +767,25 @@ export default function Dashboard() {
             const heights = [140, 180, 110]; // podium step heights
             const medals = ["🥈", "🥇", "🥉"];
             const ranks = [2, 1, 3];
-            // Solid podium colors to keep cards visible on dark background
-            const podiumBg = ["bg-[#6f6f6f]", "bg-[#b58b1a]", "bg-[#6b3f1f]"]; // silver, gold, bronze
-            const borderColors = ["border-white/10", "border-white/10", "border-white/10"];
-            const glowColors = ["shadow-[0_12px_45px_-20px_rgba(255,255,255,0.25)]", "shadow-[0_18px_60px_-22px_rgba(181,139,26,0.55)]", "shadow-[0_12px_45px_-20px_rgba(107,63,31,0.5)]"];
+            // Metallic podium gradients: silver, gold, bronze (with top highlight + glow)
+            const podiumStyles = [
+              {
+                background: "linear-gradient(180deg, #ececec 0%, #b8b8b8 35%, #7a7a7a 72%, #5a5a5a 100%)",
+                boxShadow:
+                  "inset 0 1px 0 rgba(255,255,255,0.55), inset 0 -8px 16px rgba(0,0,0,0.18), 0 12px 45px -20px rgba(255,255,255,0.25)",
+              },
+              {
+                background: "linear-gradient(180deg, #ffe566 0%, #f0c030 38%, #d4a017 68%, #9a7209 100%)",
+                boxShadow:
+                  "inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -10px 20px rgba(120,80,0,0.25), 0 18px 60px -22px rgba(181,139,26,0.55)",
+              },
+              {
+                background: "linear-gradient(180deg, #e8a86e 0%, #c47a3a 40%, #8b4513 75%, #5c2e12 100%)",
+                boxShadow:
+                  "inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -8px 16px rgba(0,0,0,0.22), 0 12px 45px -20px rgba(107,63,31,0.5)",
+              },
+            ];
+            const borderColors = ["border-white/25", "border-yellow-200/35", "border-orange-300/25"];
 
             return (
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 h-full flex flex-col">
@@ -811,8 +826,8 @@ export default function Dashboard() {
 
                         {/* Podium block */}
                         <div
-                          className={`w-full rounded-t-xl border ${borderColors[i]} ${podiumBg[i]} ${glowColors[i]} flex flex-col items-center justify-center transition-all`}
-                          style={{ height: heights[i] }}
+                          className={`w-full rounded-t-xl border ${borderColors[i]} flex flex-col items-center justify-center transition-all`}
+                          style={{ height: heights[i], ...podiumStyles[i] }}
                         >
                           <span className={`font-black tabular-nums text-white ${ranks[i] === 1 ? "text-2xl sm:text-3xl" : "text-lg sm:text-xl"}`}>
                             {formatCompact(views)}
