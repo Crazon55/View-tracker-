@@ -50,6 +50,18 @@ export const PODCAST_CHANNELS: PodcastChannel[] = [
     channelId: "UCnC8SAZzQiBGYVSKZ_S3y4Q",
     handle: "@NikhilKamath",
   },
+  {
+    id: "barbershop-shantanu",
+    name: "The BarberShop with Shantanu",
+    channelId: "UCWx7JXxm2xkTabER32I0GZg",
+    handle: "@TheBarbershopWithShantanu",
+  },
+  {
+    id: "masters-union",
+    name: "Masters' Union",
+    channelId: "UCaTkVutJ9f-AoE7cz7VLlTw",
+    handle: "@MastersUnion",
+  },
 ];
 
 // Guests whose names, when found in a title or description, trigger a Guest Alert.
