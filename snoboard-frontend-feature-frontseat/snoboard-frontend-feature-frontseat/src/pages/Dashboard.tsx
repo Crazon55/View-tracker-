@@ -366,6 +366,14 @@ export default function Dashboard() {
     return m;
   }, [trackerNiches]);
 
+  /** Team filters only — hide legacy Tech/Marketing niches from the Dashboard toolbar. */
+  const dashboardNicheFilters = useMemo(() => {
+    const hidden = new Set(["tech", "marketing"]);
+    return ((trackerNiches as any[]) || []).filter(
+      (n) => !hidden.has(String(n?.name || "").trim().toLowerCase()),
+    );
+  }, [trackerNiches]);
+
   // Fetch growth data for the growth chart
   const { data: growthData = [] } = useQuery({
     queryKey: ["growth-data"],
@@ -878,13 +886,13 @@ export default function Dashboard() {
                   value={ipFilter}
                   onChange={(v) => setIpFilter(v as "all" | "main" | "stage1")}
                 />
-                {(trackerNiches as any[]).length > 0 && (
+                {dashboardNicheFilters.length > 0 && (
                   <div className="min-w-0 max-w-full basis-[min(100%,42rem)] lg:max-w-[min(100%,44rem)]">
                     <TogglePill
                       scrollable
                       options={[
                         { label: "All Teams", value: "all" },
-                        ...(trackerNiches as any[]).map((n: any) => ({
+                        ...dashboardNicheFilters.map((n: any) => ({
                           label: n.name,
                           value: n.id,
                           title: n.name,

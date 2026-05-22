@@ -74,25 +74,23 @@ export default function TeamBattleScoreboard() {
         <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm py-8">Loading…</div>
       ) : (
         <>
-          {/* Team cards */}
-          <div className="grid grid-cols-3 gap-3 flex-1">
+          {/* Team cards — fixed row slots so all three columns align on one line */}
+          <div className="grid grid-cols-3 gap-3 flex-1 items-start content-start">
             {[teamA, teamB, teamC].filter(Boolean).map((team: any) => {
               const skin = SKIN[team.key] ?? SKIN.garfields;
               return (
-                <div key={team.key} className="flex flex-col items-center text-center">
-                  <motion.span
-                    animate={{ y: [0, -4, 0] }}
-                    transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut", delay: team.key === "goofies" ? 0.8 : team.key === "sheruses" ? 1.6 : 0 }}
-                    className="text-4xl sm:text-5xl mb-2 inline-block"
-                  >
-                    {team.emoji}
-                  </motion.span>
-                  <p className={`text-[10px] font-black tracking-[0.15em] uppercase ${skin.text}`}>{team.label}</p>
-                  <p className="text-[9px] text-zinc-500 italic mb-2">{skin.tagline}</p>
-                  <p className="text-2xl sm:text-3xl font-black text-white tabular-nums leading-none">
+                <div key={team.key} className="flex flex-col items-center text-center w-full">
+                  <div className="h-14 sm:h-16 flex items-center justify-center mb-2">
+                    <span className="text-4xl sm:text-5xl leading-none">{team.emoji}</span>
+                  </div>
+                  <p className={`min-h-[1rem] text-[10px] font-black tracking-[0.15em] uppercase ${skin.text}`}>
+                    {team.label}
+                  </p>
+                  <p className="min-h-[1rem] text-[9px] text-zinc-500 italic mb-2">{skin.tagline}</p>
+                  <p className="min-h-[2rem] flex items-center justify-center text-2xl sm:text-3xl font-black text-white tabular-nums leading-none">
                     {formatViews(team.views_6d)}
                   </p>
-                  <p className="text-[9px] text-zinc-500 mt-1 tabular-nums">
+                  <p className="min-h-[1rem] text-[9px] text-zinc-500 mt-1 tabular-nums">
                     All time · <span className="text-zinc-400">{formatViews(team.views_total)}</span>
                   </p>
                 </div>
