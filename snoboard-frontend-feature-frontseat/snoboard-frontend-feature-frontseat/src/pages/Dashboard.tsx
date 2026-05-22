@@ -325,7 +325,11 @@ function TogglePill({
     );
   }
 
-  return track;
+  return (
+    <div className="w-fit max-w-full self-start">
+      {track}
+    </div>
+  );
 }
 
 export default function Dashboard() {
@@ -876,7 +880,7 @@ export default function Dashboard() {
                   {pages.length} total
                 </span>
               </div>
-              <div className="flex min-w-0 w-full flex-col gap-2">
+              <div className="flex min-w-0 w-full flex-col items-start gap-2">
                 <TogglePill
                   options={[
                     { label: "All", value: "all" },
