@@ -861,10 +861,10 @@ export default function Dashboard() {
           <TeamBattleScoreboard />
         </div>
 
-        {/* YOUR IP'S — toolbar (aligned pill height, teams scroll if needed) */}
+        {/* YOUR IP'S — title on top, filters tucked underneath */}
         <div className="mb-4 space-y-3 sm:mb-5">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:flex-wrap">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div className="flex min-w-0 flex-col gap-3">
               <div className="flex shrink-0 items-center gap-2.5">
                 <h2 className="text-xl font-black uppercase tracking-wider text-white sm:text-2xl">Your IP&apos;s</h2>
                 <span
@@ -876,7 +876,7 @@ export default function Dashboard() {
                   {pages.length} total
                 </span>
               </div>
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <div className="flex min-w-0 w-full flex-col gap-2">
                 <TogglePill
                   options={[
                     { label: "All", value: "all" },
@@ -887,7 +887,7 @@ export default function Dashboard() {
                   onChange={(v) => setIpFilter(v as "all" | "main" | "stage1")}
                 />
                 {dashboardNicheFilters.length > 0 && (
-                  <div className="min-w-0 max-w-full basis-[min(100%,42rem)] lg:max-w-[min(100%,44rem)]">
+                  <div className="min-w-0 w-full max-w-full">
                     <TogglePill
                       scrollable
                       options={[
@@ -906,7 +906,7 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+            <div className="flex flex-wrap items-center gap-2 xl:shrink-0 xl:justify-end">
               <TogglePill
                 options={[
                   { label: "All Time", value: "all" },
