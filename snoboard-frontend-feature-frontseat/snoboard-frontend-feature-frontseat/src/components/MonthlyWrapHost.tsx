@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useWrapConfetti, WaterRiseText } from "./MonthlyWrapEffects";
+import { useWrapConfetti, useWrapCelebrationSound, WaterRiseText } from "./MonthlyWrapEffects";
 
 const MonthlyWrapContext = createContext<{
   openForMonth: (ym: string) => void;
@@ -646,6 +646,7 @@ function useCountUp(target: number, duration = 1600) {
 
 function StepTotal({ data }: { data: MonthlyWrapData }) {
   useWrapConfetti(true, true);
+  useWrapCelebrationSound(true);
   const counted = useCountUp(data.totalViews);
   return (
     <div className="flex flex-col items-center justify-center text-center space-y-8">
@@ -799,6 +800,7 @@ function StepTop5({ data }: { data: MonthlyWrapData }) {
 
 function StepTeam({ data }: { data: MonthlyWrapData }) {
   const w = data.winningTeam;
+  useWrapConfetti(!!w, false);
   if (!w) {
     return (
       <p className="text-sm text-zinc-500 text-center min-h-[240px] flex items-center justify-center">
