@@ -83,8 +83,10 @@ export function MonthlyWrapOpenButton({ className = "" }: { className?: string }
 /** Prominent dashboard entry — hard to miss on the home page. */
 export function MonthlyWrapBanner({ className = "" }: { className?: string }) {
   const navigate = useNavigate();
-  const { reportMonth, fullLabel } = useMonthlyWrapState();
-  const official = isOfficialWrapWindow();
+  // Only show during the official drop window (1st 5pm IST – 3rd each month)
+  const reportMonth = getActiveReportMonth();
+  const fullLabel = reportMonth ? monthLabel(reportMonth) : "";
+  const official = true;
   if (!reportMonth) return null;
   return (
     <button
