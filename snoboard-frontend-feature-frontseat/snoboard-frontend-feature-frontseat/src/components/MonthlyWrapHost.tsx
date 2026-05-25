@@ -340,7 +340,6 @@ function WrapBody({
             animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
             exit={{ opacity: 0, x: -30, filter: "blur(6px)" }}
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-            className="min-h-full"
           >
             <WrapSlide kind={slideKind} data={data} onDone={onDone} />
           </motion.div>
@@ -365,18 +364,37 @@ function WrapBody({
 }
 
 const SLIDE_BG: Partial<Record<WrapSlideKind, string>> = {
-  intro:                "from-violet-900/50 via-zinc-950 to-fuchsia-900/30",
-  total:                "from-indigo-900/60 via-zinc-950 to-blue-900/40",
-  topPage:              "from-amber-900/50 via-zinc-950 to-orange-900/30",
-  top5:                 "from-fuchsia-900/50 via-zinc-950 to-pink-900/30",
-  team:                 "from-emerald-900/50 via-zinc-950 to-teal-900/30",
-  created:              "from-sky-900/50 via-zinc-950 to-cyan-900/30",
-  proven:               "from-green-900/50 via-zinc-950 to-emerald-900/30",
-  killed:               "from-rose-900/50 via-zinc-950 to-red-900/30",
-  posts:                "from-cyan-900/50 via-zinc-950 to-sky-900/30",
-  personStatsGarfields: "from-purple-900/50 via-zinc-950 to-violet-900/30",
-  personStatsGoofies:   "from-blue-900/50 via-zinc-950 to-indigo-900/30",
-  outro:                "from-fuchsia-900/50 via-zinc-950 to-violet-900/30",
+  intro:                "from-violet-900 via-violet-950 to-zinc-950",
+  total:                "from-blue-900 via-blue-950 to-zinc-950",
+  topPage:              "from-amber-900 via-amber-950 to-zinc-950",
+  top5:                 "from-fuchsia-900 via-fuchsia-950 to-zinc-950",
+  team:                 "from-emerald-900 via-emerald-950 to-zinc-950",
+  created:              "from-sky-900 via-sky-950 to-zinc-950",
+  proven:               "from-green-900 via-green-950 to-zinc-950",
+  killed:               "from-rose-900 via-rose-950 to-zinc-950",
+  posts:                "from-cyan-900 via-cyan-950 to-zinc-950",
+  topReel:              "from-pink-900 via-pink-950 to-zinc-950",
+  personStatsGarfields: "from-purple-900 via-purple-950 to-zinc-950",
+  personStatsGoofies:   "from-indigo-900 via-indigo-950 to-zinc-950",
+  personStatsSherus:    "from-amber-900 via-amber-950 to-zinc-950",
+  outro:                "from-fuchsia-900 via-fuchsia-950 to-zinc-950",
+};
+
+const SLIDE_GLOW: Partial<Record<WrapSlideKind, string>> = {
+  intro:                "rgba(139,92,246,0.35)",
+  total:                "rgba(59,130,246,0.4)",
+  topPage:              "rgba(217,119,6,0.4)",
+  top5:                 "rgba(192,38,211,0.4)",
+  team:                 "rgba(16,185,129,0.4)",
+  created:              "rgba(14,165,233,0.4)",
+  proven:               "rgba(34,197,94,0.4)",
+  killed:               "rgba(244,63,94,0.4)",
+  posts:                "rgba(6,182,212,0.4)",
+  topReel:              "rgba(236,72,153,0.4)",
+  personStatsGarfields: "rgba(168,85,247,0.4)",
+  personStatsGoofies:   "rgba(99,102,241,0.4)",
+  personStatsSherus:    "rgba(217,119,6,0.4)",
+  outro:                "rgba(192,38,211,0.35)",
 };
 
 function WrapSlide({
@@ -388,8 +406,9 @@ function WrapSlide({
   data: MonthlyWrapData;
   onDone: () => void;
 }) {
-  const bg = SLIDE_BG[kind] ?? "from-zinc-900/30 to-zinc-950";
-  const isTeamStats = kind === "personStatsGarfields" || kind === "personStatsGoofies";
+  const bg = SLIDE_BG[kind] ?? "from-zinc-900 to-zinc-950";
+  const glowColor = SLIDE_GLOW[kind] ?? "rgba(139,92,246,0.3)";
+  const isTeamStats = kind === "personStatsGarfields" || kind === "personStatsGoofies" || kind === "personStatsSherus";
 
   const content = () => {
     switch (kind) {
@@ -402,8 +421,11 @@ function WrapSlide({
       case "proven":  return <StepIdea data={data} kind="proven" />;
       case "killed":  return <StepIdea data={data} kind="killed" />;
       case "posts":   return <StepIdea data={data} kind="posts" />;
+      case "reels":   return <StepIdea data={data} kind="reels" />;
+      case "topReel": return <StepTopReel data={data} />;
       case "personStatsGarfields": return <StepPersonStats data={data} team="garfields" />;
       case "personStatsGoofies":   return <StepPersonStats data={data} team="goofies" />;
+      case "personStatsSherus":    return <StepPersonStats data={data} team="sheruses" />;
       case "outro":   return <StepOutro data={data} onDone={onDone} />;
       default:        return null;
     }
@@ -412,14 +434,22 @@ function WrapSlide({
   return (
     <div
       className={cn(
-        "w-full bg-gradient-to-b px-5 py-8 sm:px-8",
+        "relative w-full overflow-hidden bg-gradient-to-b px-5 py-10 sm:px-8",
         isTeamStats
-          ? "flex flex-col min-h-[340px]"
-          : "flex flex-col items-center justify-center min-h-[320px]",
+          ? "flex flex-col min-h-[calc(100dvh-8.5rem)]"
+          : "flex flex-col items-center justify-center min-h-[calc(100dvh-8.5rem)]",
         bg,
       )}
     >
-      {content()}
+      <motion.div
+        className="pointer-events-none absolute inset-x-0 top-0 h-72"
+        style={{ background: `radial-gradient(ellipse 80% 60% at 50% 0%, ${glowColor}, transparent)` }}
+        animate={{ opacity: [0.7, 1, 0.7] }}
+        transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
+      />
+      <div className="relative z-10 w-full">
+        {content()}
+      </div>
     </div>
   );
 }
@@ -464,33 +494,63 @@ function StepIntro({ data }: { data: MonthlyWrapData }) {
   );
 }
 
+function useCountUp(target: number, duration = 1600) {
+  const [value, setValue] = useState(0);
+  useEffect(() => {
+    if (!target) return;
+    const startTime = performance.now();
+    let raf: number;
+    const tick = (now: number) => {
+      const progress = Math.min((now - startTime) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 4);
+      setValue(Math.round(target * eased));
+      if (progress < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+  return value;
+}
+
 function StepTotal({ data }: { data: MonthlyWrapData }) {
   useWrapConfetti(true, true);
+  const counted = useCountUp(data.totalViews);
   return (
-    <div className="flex min-h-[300px] flex-col items-center justify-center text-center px-2 space-y-6">
+    <div className="flex flex-col items-center justify-center text-center space-y-8">
       <motion.p
-        className="text-[10px] uppercase tracking-[0.25em] text-violet-400 font-bold"
-        initial={{ opacity: 0, y: 8 }}
+        className="text-xs uppercase tracking-[0.3em] text-blue-300 font-bold"
+        initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35 }}
+        transition={{ duration: 0.4 }}
       >
         The big number
       </motion.p>
-      <div className="flex flex-wrap items-baseline justify-center gap-x-3 gap-y-1">
-        <WaterRiseText>
-          <span className="text-5xl sm:text-6xl font-black text-white tabular-nums leading-none block">
-            {formatViewsShort(data.totalViews)}
-          </span>
-        </WaterRiseText>
+      <div className="flex flex-wrap items-baseline justify-center gap-x-4 gap-y-2">
         <motion.span
-          className="text-xl sm:text-2xl font-semibold text-zinc-500"
-          initial={{ opacity: 0, y: 8 }}
+          className="text-7xl sm:text-8xl font-black text-white tabular-nums leading-none"
+          initial={{ opacity: 0, scale: 0.7 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.1, type: "spring", stiffness: 200, damping: 18 }}
+        >
+          {formatViewsShort(counted)}
+        </motion.span>
+        <motion.span
+          className="text-2xl sm:text-3xl font-semibold text-blue-300/70"
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.72, duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ delay: 0.5, duration: 0.4 }}
         >
           views
         </motion.span>
       </div>
+      <motion.p
+        className="text-sm text-zinc-400"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.9, duration: 0.5 }}
+      >
+        combined across all pages this month
+      </motion.p>
     </div>
   );
 }
@@ -498,42 +558,46 @@ function StepTotal({ data }: { data: MonthlyWrapData }) {
 function StepTopPage({ data }: { data: MonthlyWrapData }) {
   const p = data.topPage;
   useWrapConfetti(!!p, false);
+  const counted = useCountUp(p?.views ?? 0);
   if (!p) {
     return (
-      <p className="text-sm text-zinc-500 text-center min-h-[280px] flex items-center justify-center">
+      <p className="text-sm text-zinc-500 text-center">
         No per-page data for this month yet.
       </p>
     );
   }
   return (
-    <div className="flex min-h-[300px] flex-col items-center justify-center text-center px-2 space-y-5">
+    <div className="flex flex-col items-center justify-center text-center space-y-7">
       <motion.p
-        className="text-[10px] uppercase tracking-[0.25em] text-amber-400 font-bold"
-        initial={{ opacity: 0, y: 6 }}
+        className="text-xs uppercase tracking-[0.3em] text-amber-300 font-bold"
+        initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
       >
         Top page
       </motion.p>
       <motion.h3
-        className="text-2xl sm:text-3xl font-bold text-white break-all max-w-full px-1"
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+        className="text-4xl sm:text-5xl font-black text-white break-all max-w-full"
+        initial={{ opacity: 0, y: 16, scale: 0.9 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ delay: 0.1, type: "spring", stiffness: 220, damping: 20 }}
       >
         @{p.handle}
       </motion.h3>
-      <div className="flex flex-wrap items-baseline justify-center gap-x-2.5">
-        <WaterRiseText delay={0.08}>
-          <span className="text-5xl sm:text-6xl font-black text-white tabular-nums leading-none block">
-            {formatViewsShort(p.views)}
-          </span>
-        </WaterRiseText>
+      <div className="flex flex-wrap items-baseline justify-center gap-x-3 gap-y-1">
         <motion.span
-          className="text-xl font-medium text-zinc-500"
+          className="text-6xl sm:text-7xl font-black text-white tabular-nums leading-none"
+          initial={{ opacity: 0, scale: 0.75 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.25, type: "spring", stiffness: 200, damping: 18 }}
+        >
+          {formatViewsShort(counted)}
+        </motion.span>
+        <motion.span
+          className="text-2xl font-semibold text-amber-300/70"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 0.85, duration: 0.35 }}
+          transition={{ delay: 0.7, duration: 0.4 }}
         >
           views
         </motion.span>
@@ -672,7 +736,7 @@ function StepIdea({
   kind,
 }: {
   data: MonthlyWrapData;
-  kind: "created" | "proven" | "killed" | "posts";
+  kind: "created" | "proven" | "killed" | "posts" | "reels";
 }) {
   const title =
     kind === "created"
@@ -681,7 +745,9 @@ function StepIdea({
         ? "Most shipped & proven"
         : kind === "killed"
           ? "Most ideas killed"
-          : "Most posts";
+          : kind === "reels"
+            ? "Most reels uploaded"
+            : "Most posts";
   const row =
     kind === "created"
       ? data.individuals.mostIdeasCreated
@@ -689,9 +755,18 @@ function StepIdea({
         ? data.individuals.mostProven
         : kind === "killed"
           ? data.individuals.mostKilled
-          : data.individuals.mostPosts;
-  const Icon = kind === "created" ? Lightbulb : kind === "proven" ? Flame : kind === "killed" ? Skull : Clapperboard;
-  const accent = kind === "posts" ? "text-emerald-400" : "text-sky-400";
+          : kind === "reels"
+            ? data.individuals.mostReels
+            : data.individuals.mostPosts;
+  const Icon =
+    kind === "created" ? Lightbulb
+    : kind === "proven" ? Flame
+    : kind === "killed" ? Skull
+    : Clapperboard;
+  const accent =
+    kind === "posts" ? "text-emerald-400"
+    : kind === "reels" ? "text-pink-400"
+    : "text-sky-400";
   return (
     <div className="flex min-h-[300px] flex-col items-center justify-center text-center px-2 space-y-6">
       <motion.p
@@ -721,6 +796,54 @@ function StepIdea({
         </>
       ) : (
         <p className="text-sm text-zinc-500">No data for this stat in {data.monthLabel}.</p>
+      )}
+    </div>
+  );
+}
+
+function StepTopReel({ data }: { data: MonthlyWrapData }) {
+  const page = data.topReelPage;
+  const views = useCountUp(page ? page.views : 0);
+  return (
+    <div className="flex min-h-[300px] flex-col items-center justify-center text-center px-2 space-y-5">
+      <motion.p
+        className="text-[10px] uppercase tracking-[0.25em] font-bold flex items-center justify-center gap-1.5 text-pink-400"
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35 }}
+      >
+        <Clapperboard className="w-3.5 h-3.5 text-pink-400" />
+        Top reel page
+      </motion.p>
+      {page ? (
+        <>
+          <motion.h3
+            className="text-3xl sm:text-4xl font-black text-white leading-tight"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.1, type: "spring", stiffness: 260, damping: 20 }}
+          >
+            @{page.handle}
+          </motion.h3>
+          <motion.p
+            className="text-5xl sm:text-6xl font-black tabular-nums text-pink-300 leading-none"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, type: "spring", stiffness: 240, damping: 22 }}
+          >
+            {views.toLocaleString()}
+          </motion.p>
+          <motion.p
+            className="text-xs text-zinc-400 uppercase tracking-widest"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.38, duration: 0.4 }}
+          >
+            reel views this month
+          </motion.p>
+        </>
+      ) : (
+        <p className="text-sm text-zinc-500">No reel data for {data.monthLabel}.</p>
       )}
     </div>
   );

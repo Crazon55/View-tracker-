@@ -6,7 +6,7 @@
 
 import { lookupPerson, normalizeName, PEOPLE_SEED } from "./peopleSeed";
 
-const TEAM_ORDER = ["garfields", "goofies"] as const;
+const TEAM_ORDER = ["garfields", "goofies", "sheruses"] as const;
 export type TeamKey = (typeof TEAM_ORDER)[number];
 
 const TEAM_META: Record<
@@ -25,6 +25,12 @@ const TEAM_META: Record<
     members: ["Arohi", "Harish", "Pulkit", "Samiksha"],
     nicheMatch: ["goofies"],
   },
+  sheruses: {
+    label: "The Sherus",
+    emoji: "🦁",
+    members: ["Sugam", "Nitesh"],
+    nicheMatch: ["sheruses"],
+  },
 };
 
 const MS_PER_DAY = 86_400_000;
@@ -38,7 +44,7 @@ export const ROLLOUT_TIMEZONE = "Asia/Kolkata" as const;
 
 /**
  * When the *calendar* wrap first goes live: **May 1, 2026, 5:00pm IST.**
- * Before this instant, `getActiveReportMonth` and the nav chip’s calendar logic stay inactive.
+ * Before this instant, `getActiveReportMonth` and the nav chip's calendar logic stay inactive.
  * Dev/QA: use `?wrap=1` in development or `VITE_ALLOW_WRAP_TEST` + `?wrap=YYYY-MM` to preview.
  */
 export const WRAP_FEATURE_LIVE_AT_MS = +new Date("2026-05-01T17:00:00+05:30");
@@ -356,8 +362,11 @@ export type WrapSlideKind =
   | "proven"
   | "killed"
   | "posts"
+  | "reels"
+  | "topReel"
   | "personStatsGarfields"
   | "personStatsGoofies"
+  | "personStatsSherus"
   | "outro";
 
 /** Only slides with real data — avoids empty "No data for this stat" cards. */
@@ -371,8 +380,11 @@ export function getWrapSlidePlan(data: MonthlyWrapData): WrapSlideKind[] {
   if (data.individuals.mostProven) slides.push("proven");
   if (data.individuals.mostKilled) slides.push("killed");
   if (data.individuals.mostPosts) slides.push("posts");
+  if (data.individuals.mostReels) slides.push("reels");
+  if (data.topReelPage) slides.push("topReel");
   if (data.personStats.some(p => p.team === "garfields")) slides.push("personStatsGarfields");
   if (data.personStats.some(p => p.team === "goofies")) slides.push("personStatsGoofies");
+  if (data.personStats.some(p => p.team === "sheruses")) slides.push("personStatsSherus");
   slides.push("outro");
   return slides;
 }
@@ -407,9 +419,10 @@ export type MonthlyWrapData = {
     mostIdeasCreated: { name: string; count: number } | null;
     mostProven: { name: string; count: number } | null;
     mostKilled: { name: string; count: number } | null;
-    /** Tracker posting rows dated in this month, by idea creator */
     mostPosts: { name: string; count: number } | null;
+    mostReels: { name: string; count: number } | null;
   };
+  topReelPage: MonthlyWrapPageRow | null;
   personStats: PersonStat[];
 };
 
@@ -444,6 +457,7 @@ export function buildMonthlyWrapData(
   const teamAccounts: Record<TeamKey, Set<string>> = {
     garfields: new Set(),
     goofies: new Set(),
+    sheruses: new Set(),
   };
   for (const n of niches || []) {
     const tid = nicheIdToTeam.get(n.id);
@@ -481,7 +495,7 @@ export function buildMonthlyWrapData(
   };
 
   const viewsByPage = new Map<string, number>();
-  const teamViews: Record<TeamKey, number> = { garfields: 0, goofies: 0 };
+  const teamViews: Record<TeamKey, number> = { garfields: 0, goofies: 0, sheruses: 0 };
   let totalViews = 0;
 
   const addPageViews = (pageId: string, handle: string, v: number) => {
@@ -545,10 +559,9 @@ export function buildMonthlyWrapData(
   const topPage = topPages[0] || null;
 
   let winningTeam: MonthlyWrapData["winningTeam"] = null;
-  const totalTeamViews = teamViews.garfields + teamViews.goofies;
+  const totalTeamViews = TEAM_ORDER.reduce((s, k) => s + teamViews[k], 0);
   if (totalTeamViews > 0) {
-    const [a, b] = TEAM_ORDER;
-    const wx: TeamKey = teamViews[b] > teamViews[a] ? b : a;
+    const wx = TEAM_ORDER.reduce((best, k) => teamViews[k] > teamViews[best] ? k : best, TEAM_ORDER[0]);
     const meta = TEAM_META[wx];
     winningTeam = {
       key: wx,
@@ -616,8 +629,41 @@ export function buildMonthlyWrapData(
     return count > 0 ? { name, count } : null;
   };
 
+  // Reel views per page from six-day cycle entries (reel_pct gives reel fraction)
+  const reelViewsByPage = new Map<string, number>();
+  for (const c of sixDayMonth?.cycles || []) {
+    for (const e of c?.entries || []) {
+      const pid = String(e?.page_id || "");
+      const v = Number(e?.views || 0);
+      const rp = Number(e?.reel_pct ?? 0) / 100;
+      if (v > 0 && rp > 0) {
+        reelViewsByPage.set(pid, (reelViewsByPage.get(pid) || 0) + Math.round(v * rp));
+      }
+    }
+  }
+  const topReelPage = Array.from(reelViewsByPage.entries())
+    .map(([pid, views]) => ({
+      pageId: pid,
+      handle: pageIdToHandle.get(pid) || "—",
+      name: pageIdToName.get(pid) || "",
+      views,
+    }))
+    .filter(r => r.views > 0)
+    .sort((a, b) => b.views - a.views)[0] ?? null;
+
+  // Most reels: person whose ideas had the most postings in "uploaded" stage (reel uploads)
+  const reelsByCreator = new Map<string, number>();
+  for (const idea of ideas || []) {
+    const creator = resolvePersonName(idea?.created_by);
+    const st = String(idea?.stage || "").toLowerCase();
+    const uMonth = isoMonthInTimezone(idea?.updated_at);
+    if (creator && uMonth === reportMonth && st === "uploaded") {
+      reelsByCreator.set(creator, (reelsByCreator.get(creator) || 0) + 1);
+    }
+  }
+
   const personStats: PersonStat[] = PEOPLE_SEED
-    .filter(p => p.niche === "garfields" || p.niche === "goofies")
+    .filter(p => p.niche === "garfields" || p.niche === "goofies" || p.niche === "sheruses")
     .map(p => ({
       name: p.name,
       emoji: p.emoji,
@@ -641,7 +687,9 @@ export function buildMonthlyWrapData(
       mostProven: maxEntry(proven),
       mostKilled: maxEntry(killed),
       mostPosts: maxEntry(postsByCreator),
+      mostReels: maxEntry(reelsByCreator),
     },
+    topReelPage,
     personStats,
   };
 }

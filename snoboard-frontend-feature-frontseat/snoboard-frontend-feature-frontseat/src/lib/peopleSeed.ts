@@ -39,6 +39,8 @@ export const PEOPLE_SEED: SeedPerson[] = [
   { name: "Pulkit",   role: "cdi", niche: "goofies", emoji: "🎬" },
   { name: "Samiksha", role: "cdi", niche: "goofies", emoji: "🎬" },
   // The Sherus
+  { name: "Sugam",  role: "cs", niche: "sheruses", emoji: "🦁" },
+  { name: "Nitesh", role: "cs", niche: "sheruses", emoji: "🦁" },
 ];
 
 export const ROLE_LABEL: Record<PersonRole, string> = {
