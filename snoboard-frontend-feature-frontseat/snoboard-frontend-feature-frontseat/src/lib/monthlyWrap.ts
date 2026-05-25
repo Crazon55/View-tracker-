@@ -48,10 +48,15 @@ export const WRAP_FEATURE_LIVE_AT_MS = +new Date("2026-05-01T17:00:00+05:30");
  * (1st 5pm IST through 3rd; chip 3 days after first open; repeats monthly after go-live.)
  */
 export const WRAP_ROLLOUT_EXPLAINER =
-  "Each month: unlocks 5pm IST on the 1st, open through the 3rd (IST). The “wrap” chip can stay 3 days after you first open it.";
+  "Each month: the official recap drops 5pm IST on the 1st (for the previous month). You can open this month’s live preview anytime from the ✨ wrap chip in the header.";
+
+/** Wrap feature is enabled (after first go-live date). */
+export function isWrapFeatureAvailable(now: Date = new Date()): boolean {
+  return now.getTime() >= WRAP_FEATURE_LIVE_AT_MS;
+}
 
 function isWrapCalendarLive(now: Date): boolean {
-  return now.getTime() >= WRAP_FEATURE_LIVE_AT_MS;
+  return isWrapFeatureAvailable(now);
 }
 
 /** Calendar Y/M/D and hour in `ROLLOUT_TIMEZONE` (IST), `month` 1–12, `hour` 0–23. */
@@ -167,6 +172,11 @@ export function getTestWrapMonthFromUrl(): string | null {
 export function getCurrentCalendarMonth(now: Date = new Date()): string {
   const { y, m } = getZonedRolloutCalendarParts(now);
   return `${y}-${pad2(m)}`;
+}
+
+/** Default month for the header chip: this calendar month (IST). */
+export function getDefaultWrapMonth(now: Date = new Date()): string {
+  return getCurrentCalendarMonth(now);
 }
 
 export function monthLabel(ym: string): string {

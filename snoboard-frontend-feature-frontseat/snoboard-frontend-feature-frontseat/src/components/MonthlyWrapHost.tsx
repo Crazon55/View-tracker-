@@ -10,11 +10,11 @@ import {
   readWrapState,
   writeWrapState,
   shouldAutoOpenModal,
-  findTabReportMonth,
-  isTabVisible,
   formatViewsShort,
   WRAP_ROLLOUT_EXPLAINER,
   getWrapSlidePlan,
+  getDefaultWrapMonth,
+  isWrapFeatureAvailable,
   type MonthlyWrapData,
   type WrapSlideKind,
 } from "@/lib/monthlyWrap";
@@ -38,43 +38,29 @@ function useWrapUserKey() {
   return user?.id || user?.email || null;
 }
 
-function useMonthlyWrapState() {
-  const userKey = useWrapUserKey();
-  const [tick, setTick] = useState(0);
-  const tabMonth = userKey ? findTabReportMonth(userKey) : null;
-  const st = tabMonth && userKey ? readWrapState(userKey, tabMonth) : null;
-  const visible = !!(isTabVisible(st) && !st?.completed);
-  useEffect(() => {
-    const t = setInterval(() => setTick((x) => x + 1), 2000);
-    return () => clearInterval(t);
-  }, [userKey, tabMonth]);
-  void tick;
-  return { tabMonth, showTab: visible, label: tabMonth ? shortMonthLabel(tabMonth) : "" };
-}
-
 function shortMonthLabel(ym: string) {
   const [y, m] = ym.split("-").map(Number);
   if (!y || !m) return "Monthly";
   return new Date(y, m - 1, 1).toLocaleString(undefined, { month: "short" });
 }
 
+function useMonthlyWrapState() {
+  const reportMonth = getDefaultWrapMonth();
+  return {
+    reportMonth,
+    showTab: isWrapFeatureAvailable(),
+    label: shortMonthLabel(reportMonth),
+  };
+}
+
 export function MonthlyWrapOpenButton({ className = "" }: { className?: string }) {
   const ctx = useContext(MonthlyWrapContext);
-  const { tabMonth, showTab, label } = useMonthlyWrapState();
-  const userKey = useWrapUserKey();
-  if (!showTab || !tabMonth) return null;
+  const { reportMonth, showTab, label } = useMonthlyWrapState();
+  if (!showTab || !reportMonth) return null;
   return (
     <button
       type="button"
-      onClick={() => {
-        if (userKey) {
-          const st = readWrapState(userKey, tabMonth);
-          writeWrapState(userKey, tabMonth, {
-            firstOpenedAt: st?.firstOpenedAt || Date.now(),
-          });
-        }
-        ctx?.openForMonth(tabMonth);
-      }}
+      onClick={() => ctx?.openForMonth(reportMonth)}
       className={`inline-flex items-center gap-1.5 rounded-full border border-violet-500/35 bg-violet-500/15 px-3 py-1.5 text-xs font-semibold text-violet-200 hover:bg-violet-500/25 transition-colors ${className}`}
     >
       <Sparkles className="w-3.5 h-3.5" />
