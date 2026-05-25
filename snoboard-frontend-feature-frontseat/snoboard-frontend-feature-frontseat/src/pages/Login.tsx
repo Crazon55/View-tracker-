@@ -1,13 +1,19 @@
+import { useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
+import { stashWrapMonthFromUrl } from "@/lib/monthlyWrap";
 
 export default function Login() {
+  useEffect(() => {
+    stashWrapMonthFromUrl();
+  }, []);
+
   const handleGoogleLogin = async () => {
+    stashWrapMonthFromUrl();
+    const redirectTo = `${window.location.origin}${window.location.pathname}${window.location.search}`;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: {
-        redirectTo: window.location.origin,
-      },
+      options: { redirectTo },
     });
     if (error) {
       console.error("Login failed:", error.message);

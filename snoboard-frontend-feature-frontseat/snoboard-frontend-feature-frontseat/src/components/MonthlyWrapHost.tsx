@@ -6,6 +6,7 @@ import {
   getActiveReportMonth,
   getWrapMonthFromUrl,
   stashWrapMonthFromUrl,
+  clearPendingWrapMonth,
   buildMonthlyWrapData,
   readWrapState,
   writeWrapState,
@@ -178,7 +179,7 @@ export function MonthlyWrapModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className={cn(
-          "fixed inset-0 left-0 top-0 z-50 flex h-[100dvh] max-h-[100dvh] w-full max-w-none translate-x-0 translate-y-0 flex-col",
+          "fixed inset-0 left-0 top-0 z-[200] flex h-[100dvh] max-h-[100dvh] w-full max-w-none translate-x-0 translate-y-0 flex-col",
           "gap-0 border border-white/10 bg-zinc-950 p-0 shadow-none",
           "text-zinc-100",
           "overflow-hidden sm:max-w-none sm:rounded-none",
@@ -673,10 +674,9 @@ export function MonthlyWrapRoot({ children = null }: { children?: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [forcedMonth, setForcedMonth] = useState<string | null>(null);
   const cal = getActiveReportMonth();
-  const reportForModal = forcedMonth || cal;
   const skipCalAuto = useRef(false);
 
-  /** Stash `?wrap=` before sign-in; open once authenticated. */
+  /** Stash `?wrap=` on every app boot (login page mounts before MonthlyWrapRoot). */
   useEffect(() => {
     stashWrapMonthFromUrl();
   }, []);
@@ -688,6 +688,7 @@ export function MonthlyWrapRoot({ children = null }: { children?: ReactNode }) {
     skipCalAuto.current = true;
     setForcedMonth(test);
     setOpen(true);
+    clearPendingWrapMonth();
     try {
       const u = new URL(window.location.href);
       u.searchParams.delete("wrap");
@@ -702,7 +703,7 @@ export function MonthlyWrapRoot({ children = null }: { children?: ReactNode }) {
     if (!userKey || !cal || skipCalAuto.current) return;
     const st = readWrapState(userKey, cal);
     if (shouldAutoOpenModal(true, st)) {
-      setForcedMonth(null);
+      setForcedMonth(cal);
       setOpen(true);
       writeWrapState(userKey, cal, {
         firstOpenedAt: st?.firstOpenedAt || Date.now(),
@@ -726,7 +727,7 @@ export function MonthlyWrapRoot({ children = null }: { children?: ReactNode }) {
           if (!o) setForcedMonth(null);
         }}
         forcedReportMonth={forcedMonth}
-        effectiveMonth={open ? reportForModal : null}
+        effectiveMonth={forcedMonth || cal}
       />
     </MonthlyWrapContext.Provider>
   );

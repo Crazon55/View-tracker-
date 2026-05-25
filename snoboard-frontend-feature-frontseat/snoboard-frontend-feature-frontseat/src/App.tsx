@@ -36,6 +36,7 @@ import PodcastAlerts from "./pages/PodcastAlerts";
 import RoleSelect from "./pages/RoleSelect";
 import NotFound from "./pages/NotFound";
 import { MonthlyWrapRoot, MonthlyWrapOpenButton, MonthlyWrapBanner } from "./components/MonthlyWrapHost";
+import { stashWrapMonthFromUrl } from "@/lib/monthlyWrap";
 
 const queryClient = new QueryClient();
 
@@ -376,7 +377,7 @@ function AppLayout() {
     location.pathname.startsWith("/page/");
 
   return (
-    <MonthlyWrapRoot>
+    <>
       {isFullScreen ? (
         <div className="relative">
           <HamburgerMenu />
@@ -502,12 +503,16 @@ function AppLayout() {
           </main>
         </div>
       )}
-    </MonthlyWrapRoot>
+    </>
   );
 }
 
 function AuthGate() {
   const { user, loading, domainError, needsRole } = useAuth();
+
+  useEffect(() => {
+    stashWrapMonthFromUrl();
+  }, []);
 
   if (loading) {
     return (
@@ -548,9 +553,9 @@ function AuthGate() {
   }
 
   return (
-    <>
+    <MonthlyWrapRoot>
       <AppLayout />
-    </>
+    </MonthlyWrapRoot>
   );
 }
 

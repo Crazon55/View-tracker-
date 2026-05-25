@@ -158,7 +158,25 @@ function consumePendingWrapMonth(): string | null {
   }
 }
 
-/** Manual wrap open from URL (works whenever signed in). */
+/** Read stashed wrap month without removing (OAuth return may need multiple reads). */
+export function peekPendingWrapMonth(): string | null {
+  try {
+    const raw = sessionStorage.getItem(WRAP_PENDING_KEY);
+    return raw && /^\d{4}-\d{2}$/.test(raw) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearPendingWrapMonth(): void {
+  try {
+    sessionStorage.removeItem(WRAP_PENDING_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Manual wrap open from URL or stashed pre-login intent. */
 export function getWrapMonthFromUrl(): string | null {
   if (typeof window === "undefined") return null;
   const w = new URLSearchParams(window.location.search).get("wrap");
@@ -166,7 +184,7 @@ export function getWrapMonthFromUrl(): string | null {
     const resolved = resolveWrapParam(w);
     if (resolved) return resolved;
   }
-  return consumePendingWrapMonth();
+  return peekPendingWrapMonth();
 }
 
 /** @deprecated use getWrapMonthFromUrl */
