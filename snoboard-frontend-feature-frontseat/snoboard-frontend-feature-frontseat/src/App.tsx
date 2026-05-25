@@ -5,13 +5,14 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { getDeadlines, getSixDayConfig, getSixDayDeadlines, getTickets } from "@/services/api";
 import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, BarChart3, Scissors, ClipboardList, Trophy, LayoutGrid, Ticket, Newspaper, Waves, Bell } from "lucide-react";
+import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, BarChart3, Scissors, ClipboardList, Trophy, LayoutGrid, Ticket, Newspaper, Waves, Bell, Sparkles } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import Login from "./pages/Login";
 
 import Dashboard from "./pages/Dashboard";
+import WrapView from "./pages/WrapView";
 import PageDetail from "./pages/PageDetail";
 import PagesView from "./pages/PagesView";
 import PostsView from "./pages/PostsView";
@@ -255,6 +256,7 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
+  { to: "/wrap", label: "Monthly wrap", icon: Sparkles },
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/content-tracker", label: "Reel Tracker", icon: ClipboardList },
   { to: "/post-tracker", label: "Post Tracker", icon: Image },
@@ -361,6 +363,7 @@ function AppLayout() {
 
   const isFullScreen =
     location.pathname === "/" ||
+    location.pathname === "/wrap" ||
     location.pathname === "/content-tracker" ||
     location.pathname === "/post-tracker" ||
     location.pathname === "/post-ips" ||
@@ -397,6 +400,7 @@ function AppLayout() {
           </div>
           <Routes>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/wrap" element={<WrapView />} />
             <Route path="/content-tracker" element={<ContentTracker />} />
             <Route path="/post-tracker" element={<PostTracker />} />
             <Route path="/post-ips" element={<PostIPsView />} />

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { Sparkles, ChevronRight, ChevronLeft, Trophy, Flame, X, Lightbulb, Skull, Clapperboard } from "lucide-react";
 import {
@@ -61,13 +62,13 @@ export function useMonthlyWrap() {
 }
 
 export function MonthlyWrapOpenButton({ className = "" }: { className?: string }) {
-  const ctx = useContext(MonthlyWrapContext);
+  const navigate = useNavigate();
   const { reportMonth, label } = useMonthlyWrapState();
   if (!reportMonth) return null;
   return (
     <button
       type="button"
-      onClick={() => ctx?.openForMonth(reportMonth)}
+      onClick={() => navigate(`/wrap?month=${encodeURIComponent(reportMonth)}`)}
       className={`inline-flex items-center gap-1.5 rounded-full border border-violet-500/35 bg-violet-500/15 px-3 py-1.5 text-xs font-semibold text-violet-200 hover:bg-violet-500/25 transition-colors ${className}`}
     >
       <Sparkles className="w-3.5 h-3.5" />
@@ -78,14 +79,14 @@ export function MonthlyWrapOpenButton({ className = "" }: { className?: string }
 
 /** Prominent dashboard entry — hard to miss on the home page. */
 export function MonthlyWrapBanner({ className = "" }: { className?: string }) {
-  const ctx = useContext(MonthlyWrapContext);
+  const navigate = useNavigate();
   const { reportMonth, fullLabel } = useMonthlyWrapState();
   const official = isOfficialWrapWindow();
-  if (!reportMonth || !ctx) return null;
+  if (!reportMonth) return null;
   return (
     <button
       type="button"
-      onClick={() => ctx.openForMonth(reportMonth)}
+      onClick={() => navigate(`/wrap?month=${encodeURIComponent(reportMonth)}`)}
       className={cn(
         "group relative w-full overflow-hidden rounded-2xl border border-violet-500/30 bg-gradient-to-r from-violet-600/20 via-fuchsia-600/15 to-violet-900/20",
         "px-5 py-4 sm:px-6 sm:py-5 text-left transition-all hover:border-violet-400/50 hover:from-violet-600/30",
@@ -130,11 +131,88 @@ export function MonthlyWrapBanner({ className = "" }: { className?: string }) {
 type ModalProps = {
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  /** When opening from the tab (outside the calendar window). */
   forcedReportMonth?: string | null;
-  /** Resolved month for the open session (forced || calendar). */
   effectiveMonth?: string | null;
 };
+
+function useMonthlyWrapQuery(reportMonth: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ["monthly-wrap", reportMonth],
+    queryFn: async () => {
+      const [ideas, niches, six] = await Promise.all([
+        getTrackerIdeas(),
+        getTrackerNiches(),
+        reportMonth ? getSixDayMonth(reportMonth).catch(() => null) : Promise.resolve(null),
+      ]);
+      if (!reportMonth) return null;
+      return buildMonthlyWrapData(reportMonth, ideas, niches, six);
+    },
+    enabled: enabled && !!reportMonth,
+    staleTime: 120_000,
+    retry: 1,
+  });
+}
+
+/** Full-screen wrap UI (no dialog) — used by `/wrap` route. */
+export function MonthlyWrapScreen({
+  reportMonth,
+  onExit,
+}: {
+  reportMonth: string;
+  onExit: () => void;
+}) {
+  const userKey = useWrapUserKey();
+  const [step, setStep] = useState(0);
+  const { data, isLoading, isError, error } = useMonthlyWrapQuery(reportMonth, true);
+
+  useEffect(() => {
+    setStep(0);
+  }, [reportMonth]);
+
+  const finish = useCallback(() => {
+    if (userKey && reportMonth) {
+      writeWrapState(userKey, reportMonth, { completed: true, autoModalShown: true });
+    }
+    onExit();
+  }, [userKey, reportMonth, onExit]);
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex min-h-[100dvh] flex-col bg-zinc-950 text-zinc-100">
+      {isLoading && (
+        <div className="flex flex-1 items-center justify-center p-10 text-center text-sm text-zinc-500">
+          Loading your wrap…
+        </div>
+      )}
+      {isError && (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+          <p className="text-sm font-semibold text-red-400">Could not load wrap data</p>
+          <p className="text-xs text-zinc-500 max-w-sm">{String((error as Error)?.message || error)}</p>
+          <Button variant="outline" onClick={onExit} className="mt-2 border-zinc-700">
+            Back to dashboard
+          </Button>
+        </div>
+      )}
+      {!isLoading && !isError && data && (
+        <WrapBody
+          data={data}
+          step={step}
+          setStep={setStep}
+          onClose={onExit}
+          onDone={finish}
+          slides={getWrapSlidePlan(data)}
+        />
+      )}
+      {!isLoading && !isError && !data && (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+          <p className="text-sm text-zinc-400">Nothing to show for {reportMonth} yet.</p>
+          <Button variant="outline" onClick={onExit} className="border-zinc-700">
+            Back to dashboard
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function MonthlyWrapModal({
   open,
@@ -147,20 +225,7 @@ export function MonthlyWrapModal({
   const reportMonth = effectiveMonthProp ?? forcedReportMonth ?? calMonth;
   const [step, setStep] = useState(0);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["monthly-wrap", reportMonth],
-    queryFn: async () => {
-      const [ideas, niches, six] = await Promise.all([
-        getTrackerIdeas(),
-        getTrackerNiches(),
-        reportMonth ? getSixDayMonth(reportMonth).catch(() => null) : Promise.resolve(null),
-      ]);
-      if (!reportMonth) return null;
-      return buildMonthlyWrapData(reportMonth, ideas, niches, six);
-    },
-    enabled: open && !!reportMonth,
-    staleTime: 120_000,
-  });
+  const { data, isLoading } = useMonthlyWrapQuery(reportMonth, open);
 
   const reset = useCallback(() => setStep(0), [open, reportMonth]);
 
@@ -670,25 +735,29 @@ function StepOutro({ data, onDone }: { data: MonthlyWrapData; onDone: () => void
  * `<MonthlyWrapOpenButton />` as a child so the chip can open the same modal.
  */
 export function MonthlyWrapRoot({ children = null }: { children?: ReactNode }) {
+  const navigate = useNavigate();
   const userKey = useWrapUserKey();
-  const [open, setOpen] = useState(false);
-  const [forcedMonth, setForcedMonth] = useState<string | null>(null);
   const cal = getActiveReportMonth();
   const skipCalAuto = useRef(false);
 
-  /** Stash `?wrap=` on every app boot (login page mounts before MonthlyWrapRoot). */
   useEffect(() => {
     stashWrapMonthFromUrl();
   }, []);
+
+  const goWrap = useCallback(
+    (month: string, replace = false) => {
+      navigate(`/wrap?month=${encodeURIComponent(month)}`, { replace });
+    },
+    [navigate],
+  );
 
   useEffect(() => {
     if (!userKey) return;
     const test = getWrapMonthFromUrl();
     if (!test) return;
     skipCalAuto.current = true;
-    setForcedMonth(test);
-    setOpen(true);
     clearPendingWrapMonth();
+    goWrap(test, true);
     try {
       const u = new URL(window.location.href);
       u.searchParams.delete("wrap");
@@ -697,38 +766,25 @@ export function MonthlyWrapRoot({ children = null }: { children?: ReactNode }) {
     } catch {
       /* ignore */
     }
-  }, [userKey]);
+  }, [userKey, goWrap]);
 
   useEffect(() => {
     if (!userKey || !cal || skipCalAuto.current) return;
     const st = readWrapState(userKey, cal);
     if (shouldAutoOpenModal(true, st)) {
-      setForcedMonth(cal);
-      setOpen(true);
+      goWrap(cal, true);
       writeWrapState(userKey, cal, {
         firstOpenedAt: st?.firstOpenedAt || Date.now(),
         autoModalShown: true,
       });
     }
-  }, [userKey, cal]);
+  }, [userKey, cal, goWrap]);
 
-  const openForMonth = useCallback((ym: string) => {
-    setForcedMonth(ym);
-    setOpen(true);
-  }, []);
+  const openForMonth = useCallback((ym: string) => goWrap(ym), [goWrap]);
 
   return (
     <MonthlyWrapContext.Provider value={{ openForMonth }}>
       {children}
-      <MonthlyWrapModal
-        open={open}
-        onOpenChange={(o) => {
-          setOpen(o);
-          if (!o) setForcedMonth(null);
-        }}
-        forcedReportMonth={forcedMonth}
-        effectiveMonth={forcedMonth || cal}
-      />
     </MonthlyWrapContext.Provider>
   );
 }
