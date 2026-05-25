@@ -102,27 +102,71 @@ export function getActiveReportMonth(now: Date = new Date()): string | null {
 }
 
 /**
- * **Local dev / QA only** (`import.meta.env.DEV`): open the real in-app wrap without waiting
- * for the 1st-of-month rollout.
- * - `?wrap=1` or `?wrap=true` → report month = **previous** calendar month (good default for data).
- * - `?wrap=2025-04` → that exact `YYYY-MM`.
- * Stripped from the URL after the modal opens (see `MonthlyWrapRoot`).
- * In production builds this always returns `null` unless you set `VITE_ALLOW_WRAP_TEST=true`.
+ * Resolve `?wrap=` query values to a report month (`YYYY-MM`).
+ * - `?wrap=now` / `?wrap=current` → **this** calendar month (IST)
+ * - `?wrap=1` / `?wrap=true` → **previous** calendar month (official rollout default)
+ * - `?wrap=2026-05` → that exact month
  */
-export function getTestWrapMonthFromUrl(): string | null {
-  if (typeof window === "undefined") return null;
-  const allow =
-    import.meta.env.DEV || String(import.meta.env.VITE_ALLOW_WRAP_TEST || "").toLowerCase() === "true";
-  if (!allow) return null;
-  const w = new URLSearchParams(window.location.search).get("wrap");
-  if (!w) return null;
+function resolveWrapParam(w: string): string | null {
   if (w === "1" || w === "true") {
     const d = new Date();
     d.setDate(0);
     return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
   }
+  if (w === "now" || w === "current") {
+    const { y, m } = getZonedRolloutCalendarParts();
+    return `${y}-${pad2(m)}`;
+  }
   if (/^\d{4}-\d{2}$/.test(w)) return w;
   return null;
+}
+
+const WRAP_PENDING_KEY = "fsboard-wrap-pending";
+
+/** Call on app boot (before auth) so Google OAuth does not drop `?wrap=`. */
+export function stashWrapMonthFromUrl(): void {
+  if (typeof window === "undefined") return;
+  const w = new URLSearchParams(window.location.search).get("wrap");
+  if (!w) return;
+  const resolved = resolveWrapParam(w);
+  if (!resolved) return;
+  try {
+    sessionStorage.setItem(WRAP_PENDING_KEY, resolved);
+  } catch {
+    /* ignore */
+  }
+}
+
+function consumePendingWrapMonth(): string | null {
+  try {
+    const raw = sessionStorage.getItem(WRAP_PENDING_KEY);
+    if (raw) sessionStorage.removeItem(WRAP_PENDING_KEY);
+    return raw && /^\d{4}-\d{2}$/.test(raw) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Manual wrap open from URL (works whenever signed in). */
+export function getWrapMonthFromUrl(): string | null {
+  if (typeof window === "undefined") return null;
+  const w = new URLSearchParams(window.location.search).get("wrap");
+  if (w) {
+    const resolved = resolveWrapParam(w);
+    if (resolved) return resolved;
+  }
+  return consumePendingWrapMonth();
+}
+
+/** @deprecated use getWrapMonthFromUrl */
+export function getTestWrapMonthFromUrl(): string | null {
+  return getWrapMonthFromUrl();
+}
+
+/** Current calendar month in IST as `YYYY-MM`. */
+export function getCurrentCalendarMonth(now: Date = new Date()): string {
+  const { y, m } = getZonedRolloutCalendarParts(now);
+  return `${y}-${pad2(m)}`;
 }
 
 export function monthLabel(ym: string): string {

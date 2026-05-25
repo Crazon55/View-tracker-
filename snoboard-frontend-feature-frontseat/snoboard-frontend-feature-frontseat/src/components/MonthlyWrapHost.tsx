@@ -4,7 +4,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Sparkles, ChevronRight, ChevronLeft, Trophy, Flame, X, Lightbulb, Skull, Clapperboard } from "lucide-react";
 import {
   getActiveReportMonth,
-  getTestWrapMonthFromUrl,
+  getWrapMonthFromUrl,
+  stashWrapMonthFromUrl,
   buildMonthlyWrapData,
   readWrapState,
   writeWrapState,
@@ -632,10 +633,14 @@ export function MonthlyWrapRoot({ children = null }: { children?: ReactNode }) {
   const reportForModal = forcedMonth || cal;
   const skipCalAuto = useRef(false);
 
-  /** `?wrap=1` in dev: force the real wrap open for testing (no rollout-window wait). */
+  /** Stash `?wrap=` before sign-in; open once authenticated. */
+  useEffect(() => {
+    stashWrapMonthFromUrl();
+  }, []);
+
   useEffect(() => {
     if (!userKey) return;
-    const test = getTestWrapMonthFromUrl();
+    const test = getWrapMonthFromUrl();
     if (!test) return;
     skipCalAuto.current = true;
     setForcedMonth(test);
