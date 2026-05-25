@@ -26,6 +26,47 @@ function fmt(n: number): string {
   return n.toLocaleString();
 }
 
+const normHandle = (h: string) => String(h || "").replace(/^@/, "").trim().toLowerCase();
+
+/** Garfields Week 4 roster — cycle 4+ and all future months. */
+const GARFIELD_WEEK4_HANDLES = [
+  "bizzindia",
+  "indianfoundersco",
+  "startupbydog",
+  "indiabusinesscom",
+  "entrepreneursindia.co",
+  "therealfoundr",
+] as const;
+
+const GOOFIES_ACTIVE_HANDLES = [
+  "101xfounders",
+  "foundersinindia",
+  "startupsinthelast24hrs",
+  "startupcoded",
+  "indiastartupstory",
+] as const;
+
+const SHERUS_ACTIVE_HANDLES = ["thechangingorder"] as const;
+
+const ACTIVE_ROSTER_WEEK3 = new Set([
+  "bizzindia",
+  "indianfoundersco",
+  "startupbydog",
+  "indianbusinesscom",
+  "entrepreneursindia.co",
+  ...GOOFIES_ACTIVE_HANDLES,
+  ...SHERUS_ACTIVE_HANDLES,
+]);
+
+const ACTIVE_ROSTER_WEEK4 = new Set([
+  ...GARFIELD_WEEK4_HANDLES,
+  ...GOOFIES_ACTIVE_HANDLES,
+  ...SHERUS_ACTIVE_HANDLES,
+]);
+
+const ROSTER_CUTOFF_CYCLE3 = "2026-05-13";
+const ROSTER_CUTOFF_CYCLE4 = "2026-05-19";
+
 type TabMode = "cycles" | "reconcile";
 
 export default function SixDayTracker() {
@@ -104,36 +145,15 @@ export default function SixDayTracker() {
       else if (nm.includes("sheerus") || nm.includes("sheru") || nm.includes("changing order")) bucket = "sheruses";
       if (!bucket) continue;
       for (const h of n?.pages || []) {
-        if (h) m.set(String(h).replace(/^@/, "").trim().toLowerCase(), bucket);
+        if (h) m.set(normHandle(h), bucket);
       }
     }
+    // Hardcoded fallbacks so roster updates apply before Supabase niche sync.
+    for (const h of GARFIELD_WEEK4_HANDLES) m.set(h, "garfields");
+    for (const h of GOOFIES_ACTIVE_HANDLES) m.set(h, "goofies");
+    for (const h of SHERUS_ACTIVE_HANDLES) m.set(h, "sheruses");
     return m;
   }, [nichesRaw]);
-
-  /* Roster cutoffs (May 2026):
-     - Before Cycle 3 (May 13): full historical page list
-     - Cycle 3 (May 13–18): Week 3 roster (5 Garfields incl. indianbusinesscom)
-     - Cycle 4+ (May 19 onward): current tracker_niches roster (6 Garfields) */
-  const ROSTER_CUTOFF_CYCLE3 = "2026-05-13";
-  const ROSTER_CUTOFF_CYCLE4 = "2026-05-19";
-  const ACTIVE_ROSTER_WEEK3 = useMemo(
-    () =>
-      new Set([
-        "bizzindia",
-        "indianfoundersco",
-        "startupbydog",
-        "indianbusinesscom",
-        "entrepreneursindia.co",
-        "101xfounders",
-        "foundersinindia",
-        "startupsinthelast24hrs",
-        "startupcoded",
-        "indiastartupstory",
-        "thechangingorder",
-      ]),
-    [],
-  );
-  const normHandle = (h: string) => String(h || "").replace(/^@/, "").trim().toLowerCase();
 
   /* Full server page list — used for pre-cutoff cycles so old page views remain visible. */
   const allServerPages = useMemo(() => {
@@ -142,12 +162,12 @@ export default function SixDayTracker() {
     return (allPagesRaw || []).map((p: any) => ({ id: p.id, handle: p.handle, name: p.name, stage: p.stage ?? 1 }));
   }, [monthData, allPagesRaw]);
 
-  /* Niche-filtered pages — used for post-cutoff cycles and all niche UI. */
+  /* Active roster pages — Week 4 list (hardcoded), not DB-dependent. */
   const nichePages = useMemo(() => {
+    const rosterPages = allServerPages.filter((p: any) => ACTIVE_ROSTER_WEEK4.has(normHandle(p.handle)));
+    if (rosterPages.length > 0) return rosterPages;
     if (handleToNiche.size === 0) return allServerPages;
-    return allServerPages.filter((p: any) =>
-      handleToNiche.has(String(p.handle || "").replace(/^@/, "").trim().toLowerCase())
-    );
+    return allServerPages.filter((p: any) => handleToNiche.has(normHandle(p.handle)));
   }, [allServerPages, handleToNiche]);
 
   /* allPages drives the niche filter pill counts — always the niche list. */
@@ -190,8 +210,8 @@ export default function SixDayTracker() {
     if (start < ROSTER_CUTOFF_CYCLE4) {
       return applyTeamFilter(allServerPages.filter((p: any) => ACTIVE_ROSTER_WEEK3.has(normHandle(p.handle))));
     }
-    return pages;
-  }, [allServerPages, pages, handleToNiche, nicheFilterSet, isAllActive, ACTIVE_ROSTER_WEEK3]);
+    return applyTeamFilter(allServerPages.filter((p: any) => ACTIVE_ROSTER_WEEK4.has(normHandle(p.handle))));
+  }, [allServerPages, handleToNiche, nicheFilterSet, isAllActive]);
 
   /* allowedPageIds is only needed for the reconcile/summary filter — keep as niche-based. */
   const allowedPageIds = useMemo(
