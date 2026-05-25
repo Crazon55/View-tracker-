@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getDashboard, getAutoReels, getManualReels, getPosts, getSixDayMonth, getTrackerNiches } from "@/services/api";
 import TeamBattleScoreboard from "@/components/TeamBattleScoreboard";
+import { MonthlyWrapBanner } from "@/components/MonthlyWrapHost";
 import { useNavigate } from "react-router-dom";
 import { Search, TrendingUp, MoreVertical } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -609,6 +610,10 @@ export default function Dashboard() {
 
       <div className="px-4 sm:px-6 -mt-16 sm:-mt-20 relative z-10 pb-8 sm:pb-10">
       <div className="max-w-6xl mx-auto">
+
+        <div className="mb-5 sm:mb-6">
+          <MonthlyWrapBanner />
+        </div>
 
         {/* Top Cards Row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 mb-8 sm:mb-10">

@@ -50,9 +50,9 @@ export const WRAP_FEATURE_LIVE_AT_MS = +new Date("2026-05-01T17:00:00+05:30");
 export const WRAP_ROLLOUT_EXPLAINER =
   "Each month: the official recap drops 5pm IST on the 1st (for the previous month). You can open this month’s live preview anytime from the ✨ wrap chip in the header.";
 
-/** Wrap feature is enabled (after first go-live date). */
-export function isWrapFeatureAvailable(now: Date = new Date()): boolean {
-  return now.getTime() >= WRAP_FEATURE_LIVE_AT_MS;
+/** Wrap UI is always available for signed-in users. */
+export function isWrapFeatureAvailable(_now: Date = new Date()): boolean {
+  return true;
 }
 
 function isWrapCalendarLive(now: Date): boolean {

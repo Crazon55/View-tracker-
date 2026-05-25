@@ -35,7 +35,7 @@ import BlueOceanIdeas from "./pages/BlueOceanIdeas";
 import PodcastAlerts from "./pages/PodcastAlerts";
 import RoleSelect from "./pages/RoleSelect";
 import NotFound from "./pages/NotFound";
-import { MonthlyWrapRoot, MonthlyWrapOpenButton } from "./components/MonthlyWrapHost";
+import { MonthlyWrapRoot, MonthlyWrapOpenButton, MonthlyWrapBanner } from "./components/MonthlyWrapHost";
 
 const queryClient = new QueryClient();
 
@@ -303,6 +303,9 @@ function HamburgerMenu() {
             <p className="text-xs text-muted-foreground mt-0.5">Frontseat Media</p>
           </div>
           <nav className="px-3 py-4 space-y-1 flex-1 overflow-y-auto">
+            <div className="px-1 pb-3 mb-2 border-b border-zinc-800">
+              <MonthlyWrapOpenButton className="w-full justify-center py-2.5 text-sm" />
+            </div>
             {navItems.map(({ to, label, icon: Icon, external }) => (
               <button
                 key={to}
@@ -377,8 +380,8 @@ function AppLayout() {
       {isFullScreen ? (
         <div className="relative">
           <HamburgerMenu />
-          <div className="fixed top-5 right-5 z-50 flex items-center gap-2 sm:gap-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl px-3 sm:px-4 py-2 shadow-lg max-w-[min(100vw-1rem,420px)] flex-wrap justify-end">
-            <MonthlyWrapOpenButton className="shrink-0" />
+          <div className="fixed top-5 right-5 z-[60] flex items-center gap-2 sm:gap-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl px-3 sm:px-4 py-2 shadow-lg max-w-[min(100vw-1rem,480px)] flex-wrap justify-end">
+            <MonthlyWrapOpenButton className="shrink-0 order-first bg-violet-600/90 border-violet-400/50 text-white hover:bg-violet-500" />
             <AnimalPicker userId={user?.id} />
             <p className="text-sm text-zinc-400">
               {getGreeting()}, <span className="text-white font-medium">{getFirstName(user)}</span>

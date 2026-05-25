@@ -14,7 +14,7 @@ import {
   WRAP_ROLLOUT_EXPLAINER,
   getWrapSlidePlan,
   getDefaultWrapMonth,
-  isWrapFeatureAvailable,
+  monthLabel,
   type MonthlyWrapData,
   type WrapSlideKind,
 } from "@/lib/monthlyWrap";
@@ -48,15 +48,19 @@ function useMonthlyWrapState() {
   const reportMonth = getDefaultWrapMonth();
   return {
     reportMonth,
-    showTab: isWrapFeatureAvailable(),
     label: shortMonthLabel(reportMonth),
+    fullLabel: monthLabel(reportMonth),
   };
+}
+
+export function useMonthlyWrap() {
+  return useContext(MonthlyWrapContext);
 }
 
 export function MonthlyWrapOpenButton({ className = "" }: { className?: string }) {
   const ctx = useContext(MonthlyWrapContext);
-  const { reportMonth, showTab, label } = useMonthlyWrapState();
-  if (!showTab || !reportMonth) return null;
+  const { reportMonth, label } = useMonthlyWrapState();
+  if (!reportMonth) return null;
   return (
     <button
       type="button"
@@ -65,6 +69,42 @@ export function MonthlyWrapOpenButton({ className = "" }: { className?: string }
     >
       <Sparkles className="w-3.5 h-3.5" />
       {label} wrap
+    </button>
+  );
+}
+
+/** Prominent dashboard entry — hard to miss on the home page. */
+export function MonthlyWrapBanner({ className = "" }: { className?: string }) {
+  const ctx = useContext(MonthlyWrapContext);
+  const { reportMonth, fullLabel } = useMonthlyWrapState();
+  if (!reportMonth || !ctx) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => ctx.openForMonth(reportMonth)}
+      className={cn(
+        "group relative w-full overflow-hidden rounded-2xl border border-violet-500/30 bg-gradient-to-r from-violet-600/20 via-fuchsia-600/15 to-violet-900/20",
+        "px-5 py-4 sm:px-6 sm:py-5 text-left transition-all hover:border-violet-400/50 hover:from-violet-600/30",
+        className,
+      )}
+    >
+      <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-fuchsia-500/20 blur-2xl pointer-events-none" />
+      <div className="relative flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-violet-300/90 font-bold mb-1 flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5" />
+            Monthly wrap
+          </p>
+          <p className="text-lg sm:text-xl font-bold text-white truncate">{fullLabel}</p>
+          <p className="text-xs sm:text-sm text-violet-200/70 mt-1">
+            Views, top pages, teams & creator highlights — tap to open
+          </p>
+        </div>
+        <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-violet-600 px-3 py-2 text-xs font-semibold text-white group-hover:bg-violet-500">
+          Open
+          <ChevronRight className="w-4 h-4" />
+        </span>
+      </div>
     </button>
   );
 }
