@@ -432,45 +432,64 @@ function WrapBackground({ color }: { color: string }) {
     setSize();
     const ro = new ResizeObserver(setSize);
     if (canvas.parentElement) ro.observe(canvas.parentElement);
+
+    // Build wave points for a ribbon centre-line
+    const tracePath = (baseY: number, amp: number, freq: number, spd: number, ph: number) => {
+      const w = canvas.width;
+      ctx.beginPath();
+      for (let x = 0; x <= w; x += 5) {
+        const y = baseY
+          + Math.sin(x * freq + t * spd + ph) * amp
+          + Math.sin(x * freq * 1.65 + t * spd * 0.55 + ph * 1.3) * (amp * 0.28);
+        if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+    };
+
+    // Draw one silk ribbon as layered strokes: wide soft glow -> bright core
+    const drawRibbon = (baseY: number, amp: number, freq: number, spd: number, ph: number) => {
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      const layers = [
+        { lw: 90, a: 0.025, blur: 30 },
+        { lw: 50, a: 0.05,  blur: 20 },
+        { lw: 25, a: 0.10,  blur: 14 },
+        { lw: 10, a: 0.20,  blur: 8  },
+        { lw: 4,  a: 0.50,  blur: 5  },
+        { lw: 1.5,a: 0.85,  blur: 3  },
+      ];
+      for (const l of layers) {
+        tracePath(baseY, amp, freq, spd, ph);
+        ctx.strokeStyle = color;
+        ctx.lineWidth   = l.lw;
+        ctx.globalAlpha = l.a;
+        ctx.shadowColor = color;
+        ctx.shadowBlur  = l.blur;
+        ctx.stroke();
+      }
+    };
+
     const draw = () => {
       const w = canvas.width;
       const h = canvas.height;
       if (!w || !h) { animId = requestAnimationFrame(draw); return; }
       ctx.clearRect(0, 0, w, h);
-      const lineCount = 14;
-      for (let i = 0; i < lineCount; i++) {
-        const baseY = (h / (lineCount + 1)) * (i + 1);
-        const amp   = 22 + (i % 4) * 20;
-        const f1    = 0.003 + (i % 5) * 0.0009;
-        const f2    = f1 * 2.6;
-        const s1    = 0.22 + (i % 4) * 0.12;
-        const s2    = s1 * 0.5;
-        const ph    = i * Math.PI * 1.4;
-        const alpha = 0.1 + (i % 3) * 0.1;
-        const thick = i % 4 === 0 ? 1.5 : 0.8;
-        ctx.beginPath();
-        for (let x = 0; x <= w; x += 4) {
-          const y = baseY
-            + Math.sin(x * f1 + t * s1 + ph) * amp
-            + Math.sin(x * f2 + t * s2 + ph * 0.8) * (amp * 0.38);
-          if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        }
-        ctx.globalAlpha = alpha;
-        ctx.strokeStyle = color;
-        ctx.lineWidth = thick;
-        ctx.shadowColor = color;
-        ctx.shadowBlur = thick > 1 ? 12 : 6;
-        ctx.stroke();
-      }
+
+      const cy  = h * 0.5;
+      const amp = h * 0.14;
+      // Primary ribbon
+      drawRibbon(cy,            amp,        0.0034, 0.17, 0);
+      // Secondary ribbon slightly below, smaller
+      drawRibbon(cy + amp * 0.35, amp * 0.6, 0.0028, 0.13, Math.PI * 0.75);
+
       ctx.globalAlpha = 1;
-      ctx.shadowBlur = 0;
-      t += 0.007;
+      ctx.shadowBlur  = 0;
+      t += 0.005;
       animId = requestAnimationFrame(draw);
     };
     draw();
     return () => { cancelAnimationFrame(animId); ro.disconnect(); };
   }, [color]);
-  return <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 w-full h-full opacity-50" />;
+  return <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 w-full h-full" />;
 }
 
 function WrapSlide({
