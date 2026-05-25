@@ -36,7 +36,7 @@ import BlueOceanIdeas from "./pages/BlueOceanIdeas";
 import PodcastAlerts from "./pages/PodcastAlerts";
 import RoleSelect from "./pages/RoleSelect";
 import NotFound from "./pages/NotFound";
-import { MonthlyWrapRoot } from "./components/MonthlyWrapHost";
+import { MonthlyWrapRoot, MonthlyWrapOpenButton } from "./components/MonthlyWrapHost";
 import { stashWrapMonthFromUrl } from "@/lib/monthlyWrap";
 
 const queryClient = new QueryClient();
@@ -256,7 +256,6 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { to: "/wrap?month=2026-05", label: "May wrap ✨", icon: Sparkles },
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/content-tracker", label: "Reel Tracker", icon: ClipboardList },
   { to: "/post-tracker", label: "Post Tracker", icon: Image },
@@ -382,6 +381,7 @@ function AppLayout() {
         <div className="relative">
           <HamburgerMenu />
           <div className="fixed top-5 right-5 z-[60] flex items-center gap-2 sm:gap-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl px-3 sm:px-4 py-2 shadow-lg max-w-[min(100vw-1rem,480px)] flex-wrap justify-end">
+            <MonthlyWrapOpenButton />
             <AnimalPicker userId={user?.id} />
             <p className="text-sm text-zinc-400">
               {getGreeting()}, <span className="text-white font-medium">{getFirstName(user)}</span>

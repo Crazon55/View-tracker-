@@ -66,8 +66,10 @@ export function useMonthlyWrap() {
 
 export function MonthlyWrapOpenButton({ className = "" }: { className?: string }) {
   const navigate = useNavigate();
-  const { reportMonth, label } = useMonthlyWrapState();
+  const reportMonth = getActiveReportMonth();
   if (!reportMonth) return null;
+  const [y, m] = reportMonth.split("-").map(Number);
+  const label = new Date(y, m - 1, 1).toLocaleString(undefined, { month: "short" });
   return (
     <button
       type="button"
