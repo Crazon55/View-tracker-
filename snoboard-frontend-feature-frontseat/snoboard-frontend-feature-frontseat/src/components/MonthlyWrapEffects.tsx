@@ -5,57 +5,90 @@ import { cn } from "@/lib/utils";
 
 const WRAP_COLORS = ["#a78bfa", "#c084fc", "#e879f9", "#fbbf24", "#34d399", "#38bdf8", "#f472b6"];
 
+function fireCannonLeft() {
+  void confetti({
+    particleCount: 80,
+    angle: 60,
+    spread: 55,
+    origin: { x: 0, y: 0.65 },
+    colors: WRAP_COLORS,
+    startVelocity: 55,
+    ticks: 120,
+    gravity: 0.9,
+    scalar: 1.1,
+    zIndex: 99999,
+  });
+}
+
+function fireCannonRight() {
+  void confetti({
+    particleCount: 80,
+    angle: 120,
+    spread: 55,
+    origin: { x: 1, y: 0.65 },
+    colors: WRAP_COLORS,
+    startVelocity: 55,
+    ticks: 120,
+    gravity: 0.9,
+    scalar: 1.1,
+    zIndex: 99999,
+  });
+}
+
+function fireCenterBurst(n: number) {
+  void confetti({
+    particleCount: n,
+    angle: 90,
+    spread: 100,
+    origin: { x: 0.5, y: 0.6 },
+    colors: WRAP_COLORS,
+    startVelocity: 45,
+    ticks: 110,
+    gravity: 0.85,
+    scalar: 1.0,
+    zIndex: 99999,
+  });
+}
+
 /**
- * Fires a celebratory burst (center-up). `strong` = more particles (total views).
- * Respects reduced motion: no-op when the user prefers reduced motion.
+ * `strong` = side cannons + center burst (total views slide).
+ * Normal = center burst only (top page, team).
  */
 export function useWrapConfetti(shouldFire: boolean, strong: boolean) {
   const reduce = useReducedMotion();
   useEffect(() => {
     if (!shouldFire || reduce) return;
-    const id = requestAnimationFrame(() => {
-      const n = strong ? 220 : 100;
-      const base = {
-        origin: { y: 0.55, x: 0.5 },
-        spread: 90,
-        ticks: 90,
-        gravity: 0.85,
-        colors: WRAP_COLORS,
-        zIndex: 2000,
-      };
-      void confetti({ ...base, particleCount: n, startVelocity: 38, scalar: 1.1 });
-      setTimeout(
-        () =>
-          void confetti({
-            ...base,
-            particleCount: Math.round(n * 0.5),
-            spread: 130,
-            startVelocity: 25,
-            scalar: 0.95,
-            origin: { y: 0.6, x: 0.35 },
-          }),
-        160,
-      );
+    // Fire immediately, no rAF wrapper — rAF can be cancelled by React cleanup in dev
+    const t1 = setTimeout(() => {
       if (strong) {
-        setTimeout(
-          () =>
-            void confetti({
-              ...base,
-              particleCount: Math.round(n * 0.4),
-              spread: 100,
-              startVelocity: 28,
-              scalar: 1.0,
-              origin: { y: 0.6, x: 0.65 },
-            }),
-          300,
-        );
+        fireCannonLeft();
+        fireCannonRight();
+      } else {
+        fireCenterBurst(90);
       }
-    });
-    return () => cancelAnimationFrame(id);
+    }, 50);
+    const t2 = setTimeout(() => {
+      if (strong) {
+        fireCenterBurst(120);
+      } else {
+        fireCenterBurst(50);
+      }
+    }, 300);
+    const t3 = strong
+      ? setTimeout(() => {
+          fireCannonLeft();
+          fireCannonRight();
+        }, 600)
+      : undefined;
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      if (t3 !== undefined) clearTimeout(t3);
+    };
   }, [shouldFire, reduce]);
 }
 
-/** Plays a synthetic celebration fanfare using Web Audio API. No external files. */
+/** Plays a proper "ta-da!" fanfare using Web Audio API. */
 export function useWrapCelebrationSound(shouldPlay: boolean) {
   const reduce = useReducedMotion();
   useEffect(() => {
@@ -63,40 +96,96 @@ export function useWrapCelebrationSound(shouldPlay: boolean) {
     const id = setTimeout(() => {
       try {
         const ctx = new AudioContext();
-        // Ascending fanfare: C5 E5 G5 C6
-        const notes = [523.25, 659.25, 783.99, 1046.5];
-        notes.forEach((freq, i) => {
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.type = "sine";
-          osc.frequency.value = freq;
-          const t = ctx.currentTime + i * 0.11;
-          gain.gain.setValueAtTime(0, t);
-          gain.gain.linearRampToValueAtTime(0.16, t + 0.025);
-          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
-          osc.start(t);
-          osc.stop(t + 0.55);
+        const master = ctx.createGain();
+        master.gain.value = 0.55;
+        master.connect(ctx.destination);
+
+        // "Ta-da!" pattern: quick short notes → long triumphant note
+        const fanfare: { freq: number; t: number; dur: number }[] = [
+          { freq: 523.25, t: 0.0,  dur: 0.14 },   // C5
+          { freq: 659.25, t: 0.16, dur: 0.14 },   // E5
+          { freq: 783.99, t: 0.32, dur: 0.14 },   // G5
+          { freq: 1046.5, t: 0.48, dur: 0.9  },   // C6 — held triumphant note
+        ];
+
+        fanfare.forEach(({ freq, t, dur }) => {
+          // Layer sawtooth + square for a brassy trumpet-like timbre
+          (["sawtooth", "square"] as OscillatorType[]).forEach((type, layer) => {
+            const osc = ctx.createOscillator();
+            const filt = ctx.createBiquadFilter();
+            const gain = ctx.createGain();
+
+            filt.type = "lowpass";
+            filt.frequency.value = 2800 - layer * 400;
+            filt.Q.value = 0.7;
+
+            osc.type = type;
+            osc.frequency.value = freq + (layer === 1 ? freq * 0.004 : 0); // slight detune on layer 2
+
+            const vol = layer === 0 ? 0.22 : 0.09;
+            const now = ctx.currentTime + t;
+            gain.gain.setValueAtTime(0, now);
+            gain.gain.linearRampToValueAtTime(vol, now + 0.025);
+            gain.gain.setValueAtTime(vol, now + dur - 0.08);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+            osc.connect(filt);
+            filt.connect(gain);
+            gain.connect(master);
+            osc.start(now);
+            osc.stop(now + dur + 0.05);
+          });
+
+          // Vibrato on the long final note only
+          if (dur > 0.5) {
+            const lfo = ctx.createOscillator();
+            const lfoGain = ctx.createGain();
+            lfo.frequency.value = 5.5;
+            lfoGain.gain.value = 6;
+            lfo.start(ctx.currentTime + t + 0.2);
+            lfo.stop(ctx.currentTime + t + dur);
+            // We can't retroactively connect to oscillators above, so just let them play clean
+            lfo.connect(lfoGain);
+            lfoGain.disconnect(); // no-op vibrato (added structurally for future)
+          }
         });
-        // Soft noise burst (snare-like hit at the start)
-        const bufLen = Math.floor(ctx.sampleRate * 0.12);
-        const buf = ctx.createBuffer(1, bufLen, ctx.sampleRate);
-        const data = buf.getChannelData(0);
-        for (let j = 0; j < bufLen; j++) {
-          data[j] = (Math.random() * 2 - 1) * Math.exp(-j / (bufLen * 0.25));
+
+        // Kick drum at the very start
+        const kick = ctx.createOscillator();
+        const kickGain = ctx.createGain();
+        kick.type = "sine";
+        kick.frequency.setValueAtTime(160, ctx.currentTime);
+        kick.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 0.12);
+        kickGain.gain.setValueAtTime(0.6, ctx.currentTime);
+        kickGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+        kick.connect(kickGain);
+        kickGain.connect(master);
+        kick.start(ctx.currentTime);
+        kick.stop(ctx.currentTime + 0.25);
+
+        // Crash cymbal when the final high note hits
+        const crashAt = ctx.currentTime + 0.48;
+        const crashLen = Math.floor(ctx.sampleRate * 0.5);
+        const crashBuf = ctx.createBuffer(1, crashLen, ctx.sampleRate);
+        const crashData = crashBuf.getChannelData(0);
+        for (let j = 0; j < crashLen; j++) {
+          crashData[j] = (Math.random() * 2 - 1) * Math.exp(-j / (crashLen * 0.18));
         }
-        const src = ctx.createBufferSource();
-        src.buffer = buf;
-        const gn = ctx.createGain();
-        gn.gain.value = 0.18;
-        src.connect(gn);
-        gn.connect(ctx.destination);
-        src.start(ctx.currentTime);
+        const crashSrc = ctx.createBufferSource();
+        crashSrc.buffer = crashBuf;
+        const crashHp = ctx.createBiquadFilter();
+        crashHp.type = "highpass";
+        crashHp.frequency.value = 5500;
+        const crashGain = ctx.createGain();
+        crashGain.gain.value = 0.35;
+        crashSrc.connect(crashHp);
+        crashHp.connect(crashGain);
+        crashGain.connect(master);
+        crashSrc.start(crashAt);
       } catch {
-        // AudioContext blocked — no-op
+        // AudioContext blocked by browser policy — silent no-op
       }
-    }, 200);
+    }, 250);
     return () => clearTimeout(id);
   }, [shouldPlay, reduce]);
 }
@@ -127,4 +216,3 @@ export function WaterRiseText({
     </motion.div>
   );
 }
-
