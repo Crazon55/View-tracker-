@@ -1,5 +1,5 @@
-/**
- * "Monthly wrap" — end-of-month recap (Spotify Wrapped–style) for the tracker.
+﻿/**
+ * Monthly wrap — end-of-month recap (Spotify Wrapped-style) for the tracker.
  * Rollout: **5:00pm IST (Asia/Kolkata)** on the **1st** of each month, with **2nd–3rd** full days in IST
  * (3 calendar days in that zone). Report = **previous** calendar month in IST.
  */
@@ -22,7 +22,7 @@ const TEAM_META: Record<
   goofies: {
     label: "Goofies",
     emoji: "🐶",
-    members: ["Arohi", "Harish", "Pulkit"],
+    members: ["Arohi", "Harish", "Pulkit", "Samiksha"],
     nicheMatch: ["goofies"],
   },
 };
@@ -356,9 +356,11 @@ export type WrapSlideKind =
   | "proven"
   | "killed"
   | "posts"
+  | "personStatsGarfields"
+  | "personStatsGoofies"
   | "outro";
 
-/** Only slides with real data — avoids empty “No data for this stat” cards. */
+/** Only slides with real data — avoids empty "No data for this stat" cards. */
 export function getWrapSlidePlan(data: MonthlyWrapData): WrapSlideKind[] {
   const slides: WrapSlideKind[] = ["intro"];
   if (data.totalViews > 0) slides.push("total");
@@ -369,11 +371,24 @@ export function getWrapSlidePlan(data: MonthlyWrapData): WrapSlideKind[] {
   if (data.individuals.mostProven) slides.push("proven");
   if (data.individuals.mostKilled) slides.push("killed");
   if (data.individuals.mostPosts) slides.push("posts");
+  if (data.personStats.some(p => p.team === "garfields")) slides.push("personStatsGarfields");
+  if (data.personStats.some(p => p.team === "goofies")) slides.push("personStatsGoofies");
   slides.push("outro");
   return slides;
 }
 
 export type MonthlyWrapPageRow = { pageId: string; handle: string; name: string; views: number };
+
+export type PersonStat = {
+  name: string;
+  emoji?: string;
+  team: TeamKey;
+  ideasCreated: number;
+  posts: number;
+  proven: number;
+  killed: number;
+};
+
 export type MonthlyWrapData = {
   reportMonth: string;
   monthLabel: string;
@@ -395,6 +410,7 @@ export type MonthlyWrapData = {
     /** Tracker posting rows dated in this month, by idea creator */
     mostPosts: { name: string; count: number } | null;
   };
+  personStats: PersonStat[];
 };
 
 /**
@@ -600,6 +616,18 @@ export function buildMonthlyWrapData(
     return count > 0 ? { name, count } : null;
   };
 
+  const personStats: PersonStat[] = PEOPLE_SEED
+    .filter(p => p.niche === "garfields" || p.niche === "goofies")
+    .map(p => ({
+      name: p.name,
+      emoji: p.emoji,
+      team: p.niche as TeamKey,
+      ideasCreated: created.get(p.name) ?? 0,
+      posts: postsByCreator.get(p.name) ?? 0,
+      proven: proven.get(p.name) ?? 0,
+      killed: killed.get(p.name) ?? 0,
+    }));
+
   return {
     reportMonth,
     monthLabel: monthLabelOut,
@@ -614,6 +642,7 @@ export function buildMonthlyWrapData(
       mostKilled: maxEntry(killed),
       mostPosts: maxEntry(postsByCreator),
     },
+    personStats,
   };
 }
 

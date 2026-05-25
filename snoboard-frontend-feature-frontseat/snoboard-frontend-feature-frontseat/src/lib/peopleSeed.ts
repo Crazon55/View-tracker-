@@ -1,4 +1,4 @@
-/**
+﻿/**
  * People seed for the Bandwidth Tracker.
  *
  * Hardcoded role (CS / CDI / CW / …) and niche (garfields / goofies) for every
@@ -36,7 +36,8 @@ export const PEOPLE_SEED: SeedPerson[] = [
   // Goofies
   { name: "Arohi",  role: "cs",  niche: "goofies", emoji: "🧠" },
   { name: "Harish", role: "cw",  niche: "goofies", aliases: ["Harish R"], emoji: "📝" },
-  { name: "Pulkit", role: "cdi", niche: "goofies", emoji: "🎬" },
+  { name: "Pulkit",   role: "cdi", niche: "goofies", emoji: "🎬" },
+  { name: "Samiksha", role: "cdi", niche: "goofies", emoji: "🎬" },
   // The Sherus
 ];
 

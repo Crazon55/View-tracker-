@@ -110,10 +110,30 @@ export default function SixDayTracker() {
     return m;
   }, [nichesRaw]);
 
-  /* Roster changed at the start of Cycle 3, May 2026. Everything before this date
-     uses the full historical page list; from this date forward only the 11 active
-     niche pages are shown. */
-  const ROSTER_CUTOFF = "2026-05-13";
+  /* Roster cutoffs (May 2026):
+     - Before Cycle 3 (May 13): full historical page list
+     - Cycle 3 (May 13–18): Week 3 roster (5 Garfields incl. indianbusinesscom)
+     - Cycle 4+ (May 19 onward): current tracker_niches roster (6 Garfields) */
+  const ROSTER_CUTOFF_CYCLE3 = "2026-05-13";
+  const ROSTER_CUTOFF_CYCLE4 = "2026-05-19";
+  const ACTIVE_ROSTER_WEEK3 = useMemo(
+    () =>
+      new Set([
+        "bizzindia",
+        "indianfoundersco",
+        "startupbydog",
+        "indianbusinesscom",
+        "entrepreneursindia.co",
+        "101xfounders",
+        "foundersinindia",
+        "startupsinthelast24hrs",
+        "startupcoded",
+        "indiastartupstory",
+        "thechangingorder",
+      ]),
+    [],
+  );
+  const normHandle = (h: string) => String(h || "").replace(/^@/, "").trim().toLowerCase();
 
   /* Full server page list — used for pre-cutoff cycles so old page views remain visible. */
   const allServerPages = useMemo(() => {
@@ -153,19 +173,25 @@ export default function SixDayTracker() {
     });
   }, [nichePages, handleToNiche, nicheFilterSet, isAllActive]);
 
-  /* Per-cycle page list: pre-cutoff cycles show all server pages (historical),
-     post-cutoff cycles show only the active niche pages. */
+  /* Per-cycle page list: historical → Week 3 roster → current niche roster. */
   const getCyclePages = useCallback((cycle: any): any[] => {
-    const isHistorical = String(cycle?.start || "") < ROSTER_CUTOFF;
-    if (isHistorical) {
-      if (isAllActive) return allServerPages;
-      return allServerPages.filter((p: any) => {
-        const key = handleToNiche.get(String(p.handle || "").replace(/^@/, "").trim().toLowerCase());
+    const start = String(cycle?.start || "");
+    const applyTeamFilter = (list: any[]) => {
+      if (isAllActive) return list;
+      return list.filter((p: any) => {
+        const key = handleToNiche.get(normHandle(p.handle));
         return !!key && nicheFilterSet.has(key);
       });
+    };
+
+    if (start < ROSTER_CUTOFF_CYCLE3) {
+      return applyTeamFilter(allServerPages);
+    }
+    if (start < ROSTER_CUTOFF_CYCLE4) {
+      return applyTeamFilter(allServerPages.filter((p: any) => ACTIVE_ROSTER_WEEK3.has(normHandle(p.handle))));
     }
     return pages;
-  }, [allServerPages, pages, handleToNiche, nicheFilterSet, isAllActive]);
+  }, [allServerPages, pages, handleToNiche, nicheFilterSet, isAllActive, ACTIVE_ROSTER_WEEK3]);
 
   /* allowedPageIds is only needed for the reconcile/summary filter — keep as niche-based. */
   const allowedPageIds = useMemo(
@@ -386,7 +412,7 @@ export default function SixDayTracker() {
             ) : null}
             {pages.length > 0 && cycles.map((cycle: any) => {
               const cyclePages = getCyclePages(cycle);
-              const cycleAllowedIds = String(cycle?.start || "") >= ROSTER_CUTOFF && isAllActive
+              const cycleAllowedIds = String(cycle?.start || "") >= ROSTER_CUTOFF_CYCLE3 && isAllActive
                 ? new Set<string>(cyclePages.map((p: any) => p.id))
                 : allowedPageIds;
               return (

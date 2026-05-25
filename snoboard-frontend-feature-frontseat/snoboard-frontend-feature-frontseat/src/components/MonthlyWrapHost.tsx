@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+﻿import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
@@ -19,8 +19,11 @@ import {
   monthLabel,
   isOfficialWrapWindow,
   getNextOfficialWrapHint,
+  TEAM_META,
   type MonthlyWrapData,
   type WrapSlideKind,
+  type TeamKey,
+  type PersonStat,
 } from "@/lib/monthlyWrap";
 import { getTrackerIdeas, getTrackerNiches, getSixDayMonth } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -135,19 +138,19 @@ type ModalProps = {
   effectiveMonth?: string | null;
 };
 
-function useMonthlyWrapQuery(reportMonth: string | null, enabled: boolean) {
+function useMonthlyWrapQuery(reportMonth: string | null, enabled: boolean, userKey?: string | null) {
   return useQuery({
-    queryKey: ["monthly-wrap", reportMonth],
+    queryKey: ["monthly-wrap", reportMonth, userKey],
     queryFn: async () => {
       const [ideas, niches, six] = await Promise.all([
         getTrackerIdeas(),
         getTrackerNiches(),
-        reportMonth ? getSixDayMonth(reportMonth).catch(() => null) : Promise.resolve(null),
+        reportMonth ? getSixDayMonth(reportMonth).catch((e) => { console.warn("[wrap] six-day fetch failed:", e); return null; }) : Promise.resolve(null),
       ]);
       if (!reportMonth) return null;
       return buildMonthlyWrapData(reportMonth, ideas, niches, six);
     },
-    enabled: enabled && !!reportMonth,
+    enabled: enabled && !!reportMonth && !!userKey,
     staleTime: 120_000,
     retry: 1,
   });
@@ -163,7 +166,7 @@ export function MonthlyWrapScreen({
 }) {
   const userKey = useWrapUserKey();
   const [step, setStep] = useState(0);
-  const { data, isLoading, isError, error } = useMonthlyWrapQuery(reportMonth, true);
+  const { data, isLoading, isError, error } = useMonthlyWrapQuery(reportMonth, true, userKey);
 
   useEffect(() => {
     setStep(0);
@@ -225,7 +228,7 @@ export function MonthlyWrapModal({
   const reportMonth = effectiveMonthProp ?? forcedReportMonth ?? calMonth;
   const [step, setStep] = useState(0);
 
-  const { data, isLoading } = useMonthlyWrapQuery(reportMonth, open);
+  const { data, isLoading } = useMonthlyWrapQuery(reportMonth, open, userKey);
 
   const reset = useCallback(() => setStep(0), [open, reportMonth]);
 
@@ -329,7 +332,7 @@ function WrapBody({
           />
         </div>
       </DialogHeader>
-      <div className="min-h-0 flex-1 overflow-y-auto p-5 pt-4 sm:px-6">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         <AnimatePresence mode="wait">
           <motion.div
             key={`${step}-${slideKind}`}
@@ -337,7 +340,7 @@ function WrapBody({
             animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
             exit={{ opacity: 0, x: -30, filter: "blur(6px)" }}
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-            className="h-full"
+            className="min-h-full"
           >
             <WrapSlide kind={slideKind} data={data} onDone={onDone} />
           </motion.div>
@@ -361,6 +364,21 @@ function WrapBody({
   );
 }
 
+const SLIDE_BG: Partial<Record<WrapSlideKind, string>> = {
+  intro:                "from-violet-900/50 via-zinc-950 to-fuchsia-900/30",
+  total:                "from-indigo-900/60 via-zinc-950 to-blue-900/40",
+  topPage:              "from-amber-900/50 via-zinc-950 to-orange-900/30",
+  top5:                 "from-fuchsia-900/50 via-zinc-950 to-pink-900/30",
+  team:                 "from-emerald-900/50 via-zinc-950 to-teal-900/30",
+  created:              "from-sky-900/50 via-zinc-950 to-cyan-900/30",
+  proven:               "from-green-900/50 via-zinc-950 to-emerald-900/30",
+  killed:               "from-rose-900/50 via-zinc-950 to-red-900/30",
+  posts:                "from-cyan-900/50 via-zinc-950 to-sky-900/30",
+  personStatsGarfields: "from-purple-900/50 via-zinc-950 to-violet-900/30",
+  personStatsGoofies:   "from-blue-900/50 via-zinc-950 to-indigo-900/30",
+  outro:                "from-fuchsia-900/50 via-zinc-950 to-violet-900/30",
+};
+
 function WrapSlide({
   kind,
   data,
@@ -370,30 +388,40 @@ function WrapSlide({
   data: MonthlyWrapData;
   onDone: () => void;
 }) {
-  switch (kind) {
-    case "intro":
-      return <StepIntro data={data} />;
-    case "total":
-      return <StepTotal data={data} />;
-    case "topPage":
-      return <StepTopPage data={data} />;
-    case "top5":
-      return <StepTop5 data={data} />;
-    case "team":
-      return <StepTeam data={data} />;
-    case "created":
-      return <StepIdea data={data} kind="created" />;
-    case "proven":
-      return <StepIdea data={data} kind="proven" />;
-    case "killed":
-      return <StepIdea data={data} kind="killed" />;
-    case "posts":
-      return <StepIdea data={data} kind="posts" />;
-    case "outro":
-      return <StepOutro data={data} onDone={onDone} />;
-    default:
-      return null;
-  }
+  const bg = SLIDE_BG[kind] ?? "from-zinc-900/30 to-zinc-950";
+  const isTeamStats = kind === "personStatsGarfields" || kind === "personStatsGoofies";
+
+  const content = () => {
+    switch (kind) {
+      case "intro":   return <StepIntro data={data} />;
+      case "total":   return <StepTotal data={data} />;
+      case "topPage": return <StepTopPage data={data} />;
+      case "top5":    return <StepTop5 data={data} />;
+      case "team":    return <StepTeam data={data} />;
+      case "created": return <StepIdea data={data} kind="created" />;
+      case "proven":  return <StepIdea data={data} kind="proven" />;
+      case "killed":  return <StepIdea data={data} kind="killed" />;
+      case "posts":   return <StepIdea data={data} kind="posts" />;
+      case "personStatsGarfields": return <StepPersonStats data={data} team="garfields" />;
+      case "personStatsGoofies":   return <StepPersonStats data={data} team="goofies" />;
+      case "outro":   return <StepOutro data={data} onDone={onDone} />;
+      default:        return null;
+    }
+  };
+
+  return (
+    <div
+      className={cn(
+        "w-full bg-gradient-to-b px-5 py-8 sm:px-8",
+        isTeamStats
+          ? "flex flex-col min-h-[340px]"
+          : "flex flex-col items-center justify-center min-h-[320px]",
+        bg,
+      )}
+    >
+      {content()}
+    </div>
+  );
 }
 
 function StepIntro({ data }: { data: MonthlyWrapData }) {
@@ -422,7 +450,7 @@ function StepIntro({ data }: { data: MonthlyWrapData }) {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.28, duration: 0.4 }}
       >
-        A quick look at views, top pages, teams, and creator highlights — tap Next when you’re ready.
+        A quick look at views, top pages, teams, and creator highlights — tap Next when you're ready.
       </motion.p>
       <motion.p
         className="text-[11px] text-zinc-500 max-w-sm leading-relaxed"
@@ -707,7 +735,7 @@ function StepOutro({ data, onDone }: { data: MonthlyWrapData; onDone: () => void
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45 }}
       >
-        That’s a wrap for {data.monthLabel}
+        That's a wrap for {data.monthLabel}
       </motion.h3>
       <motion.p
         className="text-sm text-zinc-400 max-w-sm leading-relaxed"
@@ -726,6 +754,55 @@ function StepOutro({ data, onDone }: { data: MonthlyWrapData; onDone: () => void
           Done
         </Button>
       </motion.div>
+    </div>
+  );
+}
+
+function StatBox({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <div className="text-center">
+      <p className={`text-xl font-black tabular-nums ${color}`}>{value}</p>
+      <p className="text-[10px] text-zinc-500 uppercase tracking-wider mt-0.5">{label}</p>
+    </div>
+  );
+}
+
+function StepPersonStats({ data, team }: { data: MonthlyWrapData; team: TeamKey }) {
+  const meta = TEAM_META[team];
+  const members = data.personStats.filter((p: PersonStat) => p.team === team);
+  const accentColor = team === "garfields" ? "text-violet-400" : "text-blue-400";
+
+  return (
+    <div className="w-full flex flex-col gap-4">
+      <div className="text-center mb-1">
+        <p className={`text-[10px] uppercase tracking-[0.25em] font-bold mb-1 ${accentColor}`}>
+          Team breakdown
+        </p>
+        <h3 className="text-xl font-bold text-white">
+          {meta.emoji} {meta.label}
+        </h3>
+      </div>
+      <div className="w-full space-y-3">
+        {members.map((person: PersonStat, i: number) => (
+          <motion.div
+            key={person.name}
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.1, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+            className="rounded-xl border border-white/5 bg-white/[0.04] px-4 py-3"
+          >
+            <p className="text-sm font-bold text-white mb-2.5">
+              {person.emoji} {person.name}
+            </p>
+            <div className="grid grid-cols-4 gap-1 divide-x divide-white/5">
+              <StatBox label="Ideas" value={person.ideasCreated} color="text-sky-400" />
+              <StatBox label="Posts" value={person.posts} color="text-emerald-400" />
+              <StatBox label="Proven" value={person.proven} color="text-green-400" />
+              <StatBox label="Killed" value={person.killed} color="text-rose-400" />
+            </div>
+          </motion.div>
+        ))}
+      </div>
     </div>
   );
 }

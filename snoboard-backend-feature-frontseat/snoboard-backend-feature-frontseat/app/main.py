@@ -1693,13 +1693,8 @@ GARFIELDS_HANDLES: list[str] = [
     "bizzindia",
     "indianfoundersco",
     "startupbydog",
-    "founderswtf",
+    "indiabusinesscom",
     "entrepreneursindia.co",
-    "richindianceo",
-    "therisingfounder",
-    "millionaire.founders",
-    "indianbusinesscom",
-    "ceohustleadvice",
     "therealfoundr",
 ]
 
@@ -3257,6 +3252,7 @@ async def tracker_sync_team_niches():
         "therisingfounder": "The Rising Founder",
         "millionaire.founders": "Millionaire.founders",
         "indianbusinesscom": "Indian Business Com",
+        "indiabusinesscom": "India Business Com",
         "ceohustleadvice": "CEO Hustle Advice",
         "therealfoundr": "The Real Foundr",
         # Goofies
