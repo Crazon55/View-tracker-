@@ -768,28 +768,28 @@ function StepIdea({
     : kind === "reels" ? "text-pink-400"
     : "text-sky-400";
   return (
-    <div className="flex min-h-[300px] flex-col items-center justify-center text-center px-2 space-y-6">
+    <div className="flex flex-col items-center justify-center text-center px-4 gap-8">
       <motion.p
-        className={`text-[10px] uppercase tracking-[0.25em] font-bold flex items-center justify-center gap-1.5 ${accent}`}
+        className={`text-xs uppercase tracking-[0.3em] font-bold flex items-center justify-center gap-2 ${accent}`}
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35 }}
       >
-        <Icon className={`w-3.5 h-3.5 ${accent}`} />
+        <Icon className={`w-4 h-4 ${accent}`} />
         {title}
       </motion.p>
       {row ? (
         <>
           <motion.h3
-            className="text-2xl sm:text-3xl font-bold text-white"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1, duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+            className="text-5xl sm:text-6xl font-black text-white leading-tight"
+            initial={{ opacity: 0, scale: 0.85 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.1, type: "spring", stiffness: 260, damping: 20 }}
           >
             {row.name}
           </motion.h3>
           <WaterRiseText delay={0.08}>
-            <span className="text-4xl sm:text-5xl font-black text-white tabular-nums block leading-none">
+            <span className="text-8xl sm:text-9xl font-black text-white tabular-nums block leading-none">
               {row.count}
             </span>
           </WaterRiseText>

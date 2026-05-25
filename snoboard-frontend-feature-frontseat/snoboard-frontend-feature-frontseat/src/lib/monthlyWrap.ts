@@ -384,7 +384,7 @@ export function getWrapSlidePlan(data: MonthlyWrapData): WrapSlideKind[] {
   if (data.topReelPage) slides.push("topReel");
   if (data.personStats.some(p => p.team === "garfields")) slides.push("personStatsGarfields");
   if (data.personStats.some(p => p.team === "goofies")) slides.push("personStatsGoofies");
-  if (data.personStats.some(p => p.team === "sheruses")) slides.push("personStatsSherus");
+  // Sherus slide omitted — shown only when they have page data
   slides.push("outro");
   return slides;
 }
