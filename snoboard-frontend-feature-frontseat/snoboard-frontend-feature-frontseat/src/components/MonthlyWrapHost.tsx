@@ -397,6 +397,82 @@ const SLIDE_GLOW: Partial<Record<WrapSlideKind, string>> = {
   outro:                "rgba(192,38,211,0.35)",
 };
 
+const SLIDE_LINE_COLOR: Record<WrapSlideKind, string> = {
+  intro:                "rgba(167,139,250,1)",
+  total:                "rgba(96,165,250,1)",
+  topPage:              "rgba(251,191,36,1)",
+  top5:                 "rgba(232,121,249,1)",
+  team:                 "rgba(52,211,153,1)",
+  created:              "rgba(56,189,248,1)",
+  proven:               "rgba(74,222,128,1)",
+  killed:               "rgba(251,113,133,1)",
+  posts:                "rgba(34,211,238,1)",
+  reels:                "rgba(244,114,182,1)",
+  topReel:              "rgba(244,114,182,1)",
+  personStatsGarfields: "rgba(192,132,252,1)",
+  personStatsGoofies:   "rgba(129,140,248,1)",
+  personStatsSherus:    "rgba(251,191,36,1)",
+  outro:                "rgba(232,121,249,1)",
+};
+
+function WrapBackground({ color }: { color: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    let animId: number;
+    let t = 0;
+    const setSize = () => {
+      const p = canvas.parentElement;
+      canvas.width  = p ? p.offsetWidth  : window.innerWidth;
+      canvas.height = p ? p.offsetHeight : window.innerHeight;
+    };
+    setSize();
+    const ro = new ResizeObserver(setSize);
+    if (canvas.parentElement) ro.observe(canvas.parentElement);
+    const draw = () => {
+      const w = canvas.width;
+      const h = canvas.height;
+      if (!w || !h) { animId = requestAnimationFrame(draw); return; }
+      ctx.clearRect(0, 0, w, h);
+      const lineCount = 14;
+      for (let i = 0; i < lineCount; i++) {
+        const baseY = (h / (lineCount + 1)) * (i + 1);
+        const amp   = 22 + (i % 4) * 20;
+        const f1    = 0.003 + (i % 5) * 0.0009;
+        const f2    = f1 * 2.6;
+        const s1    = 0.22 + (i % 4) * 0.12;
+        const s2    = s1 * 0.5;
+        const ph    = i * Math.PI * 1.4;
+        const alpha = 0.1 + (i % 3) * 0.1;
+        const thick = i % 4 === 0 ? 1.5 : 0.8;
+        ctx.beginPath();
+        for (let x = 0; x <= w; x += 4) {
+          const y = baseY
+            + Math.sin(x * f1 + t * s1 + ph) * amp
+            + Math.sin(x * f2 + t * s2 + ph * 0.8) * (amp * 0.38);
+          if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = thick;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = thick > 1 ? 12 : 6;
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+      t += 0.007;
+      animId = requestAnimationFrame(draw);
+    };
+    draw();
+    return () => { cancelAnimationFrame(animId); ro.disconnect(); };
+  }, [color]);
+  return <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 w-full h-full opacity-50" />;
+}
+
 function WrapSlide({
   kind,
   data,
@@ -408,6 +484,7 @@ function WrapSlide({
 }) {
   const bg = SLIDE_BG[kind] ?? "from-zinc-900 to-zinc-950";
   const glowColor = SLIDE_GLOW[kind] ?? "rgba(139,92,246,0.3)";
+  const lineColor = SLIDE_LINE_COLOR[kind] ?? "rgba(167,139,250,1)";
   const isTeamStats = kind === "personStatsGarfields" || kind === "personStatsGoofies" || kind === "personStatsSherus";
 
   const content = () => {
@@ -441,6 +518,7 @@ function WrapSlide({
         bg,
       )}
     >
+      <WrapBackground color={lineColor} />
       <motion.div
         className="pointer-events-none absolute inset-x-0 top-0 h-72"
         style={{ background: `radial-gradient(ellipse 80% 60% at 50% 0%, ${glowColor}, transparent)` }}
