@@ -4,6 +4,8 @@
  * (3 calendar days in that zone). Report = **previous** calendar month in IST.
  */
 
+import { lookupPerson, normalizeName, PEOPLE_SEED } from "./peopleSeed";
+
 const TEAM_ORDER = ["garfields", "goofies"] as const;
 export type TeamKey = (typeof TEAM_ORDER)[number];
 
@@ -187,23 +189,95 @@ export function shouldAutoOpenModal(
   return true;
 }
 
-function normCreator(raw: unknown): string {
-  if (!raw) return "";
-  return String(raw).trim();
+/** Canonical display name for a tracker actor (merges aliases / email local-parts). */
+function resolvePersonName(raw: unknown): string {
+  const n = normalizeName(String(raw ?? ""));
+  if (!n) return "";
+  return lookupPerson(n)?.name || n;
+}
+
+function normHandle(raw: unknown): string {
+  return String(raw ?? "")
+    .trim()
+    .replace(/^@/, "")
+    .toLowerCase();
+}
+
+/** YYYY-MM in IST for timestamps / ISO strings. */
+function isoMonthInTimezone(raw: unknown, tz: string = ROLLOUT_TIMEZONE): string | null {
+  const s = String(raw ?? "").trim();
+  if (!s) return null;
+  const head = s.slice(0, 7);
+  if (/^\d{4}-\d{2}$/.test(head) && s.length <= 7) return head;
+  const headDate = s.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(headDate) && !s.includes("T")) return headDate.slice(0, 7);
+  const t = new Date(s);
+  if (Number.isNaN(t.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(t);
+  const y = parts.find((p) => p.type === "year")?.value;
+  const m = parts.find((p) => p.type === "month")?.value;
+  return y && m ? `${y}-${m}` : null;
 }
 
 /** YYYY-MM for a tracker posting `date` (ISO string, YYYY-MM-DD, or timestamp). */
 function postingReportMonth(dateRaw: unknown): string | null {
-  const s = String(dateRaw ?? "").trim();
-  if (!s) return null;
-  const head = s.slice(0, 10);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(head)) return head.slice(0, 7);
-  const t = new Date(s);
-  if (Number.isNaN(t.getTime())) return null;
-  return `${t.getFullYear()}-${pad2(t.getMonth() + 1)}`;
+  return isoMonthInTimezone(dateRaw);
 }
 
-const PROVEN_STAGES = new Set(["proven_ideas", "scheduled", "posted", "uploaded"]);
+function viewsFromPageSummary(summary: any): number {
+  const cvs = Number(summary?.cycle_views_sum ?? 0);
+  const avRaw = summary?.actual_views;
+  const avNum =
+    avRaw != null && avRaw !== "" && !Number.isNaN(Number(avRaw)) ? Number(avRaw) : null;
+  if (avNum != null && avNum > 0) return avNum;
+  if (!Number.isNaN(cvs) && cvs > 0) return cvs;
+  if (avNum != null) return avNum;
+  return 0;
+}
+
+function buildPageOwnerByHandle(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const p of PEOPLE_SEED) {
+    for (const h of p.pages || []) {
+      const key = normHandle(h);
+      if (key) out[key] = p.name;
+    }
+  }
+  return out;
+}
+
+const SHIPPED_STAGES = new Set(["proven_ideas", "scheduled", "posted", "uploaded", "batch_production"]);
+
+export type WrapSlideKind =
+  | "intro"
+  | "total"
+  | "topPage"
+  | "top5"
+  | "team"
+  | "created"
+  | "proven"
+  | "killed"
+  | "posts"
+  | "outro";
+
+/** Only slides with real data — avoids empty “No data for this stat” cards. */
+export function getWrapSlidePlan(data: MonthlyWrapData): WrapSlideKind[] {
+  const slides: WrapSlideKind[] = ["intro"];
+  if (data.totalViews > 0) slides.push("total");
+  if (data.topPage) slides.push("topPage");
+  if (data.topPages.length > 0) slides.push("top5");
+  if (data.winningTeam && data.winningTeam.views > 0) slides.push("team");
+  if (data.individuals.mostIdeasCreated) slides.push("created");
+  if (data.individuals.mostProven) slides.push("proven");
+  if (data.individuals.mostKilled) slides.push("killed");
+  if (data.individuals.mostPosts) slides.push("posts");
+  slides.push("outro");
+  return slides;
+}
 
 export type MonthlyWrapPageRow = { pageId: string; handle: string; name: string; views: number };
 export type MonthlyWrapData = {
@@ -242,6 +316,8 @@ export function buildMonthlyWrapData(
   sixDayMonth: any | null | undefined,
 ): MonthlyWrapData {
   const monthLabelOut = monthLabel(reportMonth);
+  const pageOwnerByHandle = buildPageOwnerByHandle();
+
   const nicheIdToTeam = new Map<string, TeamKey>();
   for (const n of niches || []) {
     const nid = n.id;
@@ -263,24 +339,31 @@ export function buildMonthlyWrapData(
     const tid = nicheIdToTeam.get(n.id);
     if (!tid) continue;
     for (const h of n?.pages || []) {
-      if (h) teamAccounts[tid].add(String(h).replace(/^@/, "").trim().toLowerCase());
+      if (h) teamAccounts[tid].add(normHandle(h));
     }
   }
 
   const pageIdToHandle = new Map<string, string>();
   const pageIdToName = new Map<string, string>();
+  const handleToPageId = new Map<string, string>();
   for (const p of sixDayMonth?.pages || []) {
     if (!p?.id) continue;
-    const h = String(p.handle || "")
-      .replace(/^@/, "")
-      .trim()
-      .toLowerCase();
+    const h = normHandle(p.handle);
     pageIdToHandle.set(String(p.id), h);
+    handleToPageId.set(h, String(p.id));
     if (p.name) pageIdToName.set(String(p.id), String(p.name));
+  }
+  for (const s of sixDayMonth?.page_summaries || []) {
+    const pid = String(s?.page_id || "");
+    if (!pid) continue;
+    const h = normHandle(s.handle);
+    if (h && !pageIdToHandle.has(pid)) pageIdToHandle.set(pid, h);
+    if (h) handleToPageId.set(h, pid);
+    if (s.name) pageIdToName.set(pid, String(s.name));
   }
 
   const handleToTeam = (h: string): TeamKey | null => {
-    const handle = h.replace(/^@/, "").trim().toLowerCase();
+    const handle = normHandle(h);
     for (const k of TEAM_ORDER) {
       if (teamAccounts[k].has(handle)) return k;
     }
@@ -291,16 +374,50 @@ export function buildMonthlyWrapData(
   const teamViews: Record<TeamKey, number> = { garfields: 0, goofies: 0 };
   let totalViews = 0;
 
-  for (const c of sixDayMonth?.cycles || []) {
-    for (const e of c?.entries || []) {
-      const pid = String(e?.page_id || "");
-      const v = Number(e?.views || 0) || 0;
-      if (!pid || v <= 0) continue;
-      totalViews += v;
-      viewsByPage.set(pid, (viewsByPage.get(pid) || 0) + v);
-      const h = pageIdToHandle.get(pid) || "";
-      const tk = h ? handleToTeam(h) : null;
-      if (tk) teamViews[tk] += v;
+  const addPageViews = (pageId: string, handle: string, v: number) => {
+    if (!pageId || v <= 0) return;
+    totalViews += v;
+    viewsByPage.set(pageId, (viewsByPage.get(pageId) || 0) + v);
+    const tk = handle ? handleToTeam(handle) : null;
+    if (tk) teamViews[tk] += v;
+  };
+
+  // Prefer page_summaries (same source as Dashboard / 6-Day Tracker).
+  const summaries = sixDayMonth?.page_summaries || [];
+  if (summaries.length > 0) {
+    for (const s of summaries) {
+      const pid = String(s?.page_id || "");
+      const h = normHandle(s?.handle) || pageIdToHandle.get(pid) || "";
+      addPageViews(pid, h, viewsFromPageSummary(s));
+    }
+  } else {
+    for (const c of sixDayMonth?.cycles || []) {
+      for (const e of c?.entries || []) {
+        const pid = String(e?.page_id || "");
+        const v = Number(e?.views || 0) || 0;
+        const h = pageIdToHandle.get(pid) || "";
+        addPageViews(pid, h, v);
+      }
+    }
+  }
+
+  // Fallback: tracker posting views for the report month (when six-day month is empty).
+  if (totalViews === 0) {
+    const byHandle = new Map<string, number>();
+    for (const idea of ideas || []) {
+      for (const p of (idea as { tracker_postings?: any[] }).tracker_postings || []) {
+        if (postingReportMonth(p?.date) !== reportMonth) continue;
+        const v = Number(p?.views || 0) || 0;
+        if (v <= 0) continue;
+        const h = normHandle(p?.page);
+        if (!h) continue;
+        byHandle.set(h, (byHandle.get(h) || 0) + v);
+      }
+    }
+    for (const [h, v] of byHandle) {
+      const pid = handleToPageId.get(h) || `handle:${h}`;
+      if (!pageIdToHandle.has(pid)) pageIdToHandle.set(pid, h);
+      addPageViews(pid, h, v);
     }
   }
 
@@ -318,7 +435,8 @@ export function buildMonthlyWrapData(
   const topPage = topPages[0] || null;
 
   let winningTeam: MonthlyWrapData["winningTeam"] = null;
-  if (totalViews > 0 || pageRows.length) {
+  const totalTeamViews = teamViews.garfields + teamViews.goofies;
+  if (totalTeamViews > 0) {
     const [a, b] = TEAM_ORDER;
     const wx: TeamKey = teamViews[b] > teamViews[a] ? b : a;
     const meta = TEAM_META[wx];
@@ -332,35 +450,47 @@ export function buildMonthlyWrapData(
   }
 
   const created = new Map<string, number>();
-  const proven = new Map<string, number>();
+  const provenIdeas = new Map<string, Set<string>>();
   const killed = new Map<string, number>();
   const postsByCreator = new Map<string, number>();
 
   for (const idea of ideas || []) {
-    const creator = normCreator(idea?.created_by);
-    const cAt = String(idea?.created_at || "").slice(0, 7);
-    if (creator && cAt === reportMonth) {
+    const creator = resolvePersonName(idea?.created_by);
+    const ideaId = String(idea?.id || "");
+    const cMonth = isoMonthInTimezone(idea?.created_at);
+    if (creator && cMonth === reportMonth) {
       created.set(creator, (created.get(creator) || 0) + 1);
     }
-    const uAt = String(idea?.updated_at || "").slice(0, 7);
+
     const st = String(idea?.stage || "").toLowerCase();
-    if (creator && uAt === reportMonth) {
-      if (PROVEN_STAGES.has(st)) {
-        proven.set(creator, (proven.get(creator) || 0) + 1);
-      }
-      if (st === "kill") {
-        killed.set(creator, (killed.get(creator) || 0) + 1);
-      }
+    const uMonth = isoMonthInTimezone(idea?.updated_at);
+    if (creator && uMonth === reportMonth && (st === "kill" || st === "killed")) {
+      killed.set(creator, (killed.get(creator) || 0) + 1);
     }
 
-    if (creator) {
-      const postings = (idea as { tracker_postings?: { date?: unknown }[] }).tracker_postings || [];
-      for (const p of postings) {
-        if (postingReportMonth(p?.date) === reportMonth) {
-          postsByCreator.set(creator, (postsByCreator.get(creator) || 0) + 1);
-        }
+    if (creator && uMonth === reportMonth && SHIPPED_STAGES.has(st)) {
+      if (!provenIdeas.has(creator)) provenIdeas.set(creator, new Set());
+      if (ideaId) provenIdeas.get(creator)!.add(ideaId);
+    }
+
+    const postings = (idea as { tracker_postings?: { date?: unknown; page?: unknown }[] }).tracker_postings || [];
+    for (const p of postings) {
+      if (postingReportMonth(p?.date) !== reportMonth) continue;
+      const pageHandle = normHandle(p?.page);
+      const attributed = resolvePersonName(pageOwnerByHandle[pageHandle] || creator);
+      if (attributed) {
+        postsByCreator.set(attributed, (postsByCreator.get(attributed) || 0) + 1);
+      }
+      if (creator && ideaId) {
+        if (!provenIdeas.has(creator)) provenIdeas.set(creator, new Set());
+        provenIdeas.get(creator)!.add(ideaId);
       }
     }
+  }
+
+  const proven = new Map<string, number>();
+  for (const [name, ids] of provenIdeas) {
+    if (ids.size > 0) proven.set(name, ids.size);
   }
 
   const maxEntry = (m: Map<string, number>) => {

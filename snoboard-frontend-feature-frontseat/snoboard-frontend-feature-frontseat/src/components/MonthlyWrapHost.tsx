@@ -13,7 +13,9 @@ import {
   isTabVisible,
   formatViewsShort,
   WRAP_ROLLOUT_EXPLAINER,
+  getWrapSlidePlan,
   type MonthlyWrapData,
+  type WrapSlideKind,
 } from "@/lib/monthlyWrap";
 import { getTrackerIdeas, getTrackerNiches, getSixDayMonth } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -25,8 +27,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useWrapConfetti, WaterRiseText } from "./MonthlyWrapEffects";
-
-const STEP_COUNT = 10;
 
 const MonthlyWrapContext = createContext<{
   openForMonth: (ym: string) => void;
@@ -108,7 +108,7 @@ export function MonthlyWrapModal({
       const [ideas, niches, six] = await Promise.all([
         getTrackerIdeas(),
         getTrackerNiches(),
-        reportMonth ? getSixDayMonth(reportMonth) : Promise.resolve(null),
+        reportMonth ? getSixDayMonth(reportMonth).catch(() => null) : Promise.resolve(null),
       ]);
       if (!reportMonth) return null;
       return buildMonthlyWrapData(reportMonth, ideas, niches, six);
@@ -154,6 +154,7 @@ export function MonthlyWrapModal({
             setStep={setStep}
             onClose={() => onOpenChange(false)}
             onDone={finish}
+            slides={getWrapSlidePlan(data)}
           />
         )}
         {!isLoading && !data && open && (
@@ -172,15 +173,20 @@ function WrapBody({
   setStep,
   onClose,
   onDone,
+  slides,
 }: {
   data: MonthlyWrapData;
   step: number;
   setStep: (n: number) => void;
   onClose: () => void;
   onDone: () => void;
+  slides: WrapSlideKind[];
 }) {
+  const stepCount = slides.length;
+  const slideKind = slides[step] ?? "intro";
+
   const next = () => {
-    if (step >= STEP_COUNT - 1) onDone();
+    if (step >= stepCount - 1) onDone();
     else setStep(step + 1);
   };
   const prev = () => setStep(Math.max(0, step - 1));
@@ -201,14 +207,14 @@ function WrapBody({
         <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.2em] text-zinc-500">
           <span>Monthly wrap</span>
           <span>
-            {step + 1} / {STEP_COUNT}
+            {step + 1} / {stepCount}
           </span>
         </div>
         <div className="h-1 mt-2 rounded-full bg-zinc-800 overflow-hidden">
           <motion.div
             className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500"
             initial={false}
-            animate={{ width: `${((step + 1) / STEP_COUNT) * 100}%` }}
+            animate={{ width: `${((step + 1) / stepCount) * 100}%` }}
             transition={{ type: "spring", stiffness: 200, damping: 28 }}
           />
         </div>
@@ -216,23 +222,14 @@ function WrapBody({
       <div className="min-h-0 flex-1 overflow-y-auto p-5 pt-4 sm:px-6">
         <AnimatePresence mode="wait">
           <motion.div
-            key={step}
+            key={`${step}-${slideKind}`}
             initial={{ opacity: 0, x: 40, filter: "blur(8px)" }}
             animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
             exit={{ opacity: 0, x: -30, filter: "blur(6px)" }}
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
             className="h-full"
           >
-            {step === 0 && <StepIntro data={data} />}
-            {step === 1 && <StepTotal data={data} />}
-            {step === 2 && <StepTopPage data={data} />}
-            {step === 3 && <StepTop5 data={data} />}
-            {step === 4 && <StepTeam data={data} />}
-            {step === 5 && <StepIdea data={data} kind="created" />}
-            {step === 6 && <StepIdea data={data} kind="proven" />}
-            {step === 7 && <StepIdea data={data} kind="killed" />}
-            {step === 8 && <StepIdea data={data} kind="posts" />}
-            {step === 9 && <StepOutro data={data} onDone={onDone} />}
+            <WrapSlide kind={slideKind} data={data} onDone={onDone} />
           </motion.div>
         </AnimatePresence>
       </div>
@@ -241,7 +238,7 @@ function WrapBody({
           <ChevronLeft className="w-4 h-4 mr-1" />
           Back
         </Button>
-        {step < STEP_COUNT - 1 ? (
+        {step < stepCount - 1 ? (
           <Button size="sm" onClick={next} className="bg-violet-600 hover:bg-violet-500 text-white">
             Next
             <ChevronRight className="w-4 h-4 ml-1" />
@@ -252,6 +249,41 @@ function WrapBody({
       </div>
     </div>
   );
+}
+
+function WrapSlide({
+  kind,
+  data,
+  onDone,
+}: {
+  kind: WrapSlideKind;
+  data: MonthlyWrapData;
+  onDone: () => void;
+}) {
+  switch (kind) {
+    case "intro":
+      return <StepIntro data={data} />;
+    case "total":
+      return <StepTotal data={data} />;
+    case "topPage":
+      return <StepTopPage data={data} />;
+    case "top5":
+      return <StepTop5 data={data} />;
+    case "team":
+      return <StepTeam data={data} />;
+    case "created":
+      return <StepIdea data={data} kind="created" />;
+    case "proven":
+      return <StepIdea data={data} kind="proven" />;
+    case "killed":
+      return <StepIdea data={data} kind="killed" />;
+    case "posts":
+      return <StepIdea data={data} kind="posts" />;
+    case "outro":
+      return <StepOutro data={data} onDone={onDone} />;
+    default:
+      return null;
+  }
 }
 
 function StepIntro({ data }: { data: MonthlyWrapData }) {
