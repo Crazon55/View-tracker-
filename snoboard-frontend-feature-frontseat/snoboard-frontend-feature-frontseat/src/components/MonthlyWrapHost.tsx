@@ -424,6 +424,7 @@ function WrapBackground({ color }: { color: string }) {
     if (!ctx) return;
     let animId: number;
     let t = 0;
+
     const setSize = () => {
       const p = canvas.parentElement;
       canvas.width  = p ? p.offsetWidth  : window.innerWidth;
@@ -433,63 +434,95 @@ function WrapBackground({ color }: { color: string }) {
     const ro = new ResizeObserver(setSize);
     if (canvas.parentElement) ro.observe(canvas.parentElement);
 
-    // Build wave points for a ribbon centre-line
-    const tracePath = (baseY: number, amp: number, freq: number, spd: number, ph: number) => {
-      const w = canvas.width;
-      ctx.beginPath();
-      for (let x = 0; x <= w; x += 5) {
-        const y = baseY
-          + Math.sin(x * freq + t * spd + ph) * amp
-          + Math.sin(x * freq * 1.65 + t * spd * 0.55 + ph * 1.3) * (amp * 0.28);
-        if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-      }
-    };
+    // 2D field function — superposition of sine waves gives organic hills/valleys
+    const field = (x: number, y: number) =>
+      Math.sin(x * 0.0085 + y * 0.006  + t * 0.22)
+      + 0.7 * Math.sin(x * 0.005 - y * 0.010 + t * 0.17)
+      + 0.55 * Math.cos(x * 0.011 + y * 0.008 - t * 0.19)
+      + 0.35 * Math.sin(x * 0.007 + y * 0.014 + t * 0.14);
 
-    // Draw one silk ribbon as layered strokes: wide soft glow -> bright core
-    const drawRibbon = (baseY: number, amp: number, freq: number, spd: number, ph: number) => {
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      const layers = [
-        { lw: 90, a: 0.025, blur: 30 },
-        { lw: 50, a: 0.05,  blur: 20 },
-        { lw: 25, a: 0.10,  blur: 14 },
-        { lw: 10, a: 0.20,  blur: 8  },
-        { lw: 4,  a: 0.50,  blur: 5  },
-        { lw: 1.5,a: 0.85,  blur: 3  },
-      ];
-      for (const l of layers) {
-        tracePath(baseY, amp, freq, spd, ph);
-        ctx.strokeStyle = color;
-        ctx.lineWidth   = l.lw;
-        ctx.globalAlpha = l.a;
-        ctx.shadowColor = color;
-        ctx.shadowBlur  = l.blur;
-        ctx.stroke();
+    // Marching squares: draw contour line at given level across the grid
+    const CELL = 18;
+    const lerp = (va: number, vb: number, level: number, pa: number, pb: number) =>
+      pa + (pb - pa) * (level - va) / (vb - va);
+
+    const drawLevel = (level: number, gw: number, gh: number, grid: Float32Array) => {
+      ctx.beginPath();
+      for (let gy = 0; gy < gh - 1; gy++) {
+        for (let gx = 0; gx < gw - 1; gx++) {
+          const tl = grid[gy * gw + gx];
+          const tr = grid[gy * gw + gx + 1];
+          const bl = grid[(gy + 1) * gw + gx];
+          const br = grid[(gy + 1) * gw + gx + 1];
+          const code = (tl > level ? 8 : 0) | (tr > level ? 4 : 0)
+                     | (br > level ? 2 : 0) | (bl > level ? 1 : 0);
+          if (code === 0 || code === 15) continue;
+
+          const x0 = gx * CELL, y0 = gy * CELL;
+          const x1 = x0 + CELL, y1 = y0 + CELL;
+          const tX = lerp(tl, tr, level, x0, x1), tY = y0;
+          const rX = x1,                           rY = lerp(tr, br, level, y0, y1);
+          const bX = lerp(bl, br, level, x0, x1),  bY = y1;
+          const lX = x0,                            lY = lerp(tl, bl, level, y0, y1);
+
+          const seg = (ax: number, ay: number, bx: number, by: number) => {
+            ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+          };
+          switch (code) {
+            case  1: seg(lX,lY, bX,bY); break;
+            case  2: seg(bX,bY, rX,rY); break;
+            case  3: seg(lX,lY, rX,rY); break;
+            case  4: seg(tX,tY, rX,rY); break;
+            case  5: seg(tX,tY, rX,rY); seg(lX,lY, bX,bY); break;
+            case  6: seg(tX,tY, bX,bY); break;
+            case  7: seg(tX,tY, lX,lY); break;
+            case  8: seg(tX,tY, lX,lY); break;
+            case  9: seg(tX,tY, bX,bY); break;
+            case 10: seg(tX,tY, lX,lY); seg(rX,rY, bX,bY); break;
+            case 11: seg(tX,tY, rX,rY); break;
+            case 12: seg(lX,lY, rX,rY); break;
+            case 13: seg(rX,rY, bX,bY); break;
+            case 14: seg(lX,lY, bX,bY); break;
+          }
+        }
       }
+      ctx.strokeStyle = color;
+      ctx.lineWidth   = 1;
+      ctx.globalAlpha = 0.35;
+      ctx.shadowColor = color;
+      ctx.shadowBlur  = 3;
+      ctx.stroke();
     };
 
     const draw = () => {
       const w = canvas.width;
       const h = canvas.height;
       if (!w || !h) { animId = requestAnimationFrame(draw); return; }
-      ctx.clearRect(0, 0, w, h);
 
-      const cy  = h * 0.5;
-      const amp = h * 0.14;
-      // Primary ribbon
-      drawRibbon(cy,            amp,        0.0034, 0.17, 0);
-      // Secondary ribbon slightly below, smaller
-      drawRibbon(cy + amp * 0.35, amp * 0.6, 0.0028, 0.13, Math.PI * 0.75);
+      ctx.clearRect(0, 0, w, h);
+      ctx.lineCap  = "round";
+      ctx.lineJoin = "round";
+
+      const gw = Math.ceil(w / CELL) + 2;
+      const gh = Math.ceil(h / CELL) + 2;
+      const grid = new Float32Array(gw * gh);
+      for (let gy = 0; gy < gh; gy++)
+        for (let gx = 0; gx < gw; gx++)
+          grid[gy * gw + gx] = field(gx * CELL, gy * CELL);
+
+      // ~16 evenly-spaced contour levels spanning the field range [-2.6, 2.6]
+      for (let l = -2.4; l <= 2.4; l += 0.32) drawLevel(l, gw, gh, grid);
 
       ctx.globalAlpha = 1;
       ctx.shadowBlur  = 0;
-      t += 0.005;
+      t += 0.003;
       animId = requestAnimationFrame(draw);
     };
+
     draw();
     return () => { cancelAnimationFrame(animId); ro.disconnect(); };
   }, [color]);
-  return <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 w-full h-full" />;
+  return <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 w-full h-full opacity-55" />;
 }
 
 function WrapSlide({
