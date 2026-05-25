@@ -15,6 +15,8 @@ import {
   getWrapSlidePlan,
   getDefaultWrapMonth,
   monthLabel,
+  isOfficialWrapWindow,
+  getNextOfficialWrapHint,
   type MonthlyWrapData,
   type WrapSlideKind,
 } from "@/lib/monthlyWrap";
@@ -77,6 +79,7 @@ export function MonthlyWrapOpenButton({ className = "" }: { className?: string }
 export function MonthlyWrapBanner({ className = "" }: { className?: string }) {
   const ctx = useContext(MonthlyWrapContext);
   const { reportMonth, fullLabel } = useMonthlyWrapState();
+  const official = isOfficialWrapWindow();
   if (!reportMonth || !ctx) return null;
   return (
     <button
@@ -91,13 +94,27 @@ export function MonthlyWrapBanner({ className = "" }: { className?: string }) {
       <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-fuchsia-500/20 blur-2xl pointer-events-none" />
       <div className="relative flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-[10px] uppercase tracking-[0.2em] text-violet-300/90 font-bold mb-1 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5" />
-            Monthly wrap
+          <p className="text-[10px] uppercase tracking-[0.2em] text-violet-300/90 font-bold mb-1 flex items-center gap-2 flex-wrap">
+            <span className="inline-flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5" />
+              Monthly wrap
+            </span>
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 text-[9px] tracking-wider",
+                official
+                  ? "bg-amber-500/20 text-amber-200 border border-amber-500/30"
+                  : "bg-white/10 text-violet-100/80 border border-white/10",
+              )}
+            >
+              {official ? "Official drop" : "Live preview"}
+            </span>
           </p>
           <p className="text-lg sm:text-xl font-bold text-white truncate">{fullLabel}</p>
           <p className="text-xs sm:text-sm text-violet-200/70 mt-1">
-            Views, top pages, teams & creator highlights — tap to open
+            {official
+              ? "Views, top pages, teams & creator highlights — open through the 3rd (IST)"
+              : `${getNextOfficialWrapHint()} · tap to preview month-to-date`}
           </p>
         </div>
         <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-violet-600 px-3 py-2 text-xs font-semibold text-white group-hover:bg-violet-500">

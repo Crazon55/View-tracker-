@@ -48,15 +48,21 @@ export const WRAP_FEATURE_LIVE_AT_MS = +new Date("2026-05-01T17:00:00+05:30");
  * (1st 5pm IST through 3rd; chip 3 days after first open; repeats monthly after go-live.)
  */
 export const WRAP_ROLLOUT_EXPLAINER =
-  "Each month: the official recap drops 5pm IST on the 1st (for the previous month). You can open this month’s live preview anytime from the ✨ wrap chip in the header.";
+  "Each month: the full recap unlocks 5pm IST on the 1st (for the previous month) and stays easy to find on the dashboard through the 3rd.";
 
 /** Wrap UI is always available for signed-in users. */
 export function isWrapFeatureAvailable(_now: Date = new Date()): boolean {
   return true;
 }
 
+/** Calendar autoplay / official window (after first go-live). */
 function isWrapCalendarLive(now: Date): boolean {
-  return isWrapFeatureAvailable(now);
+  return now.getTime() >= WRAP_FEATURE_LIVE_AT_MS;
+}
+
+/** True during the official drop window (1st 5pm IST – 3rd). */
+export function isOfficialWrapWindow(now: Date = new Date()): boolean {
+  return getActiveReportMonth(now) !== null;
 }
 
 /** Calendar Y/M/D and hour in `ROLLOUT_TIMEZONE` (IST), `month` 1–12, `hour` 0–23. */
@@ -174,9 +180,25 @@ export function getCurrentCalendarMonth(now: Date = new Date()): string {
   return `${y}-${pad2(m)}`;
 }
 
-/** Default month for the header chip: this calendar month (IST). */
+/** Default month for banner/chip: official month in the 1st–3rd window, else live preview of this month. */
 export function getDefaultWrapMonth(now: Date = new Date()): string {
+  const official = getActiveReportMonth(now);
+  if (official) return official;
   return getCurrentCalendarMonth(now);
+}
+
+/** Human hint for the next official drop (for preview banner copy). */
+export function getNextOfficialWrapHint(now: Date = new Date()): string {
+  const { y, m } = getZonedRolloutCalendarParts(now);
+  const recapName = new Date(y, m - 1, 1).toLocaleString(undefined, { month: "long" });
+  let dropM = m + 1;
+  let dropY = y;
+  if (dropM > 12) {
+    dropM = 1;
+    dropY += 1;
+  }
+  const dropName = new Date(dropY, dropM - 1, 1).toLocaleString(undefined, { month: "long" });
+  return `Full ${recapName} recap drops ${dropName} 1, 5pm IST`;
 }
 
 export function monthLabel(ym: string): string {
