@@ -62,6 +62,27 @@ function toLocalDateKeyFromTimestamp(raw: string | null | undefined): string {
   return toLocalISO(d);
 }
 
+function currentBoardMonthDate() {
+  const now = new Date();
+  return { year: now.getFullYear(), month: now.getMonth() };
+}
+
+function boardMonthPrefixFromDate(md: { year: number; month: number }) {
+  return `${md.year}-${String(md.month + 1).padStart(2, "0")}`;
+}
+
+function boardMonthLabelFromDate(md: { year: number; month: number }) {
+  return new Date(md.year, md.month).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+}
+
+function prevBoardMonth(md: { year: number; month: number }) {
+  return md.month === 0 ? { year: md.year - 1, month: 11 } : { ...md, month: md.month - 1 };
+}
+
+function nextBoardMonth(md: { year: number; month: number }) {
+  return md.month === 11 ? { year: md.year + 1, month: 0 } : { ...md, month: md.month + 1 };
+}
+
 const today = () => toLocalISO(new Date());
 const fmtD = (d: string) => { const dt=new Date(d+"T00:00:00"); return dt.toLocaleDateString("en-US",{month:"short",day:"numeric"}); };
 const fmtDFull = (d: string) => { const dt=new Date(d+"T00:00:00"); return dt.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}); };
@@ -841,29 +862,27 @@ export default function ContentTracker(){
   const [scheduleDate,setScheduleDate]=useState<Record<string,any>>({});
   const [dateFrom,setDateFrom]=useState(monthStart());
   const [dateTo,setDateTo]=useState(today());
-  const [compResearchFilter,setCompResearchFilter]=useState(false);
   const [sourceFilter,setSourceFilter]=useState<"all"|"original"|"competitor">("all");
-  const [filterDateFrom,setFilterDateFrom]=useState("");
-  const [filterDateTo,setFilterDateTo]=useState("");
+  const [boardMonthMode,setBoardMonthMode]=useState<"month"|"all">("month");
+  const [boardMonthDate,setBoardMonthDate]=useState(currentBoardMonthDate);
+  const boardMonthPrefix = boardMonthPrefixFromDate(boardMonthDate);
+  const boardMonthLabel = boardMonthLabelFromDate(boardMonthDate);
   const [collapsedStages,setCollapsedStages]=useState<Record<string,boolean>>({});
 
   const ideasAfterBoardFilters = useMemo(() => {
     let x = nicheFilter === "all" ? ideas : ideas.filter((i) => (i.nicheIds || []).includes(nicheFilter));
     x = sourceFilter === "all" ? x : x.filter((i) => i.source === sourceFilter);
-    x = compResearchFilter ? x.filter((i) => i.tags?.includes("comp_research")) : x;
     return x;
-  }, [ideas, nicheFilter, sourceFilter, compResearchFilter]);
+  }, [ideas, nicheFilter, sourceFilter]);
 
   const filteredIdeas = useMemo(() => {
-    if (!(filterDateFrom || filterDateTo)) return ideasAfterBoardFilters;
+    if (boardMonthMode === "all") return ideasAfterBoardFilters;
     return ideasAfterBoardFilters.filter((i) => {
       const d = toLocalDateKeyFromTimestamp(i.created_at);
-      if (!d) return false;
-      if (filterDateFrom && d < filterDateFrom) return false;
-      if (filterDateTo && d > filterDateTo) return false;
-      return true;
+      if (!d) return true;
+      return d.slice(0, 7) === boardMonthPrefix;
     });
-  }, [ideasAfterBoardFilters, filterDateFrom, filterDateTo]);
+  }, [ideasAfterBoardFilters, boardMonthMode, boardMonthPrefix]);
 
   /** Reel-tracker toolbar search — fuzzy-match titles/notes/hooks among ideas matching niche/source/comp chips. */
   const [ideaSearchQuery, setIdeaSearchQuery] = useState("");
@@ -1292,13 +1311,53 @@ export default function ContentTracker(){
                 </ul>
               )}
             </div>
-            <div style={{display:"flex",alignItems:"center",gap:4}}>
-              <input type="date" value={filterDateFrom} onChange={e=>setFilterDateFrom(e.target.value)} title="From" style={{padding:"5px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:11,background:"#09090b",color:"#a1a1aa",cursor:"pointer"}}/>
-              <span style={{fontSize:10,color:"#52525b"}}>→</span>
-              <input type="date" value={filterDateTo} onChange={e=>setFilterDateTo(e.target.value)} title="To" style={{padding:"5px 8px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:11,background:"#09090b",color:"#a1a1aa",cursor:"pointer"}}/>
-              {(filterDateFrom||filterDateTo)&&<button onClick={()=>{setFilterDateFrom("");setFilterDateTo("");}} style={{padding:"3px 7px",borderRadius:5,border:"none",fontSize:11,cursor:"pointer",background:"transparent",color:"#71717a"}}>✕</button>}
+            <div style={{display:"flex",alignItems:"center",gap:4,background:"#27272a",borderRadius:7,border:"1px solid #3f3f46",padding:"2px 4px"}}>
+              <button
+                type="button"
+                onClick={() => setBoardMonthDate((m) => prevBoardMonth(m))}
+                disabled={boardMonthMode === "all"}
+                title="Previous month"
+                style={{padding:"4px 8px",borderRadius:5,border:"none",background:"transparent",color:boardMonthMode==="all"?"#3f3f46":"#a1a1aa",fontSize:12,cursor:boardMonthMode==="all"?"default":"pointer"}}
+              >
+                ←
+              </button>
+              <span style={{fontSize:11,fontWeight:600,color:boardMonthMode==="all"?"#71717a":"#e4e4e7",minWidth:110,textAlign:"center"}}>
+                {boardMonthMode === "all" ? "All months" : boardMonthLabel}
+              </span>
+              <button
+                type="button"
+                onClick={() => setBoardMonthDate((m) => nextBoardMonth(m))}
+                disabled={boardMonthMode === "all"}
+                title="Next month"
+                style={{padding:"4px 8px",borderRadius:5,border:"none",background:"transparent",color:boardMonthMode==="all"?"#3f3f46":"#a1a1aa",fontSize:12,cursor:boardMonthMode==="all"?"default":"pointer"}}
+              >
+                →
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (boardMonthMode === "all") {
+                    setBoardMonthMode("month");
+                    setBoardMonthDate(currentBoardMonthDate());
+                  } else {
+                    setBoardMonthMode("all");
+                  }
+                }}
+                style={{
+                  padding:"4px 10px",
+                  borderRadius:5,
+                  border:boardMonthMode==="all"?"1px solid #7c3aed":"1px solid #3f3f46",
+                  background:boardMonthMode==="all"?"rgba(124,58,237,0.2)":"transparent",
+                  color:boardMonthMode==="all"?"#fff":"#71717a",
+                  fontSize:10,
+                  fontWeight:600,
+                  cursor:"pointer",
+                  marginLeft:2,
+                }}
+              >
+                {boardMonthMode === "all" ? "This month" : "All"}
+              </button>
             </div>
-            <button onClick={()=>setCompResearchFilter(!compResearchFilter)} style={{padding:"5px 12px",borderRadius:7,border:compResearchFilter?"2px solid #F0A050":"1px solid #3f3f46",background:compResearchFilter?"rgba(212,118,42,0.15)":"transparent",color:compResearchFilter?"#F0A050":"#71717a",fontSize:11,fontWeight:600,cursor:"pointer"}}>Comp Research</button>
             <button onClick={()=>setSettingsOpen(true)} style={bs}>Niches</button>
             <button onClick={()=>setAddOpen(true)} style={bp}>+ New idea</button>
           </div>
