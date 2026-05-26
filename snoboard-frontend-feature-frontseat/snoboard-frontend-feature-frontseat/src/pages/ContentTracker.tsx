@@ -422,18 +422,45 @@ function IdeaCard({idea,niches,onClick}: {idea:any;niches:any[];onClick:()=>void
   const bp=idea.postings?.reduce((b: string|null, p: any)=>{const t=gPerf(p.views,p.baselineViews);const o: Record<string,number>={viral:4,topline:3,baseline:2,below:1};return(o[t||""]||0)>(o[b||""]||0)?t:b;},null);
   const hv=idea.hook_variations?.length||0;
   const shareUrl = `${window.location.origin}/content-tracker?idea=${idea.id}`;
+  const isComp = idea.source==="competitor";
+  const hasLinks = (idea.comp_link||idea.link)||idea.yt_url||idea.frame_link||idea.kalakar_link;
   return(
-    <div onClick={onClick} style={{background:"#18181b",borderRadius:10,padding:"11px 13px",marginBottom:5,border:"1px solid #27272a",cursor:"grab",transition:"box-shadow 0.15s",position:"relative"}}
-      onMouseEnter={e=>(e.currentTarget.style.boxShadow="0 3px 12px rgba(0,0,0,0.3)")} onMouseLeave={e=>(e.currentTarget.style.boxShadow="none")}>
+    <div
+      onClick={onClick}
+      style={{
+        background:"#1c1c1f",
+        borderRadius:12,
+        padding:"12px 14px",
+        marginBottom:6,
+        border:"1px solid #2a2a2e",
+        cursor:"pointer",
+        transition:"box-shadow 0.18s ease,border-color 0.18s ease,transform 0.18s ease",
+        position:"relative",
+        boxShadow:"0 1px 4px rgba(0,0,0,0.25)",
+      }}
+      onMouseEnter={e=>{
+        e.currentTarget.style.boxShadow="0 6px 20px rgba(0,0,0,0.4)";
+        e.currentTarget.style.borderColor="#3a3a3f";
+        e.currentTarget.style.transform="translateY(-1px)";
+      }}
+      onMouseLeave={e=>{
+        e.currentTarget.style.boxShadow="0 1px 4px rgba(0,0,0,0.25)";
+        e.currentTarget.style.borderColor="#2a2a2e";
+        e.currentTarget.style.transform="translateY(0)";
+      }}
+    >
+      {/* Title + copy + perf badge */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
-        <p style={{margin:0,fontSize:13,fontWeight:500,color:"#fff",lineHeight:1.35,flex:1}}>{idea.title}</p>
+        <p style={{margin:0,fontSize:13,fontWeight:600,color:"#f4f4f5",lineHeight:1.4,flex:1,letterSpacing:"-0.01em"}}>{idea.title}</p>
         <div style={{display:"flex",gap:4,alignItems:"center",flexShrink:0}}>
           <button
             onClick={async (e)=>{e.stopPropagation();try{await navigator.clipboard.writeText(shareUrl);toast.success("Link copied");}catch{toast.error("Failed to copy link");}}}
             title="Copy share link"
-            style={{width:22,height:22,borderRadius:6,border:"1px solid #3f3f46",background:"transparent",color:"#a1a1aa",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
+            style={{width:24,height:24,borderRadius:6,border:"1px solid #3a3a3f",background:"transparent",color:"#52525b",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.15s",flexShrink:0}}
+            onMouseEnter={e=>{e.currentTarget.style.color="#a1a1aa";e.currentTarget.style.borderColor="#52525b";e.currentTarget.style.background="rgba(255,255,255,0.05)";}}
+            onMouseLeave={e=>{e.currentTarget.style.color="#52525b";e.currentTarget.style.borderColor="#3a3a3f";e.currentTarget.style.background="transparent";}}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
               <path d="M10 13a5 5 0 0 1 0-7l1.5-1.5a5 5 0 0 1 7 7L17 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               <path d="M14 11a5 5 0 0 1 0 7L12.5 19.5a5 5 0 0 1-7-7L7 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
@@ -441,76 +468,53 @@ function IdeaCard({idea,niches,onClick}: {idea:any;niches:any[];onClick:()=>void
           {bp&&<PB tag={bp}/>}
         </div>
       </div>
+
       {/* Tags row */}
-      <div style={{display:"flex",gap:4,marginTop:6,flexWrap:"wrap",alignItems:"center"}}>
-        <span style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:idea.source==="competitor"?"#EEEDFE":"#E8F5EE",color:idea.source==="competitor"?"#534AB7":"#1A5E3A",fontWeight:500}}>{idea.source==="competitor"?"Comp":"Orig"}</span>
-        {ideaNiches.map((n: any)=><span key={n.id} style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:"#27272a",color:"#a1a1aa",fontWeight:500}}>{n.name}</span>)}
-        {pc>0&&<span style={{fontSize:10,color:"#52525b",fontWeight:500}}>{pc}pg</span>}
-      </div>
-      {/* Info row */}
-      <div style={{marginTop:5,display:"flex",flexDirection:"column",gap:2}}>
-        {idea.tags?.includes("comp_research")&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:99,background:"rgba(212,118,42,0.15)",color:"#F0A050",fontWeight:600,alignSelf:"flex-start"}}>COMP RESEARCH</span>}
-        {idea.created_by&&<span style={{fontSize:10,color:"#52525b"}}>by {idea.created_by}</span>}
-        {hv>0&&<span style={{fontSize:10,color:"#52525b"}}>{hv} hook{hv>1?"s":""}</span>}
-        {idea.music_ref&&<span style={{fontSize:10,color:"#3f3f46",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>♪ {idea.music_ref}</span>}
-        {((idea.comp_link || idea.link) || idea.yt_url || idea.frame_link || idea.kalakar_link) && (
-          <div
-            style={{display:"flex",flexWrap:"wrap",gap:8,alignItems:"center"}}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {!!idea.link && idea.link !== idea.comp_link && (
-              <a
-                href={idea.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{fontSize:10,color:"#4A7FD4",fontWeight:500}}
-              >
-                Source ↗
-              </a>
-            )}
-            {idea.comp_link && (
-              <a
-                href={idea.comp_link}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{fontSize:10,color:"#4A7FD4",fontWeight:500}}
-              >
-                {idea.source === "competitor" ? "Comp" : "Ref"} ↗
-              </a>
-            )}
-            {idea.yt_url && (
-              <a
-                href={idea.yt_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{fontSize:10,color:"#4A7FD4",fontWeight:500}}
-              >
-                YT ↗
-              </a>
-            )}
-            {idea.frame_link && (
-              <a
-                href={idea.frame_link}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{fontSize:10,color:"#F0A050",fontWeight:500}}
-              >
-                Frame ↗
-              </a>
-            )}
-            {idea.kalakar_link && (
-              <a
-                href={idea.kalakar_link}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{fontSize:10,color:"#7BB0FF",fontWeight:500}}
-              >
-                Kalakar ↗
-              </a>
-            )}
-          </div>
+      <div style={{display:"flex",gap:4,marginTop:8,flexWrap:"wrap",alignItems:"center"}}>
+        <span style={{
+          fontSize:10,padding:"2px 8px",borderRadius:99,fontWeight:600,letterSpacing:"0.02em",
+          background:isComp?"rgba(83,74,183,0.18)":"rgba(29,94,58,0.22)",
+          color:isComp?"#9B8FFF":"#5AE0A0",
+          border:`1px solid ${isComp?"rgba(83,74,183,0.35)":"rgba(45,158,95,0.35)"}`,
+        }}>{isComp?"Comp":"Orig"}</span>
+        {ideaNiches.map((n: any)=>(
+          <span key={n.id} style={{fontSize:10,padding:"2px 8px",borderRadius:99,background:"rgba(255,255,255,0.05)",color:"#a1a1aa",fontWeight:500,border:"1px solid #323238"}}>{n.name}</span>
+        ))}
+        {pc>0&&<span style={{fontSize:10,color:"#52525b",fontWeight:600,marginLeft:1}}>{pc}pg</span>}
+        {idea.tags?.includes("comp_research")&&(
+          <span style={{fontSize:9,padding:"2px 7px",borderRadius:99,background:"rgba(212,118,42,0.15)",color:"#F0A050",fontWeight:700,border:"1px solid rgba(212,118,42,0.3)"}}>COMP RES.</span>
         )}
       </div>
+
+      {/* Meta row */}
+      {(idea.created_by||hv>0||idea.music_ref)&&(
+        <div style={{marginTop:6,display:"flex",flexWrap:"wrap",gap:"2px 10px",alignItems:"center"}}>
+          {idea.created_by&&<span style={{fontSize:10,color:"#52525b"}}>by {idea.created_by}</span>}
+          {hv>0&&<span style={{fontSize:10,color:"#52525b"}}>{hv} hook{hv>1?"s":""}</span>}
+          {idea.music_ref&&<span style={{fontSize:10,color:"#3f3f46",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:160}}>♪ {idea.music_ref}</span>}
+        </div>
+      )}
+
+      {/* Links row */}
+      {hasLinks&&(
+        <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:8,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
+          {!!idea.link&&idea.link!==idea.comp_link&&(
+            <a href={idea.link} target="_blank" rel="noopener noreferrer" style={{fontSize:10,color:"#4A7FD4",fontWeight:600,padding:"2px 7px",borderRadius:5,background:"rgba(74,127,212,0.1)",border:"1px solid rgba(74,127,212,0.22)",textDecoration:"none"}}>Source ↗</a>
+          )}
+          {idea.comp_link&&(
+            <a href={idea.comp_link} target="_blank" rel="noopener noreferrer" style={{fontSize:10,color:"#4A7FD4",fontWeight:600,padding:"2px 7px",borderRadius:5,background:"rgba(74,127,212,0.1)",border:"1px solid rgba(74,127,212,0.22)",textDecoration:"none"}}>{idea.source==="competitor"?"Comp":"Ref"} ↗</a>
+          )}
+          {idea.yt_url&&(
+            <a href={idea.yt_url} target="_blank" rel="noopener noreferrer" style={{fontSize:10,color:"#FF6B6B",fontWeight:600,padding:"2px 7px",borderRadius:5,background:"rgba(201,59,59,0.1)",border:"1px solid rgba(201,59,59,0.22)",textDecoration:"none"}}>YT ↗</a>
+          )}
+          {idea.frame_link&&(
+            <a href={idea.frame_link} target="_blank" rel="noopener noreferrer" style={{fontSize:10,color:"#F0A050",fontWeight:600,padding:"2px 7px",borderRadius:5,background:"rgba(212,149,42,0.1)",border:"1px solid rgba(212,149,42,0.22)",textDecoration:"none"}}>Frame ↗</a>
+          )}
+          {idea.kalakar_link&&(
+            <a href={idea.kalakar_link} target="_blank" rel="noopener noreferrer" style={{fontSize:10,color:"#7BB0FF",fontWeight:600,padding:"2px 7px",borderRadius:5,background:"rgba(74,127,212,0.1)",border:"1px solid rgba(74,127,212,0.22)",textDecoration:"none"}}>Kalakar ↗</a>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -846,6 +850,8 @@ export default function ContentTracker(){
   const [filterDateFrom,setFilterDateFrom]=useState("");
   const [filterDateTo,setFilterDateTo]=useState("");
   const [collapsedStages,setCollapsedStages]=useState<Record<string,boolean>>({});
+  const currentMonthKey = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`; };
+  const [postedMonthFilter,setPostedMonthFilter]=useState<string>(()=>currentMonthKey());
 
   const ideasAfterBoardFilters = useMemo(() => {
     let x = nicheFilter === "all" ? ideas : ideas.filter((i) => (i.nicheIds || []).includes(nicheFilter));
@@ -902,6 +908,21 @@ export default function ContentTracker(){
     });
     return counts;
   }, [searchFilteredIdeas]);
+
+  const fmtMonth = (key: string) => { const [y,m]=key.split("-"); return new Date(Number(y),Number(m)-1,1).toLocaleDateString("en-US",{month:"short",year:"numeric"}); };
+
+  const postedMonths = useMemo(()=>{
+    const s=new Set<string>();
+    searchFilteredIdeas.forEach((idea: any)=>{
+      if(normalizePipelineStage(idea.stage)!=="posted") return;
+      const raw = idea.posted_at || idea.created_at;
+      if(!raw) return;
+      const d=new Date(raw);
+      if(isNaN(d.getTime())) return;
+      s.add(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`);
+    });
+    return Array.from(s).sort().reverse();
+  },[searchFilteredIdeas]);
 
   const ideasForHeaderStats = useMemo(() => {
     if (statFilterMode === "all") return ideasAfterBoardFilters;
@@ -1308,27 +1329,54 @@ export default function ContentTracker(){
       {/* Board — drag-and-drop */}
       {viewMode==="board"&&(
         <div style={{display:"flex",gap:10,padding:"16px 24px 24px 70px",overflowX:"auto",minHeight:"calc(100vh - 130px)"}}>
-          {STAGES.map(stage=>(
+          {STAGES.map(stage=>{
+            const stageIdeas=searchFilteredIdeas.filter(i=>normalizePipelineStage(i.stage)===stage).sort((a,b)=>b.createdAt-a.createdAt);
+            const visibleIdeas = stage==="posted" && postedMonthFilter!=="all"
+              ? stageIdeas.filter((idea: any)=>{
+                  const raw=idea.posted_at||idea.created_at;
+                  if(!raw) return false;
+                  const d=new Date(raw);
+                  if(isNaN(d.getTime())) return false;
+                  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`===postedMonthFilter;
+                })
+              : stageIdeas;
+            return(
             <div key={stage} style={{minWidth:200,maxWidth:240,flex:"1 0 200px"}}
               onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect="move";setDropStage(stage);}}
               onDragLeave={()=>setDropStage(null)}
               onDrop={e=>{e.preventDefault();const ideaId=e.dataTransfer.getData("text/plain");if(ideaId&&ideaId!==""){moveIdea(ideaId,stage);}setDraggingId(null);setDropStage(null);}}
             >
-              <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 4px 8px"}}>
-                <span style={{width:7,height:7,borderRadius:"50%",background:SC[stage].dot}}/>
+              <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 4px 6px"}}>
+                <span style={{width:7,height:7,borderRadius:"50%",background:SC[stage].dot,flexShrink:0}}/>
                 <span style={{fontSize:11,fontWeight:600,color:SC[stage].text}}>{SL[stage]}</span>
-                <span style={{fontSize:10,color:"#52525b",fontWeight:500}}>{ideaStageCounts[stage] ?? 0}</span>
+                <span style={{fontSize:10,color:"#52525b",fontWeight:500,marginLeft:1}}>{stage==="posted"&&postedMonthFilter!=="all"?`${visibleIdeas.length}/${stageIdeas.length}`:ideaStageCounts[stage]??0}</span>
               </div>
+              {stage==="posted"&&(
+                <div style={{padding:"0 4px 7px",display:"flex",gap:4,flexWrap:"wrap"}}>
+                  <button
+                    onClick={()=>setPostedMonthFilter("all")}
+                    style={{fontSize:9,fontWeight:600,padding:"2px 7px",borderRadius:99,border:postedMonthFilter==="all"?"1px solid #5AE0A0":"1px solid #3a3a3f",background:postedMonthFilter==="all"?"rgba(45,158,95,0.15)":"transparent",color:postedMonthFilter==="all"?"#5AE0A0":"#52525b",cursor:"pointer",transition:"all 0.15s"}}
+                  >All</button>
+                  {postedMonths.map(mk=>(
+                    <button
+                      key={mk}
+                      onClick={()=>setPostedMonthFilter(mk)}
+                      style={{fontSize:9,fontWeight:600,padding:"2px 7px",borderRadius:99,border:postedMonthFilter===mk?"1px solid #5AE0A0":"1px solid #3a3a3f",background:postedMonthFilter===mk?"rgba(45,158,95,0.15)":"transparent",color:postedMonthFilter===mk?"#5AE0A0":"#52525b",cursor:"pointer",transition:"all 0.15s"}}
+                    >{fmtMonth(mk)}</button>
+                  ))}
+                </div>
+              )}
               <div style={{minHeight:50,padding:1,borderRadius:9,transition:"all 0.15s",border:dropStage===stage?"2px solid #7c3aed":"2px solid transparent",background:dropStage===stage?"rgba(124,58,237,0.05)":"transparent"}}>
-                {searchFilteredIdeas.filter(i=>normalizePipelineStage(i.stage)===stage).sort((a,b)=>b.createdAt-a.createdAt).map(idea=>(
+                {visibleIdeas.map(idea=>(
                   <div key={idea.id} draggable onDragStart={e=>{setDraggingId(idea.id);e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain",idea.id);}} onDragEnd={()=>{setDraggingId(null);setDropStage(null);}} style={{opacity:draggingId===idea.id?0.4:1,transition:"opacity 0.15s"}}>
                     <IdeaCard idea={idea} niches={niches} onClick={()=>openDetail(idea)}/>
                   </div>
                 ))}
-                {(ideaStageCounts[stage] ?? 0)===0&&<div style={{padding:"24px 12px",textAlign:"center",color:"#3f3f46",fontSize:11,border:"1.5px dashed #3f3f46",borderRadius:9}}>Empty</div>}
+                {visibleIdeas.length===0&&<div style={{padding:"24px 12px",textAlign:"center",color:"#3f3f46",fontSize:11,border:"1.5px dashed #3f3f46",borderRadius:9}}>{stage==="posted"&&postedMonthFilter!=="all"?"None this month":"Empty"}</div>}
               </div>
             </div>
-          ))}
+          );})}
+
         </div>
       )}
 
