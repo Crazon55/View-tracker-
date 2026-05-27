@@ -111,6 +111,31 @@ function sourceLabel(url: string): string {
   } catch { return "News"; }
 }
 
+function parseLinkedInDate(item: any): string {
+  // Try standard absolute date fields
+  const abs = item.publishedAt || item.date || item.postedAt || item.createdAt || item.postedDate;
+  if (abs) {
+    const d = new Date(abs);
+    if (!isNaN(d.getTime())) return d.toISOString();
+  }
+  // Handle relative formats: "6d", "2h", "1w", "3mo", "just now"
+  const rel: string = item.timeSincePosted || item.time || item.relativeTime || abs || "";
+  if (rel) {
+    const now = Date.now();
+    const m = rel.match(/^(\d+)\s*(s|m|h|d|w|mo|y)/i);
+    if (m) {
+      const n = parseInt(m[1]);
+      const unit = m[2].toLowerCase();
+      const ms: Record<string, number> = {
+        s: 1000, m: 60000, h: 3600000,
+        d: 86400000, w: 604800000, mo: 2592000000, y: 31536000000,
+      };
+      return new Date(now - n * (ms[unit] || 0)).toISOString();
+    }
+  }
+  return new Date().toISOString();
+}
+
 function getMatchedKeywords(text: string): string[] {
   const lower = text.toLowerCase();
   return KEYWORDS.filter((k) => lower.includes(k.toLowerCase())).slice(0, 3);
@@ -205,7 +230,7 @@ async function fetchLinkedIn(): Promise<FeedItem[]> {
         body: item.text || item.content || item.description || "",
         url: item.url || item.postUrl || handle.url,
         source: "LinkedIn",
-        publishedAt: item.publishedAt || item.date || item.postedAt || new Date().toISOString(),
+        publishedAt: parseLinkedInDate(item),
         matchedKeywords: getMatchedKeywords(item.text || item.content || ""),
         authorUrl: handle.url,
         likes: item.likes || item.likeCount || item.numLikes || 0,
