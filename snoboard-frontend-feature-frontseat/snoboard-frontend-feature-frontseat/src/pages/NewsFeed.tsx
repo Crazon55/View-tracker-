@@ -46,16 +46,27 @@ const NEWS_SOURCE_LABELS: Record<string, string> = {
   "thehindubusinessline.com": "Hindu BL", "businessinsider.in": "Business Insider",
   "indianstartupnews.com": "Indian Startup News", "fortuneindia.com": "Fortune India",
   "indiatoday.in": "India Today", "indianexpress.com": "Indian Express",
-  "livemint.com": "Mint", "techcrunch.com": "TechCrunch",
+  "livemint.com": "Mint",
 };
 
 const NEWS_QUERIES = [
-  "Indian startup funding unicorn IPO news",
-  "Shark Tank India founders D2C B2B startup news",
-  "India startup valuation revenue profit loss news",
-  "Make in India MSME business startup news",
-  "India breaking news today startup founder",
-  "viral India business news today",
+  "Indian startup funding unicorn IPO India today",
+  "Shark Tank India founders Indian brands D2C news today",
+  "Indian founder startup valuation revenue profit India",
+  "Make in India MSME Startup India news today",
+  "India breaking startup business news today",
+  "Indian billionaire businessman wealth India news",
+  "popular Indian company brand news today",
+  "Indian unicorn decacorn IPO funding announcement",
+];
+
+// Article must contain at least one of these to pass — prevents global news leaking in
+const INDIA_REQUIRED_KEYWORDS = [
+  "india", "indian", "shark tank", "msme", "rupee", "crore", "lakh",
+  "zepto", "zomato", "swiggy", "ola", "paytm", "flipkart", "meesho",
+  "mamaearth", "boat", "cred", "zerodha", "groww", "nykaa", "blinkit",
+  "razorpay", "freshworks", "infosys", "tata", "reliance", "adani",
+  "ambani", "mukesh", "ratan", "byju", "unacademy", "vedantu",
 ];
 
 // ─── Unified Feed Item Type ───────────────────────────────────────────────────
@@ -187,7 +198,11 @@ async function fetchNews(): Promise<FeedItem[]> {
       if (!item.title || !item.url || seen.has(item.url)) continue;
       const pubDate = item.published_date ?? new Date().toISOString();
       if (!isTodayIST(pubDate)) continue;
-      const matched = getMatchedKeywords(`${item.title} ${item.content || ""}`);
+      const text = `${item.title} ${item.content || ""}`.toLowerCase();
+      // Must mention India/Indian context — blocks global articles leaking through
+      const isIndia = INDIA_REQUIRED_KEYWORDS.some((k) => text.includes(k));
+      if (!isIndia) continue;
+      const matched = getMatchedKeywords(text);
       if (matched.length === 0) continue;
       seen.add(item.url);
       items.push({
