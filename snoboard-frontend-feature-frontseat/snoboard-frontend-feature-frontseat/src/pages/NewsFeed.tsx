@@ -1,181 +1,481 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ExternalLink, Newspaper, RefreshCw, Bookmark, BookmarkCheck, Search } from "lucide-react";
+import { ExternalLink, RefreshCw, Bookmark, BookmarkCheck, Search, Linkedin, TrendingUp, Newspaper, ThumbsUp, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// ─── API Keys ─────────────────────────────────────────────────────────────────
 const TAVILY_API_KEY = import.meta.env.VITE_TAVILY_API_KEY as string;
 const TAVILY_URL = "https://api.tavily.com/search";
+const APIFY_TOKEN = import.meta.env.VITE_APIFY_TOKEN as string;
+const LINKEDIN_ACTOR_ID = "LQQIXN9Othf8f7R5n";
+const BACKEND_URL = (import.meta.env.VITE_API_URL as string) || "";
 
-type NewsArticle = {
-  id: string;
-  title: string;
-  summary: string | null;
-  url: string;
-  source: string;
-  published_at: string;
-};
-
-type TavilyResult = {
-  title: string;
-  url: string;
-  content: string;
-  published_date?: string;
-  score: number;
-};
-
-const FILTER_KEYWORDS = ["All", "Startup", "Venture capital", "Funding", "Business"];
-
-const SEARCH_QUERIES = [
-  "India startup funding news",
-  "India venture capital investment news",
-  "India business startup news",
+// ─── Keywords ─────────────────────────────────────────────────────────────────
+const KEYWORDS = [
+  "Indian Startups", "Indian Unicorns", "Shark Tank India", "Make in India",
+  "MSME", "Startup India", "Startup Funding India", "Indian Founders",
+  "D2C", "B2B", "B2C", "Startup", "Unicorn", "Decacorn", "IPO", "Funding",
+  "Valuation", "Revenue", "Profit", "Loss",
 ];
 
-async function tavilySearch(query: string): Promise<TavilyResult[]> {
-  const res = await fetch(TAVILY_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      api_key: TAVILY_API_KEY,
-      query,
-      topic: "news",
-      days: 3,
-      max_results: 20,
-      include_answer: false,
-    }),
-    signal: AbortSignal.timeout(15000),
-  });
-  if (!res.ok) throw new Error(`Tavily error: ${res.status}`);
-  const data = await res.json();
-  return (data.results ?? []) as TavilyResult[];
+// ─── LinkedIn Founders ────────────────────────────────────────────────────────
+const LINKEDIN_HANDLES = [
+  { name: "Namita Thapar",  username: "linkedin.com/in/namita-thapar",           url: "https://www.linkedin.com/in/namita-thapar" },
+  { name: "Anupam Mittal",  username: "linkedin.com/in/anupammittal007",         url: "https://www.linkedin.com/in/anupammittal007" },
+  { name: "Aman Gupta",     username: "linkedin.com/in/aman-gupta-7217a515",     url: "https://www.linkedin.com/in/aman-gupta-7217a515" },
+  { name: "Kunal Shah",     username: "linkedin.com/in/kunalshah1",              url: "https://www.linkedin.com/in/kunalshah1" },
+  { name: "Ghazal Alagh",   username: "linkedin.com/in/ghazal-alagh-9755a0128", url: "https://www.linkedin.com/in/ghazal-alagh-9755a0128" },
+  { name: "Nikhil Kamath",  username: "linkedin.com/in/nikhilkamathcio",         url: "https://www.linkedin.com/in/nikhilkamathcio" },
+  { name: "Nithin Kamath",  username: "linkedin.com/in/nithin-kamath-81136242",  url: "https://www.linkedin.com/in/nithin-kamath-81136242" },
+];
+
+// ─── News Domains ─────────────────────────────────────────────────────────────
+const NEWS_DOMAINS = [
+  "inc42.com", "yourstory.com", "entrackr.com", "moneycontrol.com",
+  "economictimes.indiatimes.com", "firstpost.com", "business-standard.com",
+  "thehindubusinessline.com", "businessinsider.in", "indianstartupnews.com",
+  "fortuneindia.com", "indiatoday.in", "indianexpress.com", "livemint.com",
+  "techcrunch.com",
+];
+
+const NEWS_SOURCE_LABELS: Record<string, string> = {
+  "inc42.com": "Inc42", "yourstory.com": "YourStory", "entrackr.com": "Entrackr",
+  "moneycontrol.com": "Moneycontrol", "economictimes.indiatimes.com": "Economic Times",
+  "firstpost.com": "Firstpost", "business-standard.com": "Business Standard",
+  "thehindubusinessline.com": "Hindu BL", "businessinsider.in": "Business Insider",
+  "indianstartupnews.com": "Indian Startup News", "fortuneindia.com": "Fortune India",
+  "indiatoday.in": "India Today", "indianexpress.com": "Indian Express",
+  "livemint.com": "Mint", "techcrunch.com": "TechCrunch",
+};
+
+const NEWS_QUERIES = [
+  "Indian startup funding unicorn IPO news",
+  "Shark Tank India founders D2C B2B startup news",
+  "India startup valuation revenue profit loss news",
+  "Make in India MSME business startup news",
+  "India breaking news today startup founder",
+  "viral India business news today",
+];
+
+// ─── Unified Feed Item Type ───────────────────────────────────────────────────
+type FeedItem = {
+  id: string;
+  type: "news" | "linkedin" | "x";
+  title: string;
+  body: string | null;
+  url: string;
+  source: string;
+  publishedAt: string;
+  matchedKeywords: string[];
+  // linkedin extras
+  authorUrl?: string;
+  likes?: number;
+  comments?: number;
+  // x extras
+  postCount?: string;
+  category?: string;
+};
+
+// ─── IST Work Hours Helpers ───────────────────────────────────────────────────
+function getISTMinutes(): number {
+  const now = new Date();
+  const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+  const istMs = utcMs + 5.5 * 60 * 60 * 1000;
+  const ist = new Date(istMs);
+  return ist.getHours() * 60 + ist.getMinutes();
 }
 
-function sourceFromUrl(url: string): string {
+function isWorkHoursIST(): boolean {
+  const m = getISTMinutes();
+  return m >= 10 * 60 + 30 && m <= 18 * 60 + 30; // 10:30 – 18:30
+}
+
+function isTodayIST(dateStr: string): boolean {
+  if (!dateStr) return false;
+  const utcMs = new Date().getTime() + new Date().getTimezoneOffset() * 60000;
+  const istNow = new Date(utcMs + 5.5 * 60 * 60 * 1000);
+  const articleUtcMs = new Date(dateStr).getTime() + new Date().getTimezoneOffset() * 60000;
+  const istArticle = new Date(articleUtcMs + 5.5 * 60 * 60 * 1000);
+  return istNow.toDateString() === istArticle.toDateString();
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function sourceLabel(url: string): string {
   try {
     const host = new URL(url).hostname.replace("www.", "");
-    const map: Record<string, string> = {
-      "inc42.com": "Inc42",
-      "techcrunch.com": "TechCrunch",
-      "moneycontrol.com": "Moneycontrol",
-      "business-standard.com": "Business Standard",
-      "economictimes.indiatimes.com": "Economic Times",
-      "livemint.com": "Mint",
-      "yourstory.com": "YourStory",
-      "entrackr.com": "Entrackr",
-      "fortuneindia.com": "Fortune India",
-      "ndtv.com": "NDTV",
-      "hindustantimes.com": "Hindustan Times",
-    };
-    for (const [key, label] of Object.entries(map)) {
-      if (host.includes(key)) return label;
+    for (const [k, v] of Object.entries(NEWS_SOURCE_LABELS)) {
+      if (host.includes(k)) return v;
     }
     return host;
-  } catch {
-    return "News";
-  }
+  } catch { return "News"; }
 }
 
-async function fetchTavilyNews(): Promise<NewsArticle[]> {
-  if (!TAVILY_API_KEY) throw new Error("VITE_TAVILY_API_KEY is not set in .env");
-
-  const results = await Promise.allSettled(SEARCH_QUERIES.map(tavilySearch));
-
-  const all: NewsArticle[] = [];
-  for (const r of results) {
-    if (r.status !== "fulfilled") continue;
-    for (const item of r.value) {
-      if (!item.title || !item.url) continue;
-      all.push({
-        id: item.url,
-        title: item.title,
-        summary: item.content?.slice(0, 400) || null,
-        url: item.url,
-        source: sourceFromUrl(item.url),
-        published_at: item.published_date ?? new Date().toISOString(),
-      });
-    }
-  }
-
-  // Deduplicate by URL, sort newest first
-  const seen = new Set<string>();
-  return all
-    .filter((a) => {
-      if (seen.has(a.url)) return false;
-      seen.add(a.url);
-      return true;
-    })
-    .sort((a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime());
+function getMatchedKeywords(text: string): string[] {
+  const lower = text.toLowerCase();
+  return KEYWORDS.filter((k) => lower.includes(k.toLowerCase())).slice(0, 3);
 }
 
-function formatNewspaperDate(dateStr: string): string {
+function formatCompact(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
+  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
+  return n.toLocaleString();
+}
+
+function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-IN", {
     day: "numeric", month: "short", year: "numeric",
   });
 }
 
-const SAVED_KEY = "news-saved-articles";
+// ─── Fetch: News ──────────────────────────────────────────────────────────────
+async function fetchNews(): Promise<FeedItem[]> {
+  if (!TAVILY_API_KEY) throw new Error("VITE_TAVILY_API_KEY is not set");
 
-function loadSaved(): Map<string, NewsArticle> {
+  const results = await Promise.allSettled(
+    NEWS_QUERIES.map((query) =>
+      fetch(TAVILY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_key: TAVILY_API_KEY,
+          query,
+          topic: "news",
+          days: 1,
+          max_results: 15,
+          include_answer: false,
+          include_domains: NEWS_DOMAINS,
+        }),
+        signal: AbortSignal.timeout(15000),
+      })
+        .then((r) => (r.ok ? r.json() : { results: [] }))
+        .then((d) => d.results ?? [])
+    )
+  );
+
+  const seen = new Set<string>();
+  const items: FeedItem[] = [];
+
+  for (const r of results) {
+    if (r.status !== "fulfilled") continue;
+    for (const item of r.value) {
+      if (!item.title || !item.url || seen.has(item.url)) continue;
+      const pubDate = item.published_date ?? new Date().toISOString();
+      if (!isTodayIST(pubDate)) continue;
+      const matched = getMatchedKeywords(`${item.title} ${item.content || ""}`);
+      if (matched.length === 0) continue;
+      seen.add(item.url);
+      items.push({
+        id: item.url,
+        type: "news",
+        title: item.title,
+        body: item.content?.slice(0, 350) || null,
+        url: item.url,
+        source: sourceLabel(item.url),
+        publishedAt: item.published_date ?? new Date().toISOString(),
+        matchedKeywords: matched,
+      });
+    }
+  }
+
+  return items;
+}
+
+// ─── Fetch: LinkedIn ──────────────────────────────────────────────────────────
+async function fetchLinkedIn(): Promise<FeedItem[]> {
+  if (!APIFY_TOKEN) return [];
+
+  const results = await Promise.allSettled(
+    LINKEDIN_HANDLES.map(async (handle) => {
+      const res = await fetch(
+        `https://api.apify.com/v2/acts/${LINKEDIN_ACTOR_ID}/run-sync-get-dataset-items?token=${APIFY_TOKEN}&timeout=120`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: handle.username, limit: 3 }),
+          signal: AbortSignal.timeout(130000),
+        }
+      );
+      if (!res.ok) return [] as FeedItem[];
+      const items: any[] = await res.json();
+      return items.map((item): FeedItem => ({
+        id: item.url || item.id || crypto.randomUUID(),
+        type: "linkedin",
+        title: handle.name,
+        body: item.text || item.content || item.description || "",
+        url: item.url || item.postUrl || handle.url,
+        source: "LinkedIn",
+        publishedAt: item.publishedAt || item.date || item.postedAt || new Date().toISOString(),
+        matchedKeywords: getMatchedKeywords(item.text || item.content || ""),
+        authorUrl: handle.url,
+        likes: item.likes || item.likeCount || item.numLikes || 0,
+        comments: item.comments || item.commentCount || item.numComments || 0,
+      }));
+    })
+  );
+
+  return results
+    .filter((r): r is PromiseFulfilledResult<FeedItem[]> => r.status === "fulfilled")
+    .flatMap((r) => r.value);
+}
+
+// ─── Fetch: X Trending via backend proxy ─────────────────────────────────────
+async function fetchXTrending(): Promise<FeedItem[]> {
   try {
-    const raw = localStorage.getItem(SAVED_KEY);
-    if (!raw) return new Map();
-    const arr: NewsArticle[] = JSON.parse(raw);
-    return new Map(arr.map((a) => [a.id, a]));
+    const res = await fetch(`${BACKEND_URL}/api/v1/x-trending`, {
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const trends: any[] = data.trends ?? [];
+
+    return trends
+      .filter((t) => t.name)
+      .map((t): FeedItem => ({
+        id: t.url || t.name,
+        type: "x",
+        title: t.name,
+        body: t.tweet_volume ? `${Number(t.tweet_volume).toLocaleString()} posts` : null,
+        url: t.url || `https://x.com/search?q=${encodeURIComponent(t.name)}`,
+        source: "X Trending",
+        publishedAt: data.as_of || new Date().toISOString(),
+        matchedKeywords: getMatchedKeywords(t.name),
+        postCount: t.tweet_volume ? `${Number(t.tweet_volume).toLocaleString()}` : undefined,
+      }));
   } catch {
-    return new Map();
+    return [];
   }
 }
 
-function persistSaved(map: Map<string, NewsArticle>) {
+// ─── Fetch: All Sources Combined ─────────────────────────────────────────────
+async function fetchAllFeed(): Promise<FeedItem[]> {
+  const [news, linkedin, xItems] = await Promise.allSettled([
+    fetchNews(),
+    fetchLinkedIn(),
+    fetchXTrending(),
+  ]);
+
+  const all: FeedItem[] = [
+    ...(news.status === "fulfilled" ? news.value : []),
+    ...(linkedin.status === "fulfilled" ? linkedin.value : []),
+    ...(xItems.status === "fulfilled" ? xItems.value : []),
+  ];
+
+  return all.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+}
+
+// ─── Saved ────────────────────────────────────────────────────────────────────
+const SAVED_KEY = "news-saved-articles";
+
+function loadSaved(): Map<string, FeedItem> {
+  try {
+    const raw = localStorage.getItem(SAVED_KEY);
+    if (!raw) return new Map();
+    const arr: FeedItem[] = JSON.parse(raw);
+    return new Map(arr.map((a) => [a.id, a]));
+  } catch { return new Map(); }
+}
+
+function persistSaved(map: Map<string, FeedItem>) {
   localStorage.setItem(SAVED_KEY, JSON.stringify([...map.values()]));
 }
 
-export default function NewsFeed() {
-  const [filter, setFilter] = useState("All");
-  const [search, setSearch] = useState("");
-  const [saved, setSaved] = useState<Map<string, NewsArticle>>(loadSaved);
+// ─── Source Badge ─────────────────────────────────────────────────────────────
+function SourceBadge({ item }: { item: FeedItem }) {
+  if (item.type === "linkedin") {
+    return (
+      <span className="inline-flex items-center gap-1 text-[9px] font-black tracking-[0.3em] uppercase text-blue-400/90 font-sans">
+        <Linkedin className="w-2.5 h-2.5" />
+        LinkedIn
+      </span>
+    );
+  }
+  if (item.type === "x") {
+    return (
+      <span className="inline-flex items-center gap-1 text-[9px] font-black tracking-[0.3em] uppercase text-zinc-300 font-sans">
+        <TrendingUp className="w-2.5 h-2.5" />
+        X Trending
+      </span>
+    );
+  }
+  return (
+    <span className="text-[9px] font-black tracking-[0.3em] uppercase text-amber-400/80 font-sans">
+      {item.source}
+    </span>
+  );
+}
 
-  const { data: articles = [], isLoading, isFetching, refetch, error } = useQuery({
-    queryKey: ["news-tavily"],
-    queryFn: fetchTavilyNews,
-    staleTime: 30 * 60_000,
+// ─── Feed Card ────────────────────────────────────────────────────────────────
+function FeedCard({
+  item,
+  idx,
+  isSaved,
+  onSave,
+}: {
+  item: FeedItem;
+  idx: number;
+  isSaved: boolean;
+  onSave: (item: FeedItem) => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 border-t-2 border-t-amber-500/50 hover:border-zinc-700 hover:bg-zinc-900/70 transition-all duration-150">
+      <div className="p-5 sm:p-6">
+        {/* Byline row */}
+        <div className="flex items-center gap-2 mb-3">
+          <SourceBadge item={item} />
+          <div className="flex-1 h-px bg-zinc-800" />
+          <span className="text-[9px] tracking-[0.1em] text-zinc-600 font-sans">
+            {formatDate(item.publishedAt)}
+          </span>
+        </div>
+
+        <div className="flex items-start gap-5">
+          <div className="flex-1 min-w-0">
+            {/* Title / Author */}
+            <h3 className={cn(
+              "font-serif font-black text-white leading-tight mb-2",
+              idx === 0 ? "text-2xl" : "text-xl"
+            )}>
+              {item.type === "linkedin" ? (
+                <a href={item.authorUrl} target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 transition-colors">
+                  {item.title}
+                </a>
+              ) : item.title}
+            </h3>
+
+            {/* Body */}
+            {item.body && (
+              <>
+                <div className="h-px bg-zinc-800 mb-2" />
+                <p className="text-[11px] text-zinc-500 leading-relaxed line-clamp-4 font-sans">
+                  {item.body}
+                </p>
+              </>
+            )}
+
+            {/* LinkedIn engagement */}
+            {item.type === "linkedin" && (
+              <div className="flex items-center gap-4 mt-2">
+                <div className="flex items-center gap-1 text-[10px] text-zinc-600">
+                  <ThumbsUp className="w-3 h-3" />
+                  {formatCompact(item.likes || 0)}
+                </div>
+                <div className="flex items-center gap-1 text-[10px] text-zinc-600">
+                  <MessageSquare className="w-3 h-3" />
+                  {formatCompact(item.comments || 0)}
+                </div>
+              </div>
+            )}
+
+            {/* X post count */}
+            {item.type === "x" && item.postCount && (
+              <p className="text-[10px] text-zinc-600 mt-1 font-sans">
+                {item.postCount} posts · {item.category}
+              </p>
+            )}
+
+            {/* Keyword tags */}
+            {item.matchedKeywords.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {item.matchedKeywords.map((k) => (
+                  <span key={k} className="text-[9px] px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20">
+                    {k}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="shrink-0 flex flex-col gap-2 items-end border-l border-zinc-800 pl-5">
+            <a
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-xs text-zinc-300 hover:text-white hover:border-white/20 transition-colors"
+            >
+              <ExternalLink className="w-3 h-3" />
+              {item.type === "linkedin" ? "View Post" : "Read"}
+            </a>
+            <button
+              onClick={() => onSave(item)}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors",
+                isSaved
+                  ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-red-500/10 hover:border-red-500/20 hover:text-red-400"
+                  : "bg-amber-500/10 border border-amber-500/20 text-amber-300 hover:bg-amber-500/20"
+              )}
+            >
+              {isSaved
+                ? <><BookmarkCheck className="w-3 h-3" /> Saved</>
+                : <><Bookmark className="w-3 h-3" /> Save</>
+              }
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+type FilterTab = "All" | "News" | "LinkedIn" | "X Trending" | "Saved";
+const FILTER_TABS: FilterTab[] = ["All", "News", "LinkedIn", "X Trending", "Saved"];
+
+export default function NewsFeed() {
+  const [filter, setFilter] = useState<FilterTab>("All");
+  const [search, setSearch] = useState("");
+  const [saved, setSaved] = useState<Map<string, FeedItem>>(loadSaved);
+
+  const { data: allItems = [], isLoading, isFetching, refetch, error } = useQuery({
+    queryKey: ["unified-feed"],
+    queryFn: fetchAllFeed,
+    staleTime: 60 * 60_000,
+    refetchInterval: () => isWorkHoursIST() ? 60 * 60_000 : false,
     retry: 1,
   });
 
-  function toggleSave(article: NewsArticle) {
+  function toggleSave(item: FeedItem) {
     setSaved((prev) => {
       const next = new Map(prev);
-      if (next.has(article.id)) {
-        next.delete(article.id);
+      if (next.has(item.id)) {
+        next.delete(item.id);
         persistSaved(next);
         toast.success("Removed from saved");
       } else {
-        next.set(article.id, article);
+        next.set(item.id, item);
         persistSaved(next);
-        toast.success("Article saved");
+        toast.success("Saved");
       }
       return next;
     });
   }
 
-  const baseList = filter === "Saved"
-    ? [...saved.values()]
-    : articles;
+  const baseList = filter === "Saved" ? [...saved.values()] : allItems;
 
-  const filtered = baseList.filter((a) => {
-    const text = `${a.title} ${a.summary || ""}`.toLowerCase();
-    return (
-      (filter === "Saved" || filter === "All" || text.includes(filter.toLowerCase())) &&
-      (!search.trim() || text.includes(search.toLowerCase()))
-    );
+  const filtered = baseList.filter((item) => {
+    const matchesFilter =
+      filter === "All" ||
+      filter === "Saved" ||
+      (filter === "News" && item.type === "news") ||
+      (filter === "LinkedIn" && item.type === "linkedin") ||
+      (filter === "X Trending" && item.type === "x");
+
+    const text = `${item.title} ${item.body || ""}`.toLowerCase();
+    const matchesSearch = !search.trim() || text.includes(search.toLowerCase());
+
+    return matchesFilter && matchesSearch;
   });
+
+  const newsCount = allItems.filter((i) => i.type === "news").length;
+  const linkedinCount = allItems.filter((i) => i.type === "linkedin").length;
+  const xCount = allItems.filter((i) => i.type === "x").length;
 
   return (
     <div className="min-h-screen bg-zinc-950 pt-20 pb-16 px-4 sm:px-6">
       <div className="max-w-5xl mx-auto">
 
-        {/* ── Masthead ─────────────────────────────────────────── */}
+        {/* Masthead */}
         <div className="mb-10">
           <div className="h-[2px] bg-amber-500/50" />
           <div className="h-px bg-zinc-700 mt-0.5 mb-4" />
@@ -189,7 +489,7 @@ export default function NewsFeed() {
                 NEWS PIECES
               </h1>
               <p className="text-[9px] tracking-[0.35em] uppercase text-zinc-500 mt-2 font-sans">
-                India · Business · Venture Capital · Funding
+                News · LinkedIn · X Trending
               </p>
             </div>
             <div className="text-right pb-1">
@@ -210,24 +510,38 @@ export default function NewsFeed() {
           <div className="h-[2px] bg-amber-500/50" />
         </div>
 
-        {/* ── Section Nav ──────────────────────────────────────── */}
+        {/* Filter Tabs */}
         <div className="mb-6 border-b border-zinc-800">
           <div className="flex items-center">
-            {FILTER_KEYWORDS.map((kw) => (
+            {FILTER_TABS.filter((t) => t !== "Saved").map((tab) => (
               <button
-                key={kw}
-                onClick={() => setFilter(kw)}
+                key={tab}
+                onClick={() => setFilter(tab)}
                 className={cn(
-                  "px-4 py-2 text-[9px] tracking-[0.25em] uppercase font-black font-sans border-b-2 -mb-px transition-colors whitespace-nowrap",
-                  filter === kw
+                  "flex items-center gap-1.5 px-4 py-2 text-[9px] tracking-[0.25em] uppercase font-black font-sans border-b-2 -mb-px transition-colors whitespace-nowrap",
+                  filter === tab
                     ? "border-amber-400 text-amber-300"
                     : "border-transparent text-zinc-600 hover:text-zinc-300"
                 )}
               >
-                {kw}
+                {tab === "LinkedIn" && <Linkedin className="w-2.5 h-2.5" />}
+                {tab === "X Trending" && <TrendingUp className="w-2.5 h-2.5" />}
+                {tab === "News" && <Newspaper className="w-2.5 h-2.5" />}
+                {tab}
+                {tab === "News" && newsCount > 0 && (
+                  <span className="text-[8px] text-zinc-600 font-mono">({newsCount})</span>
+                )}
+                {tab === "LinkedIn" && linkedinCount > 0 && (
+                  <span className="text-[8px] text-zinc-600 font-mono">({linkedinCount})</span>
+                )}
+                {tab === "X Trending" && xCount > 0 && (
+                  <span className="text-[8px] text-zinc-600 font-mono">({xCount})</span>
+                )}
               </button>
             ))}
+
             <div className="w-px h-4 bg-zinc-700 mx-2 self-center" />
+
             <button
               onClick={() => setFilter("Saved")}
               className={cn(
@@ -240,28 +554,55 @@ export default function NewsFeed() {
               <BookmarkCheck className="w-3 h-3" />
               Saved {saved.size > 0 && `(${saved.size})`}
             </button>
+
             <div className="ml-auto relative pb-1">
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-600" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search articles…"
+                placeholder="Search feed…"
                 className="pl-7 pr-3 py-1 text-[10px] bg-transparent border-0 text-zinc-400 placeholder:text-zinc-700 outline-none focus:text-zinc-200 w-44 font-sans"
               />
             </div>
           </div>
         </div>
 
-        {/* ── Circulation count ────────────────────────────────── */}
+        {/* Count */}
         <div className="flex items-center gap-3 mb-6">
           <div className="h-px flex-1 bg-zinc-800" />
           <p className="text-[9px] tracking-[0.3em] uppercase text-zinc-600 font-sans shrink-0">
-            {isLoading ? "Loading edition…" : filter === "Saved" ? `${filtered.length} saved article${filtered.length !== 1 ? "s" : ""}` : `${filtered.length} article${filtered.length !== 1 ? "s" : ""} in circulation`}
+            {isLoading
+              ? "Loading edition…"
+              : filter === "Saved"
+              ? `${filtered.length} saved item${filtered.length !== 1 ? "s" : ""}`
+              : `${filtered.length} item${filtered.length !== 1 ? "s" : ""} in circulation`}
           </p>
           <div className="h-px flex-1 bg-zinc-800" />
         </div>
 
-        {/* ── States ───────────────────────────────────────────── */}
+        {/* Source summary pills */}
+        {!isLoading && filter === "All" && allItems.length > 0 && (
+          <div className="flex items-center gap-2 mb-6 flex-wrap">
+            <span className="text-[9px] uppercase tracking-wider text-zinc-600 font-sans">Sources:</span>
+            {newsCount > 0 && (
+              <span className="inline-flex items-center gap-1 text-[9px] px-2 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                <Newspaper className="w-2.5 h-2.5" /> {newsCount} news articles
+              </span>
+            )}
+            {linkedinCount > 0 && (
+              <span className="inline-flex items-center gap-1 text-[9px] px-2 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                <Linkedin className="w-2.5 h-2.5" /> {linkedinCount} LinkedIn posts
+              </span>
+            )}
+            {xCount > 0 && (
+              <span className="inline-flex items-center gap-1 text-[9px] px-2 py-1 rounded-full bg-zinc-700/50 text-zinc-300 border border-zinc-600/30">
+                <TrendingUp className="w-2.5 h-2.5" /> {xCount} X trends
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* States */}
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3">
             <RefreshCw className="w-5 h-5 animate-spin text-zinc-600" />
@@ -277,86 +618,27 @@ export default function NewsFeed() {
             {filter === "Saved" ? (
               <>
                 <BookmarkCheck className="w-8 h-8 text-zinc-700 mx-auto mb-3" />
-                <p className="font-serif text-xl font-black text-white">No Saved Articles</p>
-                <p className="text-[11px] text-zinc-600 mt-1 font-sans tracking-wide">Hit Save on any article to bookmark it here.</p>
+                <p className="font-serif text-xl font-black text-white">No Saved Items</p>
+                <p className="text-[11px] text-zinc-600 mt-1 font-sans tracking-wide">Save any article or post to bookmark it here.</p>
               </>
             ) : (
               <>
                 <Newspaper className="w-8 h-8 text-zinc-700 mx-auto mb-3" />
-                <p className="font-serif text-xl font-black text-white">No Articles in Circulation</p>
-                <p className="text-[11px] text-zinc-600 mt-1 font-sans tracking-wide">No stories found in the last 3 days.</p>
+                <p className="font-serif text-xl font-black text-white">No Items in Circulation</p>
+                <p className="text-[11px] text-zinc-600 mt-1 font-sans tracking-wide">Nothing found matching your filters.</p>
               </>
             )}
           </div>
         ) : (
           <div className="grid gap-4">
-            {filtered.map((article, idx) => (
-              <div
-                key={article.id}
-                className="rounded-2xl border border-zinc-800 bg-zinc-900/40 border-t-2 border-t-amber-500/50 hover:border-zinc-700 hover:bg-zinc-900/70 transition-all duration-150"
-              >
-                <div className="p-5 sm:p-6">
-                  {/* Byline row */}
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-[9px] font-black tracking-[0.3em] uppercase text-amber-400/80 font-sans">
-                      {article.source}
-                    </span>
-                    <div className="flex-1 h-px bg-zinc-800" />
-                    <span className="text-[9px] tracking-[0.1em] text-zinc-600 font-sans">
-                      {formatNewspaperDate(article.published_at)}
-                    </span>
-                  </div>
-
-                  <div className="flex items-start gap-5">
-                    <div className="flex-1 min-w-0">
-                      {/* Headline */}
-                      <h3 className={cn(
-                        "font-serif font-black text-white leading-tight mb-3",
-                        idx === 0 ? "text-2xl" : "text-xl"
-                      )}>
-                        {article.title}
-                      </h3>
-
-                      {/* Body */}
-                      {article.summary && (
-                        <>
-                          <div className="h-px bg-zinc-800 mb-2" />
-                          <p className="text-[11px] text-zinc-500 leading-relaxed line-clamp-3 font-sans">
-                            {article.summary}
-                          </p>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Actions */}
-                    <div className="shrink-0 flex flex-col gap-2 items-end border-l border-zinc-800 pl-5">
-                      <a
-                        href={article.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-xs text-zinc-300 hover:text-white hover:border-white/20 transition-colors"
-                      >
-                        <ExternalLink className="w-3 h-3" />
-                        Read
-                      </a>
-                      <button
-                        onClick={() => toggleSave(article)}
-                        className={cn(
-                          "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors",
-                          saved.has(article.id)
-                            ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-red-500/10 hover:border-red-500/20 hover:text-red-400"
-                            : "bg-amber-500/10 border border-amber-500/20 text-amber-300 hover:bg-amber-500/20"
-                        )}
-                      >
-                        {saved.has(article.id)
-                          ? <><BookmarkCheck className="w-3 h-3" /> Saved</>
-                          : <><Bookmark className="w-3 h-3" /> Save</>
-                        }
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
+            {filtered.map((item, idx) => (
+              <FeedCard
+                key={item.id}
+                item={item}
+                idx={idx}
+                isSaved={saved.has(item.id)}
+                onSave={toggleSave}
+              />
             ))}
           </div>
         )}

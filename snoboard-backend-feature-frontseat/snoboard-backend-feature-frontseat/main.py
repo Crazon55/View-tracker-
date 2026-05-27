@@ -8,6 +8,8 @@ It wraps the FastAPI application to work with the functions-framework.
 import functions_framework
 from flask import Request, Response, make_response
 import json
+import os
+import requests as http_requests
 
 # Import the FastAPI app
 from app.main import app
@@ -42,6 +44,16 @@ def handler(request: Request) -> Response:
             {"Content-Type": "application/json"},
         )
 
+    # X Trending endpoint
+    if path == "/api/v1/x-trending" and method in ["GET", "OPTIONS"]:
+        if method == "OPTIONS":
+            return make_response("", 204, {
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type",
+            })
+        return handle_x_trending()
+
     # Scrape endpoint
     if path == "/api/v1/scrape" and method == "POST":
         return handle_scrape(request)
@@ -62,6 +74,54 @@ def handler(request: Request) -> Response:
         404,
         {"Content-Type": "application/json"},
     )
+
+
+CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Content-Type": "application/json",
+}
+
+# Twitter bearer token used by the X web app (public)
+TWITTER_BEARER = "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I%2BAceTPH8LY%3DiANXtLRgj32t4%2FMaVXHBi4I0Z0pxVTHNTHLolv4AqOzNq"
+INDIA_WOEID = "23424848"
+
+
+def handle_x_trending() -> Response:
+    auth_token = os.getenv("X_AUTH_TOKEN", "")
+    ct0 = os.getenv("X_CT0", "")
+
+    if not auth_token or not ct0:
+        return make_response(json.dumps({"error": "X credentials not configured"}), 500, CORS_HEADERS)
+
+    headers = {
+        "Authorization": f"Bearer {TWITTER_BEARER}",
+        "Cookie": f"auth_token={auth_token}; ct0={ct0}",
+        "x-csrf-token": ct0,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "x-twitter-active-user": "yes",
+        "x-twitter-auth-type": "OAuth2Session",
+        "Accept": "*/*",
+        "Accept-Language": "en-IN,en;q=0.9",
+    }
+
+    try:
+        res = http_requests.get(
+            f"https://api.twitter.com/1.1/trends/place.json?id={INDIA_WOEID}",
+            headers=headers,
+            timeout=10,
+        )
+        res.raise_for_status()
+        data = res.json()
+        trends = data[0].get("trends", []) if data else []
+        as_of = data[0].get("as_of", "") if data else ""
+
+        return make_response(
+            json.dumps({"trends": trends, "as_of": as_of}),
+            200,
+            CORS_HEADERS,
+        )
+    except Exception as e:
+        return make_response(json.dumps({"error": str(e)}), 500, CORS_HEADERS)
 
 
 def handle_scrape(request: Request) -> Response:
