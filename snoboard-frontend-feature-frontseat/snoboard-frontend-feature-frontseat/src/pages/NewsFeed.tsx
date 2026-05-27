@@ -50,15 +50,16 @@ const NEWS_SOURCE_LABELS: Record<string, string> = {
 };
 
 const NEWS_QUERIES = [
-  "Indian startup funding unicorn IPO India today",
-  "Shark Tank India founders Indian brands D2C news today",
-  "Indian founder startup valuation revenue profit India",
-  "Make in India MSME Startup India news today",
-  "India breaking startup business news today",
-  "Indian billionaire businessman wealth India news",
-  "popular Indian company brand news today",
-  "Indian unicorn decacorn IPO funding announcement",
+  "India startup founder breaking news today viral",
+  "Indian billionaire businessman wealth India trending today",
+  "India startup unicorn IPO funding announcement today",
+  "Shark Tank India founder Indian brand viral news",
+  "India business scandal controversy trending today",
+  "popular Indian company startup founder news today",
 ];
+
+// Minimum Tavily relevance score — drops low-quality/irrelevant matches
+const MIN_SCORE = 0.4;
 
 // Article must contain at least one of these to pass — prevents global news leaking in
 const INDIA_REQUIRED_KEYWORDS = [
@@ -178,7 +179,8 @@ async function fetchNews(): Promise<FeedItem[]> {
           query,
           topic: "news",
           days: 1,
-          max_results: 15,
+          max_results: 10,
+          search_depth: "advanced",
           include_answer: false,
           include_domains: NEWS_DOMAINS,
         }),
@@ -196,10 +198,10 @@ async function fetchNews(): Promise<FeedItem[]> {
     if (r.status !== "fulfilled") continue;
     for (const item of r.value) {
       if (!item.title || !item.url || seen.has(item.url)) continue;
+      if ((item.score ?? 0) < MIN_SCORE) continue;
       const pubDate = item.published_date ?? new Date().toISOString();
       if (!isTodayIST(pubDate)) continue;
       const text = `${item.title} ${item.content || ""}`.toLowerCase();
-      // Must mention India/Indian context — blocks global articles leaking through
       const isIndia = INDIA_REQUIRED_KEYWORDS.some((k) => text.includes(k));
       if (!isIndia) continue;
       const matched = getMatchedKeywords(text);
