@@ -495,13 +495,8 @@ function writeBackup(key: string, rows: string[]) {
   try { localStorage.setItem(SLIDES_BK + key, JSON.stringify(rows)); } catch {}
 }
 
-/** True if `local` has content in a slide where `server` is empty AND local has more total
- *  content — prevents a stale backup with one extra stub slide from overriding a fully-filled
- *  server version. */
+/** True if `local` has content in a slide where `server` is empty — i.e. backup is richer. */
 function backupIsRicher(local: string[], server: string[]): boolean {
-  const localTotal = local.reduce((sum, s) => sum + s.trim().length, 0);
-  const serverTotal = server.reduce((sum, s) => sum + s.trim().length, 0);
-  if (serverTotal >= localTotal) return false;
   return local.some((s, i) => s.trim().length > 0 && !(server[i] ?? "").trim().length);
 }
 
