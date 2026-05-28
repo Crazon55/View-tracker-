@@ -73,6 +73,34 @@ const INDIA_REQUIRED_KEYWORDS = [
   "nikhil kamath", "nithin kamath", "peyush bansal", "vineeta singh",
 ];
 
+// Brands that always pass through — even if a learned pattern would block them.
+// "Zepto reports net loss" is relevant; "Shree Manufacturing reports net loss" is not.
+const KNOWN_BRANDS = new Set([
+  "zepto", "zomato", "blinkit", "swiggy", "ola", "paytm", "flipkart", "meesho",
+  "mamaearth", "boat", "cred", "zerodha", "groww", "nykaa", "razorpay",
+  "freshworks", "infosys", "wipro", "tcs", "hcl", "tech mahindra",
+  "tata", "reliance", "adani", "bajaj", "mahindra", "hero",
+  "oyo", "myntra", "bigbasket", "urban company", "lenskart",
+  "dream11", "games24x7", "nazara", "mpl",
+  "byju", "unacademy", "vedantu", "physicswallah", "pw",
+  "ather", "ola electric", "pure ev", "revolt",
+  "dunzo", "curefit", "licious", "mensa",
+  "khatabook", "ofbusiness", "udaan", "delhivery", "shiprocket",
+  "slice", "jupiter", "fi money", "open", "cashfree",
+  "sharechat", "moj", "dailyhunt", "josh",
+  "namita thapar", "anupam mittal", "aman gupta", "kunal shah",
+  "ghazal alagh", "nikhil kamath", "nithin kamath", "peyush bansal", "vineeta singh",
+  "mukesh ambani", "ratan tata", "gautam adani", "azim premji",
+]);
+
+function titleHasKnownBrand(title: string): boolean {
+  const lower = title.toLowerCase();
+  for (const brand of KNOWN_BRANDS) {
+    if (lower.includes(brand)) return true;
+  }
+  return false;
+}
+
 // ─── Unified Feed Item Type ───────────────────────────────────────────────────
 type FeedItem = {
   id: string;
@@ -411,12 +439,18 @@ function isArticleBlocked(
   blocked: Set<string>,
   penalized: Set<string>
 ): boolean {
+  // explicit No vote always hides
   if (feedback[item.id] === "no") return true;
   // paywall artifact — body is navigation/login template, not real content
   if (item.type === "news" && isScrapingArtifact(item.body)) return true;
-  // domain penalized by repeated No's
+
+  // known brand in title → never block via learned patterns or domain penalty
+  // e.g. "Zepto reports net loss" passes even if "net loss" pattern was learned
+  if (titleHasKnownBrand(item.title)) return false;
+
+  // domain penalized by repeated No's (only applies to non-brand articles)
   if (penalized.has(getDomain(item.url))) return true;
-  // title trigram pattern learned from 2+ No's
+  // title trigram pattern learned from 2+ No's (only applies to non-brand articles)
   if (blocked.size > 0 && extractTrigrams(item.title).some((tg) => blocked.has(tg))) return true;
   return false;
 }
