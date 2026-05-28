@@ -162,37 +162,54 @@ function sourceLabel(url: string): string {
   } catch { return "News"; }
 }
 
-function parseLinkedInDate(item: any): string {
-  // Try absolute date fields first
-  const abs = item.publishedAt || item.date || item.postedAt || item.createdAt || item.postedDate;
-  if (abs && typeof abs === "string" && abs.match(/\d{4}/)) {
-    const d = new Date(abs);
-    if (!isNaN(d.getTime())) return d.toISOString();
+function parseRelativeTime(val: string): string | null {
+  const now = Date.now();
+  if (/just now|moments? ago/i.test(val)) return new Date(now - 60000).toISOString();
+  if (/yesterday/i.test(val)) return new Date(now - 86400000).toISOString();
+  const m = val.match(/(\d+)\s*(s(?:ec(?:ond)?s?)?|m(?:in(?:ute)?s?)?|h(?:ou?r?s?)?|d(?:ay?s?)?|w(?:ee?k?s?)?|mo(?:nth?s?)?|y(?:ea?r?s?)?)/i);
+  if (m) {
+    const n = parseInt(m[1]);
+    const u = m[2].toLowerCase();
+    const ms = u.startsWith("mo") ? 2592000000 : u.startsWith("m") ? 60000 :
+      u.startsWith("s") ? 1000 : u.startsWith("h") ? 3600000 :
+      u.startsWith("d") ? 86400000 : u.startsWith("w") ? 604800000 :
+      u.startsWith("y") ? 31536000000 : 0;
+    if (ms) return new Date(now - n * ms).toISOString();
   }
+  return null;
+}
 
-  // Handle relative formats: "5d", "2h", "1w", "3mo", "5 days", "5 days ago", "just now"
-  const rel: string = item.timeSincePosted || item.time || item.relativeTime || "";
-  if (rel) {
-    const now = Date.now();
-    if (/just now|moments? ago/i.test(rel)) return new Date(now - 60000).toISOString();
-    const m = rel.match(/(\d+)\s*(s(?:ec(?:ond)?s?)?|m(?:in(?:ute)?s?)?|h(?:ou?r?s?)?|d(?:ay?s?)?|w(?:ee?k?s?)?|mo(?:nth?s?)?|y(?:ea?r?s?)?)/i);
-    if (m) {
-      const n = parseInt(m[1]);
-      const u = m[2].toLowerCase();
-      const ms =
-        u.startsWith("s") ? 1000 :
-        u.startsWith("mo") ? 2592000000 :
-        u.startsWith("m") ? 60000 :
-        u.startsWith("h") ? 3600000 :
-        u.startsWith("d") ? 86400000 :
-        u.startsWith("w") ? 604800000 :
-        u.startsWith("y") ? 31536000000 : 0;
-      if (ms) return new Date(now - n * ms).toISOString();
+function parseLinkedInDate(item: any): string {
+  // 1. Try all known absolute date fields
+  for (const f of ["publishedAt","date","postedAt","createdAt","postedDate","timestamp","postDate","datePosted","created_at","published_at","dateCreated"]) {
+    const v = item[f];
+    if (!v) continue;
+    if (typeof v === "number" && v > 1e9) return new Date(v > 1e12 ? v : v * 1000).toISOString();
+    if (typeof v === "string" && /\d{4}/.test(v)) {
+      const d = new Date(v);
+      if (!isNaN(d.getTime())) return d.toISOString();
     }
   }
 
-  // Unknown date — use a week ago so it doesn't appear as today
-  return new Date(Date.now() - 7 * 86400000).toISOString();
+  // 2. Try all known relative time fields
+  for (const f of ["timeSincePosted","time","relativeTime","timeAgo","postTime","age","postedAgo"]) {
+    const v = item[f];
+    if (v && typeof v === "string") {
+      const parsed = parseRelativeTime(v);
+      if (parsed) return parsed;
+    }
+  }
+
+  // 3. Last resort: scan every short string field on the item for a relative time pattern
+  for (const key of Object.keys(item)) {
+    const v = item[key];
+    if (typeof v !== "string" || v.length > 40) continue;
+    const parsed = parseRelativeTime(v);
+    if (parsed) return parsed;
+  }
+
+  // 4. Unknown — show as today since Apify just fetched it fresh
+  return new Date().toISOString();
 }
 
 function getMatchedKeywords(text: string): string[] {
