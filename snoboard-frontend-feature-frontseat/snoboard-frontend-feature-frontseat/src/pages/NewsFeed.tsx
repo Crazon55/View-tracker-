@@ -15,8 +15,7 @@ const BACKEND_URL = (import.meta.env.VITE_API_URL as string) || "";
 const KEYWORDS = [
   "Indian Startups", "Indian Unicorns", "Shark Tank India", "Make in India",
   "MSME", "Startup India", "Startup Funding India", "Indian Founders",
-  "Business & Startup", "D2C", "B2B", "B2C", "Startup", "Unicorn",
-  "Decacorn", "IPO", "Funding", "Valuation", "Revenue", "Profit", "Loss",
+  "Business & Startup",
 ];
 
 // ─── LinkedIn Founders ────────────────────────────────────────────────────────
