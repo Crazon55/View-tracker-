@@ -788,8 +788,15 @@ export default function NewsFeed() {
 
   const baseList = filter === "Saved" ? [...saved.values()] : allItems;
 
+  const linkedInCutoff = Date.now() - 3 * 24 * 60 * 60 * 1000;
+
   const filtered = baseList.filter((item) => {
     if (filter !== "Saved" && isArticleBlocked(item, feedback, rules)) return false;
+
+    if (item.type === "linkedin" && filter !== "Saved") {
+      const t = item.publishedAt ? new Date(item.publishedAt).getTime() : 0;
+      if (!t || t < linkedInCutoff) return false;
+    }
 
     const matchesFilter =
       filter === "All" ||
@@ -808,7 +815,7 @@ export default function NewsFeed() {
   const learnedPatterns = getLearnedPatternCount();
 
   const newsCount = allItems.filter((i) => i.type === "news" && !isArticleBlocked(i, feedback, rules)).length;
-  const linkedinCount = allItems.filter((i) => i.type === "linkedin" && !isArticleBlocked(i, feedback, rules)).length;
+  const linkedinCount = allItems.filter((i) => i.type === "linkedin" && !isArticleBlocked(i, feedback, rules) && i.publishedAt && new Date(i.publishedAt).getTime() >= linkedInCutoff).length;
   const xCount = allItems.filter((i) => i.type === "x" && !isArticleBlocked(i, feedback, rules)).length;
 
   return (
