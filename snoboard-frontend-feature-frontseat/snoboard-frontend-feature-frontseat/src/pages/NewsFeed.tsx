@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ExternalLink, RefreshCw, Bookmark, BookmarkCheck, Search, Linkedin, TrendingUp, Newspaper, ThumbsUp, ThumbsDown, MessageSquare, Heart, Repeat2 } from "lucide-react";
@@ -180,19 +180,26 @@ function parseRelativeTime(val: string): string | null {
 }
 
 function parseLinkedInDate(item: any): string {
-  // 1. Try all known absolute date fields
-  for (const f of ["publishedAt","date","postedAt","createdAt","postedDate","timestamp","postDate","datePosted","created_at","published_at","dateCreated"]) {
+  // 1. Relative fields first — unambiguous about how old the post is
+  for (const f of ["timeSincePosted","relative","relativeTime","timeAgo","postTime","postedAgo","postedTime"]) {
+    const v = item[f];
+    if (v && typeof v === "string") {
+      const parsed = parseRelativeTime(v);
+      if (parsed) return parsed;
+    }
+  }
+
+  // 2. Absolute date fields — prefer post-time fields (timestamp/date) over scrape-time fields (createdAt/publishedAt)
+  for (const f of ["timestamp","date","postedAt","postedDate","postDate","datePosted","published_at","dateCreated","publishedAt","createdAt","created_at"]) {
     const v = item[f];
     if (v == null || v === "") continue;
     if (typeof v === "number" && v > 1e9) return new Date(v > 1e12 ? v : v * 1000).toISOString();
     if (typeof v === "string") {
-      // Pure numeric string timestamp (10 or 13 digits)
       if (/^\d{10,13}$/.test(v.trim())) {
         const n = Number(v.trim());
         return new Date(n > 1e12 ? n : n * 1000).toISOString();
       }
       if (/\d{4}/.test(v)) {
-        // Try with T separator in case of space-separated datetime ("2026-05-25 06:32:57")
         const d = new Date(v.replace(" ", "T"));
         if (!isNaN(d.getTime())) return d.toISOString();
         const d2 = new Date(v);
@@ -201,16 +208,7 @@ function parseLinkedInDate(item: any): string {
     }
   }
 
-  // 2. Try all known relative time fields (including "relative" which Apify returns)
-  for (const f of ["timeSincePosted","relative","time","relativeTime","timeAgo","postTime","age","postedAgo","postedTime"]) {
-    const v = item[f];
-    if (v && typeof v === "string") {
-      const parsed = parseRelativeTime(v);
-      if (parsed) return parsed;
-    }
-  }
-
-  // 3. Last resort: scan every string field — longer limit to catch "3 days ago • Visible to anyone..."
+  // 3. Last resort: scan all string fields for relative time patterns
   for (const key of Object.keys(item)) {
     const v = item[key];
     if (typeof v !== "string" || v.length > 120) continue;
@@ -432,6 +430,26 @@ function loadSaved(): Map<string, FeedItem> {
 
 function persistSaved(map: Map<string, FeedItem>) {
   localStorage.setItem(SAVED_KEY, JSON.stringify([...map.values()]));
+}
+
+// ─── Feed Cache (persists across page refreshes) ──────────────────────────────
+const FEED_CACHE_KEY = "news-feed-cache";
+const FEED_CACHE_TTL = 8 * 60 * 60 * 1000; // 8 hours
+
+function loadFeedCache(): { items: FeedItem[]; ts: number } | null {
+  try {
+    const raw = localStorage.getItem(FEED_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.items || !parsed?.ts) return null;
+    return parsed;
+  } catch { return null; }
+}
+
+function saveFeedCache(items: FeedItem[]) {
+  try {
+    localStorage.setItem(FEED_CACHE_KEY, JSON.stringify({ ts: Date.now(), items }));
+  } catch {}
 }
 
 // ─── Feedback / Learning ──────────────────────────────────────────────────────
@@ -754,13 +772,31 @@ export default function NewsFeed() {
   const [feedback, setFeedback] = useState<Record<string, Vote>>(loadFeedback);
   const [rules, setRules] = useState<Set<ArticleCategory>>(loadRules);
 
+  const forceRef = useRef(false);
+  const cachedFeed = loadFeedCache();
+
   const { data: allItems = [], isLoading, isFetching, refetch, error } = useQuery({
     queryKey: ["unified-feed"],
-    queryFn: fetchAllFeed,
-    staleTime: 60 * 60_000,
-    refetchInterval: () => isWorkHoursIST() ? 60 * 60_000 : false,
+    queryFn: async () => {
+      if (!forceRef.current) {
+        const cache = loadFeedCache();
+        if (cache) return cache.items;
+      }
+      forceRef.current = false;
+      const items = await fetchAllFeed();
+      saveFeedCache(items);
+      return items;
+    },
+    initialData: cachedFeed?.items,
+    staleTime: Infinity,
+    refetchInterval: false,
     retry: 1,
   });
+
+  function handleScrape() {
+    forceRef.current = true;
+    refetch();
+  }
 
   function toggleSave(item: FeedItem) {
     setSaved((prev) => {
@@ -869,12 +905,12 @@ export default function NewsFeed() {
                 {new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
               </p>
               <button
-                onClick={() => refetch()}
+                onClick={handleScrape}
                 disabled={isFetching}
                 className="inline-flex items-center gap-1 text-[8px] tracking-[0.2em] uppercase text-zinc-500 hover:text-amber-400 transition-colors disabled:opacity-40 mt-1 ml-auto font-sans"
               >
                 <RefreshCw className={cn("w-2.5 h-2.5", isFetching && "animate-spin")} />
-                {isFetching ? "Fetching…" : "Fetch Edition"}
+                {isFetching ? "Scraping…" : "Scrape Feed"}
               </button>
               {(noCount > 0 || learnedPatterns > 0) && (
                 <div className="flex items-center gap-2 mt-1 justify-end">
