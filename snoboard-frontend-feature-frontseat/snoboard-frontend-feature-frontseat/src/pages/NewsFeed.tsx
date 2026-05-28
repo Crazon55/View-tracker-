@@ -15,8 +15,8 @@ const BACKEND_URL = (import.meta.env.VITE_API_URL as string) || "";
 const KEYWORDS = [
   "Indian Startups", "Indian Unicorns", "Shark Tank India", "Make in India",
   "MSME", "Startup India", "Startup Funding India", "Indian Founders",
-  "D2C", "B2B", "B2C", "Startup", "Unicorn", "Decacorn", "IPO", "Funding",
-  "Valuation", "Revenue", "Profit", "Loss",
+  "Business & Startup", "D2C", "B2B", "B2C", "Startup", "Unicorn",
+  "Decacorn", "IPO", "Funding", "Valuation", "Revenue", "Profit", "Loss",
 ];
 
 // ─── LinkedIn Founders ────────────────────────────────────────────────────────
@@ -56,6 +56,14 @@ const NEWS_QUERIES = [
   "Shark Tank India founder Indian brand viral news",
   "India business scandal controversy trending today",
   "popular Indian company startup founder news today",
+  "Indian startup funding unicorn IPO India today",
+  "Shark Tank India founders Indian brands D2C news today",
+  "Indian founder startup valuation revenue profit India",
+  "Make in India MSME Startup India news today",
+  "India breaking startup business news today",
+  "Indian billionaire businessman wealth India news",
+  "popular Indian company brand news today",
+  "Indian unicorn decacorn IPO funding announcement",
 ];
 
 // Article must contain at least one of these to pass — prevents global news leaking in
