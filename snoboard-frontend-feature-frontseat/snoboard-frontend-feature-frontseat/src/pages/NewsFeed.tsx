@@ -13,7 +13,8 @@ const BACKEND_URL = (import.meta.env.VITE_API_URL as string) || "";
 
 // ─── Keywords ─────────────────────────────────────────────────────────────────
 const KEYWORDS = [
-  "Indian Startups", "Indian Unicorns", "Shark Tank India", "Make in India",
+  "Indian Tech", "Indian Food Brands", "Indian Startups",
+  "Indian Unicorns", "Shark Tank India", "Make in India",
   "MSME", "Startup India", "Startup Funding India", "Indian Founders",
   "Business & Startup",
 ];
