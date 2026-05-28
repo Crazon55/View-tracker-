@@ -208,8 +208,8 @@ function parseLinkedInDate(item: any): string {
     if (parsed) return parsed;
   }
 
-  // 4. Unknown — show as today since Apify just fetched it fresh
-  return new Date().toISOString();
+  // 4. Unknown — no parseable date, exclude from 3-day filter
+  return "";
 }
 
 function getMatchedKeywords(text: string): string[] {
@@ -224,6 +224,7 @@ function formatCompact(n: number): string {
 }
 
 function formatDate(dateStr: string): string {
+  if (!dateStr) return "Recent";
   return new Date(dateStr).toLocaleDateString("en-IN", {
     day: "numeric", month: "short", year: "numeric",
   });
