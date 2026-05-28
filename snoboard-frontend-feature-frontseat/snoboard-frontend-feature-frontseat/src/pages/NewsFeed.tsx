@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ExternalLink, RefreshCw, Bookmark, BookmarkCheck, Search, Linkedin, TrendingUp, Newspaper, ThumbsUp, ThumbsDown, MessageSquare } from "lucide-react";
+import { ExternalLink, RefreshCw, Bookmark, BookmarkCheck, Search, Linkedin, TrendingUp, Newspaper, ThumbsUp, ThumbsDown, MessageSquare, Heart, Repeat2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ─── API Keys ─────────────────────────────────────────────────────────────────
@@ -295,29 +295,57 @@ async function fetchLinkedIn(): Promise<FeedItem[]> {
     .flatMap((r) => r.value);
 }
 
-// ─── Fetch: X Trending via backend proxy ─────────────────────────────────────
+// ─── Fetch: X Trending + Explorer via backend proxy ──────────────────────────
 async function fetchXTrending(): Promise<FeedItem[]> {
   try {
-    const res = await fetch(`${BACKEND_URL}/api/v1/x-trending`, {
-      signal: AbortSignal.timeout(15000),
+    const res = await fetch(`${BACKEND_URL}/api/v1/x-feed`, {
+      signal: AbortSignal.timeout(25000),
     });
     if (!res.ok) return [];
     const data = await res.json();
-    const trends: any[] = data.trends ?? [];
+    const asOf: string = data.as_of || new Date().toISOString();
+    const items: FeedItem[] = [];
 
-    return trends
-      .filter((t) => t.name)
-      .map((t): FeedItem => ({
+    // Trending topics
+    for (const t of (data.trends ?? [])) {
+      if (!t.name) continue;
+      items.push({
         id: t.url || t.name,
         type: "x",
         title: t.name,
         body: t.tweet_volume ? `${Number(t.tweet_volume).toLocaleString()} posts` : null,
         url: t.url || `https://x.com/search?q=${encodeURIComponent(t.name)}`,
         source: "X Trending",
-        publishedAt: data.as_of || new Date().toISOString(),
+        publishedAt: asOf,
         matchedKeywords: getMatchedKeywords(t.name),
         postCount: t.tweet_volume ? `${Number(t.tweet_volume).toLocaleString()}` : undefined,
-      }));
+      });
+    }
+
+    // Live tweets from Explorer search
+    for (const tweet of (data.tweets ?? [])) {
+      if (!tweet.text) continue;
+      let publishedAt = asOf;
+      try {
+        const d = new Date(tweet.created_at);
+        if (!isNaN(d.getTime())) publishedAt = d.toISOString();
+      } catch { /* keep asOf */ }
+      items.push({
+        id: tweet.id,
+        type: "x",
+        title: tweet.user_name ? `${tweet.user_name} · @${tweet.user_screen_name}` : `@${tweet.user_screen_name}`,
+        body: tweet.text,
+        url: tweet.url,
+        source: "X",
+        publishedAt,
+        matchedKeywords: getMatchedKeywords(tweet.text),
+        likes: tweet.favorites || 0,
+        comments: tweet.retweets || 0,
+        authorUrl: `https://x.com/${tweet.user_screen_name}`,
+      });
+    }
+
+    return items;
   } catch {
     return [];
   }
@@ -476,6 +504,14 @@ function SourceBadge({ item }: { item: FeedItem }) {
     );
   }
   if (item.type === "x") {
+    if (item.source === "X") {
+      return (
+        <span className="inline-flex items-center gap-1 text-[9px] font-black tracking-[0.3em] uppercase text-zinc-300 font-sans">
+          <span className="font-black text-[10px] leading-none">𝕏</span>
+          Post
+        </span>
+      );
+    }
     return (
       <span className="inline-flex items-center gap-1 text-[9px] font-black tracking-[0.3em] uppercase text-zinc-300 font-sans">
         <TrendingUp className="w-2.5 h-2.5" />
@@ -563,8 +599,26 @@ function FeedCard({
               </div>
             )}
 
-            {/* X post count */}
-            {item.type === "x" && item.postCount && (
+            {/* X tweet engagement */}
+            {item.type === "x" && item.source === "X" && (
+              <div className="flex items-center gap-4 mt-2">
+                {(item.likes || 0) > 0 && (
+                  <div className="flex items-center gap-1 text-[10px] text-zinc-600">
+                    <Heart className="w-3 h-3" />
+                    {formatCompact(item.likes || 0)}
+                  </div>
+                )}
+                {(item.comments || 0) > 0 && (
+                  <div className="flex items-center gap-1 text-[10px] text-zinc-600">
+                    <Repeat2 className="w-3 h-3" />
+                    {formatCompact(item.comments || 0)}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* X trending post count */}
+            {item.type === "x" && item.source === "X Trending" && item.postCount && (
               <p className="text-[10px] text-zinc-600 mt-1 font-sans">
                 {item.postCount} posts · {item.category}
               </p>
@@ -591,7 +645,7 @@ function FeedCard({
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-xs text-zinc-300 hover:text-white hover:border-white/20 transition-colors"
             >
               <ExternalLink className="w-3 h-3" />
-              {item.type === "linkedin" ? "View Post" : "Read"}
+              {item.type === "linkedin" ? "View Post" : item.type === "x" && item.source === "X" ? "View Tweet" : "Read"}
             </a>
 
             {/* Yes / No feedback */}

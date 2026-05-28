@@ -1,6 +1,7 @@
 """FastAPI app for Instagram View Tracker."""
 import os
 import hashlib
+import requests as http_req
 from datetime import datetime, timezone, timedelta
 
 from fastapi import FastAPI, HTTPException, Request
@@ -4525,4 +4526,96 @@ async def blue_ocean_scraped_posts_delete(post_id: str):
     from app.database.client import get_supabase_client
     client = get_supabase_client()
     client.table("blue_ocean_scraped_posts").delete().eq("id", post_id).execute()
+
+
+# ===================== X (Twitter) Feed =====================
+
+_TWITTER_BEARER = "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I%2BxP1Rf%2FI4TXCdY%3D"
+
+_X_SEARCH_QUERIES = [
+    "Indian startup funding India -filter:retweets",
+    "Shark Tank India founder Indian brand -filter:retweets",
+    "India unicorn IPO funding announcement -filter:retweets",
+    "Indian billionaire startup business India -filter:retweets",
+    "Make in India MSME startup news -filter:retweets",
+]
+
+
+@app.get("/api/v1/x-feed")
+async def x_feed():
+    auth_token = os.environ.get("X_AUTH_TOKEN", "")
+    ct0 = os.environ.get("X_CT0", "")
+
+    if not auth_token or not ct0:
+        return {"trends": [], "tweets": [], "as_of": datetime.now(timezone.utc).isoformat(), "error": "X credentials not configured"}
+
+    headers = {
+        "authorization": f"Bearer {_TWITTER_BEARER}",
+        "cookie": f"auth_token={auth_token}; ct0={ct0}",
+        "x-csrf-token": ct0,
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "x-twitter-active-user": "yes",
+        "x-twitter-auth-type": "OAuth2Session",
+        "x-twitter-client-language": "en",
+        "accept-language": "en-US,en;q=0.9",
+    }
+
+    # 1. India trending topics (WOEID 23424848)
+    trends = []
+    try:
+        resp = http_req.get(
+            "https://api.twitter.com/1.1/trends/place.json",
+            params={"id": "23424848"},
+            headers=headers,
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            if isinstance(data, list) and data:
+                trends = data[0].get("trends", [])[:20]
+    except Exception:
+        pass
+
+    # 2. Recent India startup/business tweets (Explorer-style search)
+    tweets: list[dict] = []
+    seen_ids: set = set()
+    for query in _X_SEARCH_QUERIES[:3]:
+        try:
+            resp = http_req.get(
+                "https://api.twitter.com/1.1/search/tweets.json",
+                params={
+                    "q": query,
+                    "lang": "en",
+                    "result_type": "recent",
+                    "count": "8",
+                    "tweet_mode": "extended",
+                },
+                headers=headers,
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                for tweet in (resp.json().get("statuses") or []):
+                    tid = tweet.get("id_str")
+                    if not tid or tid in seen_ids:
+                        continue
+                    seen_ids.add(tid)
+                    user = tweet.get("user", {})
+                    tweets.append({
+                        "id": tid,
+                        "text": tweet.get("full_text") or tweet.get("text", ""),
+                        "created_at": tweet.get("created_at", ""),
+                        "user_name": user.get("name", ""),
+                        "user_screen_name": user.get("screen_name", ""),
+                        "favorites": tweet.get("favorite_count", 0),
+                        "retweets": tweet.get("retweet_count", 0),
+                        "url": f"https://x.com/{user.get('screen_name')}/status/{tid}",
+                    })
+        except Exception:
+            pass
+
+    return {
+        "trends": trends,
+        "tweets": tweets[:20],
+        "as_of": datetime.now(timezone.utc).isoformat(),
+    }
     return {"success": True}
