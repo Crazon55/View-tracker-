@@ -4541,17 +4541,25 @@ _X_SEARCH_QUERIES = [
 ]
 
 
-@app.get("/api/v1/x-feed")
-async def x_feed():
+def _x_headers() -> tuple[dict, bool]:
+    """Build Twitter request headers from env cookies. Returns (headers, ok)."""
     auth_token = os.environ.get("X_AUTH_TOKEN", "")
     ct0 = os.environ.get("X_CT0", "")
+    kdt = os.environ.get("X_KDT", "")
+    twid = os.environ.get("X_TWID", "")
 
     if not auth_token or not ct0:
-        return {"trends": [], "tweets": [], "as_of": datetime.now(timezone.utc).isoformat(), "error": "X credentials not configured"}
+        return {}, False
+
+    cookie_parts = [f"auth_token={auth_token}", f"ct0={ct0}"]
+    if kdt:
+        cookie_parts.append(f"kdt={kdt}")
+    if twid:
+        cookie_parts.append(f"twid={twid}")
 
     headers = {
         "authorization": f"Bearer {_TWITTER_BEARER}",
-        "cookie": f"auth_token={auth_token}; ct0={ct0}",
+        "cookie": "; ".join(cookie_parts),
         "x-csrf-token": ct0,
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "x-twitter-active-user": "yes",
@@ -4559,6 +4567,38 @@ async def x_feed():
         "x-twitter-client-language": "en",
         "accept-language": "en-US,en;q=0.9",
     }
+    return headers, True
+
+
+@app.get("/api/v1/x-keepalive")
+async def x_keepalive():
+    """Lightweight daily ping to keep the X session active.
+    Call this once every 24h (e.g. via Supabase cron or external scheduler)
+    so Twitter sees the session as in-use and may extend the cookie expiry."""
+    headers, ok = _x_headers()
+    if not ok:
+        return {"success": False, "error": "X credentials not configured"}
+    try:
+        resp = http_req.get(
+            "https://api.twitter.com/1.1/account/verify_credentials.json",
+            params={"skip_status": "true", "include_entities": "false"},
+            headers=headers,
+            timeout=10,
+        )
+        return {
+            "success": resp.status_code == 200,
+            "status_code": resp.status_code,
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/api/v1/x-feed")
+async def x_feed():
+    headers, ok = _x_headers()
+    if not ok:
+        return {"trends": [], "tweets": [], "as_of": datetime.now(timezone.utc).isoformat(), "error": "X credentials not configured"}
 
     # 1. India trending topics (WOEID 23424848)
     trends = []
