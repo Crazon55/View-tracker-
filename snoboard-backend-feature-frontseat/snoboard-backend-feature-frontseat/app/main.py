@@ -4662,3 +4662,104 @@ async def x_feed():
         "as_of": datetime.now(timezone.utc).isoformat(),
     }
     return {"success": True}
+
+
+# ===================== LinkedIn Feed =====================
+
+@app.post("/api/v1/linkedin-feed/ingest")
+async def linkedin_feed_ingest(request: Request):
+    """Receive LinkedIn posts from n8n. Deduplicates by URL."""
+    client = get_supabase_client()
+    body = await request.json()
+    items = body if isinstance(body, list) else [body]
+    inserted, skipped = 0, 0
+    for item in items:
+        url = (item.get("url") or "").strip()
+        if not url:
+            skipped += 1
+            continue
+        if client.table("linkedin_feed").select("id").eq("url", url).execute().data:
+            skipped += 1
+            continue
+        client.table("linkedin_feed").insert({
+            "name": (item.get("name") or "").strip(),
+            "body": (item.get("body") or "").strip(),
+            "url": url,
+            "published_at": (item.get("publishedAt") or "").strip() or None,
+            "likes": int(item.get("likes") or 0),
+            "comments": int(item.get("comments") or 0),
+            "author_url": (item.get("authorUrl") or "").strip() or None,
+        }).execute()
+        inserted += 1
+    return {"success": True, "inserted": inserted, "skipped": skipped}
+
+
+@app.get("/api/v1/linkedin-feed")
+async def linkedin_feed_list():
+    """Return LinkedIn posts from the last 3 days."""
+    client = get_supabase_client()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%d")
+    data = client.table("linkedin_feed").select("*").gte("published_at", cutoff).order("published_at", desc=True).execute().data
+    return {"success": True, "data": data}
+
+
+# ===================== News Feed Feedback =====================
+
+@app.post("/api/v1/news-feed/feedback")
+async def news_feed_feedback(request: Request):
+    """Upsert a yes/no vote for an article URL."""
+    client = get_supabase_client()
+    body = await request.json()
+    url = (body.get("article_url") or "").strip()
+    vote = body.get("vote")
+    if not url or vote not in ("yes", "no"):
+        raise HTTPException(status_code=400, detail="article_url and vote (yes/no) required")
+    client.table("news_feed_feedback").upsert({
+        "article_url": url,
+        "vote": vote,
+        "article_title": body.get("article_title", ""),
+        "article_type": body.get("article_type", ""),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }, on_conflict="article_url").execute()
+    return {"success": True}
+
+
+@app.get("/api/v1/news-feed/feedback")
+async def news_feed_feedback_list():
+    """Return all feedback votes."""
+    client = get_supabase_client()
+    data = client.table("news_feed_feedback").select("article_url,vote").execute().data
+    return {"success": True, "data": data}
+
+
+# ===================== News Feed Saved =====================
+
+@app.post("/api/v1/news-feed/saved")
+async def news_feed_saved_add(request: Request):
+    """Save an article."""
+    client = get_supabase_client()
+    body = await request.json()
+    url = (body.get("article_url") or "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="article_url required")
+    client.table("news_feed_saved").upsert({
+        "article_url": url,
+        "article_data": body.get("article_data", {}),
+    }, on_conflict="article_url").execute()
+    return {"success": True}
+
+
+@app.delete("/api/v1/news-feed/saved/{article_url:path}")
+async def news_feed_saved_remove(article_url: str):
+    """Remove a saved article."""
+    client = get_supabase_client()
+    client.table("news_feed_saved").delete().eq("article_url", article_url).execute()
+    return {"success": True}
+
+
+@app.get("/api/v1/news-feed/saved")
+async def news_feed_saved_list():
+    """Return all saved articles."""
+    client = get_supabase_client()
+    data = client.table("news_feed_saved").select("article_url,article_data").order("created_at", desc=True).execute().data
+    return {"success": True, "data": data}

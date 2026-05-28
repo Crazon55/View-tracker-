@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ExternalLink, RefreshCw, Bookmark, BookmarkCheck, Search, Linkedin, TrendingUp, Newspaper, ThumbsUp, ThumbsDown, MessageSquare, Heart, Repeat2 } from "lucide-react";
@@ -298,53 +298,26 @@ async function fetchNews(): Promise<FeedItem[]> {
   return items;
 }
 
-// ─── Fetch: LinkedIn ──────────────────────────────────────────────────────────
+// ─── Fetch: LinkedIn (via backend — populated by n8n) ────────────────────────
 async function fetchLinkedIn(): Promise<FeedItem[]> {
-  if (!APIFY_TOKEN) return [];
-
-  // Compute 3-day window — Apify filters posts at source
-  const today = new Date();
-  const threeDaysAgo = new Date(today.getTime() - 3 * 24 * 60 * 60 * 1000);
-  const endDate = today.toISOString().slice(0, 10);     // YYYY-MM-DD
-  const startDate = threeDaysAgo.toISOString().slice(0, 10);
-
-  const results = await Promise.allSettled(
-    LINKEDIN_HANDLES.map(async (handle) => {
-      const res = await fetch(
-        `https://api.apify.com/v2/acts/${LINKEDIN_ACTOR_ID}/run-sync-get-dataset-items?token=${APIFY_TOKEN}&timeout=120`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            username: handle.username,
-            limit: 5,
-            start: startDate,
-            end: endDate,
-          }),
-          signal: AbortSignal.timeout(130000),
-        }
-      );
-      if (!res.ok) return [] as FeedItem[];
-      const items: any[] = await res.json();
-      return items.map((item): FeedItem => ({
-        id: item.url || item.id || crypto.randomUUID(),
-        type: "linkedin",
-        title: handle.name,
-        body: item.text || item.content || item.description || "",
-        url: item.url || item.postUrl || handle.url,
-        source: "LinkedIn",
-        publishedAt: parseLinkedInDate(item),
-        matchedKeywords: getMatchedKeywords(item.text || item.content || ""),
-        authorUrl: handle.url,
-        likes: item.likes || item.likeCount || item.numLikes || 0,
-        comments: item.comments || item.commentCount || item.numComments || 0,
-      }));
-    })
-  );
-
-  return results
-    .filter((r): r is PromiseFulfilledResult<FeedItem[]> => r.status === "fulfilled")
-    .flatMap((r) => r.value);
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/v1/linkedin-feed`, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.data ?? []).map((item: any): FeedItem => ({
+      id: item.url || item.id,
+      type: "linkedin",
+      title: item.name || "LinkedIn",
+      body: item.body || "",
+      url: item.url,
+      source: "LinkedIn",
+      publishedAt: item.published_at || "",
+      matchedKeywords: getMatchedKeywords(item.body || ""),
+      authorUrl: item.author_url || "",
+      likes: item.likes || 0,
+      comments: item.comments || 0,
+    }));
+  } catch { return []; }
 }
 
 // ─── Fetch: X Trending + Explorer via backend proxy ──────────────────────────
@@ -427,20 +400,31 @@ async function fetchAllFeed(): Promise<FeedItem[]> {
   });
 }
 
-// ─── Saved ────────────────────────────────────────────────────────────────────
-const SAVED_KEY = "news-saved-articles";
-
-function loadSaved(): Map<string, FeedItem> {
+// ─── Saved (Supabase via backend) ────────────────────────────────────────────
+async function fetchSaved(): Promise<Map<string, FeedItem>> {
   try {
-    const raw = localStorage.getItem(SAVED_KEY);
-    if (!raw) return new Map();
-    const arr: FeedItem[] = JSON.parse(raw);
-    return new Map(arr.map((a) => [a.id, a]));
+    const res = await fetch(`${BACKEND_URL}/api/v1/news-feed/saved`);
+    if (!res.ok) return new Map();
+    const data = await res.json();
+    const map = new Map<string, FeedItem>();
+    for (const row of (data.data ?? [])) {
+      const item: FeedItem = row.article_data;
+      if (item?.id) map.set(item.id, item);
+    }
+    return map;
   } catch { return new Map(); }
 }
 
-function persistSaved(map: Map<string, FeedItem>) {
-  localStorage.setItem(SAVED_KEY, JSON.stringify([...map.values()]));
+async function addSaved(item: FeedItem) {
+  await fetch(`${BACKEND_URL}/api/v1/news-feed/saved`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ article_url: item.url, article_data: item }),
+  });
+}
+
+async function removeSaved(item: FeedItem) {
+  await fetch(`${BACKEND_URL}/api/v1/news-feed/saved/${encodeURIComponent(item.url)}`, { method: "DELETE" });
 }
 
 // ─── Feed Cache (persists across page refreshes) ──────────────────────────────
@@ -463,9 +447,7 @@ function saveFeedCache(items: FeedItem[]) {
   } catch {}
 }
 
-// ─── Feedback / Learning ──────────────────────────────────────────────────────
-const FEEDBACK_KEY = "nf-feedback";
-const RULES_KEY = "nf-rules";
+// ─── Feedback / Learning (Supabase via backend) ───────────────────────────────
 
 // Body fragments that mean Tavily scraped a login/paywall page, not real content
 const ARTIFACT_MARKERS = [
@@ -489,11 +471,19 @@ const CATEGORY_LABELS: Record<ArticleCategory, string> = {
   "general": "article",
 };
 
-function loadFeedback(): Record<string, Vote> {
-  try { return JSON.parse(localStorage.getItem(FEEDBACK_KEY) || "{}"); } catch { return {}; }
+async function fetchFeedback(): Promise<Record<string, Vote>> {
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/v1/news-feed/feedback`);
+    if (!res.ok) return {};
+    const data = await res.json();
+    const map: Record<string, Vote> = {};
+    for (const row of (data.data ?? [])) map[row.article_url] = row.vote;
+    return map;
+  } catch { return {}; }
 }
+
 function loadRules(): Set<ArticleCategory> {
-  try { return new Set(JSON.parse(localStorage.getItem(RULES_KEY) || "[]")); } catch { return new Set(); }
+  try { return new Set(JSON.parse(localStorage.getItem("nf-rules") || "[]")); } catch { return new Set(); }
 }
 
 function isScrapingArtifact(body: string | null): boolean {
@@ -530,25 +520,27 @@ function detectCategory(item: FeedItem): ArticleCategory {
   return "general";
 }
 
-// Returns the category that was learned so the caller can show a useful toast.
 function recordNo(url: string, item: FeedItem): ArticleCategory {
-  const fb = loadFeedback();
-  fb[url] = "no";
-  localStorage.setItem(FEEDBACK_KEY, JSON.stringify(fb));
-
+  fetch(`${BACKEND_URL}/api/v1/news-feed/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ article_url: url, vote: "no", article_title: item.title, article_type: item.type }),
+  });
   const category = detectCategory(item);
   if (category !== "general") {
     const rules = loadRules();
     rules.add(category);
-    localStorage.setItem(RULES_KEY, JSON.stringify([...rules]));
+    localStorage.setItem("nf-rules", JSON.stringify([...rules]));
   }
   return category;
 }
 
 function recordYes(url: string) {
-  const fb = loadFeedback();
-  fb[url] = "yes";
-  localStorage.setItem(FEEDBACK_KEY, JSON.stringify(fb));
+  fetch(`${BACKEND_URL}/api/v1/news-feed/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ article_url: url, vote: "yes" }),
+  });
 }
 
 function isArticleBlocked(item: FeedItem, feedback: Record<string, Vote>, rules: Set<ArticleCategory>): boolean {
@@ -568,8 +560,7 @@ function getLearnedPatternCount(): number {
 }
 
 function resetLearning() {
-  localStorage.removeItem(FEEDBACK_KEY);
-  localStorage.removeItem(RULES_KEY);
+  localStorage.removeItem("nf-rules");
 }
 
 // ─── Source Badge ─────────────────────────────────────────────────────────────
@@ -779,9 +770,14 @@ const FILTER_TABS: FilterTab[] = ["All", "News", "LinkedIn", "X Trending", "Save
 export default function NewsFeed() {
   const [filter, setFilter] = useState<FilterTab>("All");
   const [search, setSearch] = useState("");
-  const [saved, setSaved] = useState<Map<string, FeedItem>>(loadSaved);
-  const [feedback, setFeedback] = useState<Record<string, Vote>>(loadFeedback);
+  const [saved, setSaved] = useState<Map<string, FeedItem>>(new Map());
+  const [feedback, setFeedback] = useState<Record<string, Vote>>({});
   const [rules, setRules] = useState<Set<ArticleCategory>>(loadRules);
+
+  useEffect(() => {
+    fetchSaved().then(setSaved);
+    fetchFeedback().then(setFeedback);
+  }, []);
 
   const forceRef = useRef(false);
   const cachedFeed = loadFeedCache();
@@ -814,11 +810,11 @@ export default function NewsFeed() {
       const next = new Map(prev);
       if (next.has(item.id)) {
         next.delete(item.id);
-        persistSaved(next);
+        removeSaved(item);
         toast.success("Removed from saved");
       } else {
         next.set(item.id, item);
-        persistSaved(next);
+        addSaved(item);
         toast.success("Saved");
       }
       return next;
