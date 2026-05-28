@@ -180,17 +180,8 @@ function parseRelativeTime(val: string): string | null {
 }
 
 function parseLinkedInDate(item: any): string {
-  // 1. Relative fields first — unambiguous about how old the post is
-  for (const f of ["timeSincePosted","relative","relativeTime","timeAgo","postTime","postedAgo","postedTime"]) {
-    const v = item[f];
-    if (v && typeof v === "string") {
-      const parsed = parseRelativeTime(v);
-      if (parsed) return parsed;
-    }
-  }
-
-  // 2. Absolute date fields — prefer post-time fields (timestamp/date) over scrape-time fields (createdAt/publishedAt)
-  for (const f of ["timestamp","date","postedAt","postedDate","postDate","datePosted","published_at","dateCreated","publishedAt","createdAt","created_at"]) {
+  // 1. Absolute post-date fields first — these are the actual post time
+  for (const f of ["timestamp","date","postedAt","postedDate","postDate","datePosted","published_at","dateCreated","publishedAt"]) {
     const v = item[f];
     if (v == null || v === "") continue;
     if (typeof v === "number" && v > 1e9) return new Date(v > 1e12 ? v : v * 1000).toISOString();
@@ -205,6 +196,15 @@ function parseLinkedInDate(item: any): string {
         const d2 = new Date(v);
         if (!isNaN(d2.getTime())) return d2.toISOString();
       }
+    }
+  }
+
+  // 2. Relative fields — approximate, only if no absolute date was found
+  for (const f of ["timeSincePosted","relative","relativeTime","timeAgo","postTime","postedAgo","postedTime"]) {
+    const v = item[f];
+    if (v && typeof v === "string") {
+      const parsed = parseRelativeTime(v);
+      if (parsed) return parsed;
     }
   }
 
@@ -444,7 +444,7 @@ function persistSaved(map: Map<string, FeedItem>) {
 }
 
 // ─── Feed Cache (persists across page refreshes) ──────────────────────────────
-const FEED_CACHE_KEY = "news-feed-cache-v3";
+const FEED_CACHE_KEY = "news-feed-cache-v4";
 const FEED_CACHE_TTL = 8 * 60 * 60 * 1000; // 8 hours
 
 function loadFeedCache(): { items: FeedItem[]; ts: number } | null {
