@@ -805,6 +805,17 @@ export default function NewsFeed() {
     refetch();
   }
 
+  // Auto-scrape at 11:10 AM IST
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (getISTMinutes() === 11 * 60 + 10) {
+        forceRef.current = true;
+        refetch();
+      }
+    }, 60 * 1000);
+    return () => clearInterval(interval);
+  }, [refetch]);
+
   function toggleSave(item: FeedItem) {
     setSaved((prev) => {
       const next = new Map(prev);
