@@ -322,54 +322,113 @@ function persistSaved(map: Map<string, FeedItem>) {
 
 // ─── Feedback / Learning ──────────────────────────────────────────────────────
 const FEEDBACK_KEY = "nf-feedback";
-const BIGRAMS_KEY = "nf-no-bigrams";
+const TRIGRAMS_KEY = "nf-no-trigrams";
+const DOMAIN_VOTES_KEY = "nf-domain-votes";
+
+// Body fragments that indicate Tavily scraped a paywall/login page instead of real content
+const ARTIFACT_MARKERS = [
+  "{{firstname}}", "edit logout", "login / sign up", "login/sign up",
+  "subscribe to", "sign up my reads", "my account newsletters",
+  "हिंदी में", "hindi mein",
+];
 
 type Vote = "yes" | "no";
 
 function loadFeedback(): Record<string, Vote> {
   try { return JSON.parse(localStorage.getItem(FEEDBACK_KEY) || "{}"); } catch { return {}; }
 }
-function loadBigrams(): Record<string, number> {
-  try { return JSON.parse(localStorage.getItem(BIGRAMS_KEY) || "{}"); } catch { return {}; }
+function loadTrigrams(): Record<string, number> {
+  try { return JSON.parse(localStorage.getItem(TRIGRAMS_KEY) || "{}"); } catch { return {}; }
+}
+function loadDomainVotes(): Record<string, { yes: number; no: number }> {
+  try { return JSON.parse(localStorage.getItem(DOMAIN_VOTES_KEY) || "{}"); } catch { return {}; }
 }
 
-function extractBigrams(title: string): string[] {
+function getDomain(url: string): string {
+  try { return new URL(url).hostname.replace("www.", ""); } catch { return ""; }
+}
+
+function extractTrigrams(title: string): string[] {
   const words = title.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean);
   const out: string[] = [];
-  for (let i = 0; i < words.length - 1; i++) out.push(`${words[i]} ${words[i + 1]}`);
+  // trigrams (3-word phrases) — specific enough to not over-block
+  for (let i = 0; i < words.length - 2; i++) out.push(`${words[i]} ${words[i + 1]} ${words[i + 2]}`);
   return out;
+}
+
+function isScrapingArtifact(body: string | null): boolean {
+  if (!body) return false;
+  const lower = body.toLowerCase();
+  return ARTIFACT_MARKERS.some((m) => lower.includes(m));
 }
 
 function recordNo(url: string, title: string) {
   const fb = loadFeedback();
   fb[url] = "no";
   localStorage.setItem(FEEDBACK_KEY, JSON.stringify(fb));
-  const bigrams = loadBigrams();
-  for (const bg of extractBigrams(title)) bigrams[bg] = (bigrams[bg] || 0) + 1;
-  localStorage.setItem(BIGRAMS_KEY, JSON.stringify(bigrams));
+
+  // learn title trigrams
+  const trigrams = loadTrigrams();
+  for (const tg of extractTrigrams(title)) trigrams[tg] = (trigrams[tg] || 0) + 1;
+  localStorage.setItem(TRIGRAMS_KEY, JSON.stringify(trigrams));
+
+  // track domain no count
+  const dv = loadDomainVotes();
+  const d = getDomain(url);
+  if (d) { dv[d] = { yes: dv[d]?.yes || 0, no: (dv[d]?.no || 0) + 1 }; }
+  localStorage.setItem(DOMAIN_VOTES_KEY, JSON.stringify(dv));
 }
 
 function recordYes(url: string) {
   const fb = loadFeedback();
   fb[url] = "yes";
   localStorage.setItem(FEEDBACK_KEY, JSON.stringify(fb));
+
+  const dv = loadDomainVotes();
+  const d = getDomain(url);
+  if (d) { dv[d] = { yes: (dv[d]?.yes || 0) + 1, no: dv[d]?.no || 0 }; }
+  localStorage.setItem(DOMAIN_VOTES_KEY, JSON.stringify(dv));
 }
 
-function getBlockedBigrams(): Set<string> {
-  const bigrams = loadBigrams();
-  return new Set(Object.entries(bigrams).filter(([, v]) => v >= 2).map(([k]) => k));
+function getBlockedTrigrams(): Set<string> {
+  const trigrams = loadTrigrams();
+  return new Set(Object.entries(trigrams).filter(([, v]) => v >= 2).map(([k]) => k));
 }
 
-function isArticleBlocked(item: FeedItem, feedback: Record<string, Vote>, blocked: Set<string>): boolean {
+function getPenalizedDomains(): Set<string> {
+  const dv = loadDomainVotes();
+  // domain gets penalized if it has 3+ No's and more No's than Yes's
+  return new Set(
+    Object.entries(dv)
+      .filter(([, v]) => v.no >= 3 && v.no > v.yes)
+      .map(([k]) => k)
+  );
+}
+
+function isArticleBlocked(
+  item: FeedItem,
+  feedback: Record<string, Vote>,
+  blocked: Set<string>,
+  penalized: Set<string>
+): boolean {
   if (feedback[item.id] === "no") return true;
-  if (blocked.size === 0) return false;
-  const bgs = extractBigrams(item.title);
-  return bgs.some((bg) => blocked.has(bg));
+  // paywall artifact — body is navigation/login template, not real content
+  if (item.type === "news" && isScrapingArtifact(item.body)) return true;
+  // domain penalized by repeated No's
+  if (penalized.has(getDomain(item.url))) return true;
+  // title trigram pattern learned from 2+ No's
+  if (blocked.size > 0 && extractTrigrams(item.title).some((tg) => blocked.has(tg))) return true;
+  return false;
+}
+
+function getLearnedPatternCount(): number {
+  return getBlockedTrigrams().size;
 }
 
 function resetLearning() {
   localStorage.removeItem(FEEDBACK_KEY);
-  localStorage.removeItem(BIGRAMS_KEY);
+  localStorage.removeItem(TRIGRAMS_KEY);
+  localStorage.removeItem(DOMAIN_VOTES_KEY);
 }
 
 // ─── Source Badge ─────────────────────────────────────────────────────────────
@@ -555,7 +614,8 @@ export default function NewsFeed() {
   const [search, setSearch] = useState("");
   const [saved, setSaved] = useState<Map<string, FeedItem>>(loadSaved);
   const [feedback, setFeedback] = useState<Record<string, Vote>>(loadFeedback);
-  const [blocked, setBlocked] = useState<Set<string>>(getBlockedBigrams);
+  const [blocked, setBlocked] = useState<Set<string>>(getBlockedTrigrams);
+  const [penalized, setPenalized] = useState<Set<string>>(getPenalizedDomains);
 
   const { data: allItems = [], isLoading, isFetching, refetch, error } = useQuery({
     queryKey: ["unified-feed"],
@@ -590,7 +650,8 @@ export default function NewsFeed() {
   function handleNo(item: FeedItem) {
     recordNo(item.id, item.title);
     setFeedback((prev) => ({ ...prev, [item.id]: "no" }));
-    setBlocked(getBlockedBigrams());
+    setBlocked(getBlockedTrigrams());
+    setPenalized(getPenalizedDomains());
     toast("Hidden — learning from this", { icon: "🚫" });
   }
 
@@ -598,13 +659,14 @@ export default function NewsFeed() {
     resetLearning();
     setFeedback({});
     setBlocked(new Set());
+    setPenalized(new Set());
     toast.success("Learning reset — starting fresh");
   }
 
   const baseList = filter === "Saved" ? [...saved.values()] : allItems;
 
   const filtered = baseList.filter((item) => {
-    if (filter !== "Saved" && isArticleBlocked(item, feedback, blocked)) return false;
+    if (filter !== "Saved" && isArticleBlocked(item, feedback, blocked, penalized)) return false;
 
     const matchesFilter =
       filter === "All" ||
@@ -620,11 +682,11 @@ export default function NewsFeed() {
   });
 
   const noCount = Object.values(feedback).filter((v) => v === "no").length;
-  const learnedPatterns = [...blocked].length;
+  const learnedPatterns = getLearnedPatternCount();
 
-  const newsCount = allItems.filter((i) => i.type === "news" && !isArticleBlocked(i, feedback, blocked)).length;
-  const linkedinCount = allItems.filter((i) => i.type === "linkedin" && !isArticleBlocked(i, feedback, blocked)).length;
-  const xCount = allItems.filter((i) => i.type === "x" && !isArticleBlocked(i, feedback, blocked)).length;
+  const newsCount = allItems.filter((i) => i.type === "news" && !isArticleBlocked(i, feedback, blocked, penalized)).length;
+  const linkedinCount = allItems.filter((i) => i.type === "linkedin" && !isArticleBlocked(i, feedback, blocked, penalized)).length;
+  const xCount = allItems.filter((i) => i.type === "x" && !isArticleBlocked(i, feedback, blocked, penalized)).length;
 
   return (
     <div className="min-h-screen bg-zinc-950 pt-20 pb-16 px-4 sm:px-6">
