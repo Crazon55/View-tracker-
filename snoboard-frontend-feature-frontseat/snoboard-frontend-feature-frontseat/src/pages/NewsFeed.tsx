@@ -183,16 +183,26 @@ function parseLinkedInDate(item: any): string {
   // 1. Try all known absolute date fields
   for (const f of ["publishedAt","date","postedAt","createdAt","postedDate","timestamp","postDate","datePosted","created_at","published_at","dateCreated"]) {
     const v = item[f];
-    if (!v) continue;
+    if (v == null || v === "") continue;
     if (typeof v === "number" && v > 1e9) return new Date(v > 1e12 ? v : v * 1000).toISOString();
-    if (typeof v === "string" && /\d{4}/.test(v)) {
-      const d = new Date(v);
-      if (!isNaN(d.getTime())) return d.toISOString();
+    if (typeof v === "string") {
+      // Pure numeric string timestamp (10 or 13 digits)
+      if (/^\d{10,13}$/.test(v.trim())) {
+        const n = Number(v.trim());
+        return new Date(n > 1e12 ? n : n * 1000).toISOString();
+      }
+      if (/\d{4}/.test(v)) {
+        // Try with T separator in case of space-separated datetime ("2026-05-25 06:32:57")
+        const d = new Date(v.replace(" ", "T"));
+        if (!isNaN(d.getTime())) return d.toISOString();
+        const d2 = new Date(v);
+        if (!isNaN(d2.getTime())) return d2.toISOString();
+      }
     }
   }
 
-  // 2. Try all known relative time fields
-  for (const f of ["timeSincePosted","time","relativeTime","timeAgo","postTime","age","postedAgo"]) {
+  // 2. Try all known relative time fields (including "relative" which Apify returns)
+  for (const f of ["timeSincePosted","relative","time","relativeTime","timeAgo","postTime","age","postedAgo","postedTime"]) {
     const v = item[f];
     if (v && typeof v === "string") {
       const parsed = parseRelativeTime(v);
@@ -200,15 +210,14 @@ function parseLinkedInDate(item: any): string {
     }
   }
 
-  // 3. Last resort: scan every short string field on the item for a relative time pattern
+  // 3. Last resort: scan every string field — longer limit to catch "3 days ago • Visible to anyone..."
   for (const key of Object.keys(item)) {
     const v = item[key];
-    if (typeof v !== "string" || v.length > 40) continue;
+    if (typeof v !== "string" || v.length > 120) continue;
     const parsed = parseRelativeTime(v);
     if (parsed) return parsed;
   }
 
-  // 4. Unknown — no parseable date, exclude from 3-day filter
   return "";
 }
 
