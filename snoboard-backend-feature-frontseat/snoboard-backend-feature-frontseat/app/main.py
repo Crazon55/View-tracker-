@@ -4696,10 +4696,26 @@ async def linkedin_feed_ingest(request: Request):
 
 @app.get("/api/v1/linkedin-feed")
 async def linkedin_feed_list():
-    """Return LinkedIn posts from the last 3 days."""
+    """Return posts not yet shown OR shown today. Marks unseen posts as shown today."""
     client = get_supabase_client()
+    today = datetime.now(timezone.utc).date().isoformat()
     cutoff = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%d")
-    data = client.table("linkedin_feed").select("*").gte("published_at", cutoff).order("published_at", desc=True).execute().data
+
+    data = (
+        client.table("linkedin_feed")
+        .select("*")
+        .gte("published_at", cutoff)
+        .or_(f"shown_on.is.null,shown_on.eq.{today}")
+        .order("published_at", desc=True)
+        .execute()
+        .data
+    )
+
+    # Mark unseen posts as shown today
+    unseen_ids = [row["id"] for row in data if not row.get("shown_on")]
+    for uid in unseen_ids:
+        client.table("linkedin_feed").update({"shown_on": today}).eq("id", uid).execute()
+
     return {"success": True, "data": data}
 
 
