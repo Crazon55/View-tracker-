@@ -399,7 +399,14 @@ async function fetchAllFeed(): Promise<FeedItem[]> {
     ...(xItems.status === "fulfilled" ? xItems.value : []),
   ];
 
-  return all.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+  return all.sort((a, b) => {
+    const ta = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+    const tb = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+    if (isNaN(ta) && isNaN(tb)) return 0;
+    if (isNaN(ta)) return 1;
+    if (isNaN(tb)) return -1;
+    return tb - ta;
+  });
 }
 
 // ─── Saved ────────────────────────────────────────────────────────────────────
@@ -795,8 +802,11 @@ export default function NewsFeed() {
     if (filter !== "Saved" && isArticleBlocked(item, feedback, rules)) return false;
 
     if (item.type === "linkedin" && filter !== "Saved") {
-      const t = item.publishedAt ? new Date(item.publishedAt).getTime() : 0;
-      if (!t || t < linkedInCutoff) return false;
+      if (item.publishedAt) {
+        const t = new Date(item.publishedAt).getTime();
+        if (!isNaN(t) && t < linkedInCutoff) return false;
+      }
+      // No parseable date → include (assume Apify just fetched it fresh)
     }
 
     const matchesFilter =
@@ -816,7 +826,12 @@ export default function NewsFeed() {
   const learnedPatterns = getLearnedPatternCount();
 
   const newsCount = allItems.filter((i) => i.type === "news" && !isArticleBlocked(i, feedback, rules)).length;
-  const linkedinCount = allItems.filter((i) => i.type === "linkedin" && !isArticleBlocked(i, feedback, rules) && i.publishedAt && new Date(i.publishedAt).getTime() >= linkedInCutoff).length;
+  const linkedinCount = allItems.filter((i) => {
+    if (i.type !== "linkedin" || isArticleBlocked(i, feedback, rules)) return false;
+    if (!i.publishedAt) return true; // unknown date → assume recent
+    const t = new Date(i.publishedAt).getTime();
+    return isNaN(t) || t >= linkedInCutoff;
+  }).length;
   const xCount = allItems.filter((i) => i.type === "x" && !isArticleBlocked(i, feedback, rules)).length;
 
   return (
