@@ -350,38 +350,35 @@ function persistSaved(map: Map<string, FeedItem>) {
 
 // ─── Feedback / Learning ──────────────────────────────────────────────────────
 const FEEDBACK_KEY = "nf-feedback";
-const TRIGRAMS_KEY = "nf-no-trigrams";
-const DOMAIN_VOTES_KEY = "nf-domain-votes";
+const RULES_KEY = "nf-rules";
 
-// Body fragments that indicate Tavily scraped a paywall/login page instead of real content
+// Body fragments that mean Tavily scraped a login/paywall page, not real content
 const ARTIFACT_MARKERS = [
   "{{firstname}}", "edit logout", "login / sign up", "login/sign up",
-  "subscribe to", "sign up my reads", "my account newsletters",
-  "हिंदी में", "hindi mein",
+  "sign up my reads", "my account newsletters", "हिंदी में",
 ];
 
 type Vote = "yes" | "no";
 
+// Categories the system can understand and learn to auto-block
+type ArticleCategory =
+  | "routine-filing"          // quarterly/annual BSE results from unknown company
+  | "unknown-company-finance" // profit/loss from a company nobody knows
+  | "scraping-artifact"       // body is a paywall template
+  | "general";                // everything else
+
+const CATEGORY_LABELS: Record<ArticleCategory, string> = {
+  "routine-filing": "routine quarterly filing from an unknown company",
+  "unknown-company-finance": "financial news from a company you don't cover",
+  "scraping-artifact": "article the scraper couldn't read (paywall)",
+  "general": "article",
+};
+
 function loadFeedback(): Record<string, Vote> {
   try { return JSON.parse(localStorage.getItem(FEEDBACK_KEY) || "{}"); } catch { return {}; }
 }
-function loadTrigrams(): Record<string, number> {
-  try { return JSON.parse(localStorage.getItem(TRIGRAMS_KEY) || "{}"); } catch { return {}; }
-}
-function loadDomainVotes(): Record<string, { yes: number; no: number }> {
-  try { return JSON.parse(localStorage.getItem(DOMAIN_VOTES_KEY) || "{}"); } catch { return {}; }
-}
-
-function getDomain(url: string): string {
-  try { return new URL(url).hostname.replace("www.", ""); } catch { return ""; }
-}
-
-function extractTrigrams(title: string): string[] {
-  const words = title.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean);
-  const out: string[] = [];
-  // trigrams (3-word phrases) — specific enough to not over-block
-  for (let i = 0; i < words.length - 2; i++) out.push(`${words[i]} ${words[i + 1]} ${words[i + 2]}`);
-  return out;
+function loadRules(): Set<ArticleCategory> {
+  try { return new Set(JSON.parse(localStorage.getItem(RULES_KEY) || "[]")); } catch { return new Set(); }
 }
 
 function isScrapingArtifact(body: string | null): boolean {
@@ -390,79 +387,74 @@ function isScrapingArtifact(body: string | null): boolean {
   return ARTIFACT_MARKERS.some((m) => lower.includes(m));
 }
 
-function recordNo(url: string, title: string) {
+// Reads the article itself to understand WHY it might be getting No'd.
+// One No is enough to activate a category rule — no counting required.
+function detectCategory(item: FeedItem): ArticleCategory {
+  if (item.type === "news" && isScrapingArtifact(item.body)) return "scraping-artifact";
+  // known brands are never categorised as filterable — their financial news is relevant
+  if (titleHasKnownBrand(item.title)) return "general";
+
+  const text = `${item.title} ${item.body || ""}`.toLowerCase();
+
+  // Routine BSE/NSE quarterly or annual filing:
+  // "XYZ Company reports standalone net loss of Rs N crore in March quarter"
+  const isFinancialResult =
+    (text.includes("standalone") || text.includes("consolidated")) &&
+    (text.includes("net loss") || text.includes("net profit")) &&
+    (text.includes("quarter") || /\bq[1-4]\b/.test(text) || text.includes(" fy") || /march|june|september|december/.test(text));
+  if (isFinancialResult) return "routine-filing";
+
+  // Unknown company finance: has a corporate suffix + financial language, no known brand
+  const hasCorporateSuffix =
+    / limited\b| ltd\b| pvt\b|industries\b|enterprises\b|corporation\b/.test(text);
+  const hasFinanceWord =
+    text.includes("profit") || text.includes("loss") ||
+    text.includes("revenue") || (text.includes("crore") && text.includes("report"));
+  if (hasCorporateSuffix && hasFinanceWord) return "unknown-company-finance";
+
+  return "general";
+}
+
+// Returns the category that was learned so the caller can show a useful toast.
+function recordNo(url: string, item: FeedItem): ArticleCategory {
   const fb = loadFeedback();
   fb[url] = "no";
   localStorage.setItem(FEEDBACK_KEY, JSON.stringify(fb));
 
-  // learn title trigrams
-  const trigrams = loadTrigrams();
-  for (const tg of extractTrigrams(title)) trigrams[tg] = (trigrams[tg] || 0) + 1;
-  localStorage.setItem(TRIGRAMS_KEY, JSON.stringify(trigrams));
-
-  // track domain no count
-  const dv = loadDomainVotes();
-  const d = getDomain(url);
-  if (d) { dv[d] = { yes: dv[d]?.yes || 0, no: (dv[d]?.no || 0) + 1 }; }
-  localStorage.setItem(DOMAIN_VOTES_KEY, JSON.stringify(dv));
+  const category = detectCategory(item);
+  if (category !== "general") {
+    const rules = loadRules();
+    rules.add(category);
+    localStorage.setItem(RULES_KEY, JSON.stringify([...rules]));
+  }
+  return category;
 }
 
 function recordYes(url: string) {
   const fb = loadFeedback();
   fb[url] = "yes";
   localStorage.setItem(FEEDBACK_KEY, JSON.stringify(fb));
-
-  const dv = loadDomainVotes();
-  const d = getDomain(url);
-  if (d) { dv[d] = { yes: (dv[d]?.yes || 0) + 1, no: dv[d]?.no || 0 }; }
-  localStorage.setItem(DOMAIN_VOTES_KEY, JSON.stringify(dv));
 }
 
-function getBlockedTrigrams(): Set<string> {
-  const trigrams = loadTrigrams();
-  return new Set(Object.entries(trigrams).filter(([, v]) => v >= 2).map(([k]) => k));
-}
-
-function getPenalizedDomains(): Set<string> {
-  const dv = loadDomainVotes();
-  // domain gets penalized if it has 3+ No's and more No's than Yes's
-  return new Set(
-    Object.entries(dv)
-      .filter(([, v]) => v.no >= 3 && v.no > v.yes)
-      .map(([k]) => k)
-  );
-}
-
-function isArticleBlocked(
-  item: FeedItem,
-  feedback: Record<string, Vote>,
-  blocked: Set<string>,
-  penalized: Set<string>
-): boolean {
-  // explicit No vote always hides
+function isArticleBlocked(item: FeedItem, feedback: Record<string, Vote>, rules: Set<ArticleCategory>): boolean {
+  // explicit No always hides, regardless of category
   if (feedback[item.id] === "no") return true;
-  // paywall artifact — body is navigation/login template, not real content
+  // scraping artifact — auto-blocked without needing a No
   if (item.type === "news" && isScrapingArtifact(item.body)) return true;
-
-  // known brand in title → never block via learned patterns or domain penalty
-  // e.g. "Zepto reports net loss" passes even if "net loss" pattern was learned
+  // known brand — never blocked by category rules
   if (titleHasKnownBrand(item.title)) return false;
-
-  // domain penalized by repeated No's (only applies to non-brand articles)
-  if (penalized.has(getDomain(item.url))) return true;
-  // title trigram pattern learned from 2+ No's (only applies to non-brand articles)
-  if (blocked.size > 0 && extractTrigrams(item.title).some((tg) => blocked.has(tg))) return true;
-  return false;
+  // apply learned category rules
+  const category = detectCategory(item);
+  return category !== "general" && rules.has(category);
 }
 
 function getLearnedPatternCount(): number {
-  return getBlockedTrigrams().size;
+  return loadRules().size;
 }
 
 function resetLearning() {
   localStorage.removeItem(FEEDBACK_KEY);
-  localStorage.removeItem(TRIGRAMS_KEY);
-  localStorage.removeItem(DOMAIN_VOTES_KEY);
+  localStorage.removeItem(RULES_KEY);
 }
 
 // ─── Source Badge ─────────────────────────────────────────────────────────────
@@ -648,8 +640,7 @@ export default function NewsFeed() {
   const [search, setSearch] = useState("");
   const [saved, setSaved] = useState<Map<string, FeedItem>>(loadSaved);
   const [feedback, setFeedback] = useState<Record<string, Vote>>(loadFeedback);
-  const [blocked, setBlocked] = useState<Set<string>>(getBlockedTrigrams);
-  const [penalized, setPenalized] = useState<Set<string>>(getPenalizedDomains);
+  const [rules, setRules] = useState<Set<ArticleCategory>>(loadRules);
 
   const { data: allItems = [], isLoading, isFetching, refetch, error } = useQuery({
     queryKey: ["unified-feed"],
@@ -682,25 +673,28 @@ export default function NewsFeed() {
   }
 
   function handleNo(item: FeedItem) {
-    recordNo(item.id, item.title);
+    const category = recordNo(item.id, item);
     setFeedback((prev) => ({ ...prev, [item.id]: "no" }));
-    setBlocked(getBlockedTrigrams());
-    setPenalized(getPenalizedDomains());
-    toast("Hidden — learning from this", { icon: "🚫" });
+    setRules(loadRules());
+    const label = CATEGORY_LABELS[category];
+    if (category !== "general") {
+      toast(`Hidden + learned — will auto-block ${label} from now on`, { icon: "🚫" });
+    } else {
+      toast("Hidden", { icon: "🚫" });
+    }
   }
 
   function handleResetLearning() {
     resetLearning();
     setFeedback({});
-    setBlocked(new Set());
-    setPenalized(new Set());
+    setRules(new Set());
     toast.success("Learning reset — starting fresh");
   }
 
   const baseList = filter === "Saved" ? [...saved.values()] : allItems;
 
   const filtered = baseList.filter((item) => {
-    if (filter !== "Saved" && isArticleBlocked(item, feedback, blocked, penalized)) return false;
+    if (filter !== "Saved" && isArticleBlocked(item, feedback, rules)) return false;
 
     const matchesFilter =
       filter === "All" ||
@@ -718,9 +712,9 @@ export default function NewsFeed() {
   const noCount = Object.values(feedback).filter((v) => v === "no").length;
   const learnedPatterns = getLearnedPatternCount();
 
-  const newsCount = allItems.filter((i) => i.type === "news" && !isArticleBlocked(i, feedback, blocked, penalized)).length;
-  const linkedinCount = allItems.filter((i) => i.type === "linkedin" && !isArticleBlocked(i, feedback, blocked, penalized)).length;
-  const xCount = allItems.filter((i) => i.type === "x" && !isArticleBlocked(i, feedback, blocked, penalized)).length;
+  const newsCount = allItems.filter((i) => i.type === "news" && !isArticleBlocked(i, feedback, rules)).length;
+  const linkedinCount = allItems.filter((i) => i.type === "linkedin" && !isArticleBlocked(i, feedback, rules)).length;
+  const xCount = allItems.filter((i) => i.type === "x" && !isArticleBlocked(i, feedback, rules)).length;
 
   return (
     <div className="min-h-screen bg-zinc-950 pt-20 pb-16 px-4 sm:px-6">
