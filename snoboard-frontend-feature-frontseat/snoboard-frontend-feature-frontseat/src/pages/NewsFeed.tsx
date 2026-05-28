@@ -58,9 +58,6 @@ const NEWS_QUERIES = [
   "popular Indian company startup founder news today",
 ];
 
-// Minimum Tavily relevance score — drops low-quality/irrelevant matches
-const MIN_SCORE = 0.4;
-
 // Article must contain at least one of these to pass — prevents global news leaking in
 const INDIA_REQUIRED_KEYWORDS = [
   "india", "indian", "shark tank", "msme", "rupee", "crore", "lakh",
@@ -68,6 +65,12 @@ const INDIA_REQUIRED_KEYWORDS = [
   "mamaearth", "boat", "cred", "zerodha", "groww", "nykaa", "blinkit",
   "razorpay", "freshworks", "infosys", "tata", "reliance", "adani",
   "ambani", "mukesh", "ratan", "byju", "unacademy", "vedantu",
+  "bengaluru", "bangalore", "mumbai", "delhi", "hyderabad", "pune",
+  "ola electric", "ather", "dunzo", "curefit", "licious", "mensa",
+  "oyo", "myntra", "bigbasket", "pepperfry", "urban company",
+  "nazara", "dream11", "games24x7", "khatabook", "ofbusiness",
+  "namita", "anupam mittal", "aman gupta", "kunal shah", "ghazal",
+  "nikhil kamath", "nithin kamath", "peyush bansal", "vineeta singh",
 ];
 
 // ─── Unified Feed Item Type ───────────────────────────────────────────────────
@@ -178,8 +181,8 @@ async function fetchNews(): Promise<FeedItem[]> {
           api_key: TAVILY_API_KEY,
           query,
           topic: "news",
-          days: 1,
-          max_results: 10,
+          days: 2,
+          max_results: 20,
           search_depth: "advanced",
           include_answer: false,
           include_domains: NEWS_DOMAINS,
@@ -198,14 +201,9 @@ async function fetchNews(): Promise<FeedItem[]> {
     if (r.status !== "fulfilled") continue;
     for (const item of r.value) {
       if (!item.title || !item.url || seen.has(item.url)) continue;
-      if ((item.score ?? 0) < MIN_SCORE) continue;
-      const pubDate = item.published_date ?? new Date().toISOString();
-      if (!isTodayIST(pubDate)) continue;
       const text = `${item.title} ${item.content || ""}`.toLowerCase();
       const isIndia = INDIA_REQUIRED_KEYWORDS.some((k) => text.includes(k));
       if (!isIndia) continue;
-      const matched = getMatchedKeywords(text);
-      if (matched.length === 0) continue;
       seen.add(item.url);
       items.push({
         id: item.url,
@@ -215,7 +213,7 @@ async function fetchNews(): Promise<FeedItem[]> {
         url: item.url,
         source: sourceLabel(item.url),
         publishedAt: item.published_date ?? new Date().toISOString(),
-        matchedKeywords: matched,
+        matchedKeywords: getMatchedKeywords(text),
       });
     }
   }
