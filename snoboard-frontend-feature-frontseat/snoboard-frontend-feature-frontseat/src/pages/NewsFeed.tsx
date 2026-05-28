@@ -163,28 +163,36 @@ function sourceLabel(url: string): string {
 }
 
 function parseLinkedInDate(item: any): string {
-  // Try standard absolute date fields
+  // Try absolute date fields first
   const abs = item.publishedAt || item.date || item.postedAt || item.createdAt || item.postedDate;
-  if (abs) {
+  if (abs && typeof abs === "string" && abs.match(/\d{4}/)) {
     const d = new Date(abs);
     if (!isNaN(d.getTime())) return d.toISOString();
   }
-  // Handle relative formats: "6d", "2h", "1w", "3mo", "just now"
-  const rel: string = item.timeSincePosted || item.time || item.relativeTime || abs || "";
+
+  // Handle relative formats: "5d", "2h", "1w", "3mo", "5 days", "5 days ago", "just now"
+  const rel: string = item.timeSincePosted || item.time || item.relativeTime || "";
   if (rel) {
     const now = Date.now();
-    const m = rel.match(/^(\d+)\s*(s|m|h|d|w|mo|y)/i);
+    if (/just now|moments? ago/i.test(rel)) return new Date(now - 60000).toISOString();
+    const m = rel.match(/(\d+)\s*(s(?:ec(?:ond)?s?)?|m(?:in(?:ute)?s?)?|h(?:ou?r?s?)?|d(?:ay?s?)?|w(?:ee?k?s?)?|mo(?:nth?s?)?|y(?:ea?r?s?)?)/i);
     if (m) {
       const n = parseInt(m[1]);
-      const unit = m[2].toLowerCase();
-      const ms: Record<string, number> = {
-        s: 1000, m: 60000, h: 3600000,
-        d: 86400000, w: 604800000, mo: 2592000000, y: 31536000000,
-      };
-      return new Date(now - n * (ms[unit] || 0)).toISOString();
+      const u = m[2].toLowerCase();
+      const ms =
+        u.startsWith("s") ? 1000 :
+        u.startsWith("mo") ? 2592000000 :
+        u.startsWith("m") ? 60000 :
+        u.startsWith("h") ? 3600000 :
+        u.startsWith("d") ? 86400000 :
+        u.startsWith("w") ? 604800000 :
+        u.startsWith("y") ? 31536000000 : 0;
+      if (ms) return new Date(now - n * ms).toISOString();
     }
   }
-  return new Date().toISOString();
+
+  // Unknown date — use a week ago so it doesn't appear as today
+  return new Date(Date.now() - 7 * 86400000).toISOString();
 }
 
 function getMatchedKeywords(text: string): string[] {
