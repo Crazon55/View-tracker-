@@ -233,10 +233,18 @@ async function fetchNews(): Promise<FeedItem[]> {
   const seen = new Set<string>();
   const items: FeedItem[] = [];
 
+  const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
+
   for (const r of results) {
     if (r.status !== "fulfilled") continue;
     for (const item of r.value) {
       if (!item.title || !item.url || seen.has(item.url)) continue;
+
+      // Hard date gate — no date or older than 3 days = skip entirely
+      if (!item.published_date) continue;
+      const pubDate = new Date(item.published_date);
+      if (isNaN(pubDate.getTime()) || pubDate.getTime() < threeDaysAgo) continue;
+
       const text = `${item.title} ${item.content || ""}`.toLowerCase();
       const isIndia = INDIA_REQUIRED_KEYWORDS.some((k) => text.includes(k));
       if (!isIndia) continue;
@@ -248,7 +256,7 @@ async function fetchNews(): Promise<FeedItem[]> {
         body: item.content?.slice(0, 350) || null,
         url: item.url,
         source: sourceLabel(item.url),
-        publishedAt: item.published_date ?? new Date().toISOString(),
+        publishedAt: item.published_date,
         matchedKeywords: getMatchedKeywords(text),
       });
     }
