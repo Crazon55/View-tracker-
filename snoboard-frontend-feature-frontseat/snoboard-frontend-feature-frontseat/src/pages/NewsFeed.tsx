@@ -302,6 +302,12 @@ async function fetchNews(): Promise<FeedItem[]> {
 async function fetchLinkedIn(): Promise<FeedItem[]> {
   if (!APIFY_TOKEN) return [];
 
+  // Compute 3-day window — Apify filters posts at source
+  const today = new Date();
+  const threeDaysAgo = new Date(today.getTime() - 3 * 24 * 60 * 60 * 1000);
+  const endDate = today.toISOString().slice(0, 10);     // YYYY-MM-DD
+  const startDate = threeDaysAgo.toISOString().slice(0, 10);
+
   const results = await Promise.allSettled(
     LINKEDIN_HANDLES.map(async (handle) => {
       const res = await fetch(
@@ -309,7 +315,12 @@ async function fetchLinkedIn(): Promise<FeedItem[]> {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: handle.username, limit: 3 }),
+          body: JSON.stringify({
+            username: handle.username,
+            limit: 5,
+            start: startDate,
+            end: endDate,
+          }),
           signal: AbortSignal.timeout(130000),
         }
       );
@@ -433,7 +444,7 @@ function persistSaved(map: Map<string, FeedItem>) {
 }
 
 // ─── Feed Cache (persists across page refreshes) ──────────────────────────────
-const FEED_CACHE_KEY = "news-feed-cache-v2";
+const FEED_CACHE_KEY = "news-feed-cache-v3";
 const FEED_CACHE_TTL = 8 * 60 * 60 * 1000; // 8 hours
 
 function loadFeedCache(): { items: FeedItem[]; ts: number } | null {
