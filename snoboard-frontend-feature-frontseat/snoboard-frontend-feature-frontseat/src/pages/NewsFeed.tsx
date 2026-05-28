@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ExternalLink, RefreshCw, Bookmark, BookmarkCheck, Search, Linkedin, TrendingUp, Newspaper, ThumbsUp, MessageSquare } from "lucide-react";
+import { ExternalLink, RefreshCw, Bookmark, BookmarkCheck, Search, Linkedin, TrendingUp, Newspaper, ThumbsUp, ThumbsDown, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ─── API Keys ─────────────────────────────────────────────────────────────────
@@ -320,6 +320,58 @@ function persistSaved(map: Map<string, FeedItem>) {
   localStorage.setItem(SAVED_KEY, JSON.stringify([...map.values()]));
 }
 
+// ─── Feedback / Learning ──────────────────────────────────────────────────────
+const FEEDBACK_KEY = "nf-feedback";
+const BIGRAMS_KEY = "nf-no-bigrams";
+
+type Vote = "yes" | "no";
+
+function loadFeedback(): Record<string, Vote> {
+  try { return JSON.parse(localStorage.getItem(FEEDBACK_KEY) || "{}"); } catch { return {}; }
+}
+function loadBigrams(): Record<string, number> {
+  try { return JSON.parse(localStorage.getItem(BIGRAMS_KEY) || "{}"); } catch { return {}; }
+}
+
+function extractBigrams(title: string): string[] {
+  const words = title.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean);
+  const out: string[] = [];
+  for (let i = 0; i < words.length - 1; i++) out.push(`${words[i]} ${words[i + 1]}`);
+  return out;
+}
+
+function recordNo(url: string, title: string) {
+  const fb = loadFeedback();
+  fb[url] = "no";
+  localStorage.setItem(FEEDBACK_KEY, JSON.stringify(fb));
+  const bigrams = loadBigrams();
+  for (const bg of extractBigrams(title)) bigrams[bg] = (bigrams[bg] || 0) + 1;
+  localStorage.setItem(BIGRAMS_KEY, JSON.stringify(bigrams));
+}
+
+function recordYes(url: string) {
+  const fb = loadFeedback();
+  fb[url] = "yes";
+  localStorage.setItem(FEEDBACK_KEY, JSON.stringify(fb));
+}
+
+function getBlockedBigrams(): Set<string> {
+  const bigrams = loadBigrams();
+  return new Set(Object.entries(bigrams).filter(([, v]) => v >= 2).map(([k]) => k));
+}
+
+function isArticleBlocked(item: FeedItem, feedback: Record<string, Vote>, blocked: Set<string>): boolean {
+  if (feedback[item.id] === "no") return true;
+  if (blocked.size === 0) return false;
+  const bgs = extractBigrams(item.title);
+  return bgs.some((bg) => blocked.has(bg));
+}
+
+function resetLearning() {
+  localStorage.removeItem(FEEDBACK_KEY);
+  localStorage.removeItem(BIGRAMS_KEY);
+}
+
 // ─── Source Badge ─────────────────────────────────────────────────────────────
 function SourceBadge({ item }: { item: FeedItem }) {
   if (item.type === "linkedin") {
@@ -351,14 +403,25 @@ function FeedCard({
   idx,
   isSaved,
   onSave,
+  vote,
+  onYes,
+  onNo,
 }: {
   item: FeedItem;
   idx: number;
   isSaved: boolean;
   onSave: (item: FeedItem) => void;
+  vote: Vote | null;
+  onYes: (item: FeedItem) => void;
+  onNo: (item: FeedItem) => void;
 }) {
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 border-t-2 border-t-amber-500/50 hover:border-zinc-700 hover:bg-zinc-900/70 transition-all duration-150">
+    <div className={cn(
+      "rounded-2xl border bg-zinc-900/40 border-t-2 hover:border-zinc-700 hover:bg-zinc-900/70 transition-all duration-150",
+      vote === "yes"
+        ? "border-emerald-800 border-t-emerald-500/60"
+        : "border-zinc-800 border-t-amber-500/50"
+    )}>
       <div className="p-5 sm:p-6">
         {/* Byline row */}
         <div className="flex items-center gap-2 mb-3">
@@ -437,6 +500,31 @@ function FeedCard({
               <ExternalLink className="w-3 h-3" />
               {item.type === "linkedin" ? "View Post" : "Read"}
             </a>
+
+            {/* Yes / No feedback */}
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => onYes(item)}
+                title="Good content — learn more like this"
+                className={cn(
+                  "inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors",
+                  vote === "yes"
+                    ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
+                    : "bg-white/[0.03] border-white/10 text-zinc-500 hover:bg-emerald-500/10 hover:border-emerald-500/30 hover:text-emerald-400"
+                )}
+              >
+                <ThumbsUp className="w-3 h-3" />
+              </button>
+              <button
+                onClick={() => onNo(item)}
+                title="Not relevant — hide and learn to block similar"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border bg-white/[0.03] border-white/10 text-zinc-500 hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-400 transition-colors"
+              >
+                <ThumbsDown className="w-3 h-3" />
+              </button>
+            </div>
+
+            {/* Save */}
             <button
               onClick={() => onSave(item)}
               className={cn(
@@ -466,6 +554,8 @@ export default function NewsFeed() {
   const [filter, setFilter] = useState<FilterTab>("All");
   const [search, setSearch] = useState("");
   const [saved, setSaved] = useState<Map<string, FeedItem>>(loadSaved);
+  const [feedback, setFeedback] = useState<Record<string, Vote>>(loadFeedback);
+  const [blocked, setBlocked] = useState<Set<string>>(getBlockedBigrams);
 
   const { data: allItems = [], isLoading, isFetching, refetch, error } = useQuery({
     queryKey: ["unified-feed"],
@@ -491,9 +581,31 @@ export default function NewsFeed() {
     });
   }
 
+  function handleYes(item: FeedItem) {
+    recordYes(item.id);
+    setFeedback((prev) => ({ ...prev, [item.id]: "yes" }));
+    toast.success("Got it — more like this");
+  }
+
+  function handleNo(item: FeedItem) {
+    recordNo(item.id, item.title);
+    setFeedback((prev) => ({ ...prev, [item.id]: "no" }));
+    setBlocked(getBlockedBigrams());
+    toast("Hidden — learning from this", { icon: "🚫" });
+  }
+
+  function handleResetLearning() {
+    resetLearning();
+    setFeedback({});
+    setBlocked(new Set());
+    toast.success("Learning reset — starting fresh");
+  }
+
   const baseList = filter === "Saved" ? [...saved.values()] : allItems;
 
   const filtered = baseList.filter((item) => {
+    if (filter !== "Saved" && isArticleBlocked(item, feedback, blocked)) return false;
+
     const matchesFilter =
       filter === "All" ||
       filter === "Saved" ||
@@ -507,9 +619,12 @@ export default function NewsFeed() {
     return matchesFilter && matchesSearch;
   });
 
-  const newsCount = allItems.filter((i) => i.type === "news").length;
-  const linkedinCount = allItems.filter((i) => i.type === "linkedin").length;
-  const xCount = allItems.filter((i) => i.type === "x").length;
+  const noCount = Object.values(feedback).filter((v) => v === "no").length;
+  const learnedPatterns = [...blocked].length;
+
+  const newsCount = allItems.filter((i) => i.type === "news" && !isArticleBlocked(i, feedback, blocked)).length;
+  const linkedinCount = allItems.filter((i) => i.type === "linkedin" && !isArticleBlocked(i, feedback, blocked)).length;
+  const xCount = allItems.filter((i) => i.type === "x" && !isArticleBlocked(i, feedback, blocked)).length;
 
   return (
     <div className="min-h-screen bg-zinc-950 pt-20 pb-16 px-4 sm:px-6">
@@ -544,6 +659,19 @@ export default function NewsFeed() {
                 <RefreshCw className={cn("w-2.5 h-2.5", isFetching && "animate-spin")} />
                 {isFetching ? "Fetching…" : "Fetch Edition"}
               </button>
+              {(noCount > 0 || learnedPatterns > 0) && (
+                <div className="flex items-center gap-2 mt-1 justify-end">
+                  <span className="text-[7px] tracking-[0.15em] text-zinc-700 font-sans">
+                    {noCount} hidden · {learnedPatterns} patterns learned
+                  </span>
+                  <button
+                    onClick={handleResetLearning}
+                    className="text-[7px] tracking-[0.15em] uppercase text-zinc-700 hover:text-red-500 transition-colors font-sans"
+                  >
+                    Reset
+                  </button>
+                </div>
+              )}
             </div>
           </div>
           <div className="h-px bg-zinc-700 mt-4 mb-0.5" />
@@ -678,6 +806,9 @@ export default function NewsFeed() {
                 idx={idx}
                 isSaved={saved.has(item.id)}
                 onSave={toggleSave}
+                vote={feedback[item.id] ?? null}
+                onYes={handleYes}
+                onNo={handleNo}
               />
             ))}
           </div>
