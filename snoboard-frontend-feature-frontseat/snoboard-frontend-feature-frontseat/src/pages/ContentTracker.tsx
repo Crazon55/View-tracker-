@@ -863,7 +863,7 @@ export default function ContentTracker(){
   const [dateFrom,setDateFrom]=useState(monthStart());
   const [dateTo,setDateTo]=useState(today());
   const [sourceFilter,setSourceFilter]=useState<"all"|"original"|"competitor">("all");
-  const [boardMonthMode,setBoardMonthMode]=useState<"month"|"all">("month");
+  const [boardMonthMode,setBoardMonthMode]=useState<"month"|"all">("all");
   const [boardMonthDate,setBoardMonthDate]=useState(currentBoardMonthDate);
   const boardMonthPrefix = boardMonthPrefixFromDate(boardMonthDate);
   const boardMonthLabel = boardMonthLabelFromDate(boardMonthDate);
