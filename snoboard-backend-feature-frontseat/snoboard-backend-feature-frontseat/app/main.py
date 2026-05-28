@@ -4662,3 +4662,55 @@ async def x_feed():
         "as_of": datetime.now(timezone.utc).isoformat(),
     }
     return {"success": True}
+
+
+# ===================== LinkedIn Feed =====================
+
+@app.post("/api/v1/linkedin-feed/ingest")
+async def linkedin_feed_ingest(request: Request):
+    """Receive LinkedIn posts from n8n and store in Supabase. Deduplicates by URL."""
+    client = get_supabase_client()
+    body = await request.json()
+    items = body if isinstance(body, list) else [body]
+
+    inserted, skipped = 0, 0
+    for item in items:
+        url = (item.get("url") or "").strip()
+        if not url:
+            skipped += 1
+            continue
+
+        existing = client.table("linkedin_feed").select("id").eq("url", url).execute()
+        if existing.data:
+            skipped += 1
+            continue
+
+        row = {
+            "name": (item.get("name") or "").strip(),
+            "body": (item.get("body") or "").strip(),
+            "url": url,
+            "published_at": (item.get("publishedAt") or "").strip() or None,
+            "likes": int(item.get("likes") or 0),
+            "comments": int(item.get("comments") or 0),
+            "author_url": (item.get("authorUrl") or "").strip() or None,
+        }
+        client.table("linkedin_feed").insert(row).execute()
+        inserted += 1
+
+    return {"success": True, "inserted": inserted, "skipped": skipped}
+
+
+@app.get("/api/v1/linkedin-feed")
+async def linkedin_feed_list():
+    """Return LinkedIn posts from the last 3 days."""
+    client = get_supabase_client()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%d")
+    data = (
+        client.table("linkedin_feed")
+        .select("*")
+        .gte("published_at", cutoff)
+        .order("published_at", desc=True)
+        .execute()
+        .data
+    )
+    return {"success": True, "data": data}
