@@ -2,7 +2,10 @@
 import os
 import hashlib
 import requests as http_req
+from dotenv import load_dotenv
 from datetime import datetime, timezone, timedelta
+
+load_dotenv()
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
