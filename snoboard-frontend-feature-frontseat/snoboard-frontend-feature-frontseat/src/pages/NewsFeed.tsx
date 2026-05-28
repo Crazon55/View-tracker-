@@ -298,30 +298,53 @@ async function fetchNews(): Promise<FeedItem[]> {
   return items;
 }
 
-// ─── Fetch: LinkedIn (via backend — populated by n8n) ────────────────────────
+// ─── Fetch: LinkedIn ──────────────────────────────────────────────────────────
 async function fetchLinkedIn(): Promise<FeedItem[]> {
-  try {
-    const res = await fetch(`${BACKEND_URL}/api/v1/linkedin-feed`, {
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return (data.data ?? []).map((item: any): FeedItem => ({
-      id: item.url || item.id,
-      type: "linkedin",
-      title: item.name || "LinkedIn",
-      body: item.body || "",
-      url: item.url,
-      source: "LinkedIn",
-      publishedAt: item.published_at || "",
-      matchedKeywords: getMatchedKeywords(item.body || ""),
-      authorUrl: item.author_url || "",
-      likes: item.likes || 0,
-      comments: item.comments || 0,
-    }));
-  } catch {
-    return [];
-  }
+  if (!APIFY_TOKEN) return [];
+
+  // Compute 3-day window — Apify filters posts at source
+  const today = new Date();
+  const threeDaysAgo = new Date(today.getTime() - 3 * 24 * 60 * 60 * 1000);
+  const endDate = today.toISOString().slice(0, 10);     // YYYY-MM-DD
+  const startDate = threeDaysAgo.toISOString().slice(0, 10);
+
+  const results = await Promise.allSettled(
+    LINKEDIN_HANDLES.map(async (handle) => {
+      const res = await fetch(
+        `https://api.apify.com/v2/acts/${LINKEDIN_ACTOR_ID}/run-sync-get-dataset-items?token=${APIFY_TOKEN}&timeout=120`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: handle.username,
+            limit: 5,
+            start: startDate,
+            end: endDate,
+          }),
+          signal: AbortSignal.timeout(130000),
+        }
+      );
+      if (!res.ok) return [] as FeedItem[];
+      const items: any[] = await res.json();
+      return items.map((item): FeedItem => ({
+        id: item.url || item.id || crypto.randomUUID(),
+        type: "linkedin",
+        title: handle.name,
+        body: item.text || item.content || item.description || "",
+        url: item.url || item.postUrl || handle.url,
+        source: "LinkedIn",
+        publishedAt: parseLinkedInDate(item),
+        matchedKeywords: getMatchedKeywords(item.text || item.content || ""),
+        authorUrl: handle.url,
+        likes: item.likes || item.likeCount || item.numLikes || 0,
+        comments: item.comments || item.commentCount || item.numComments || 0,
+      }));
+    })
+  );
+
+  return results
+    .filter((r): r is PromiseFulfilledResult<FeedItem[]> => r.status === "fulfilled")
+    .flatMap((r) => r.value);
 }
 
 // ─── Fetch: X Trending + Explorer via backend proxy ──────────────────────────
