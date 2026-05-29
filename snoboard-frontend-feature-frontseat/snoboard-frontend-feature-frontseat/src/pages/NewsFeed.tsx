@@ -237,65 +237,26 @@ function formatDate(dateStr: string): string {
   });
 }
 
-// ─── Fetch: News ──────────────────────────────────────────────────────────────
+// ─── Fetch: News (from backend → Supabase, never Tavily direct) ──────────────
 async function fetchNews(): Promise<FeedItem[]> {
-  if (!TAVILY_API_KEY) throw new Error("VITE_TAVILY_API_KEY is not set");
-
-  const results = await Promise.allSettled(
-    NEWS_QUERIES.map((query) =>
-      fetch(TAVILY_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          api_key: TAVILY_API_KEY,
-          query,
-          topic: "news",
-          days: 2,
-          max_results: 20,
-          search_depth: "advanced",
-          include_answer: false,
-          include_domains: NEWS_DOMAINS,
-        }),
-        signal: AbortSignal.timeout(15000),
-      })
-        .then((r) => (r.ok ? r.json() : { results: [] }))
-        .then((d) => d.results ?? [])
-    )
-  );
-
-  const seen = new Set<string>();
-  const items: FeedItem[] = [];
-
-  const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
-
-  for (const r of results) {
-    if (r.status !== "fulfilled") continue;
-    for (const item of r.value) {
-      if (!item.title || !item.url || seen.has(item.url)) continue;
-
-      // Hard date gate — no date or older than 3 days = skip entirely
-      if (!item.published_date) continue;
-      const pubDate = new Date(item.published_date);
-      if (isNaN(pubDate.getTime()) || pubDate.getTime() < threeDaysAgo) continue;
-
-      const text = `${item.title} ${item.content || ""}`.toLowerCase();
-      const isIndia = INDIA_REQUIRED_KEYWORDS.some((k) => text.includes(k));
-      if (!isIndia) continue;
-      seen.add(item.url);
-      items.push({
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/v1/news-articles`, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.data ?? []).map((item: any): FeedItem => {
+      const text = `${item.title} ${item.body || ""}`;
+      return {
         id: item.url,
         type: "news",
         title: item.title,
-        body: item.content?.slice(0, 350) || null,
+        body: item.body || null,
         url: item.url,
-        source: sourceLabel(item.url),
-        publishedAt: item.published_date,
+        source: item.source || "News",
+        publishedAt: item.published_date || "",
         matchedKeywords: getMatchedKeywords(text),
-      });
-    }
-  }
-
-  return items;
+      };
+    });
+  } catch { return []; }
 }
 
 // ─── Fetch: LinkedIn (via backend — populated by n8n) ────────────────────────
@@ -805,10 +766,11 @@ export default function NewsFeed() {
     refetch();
   }
 
-  // Auto-scrape at 11:10 AM IST
+  // Auto-scrape at 11:10 AM IST — backend calls Tavily (once/day), frontend reads from Supabase
   useEffect(() => {
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
       if (getISTMinutes() === 11 * 60 + 10) {
+        try { await fetch(`${BACKEND_URL}/api/v1/news-articles/scrape`, { method: "POST" }); } catch {}
         forceRef.current = true;
         refetch();
       }
