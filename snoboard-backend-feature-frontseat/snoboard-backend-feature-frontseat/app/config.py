@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     instagram_actor_id: str = "apify/instagram-post-scraper"
     instagram_profile_actor_id: str = "xMc5Ga1oCONPmWJIa"
 
+    # Tavily (News scraping)
+    tavily_api_key: str = ""
+
     # Anthropic (Claude AI)
     anthropic_api_key: str = ""
 

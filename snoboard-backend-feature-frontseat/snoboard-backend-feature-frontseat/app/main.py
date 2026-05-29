@@ -4719,6 +4719,164 @@ async def linkedin_feed_list():
     return {"success": True, "data": data}
 
 
+# ===================== News Articles (Tavily → Supabase) =====================
+
+_NEWS_DOMAINS = [
+    "inc42.com", "yourstory.com", "entrackr.com", "moneycontrol.com",
+    "economictimes.indiatimes.com", "firstpost.com", "business-standard.com",
+    "thehindubusinessline.com", "businessinsider.in", "indianstartupnews.com",
+    "fortuneindia.com", "indiatoday.in", "indianexpress.com", "livemint.com",
+    "techcrunch.com",
+]
+
+_NEWS_QUERIES = [
+    "India startup founder breaking news today viral",
+    "Indian billionaire businessman wealth India trending today",
+    "India startup unicorn IPO funding announcement today",
+    "Shark Tank India founder Indian brand viral news",
+    "India business scandal controversy trending today",
+    "popular Indian company startup founder news today",
+    "Indian startup funding unicorn IPO India today",
+    "Shark Tank India founders Indian brands D2C news today",
+    "Indian founder startup valuation revenue profit India",
+    "Make in India MSME Startup India news today",
+    "India breaking startup business news today",
+    "Indian billionaire businessman wealth India news",
+    "popular Indian company brand news today",
+    "Indian unicorn decacorn IPO funding announcement",
+]
+
+_INDIA_KEYWORDS = [
+    "india", "indian", "shark tank", "msme", "rupee", "crore", "lakh",
+    "zepto", "zomato", "swiggy", "ola", "paytm", "flipkart", "meesho",
+    "mamaearth", "boat", "cred", "zerodha", "groww", "nykaa", "blinkit",
+    "razorpay", "freshworks", "infosys", "tata", "reliance", "adani",
+    "ambani", "mukesh", "ratan", "byju", "unacademy", "vedantu",
+    "bengaluru", "bangalore", "mumbai", "delhi", "hyderabad", "pune",
+    "oyo", "myntra", "bigbasket", "urban company",
+    "nazara", "dream11", "khatabook", "ofbusiness",
+    "namita", "anupam mittal", "aman gupta", "kunal shah", "ghazal",
+    "nikhil kamath", "nithin kamath", "peyush bansal", "vineeta singh",
+]
+
+_NEWS_SOURCE_MAP = {
+    "inc42.com": "Inc42", "yourstory.com": "YourStory", "entrackr.com": "Entrackr",
+    "moneycontrol.com": "Moneycontrol", "economictimes.indiatimes.com": "Economic Times",
+    "firstpost.com": "Firstpost", "business-standard.com": "Business Standard",
+    "thehindubusinessline.com": "Hindu BL", "businessinsider.in": "Business Insider",
+    "indianstartupnews.com": "Indian Startup News", "fortuneindia.com": "Fortune India",
+    "indiatoday.in": "India Today", "indianexpress.com": "Indian Express",
+    "livemint.com": "Mint", "techcrunch.com": "TechCrunch",
+}
+
+
+def _news_source_label(url: str) -> str:
+    try:
+        from urllib.parse import urlparse
+        host = urlparse(url).hostname.replace("www.", "")
+        for k, v in _NEWS_SOURCE_MAP.items():
+            if k in host:
+                return v
+        return host
+    except:
+        return "News"
+
+
+@app.post("/api/v1/news-articles/scrape")
+async def news_articles_scrape():
+    """Fetch from Tavily and store in news_articles. Idempotent — skips if already scraped today."""
+    import asyncio
+    import requests as req_lib
+
+    client = get_supabase_client()
+    settings = get_settings()
+
+    if not settings.tavily_api_key:
+        raise HTTPException(status_code=500, detail="TAVILY_API_KEY not configured on server")
+
+    today = datetime.now(timezone.utc).date().isoformat()
+    existing = client.table("news_articles").select("id").gte("created_at", today).limit(1).execute().data
+    if existing:
+        return {"success": True, "message": "already scraped today", "inserted": 0}
+
+    def _fetch_query(query: str) -> list:
+        try:
+            r = req_lib.post(
+                "https://api.tavily.com/search",
+                json={
+                    "api_key": settings.tavily_api_key,
+                    "query": query,
+                    "topic": "news",
+                    "days": 2,
+                    "max_results": 20,
+                    "search_depth": "advanced",
+                    "include_answer": False,
+                    "include_domains": _NEWS_DOMAINS,
+                },
+                timeout=20,
+            )
+            return r.json().get("results", []) if r.ok else []
+        except:
+            return []
+
+    results = await asyncio.gather(*[asyncio.to_thread(_fetch_query, q) for q in _NEWS_QUERIES])
+
+    seen: set = set()
+    items = []
+    three_days_ago = datetime.now(timezone.utc) - timedelta(days=3)
+
+    for result_list in results:
+        for item in result_list:
+            url = (item.get("url") or "").strip()
+            if not url or url in seen or not item.get("title") or not item.get("published_date"):
+                continue
+            try:
+                pub = datetime.fromisoformat(item["published_date"].replace("Z", "+00:00"))
+                if pub.tzinfo is None:
+                    pub = pub.replace(tzinfo=timezone.utc)
+                if pub < three_days_ago:
+                    continue
+            except:
+                continue
+            text = f"{item['title']} {item.get('content', '')}".lower()
+            if not any(k in text for k in _INDIA_KEYWORDS):
+                continue
+            seen.add(url)
+            items.append({
+                "title": item["title"],
+                "url": url,
+                "body": (item.get("content") or "")[:500],
+                "source": _news_source_label(url),
+                "published_date": item["published_date"],
+            })
+
+    inserted = 0
+    for item in items:
+        try:
+            client.table("news_articles").insert(item).execute()
+            inserted += 1
+        except:
+            pass
+
+    return {"success": True, "inserted": inserted, "total_found": len(items)}
+
+
+@app.get("/api/v1/news-articles")
+async def news_articles_list():
+    """Return news articles from the last 2 days."""
+    client = get_supabase_client()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+    data = (
+        client.table("news_articles")
+        .select("*")
+        .gte("created_at", cutoff)
+        .order("published_date", desc=True, nullsfirst=False)
+        .execute()
+        .data
+    )
+    return {"success": True, "data": data}
+
+
 # ===================== News Feed Feedback =====================
 
 @app.post("/api/v1/news-feed/feedback")
