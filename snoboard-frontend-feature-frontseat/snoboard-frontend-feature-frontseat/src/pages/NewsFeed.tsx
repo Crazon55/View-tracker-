@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ExternalLink, RefreshCw, Bookmark, BookmarkCheck, Search, Linkedin, TrendingUp, Newspaper, ThumbsUp, ThumbsDown, MessageSquare, Heart, Repeat2 } from "lucide-react";
@@ -244,15 +244,15 @@ async function fetchNews(): Promise<FeedItem[]> {
     if (!res.ok) return [];
     const data = await res.json();
     return (data.data ?? []).map((item: any): FeedItem => {
-      const text = `${item.title} ${item.body || ""}`;
+      const text = `${item.title} ${item.summary || ""}`;
       return {
         id: item.url,
         type: "news",
         title: item.title,
-        body: item.body || null,
+        body: item.summary || null,
         url: item.url,
         source: item.source || "News",
-        publishedAt: item.published_date || "",
+        publishedAt: item.created_at || "",
         matchedKeywords: getMatchedKeywords(text),
       };
     });
@@ -386,26 +386,6 @@ async function addSaved(item: FeedItem) {
 
 async function removeSaved(item: FeedItem) {
   await fetch(`${BACKEND_URL}/api/v1/news-feed/saved/${encodeURIComponent(item.url)}`, { method: "DELETE" });
-}
-
-// ─── Feed Cache (persists across page refreshes) ──────────────────────────────
-const FEED_CACHE_KEY = "news-feed-cache-v6";
-const FEED_CACHE_TTL = 8 * 60 * 60 * 1000; // 8 hours
-
-function loadFeedCache(): { items: FeedItem[]; ts: number } | null {
-  try {
-    const raw = localStorage.getItem(FEED_CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed?.items || !parsed?.ts) return null;
-    return parsed;
-  } catch { return null; }
-}
-
-function saveFeedCache(items: FeedItem[]) {
-  try {
-    localStorage.setItem(FEED_CACHE_KEY, JSON.stringify({ ts: Date.now(), items }));
-  } catch {}
 }
 
 // ─── Feedback / Learning (Supabase via backend) ───────────────────────────────
@@ -740,43 +720,17 @@ export default function NewsFeed() {
     fetchFeedback().then(setFeedback);
   }, []);
 
-  const forceRef = useRef(false);
-  const cachedFeed = loadFeedCache();
-
   const { data: allItems = [], isLoading, isFetching, refetch, error } = useQuery({
     queryKey: ["unified-feed"],
-    queryFn: async () => {
-      if (!forceRef.current) {
-        const cache = loadFeedCache();
-        if (cache && Date.now() - cache.ts < FEED_CACHE_TTL) return cache.items;
-      }
-      forceRef.current = false;
-      const items = await fetchAllFeed();
-      saveFeedCache(items);
-      return items;
-    },
-    initialData: cachedFeed && Date.now() - cachedFeed.ts < FEED_CACHE_TTL ? cachedFeed.items : undefined,
-    staleTime: Infinity,
-    refetchInterval: false,
+    queryFn: fetchAllFeed,
+    staleTime: 0,
+    refetchOnWindowFocus: false,
     retry: 1,
   });
 
   function handleScrape() {
-    forceRef.current = true;
     refetch();
   }
-
-  // Auto-scrape at 11:10 AM IST — backend calls Tavily (once/day), frontend reads from Supabase
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      if (getISTMinutes() === 11 * 60 + 10) {
-        try { await fetch(`${BACKEND_URL}/api/v1/news-articles/scrape`, { method: "POST" }); } catch {}
-        forceRef.current = true;
-        refetch();
-      }
-    }, 60 * 1000);
-    return () => clearInterval(interval);
-  }, [refetch]);
 
   function toggleSave(item: FeedItem) {
     setSaved((prev) => {
