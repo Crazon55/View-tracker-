@@ -4783,11 +4783,9 @@ def _news_source_label(url: str) -> str:
 
 
 @app.post("/api/v1/news-articles/scrape")
-async def news_articles_scrape():
+def news_articles_scrape():
     """Fetch from Tavily and store in news_articles. Idempotent — skips if already scraped today."""
     import requests as req_lib
-    from concurrent.futures import ThreadPoolExecutor
-    import asyncio
 
     client = get_supabase_client()
     settings = get_settings()
@@ -4800,7 +4798,8 @@ async def news_articles_scrape():
     if existing:
         return {"success": True, "message": "already scraped today", "inserted": 0}
 
-    def _fetch_query(query: str) -> list:
+    results = []
+    for query in _NEWS_QUERIES:
         try:
             r = req_lib.post(
                 "https://api.tavily.com/search",
@@ -4816,14 +4815,9 @@ async def news_articles_scrape():
                 },
                 timeout=20,
             )
-            return r.json().get("results", []) if r.ok else []
+            results.append(r.json().get("results", []) if r.ok else [])
         except:
-            return []
-
-    loop = asyncio.get_event_loop()
-    with ThreadPoolExecutor(max_workers=14) as executor:
-        futures = [loop.run_in_executor(executor, _fetch_query, q) for q in _NEWS_QUERIES]
-        results = await asyncio.gather(*futures)
+            results.append([])
 
     seen: set = set()
     items = []
