@@ -4868,7 +4868,7 @@ async def news_articles_list():
         client.table("news_articles")
         .select("*")
         .gte("created_at", cutoff)
-        .order("published_date", desc=True, nullsfirst=False)
+        .order("created_at", desc=True)
         .execute()
         .data
     )
