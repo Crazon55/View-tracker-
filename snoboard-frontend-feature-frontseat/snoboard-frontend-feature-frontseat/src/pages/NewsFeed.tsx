@@ -428,7 +428,7 @@ async function removeSaved(item: FeedItem) {
 }
 
 // ─── Feed Cache (persists across page refreshes) ──────────────────────────────
-const FEED_CACHE_KEY = "news-feed-cache-v5";
+const FEED_CACHE_KEY = "news-feed-cache-v6";
 const FEED_CACHE_TTL = 8 * 60 * 60 * 1000; // 8 hours
 
 function loadFeedCache(): { items: FeedItem[]; ts: number } | null {
