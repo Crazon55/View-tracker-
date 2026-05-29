@@ -814,8 +814,8 @@ export default function NewsFeed() {
   const xCount = allItems.filter((i) => i.type === "x" && !isArticleBlocked(i, feedback, rules)).length;
 
   return (
-    <div className="min-h-screen bg-zinc-950 pt-20 pb-16 px-6 sm:px-12 lg:px-20">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-zinc-950 pt-20 pb-16 px-4 sm:px-6">
+      <div className="max-w-5xl mx-auto">
 
         {/* Masthead */}
         <div className="mb-10">
