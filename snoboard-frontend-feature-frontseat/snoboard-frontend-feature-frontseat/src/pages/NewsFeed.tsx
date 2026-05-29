@@ -557,7 +557,7 @@ function FeedCard({
 }) {
   return (
     <div className={cn(
-      "rounded-2xl border bg-zinc-900/40 border-t-2 hover:border-zinc-700 hover:bg-zinc-900/70 transition-all duration-150",
+      "rounded-2xl border bg-zinc-900/40 border-t-2 hover:border-zinc-700 hover:bg-zinc-900/70 transition-all duration-150 overflow-hidden",
       vote === "yes"
         ? "border-emerald-800 border-t-emerald-500/60"
         : "border-zinc-800 border-t-amber-500/50"
@@ -576,7 +576,7 @@ function FeedCard({
           <div className="flex-1 min-w-0">
             {/* Title / Author */}
             <h3 className={cn(
-              "font-serif font-black text-white leading-tight mb-2",
+              "font-serif font-black text-white leading-tight mb-2 break-words",
               idx === 0 ? "text-2xl" : "text-xl"
             )}>
               {item.type === "linkedin" ? (
@@ -648,7 +648,7 @@ function FeedCard({
           </div>
 
           {/* Actions */}
-          <div className="shrink-0 flex flex-col gap-2 items-end border-l border-zinc-800 pl-5">
+          <div className="shrink-0 flex flex-col gap-2 items-end border-l border-zinc-800 pl-5 w-[110px]">
             <a
               href={item.url}
               target="_blank"
