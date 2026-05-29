@@ -252,7 +252,7 @@ async function fetchNews(): Promise<FeedItem[]> {
         body: item.summary || null,
         url: item.url,
         source: item.source || "News",
-        publishedAt: item.created_at || "",
+        publishedAt: item.published_date || item.created_at || "",
         matchedKeywords: getMatchedKeywords(text),
       };
     });
