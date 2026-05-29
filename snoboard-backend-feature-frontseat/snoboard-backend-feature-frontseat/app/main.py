@@ -4787,11 +4787,11 @@ def news_articles_scrape():
     """Fetch from Tavily and store in news_articles. Idempotent — skips if already scraped today."""
     import requests as req_lib
 
-    client = get_supabase_client()
-    settings = get_settings()
-
-    if not settings.tavily_api_key:
+    tavily_key = os.environ.get("TAVILY_API_KEY", "")
+    if not tavily_key:
         raise HTTPException(status_code=500, detail="TAVILY_API_KEY not configured on server")
+
+    client = get_supabase_client()
 
     today = datetime.now(timezone.utc).date().isoformat()
     existing = client.table("news_articles").select("id").gte("created_at", today).limit(1).execute().data
@@ -4804,7 +4804,7 @@ def news_articles_scrape():
             r = req_lib.post(
                 "https://api.tavily.com/search",
                 json={
-                    "api_key": settings.tavily_api_key,
+                    "api_key": tavily_key,
                     "query": query,
                     "topic": "news",
                     "days": 2,
