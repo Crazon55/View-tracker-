@@ -4785,8 +4785,9 @@ def _news_source_label(url: str) -> str:
 @app.post("/api/v1/news-articles/scrape")
 async def news_articles_scrape():
     """Fetch from Tavily and store in news_articles. Idempotent — skips if already scraped today."""
-    import asyncio
     import requests as req_lib
+    from concurrent.futures import ThreadPoolExecutor
+    import asyncio
 
     client = get_supabase_client()
     settings = get_settings()
@@ -4819,7 +4820,10 @@ async def news_articles_scrape():
         except:
             return []
 
-    results = await asyncio.gather(*[asyncio.to_thread(_fetch_query, q) for q in _NEWS_QUERIES])
+    loop = asyncio.get_event_loop()
+    with ThreadPoolExecutor(max_workers=14) as executor:
+        futures = [loop.run_in_executor(executor, _fetch_query, q) for q in _NEWS_QUERIES]
+        results = await asyncio.gather(*futures)
 
     seen: set = set()
     items = []
