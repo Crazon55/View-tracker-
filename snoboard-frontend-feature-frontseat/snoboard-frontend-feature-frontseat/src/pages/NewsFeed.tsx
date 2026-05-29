@@ -787,14 +787,14 @@ export default function NewsFeed() {
     queryFn: async () => {
       if (!forceRef.current) {
         const cache = loadFeedCache();
-        if (cache) return cache.items;
+        if (cache && Date.now() - cache.ts < FEED_CACHE_TTL) return cache.items;
       }
       forceRef.current = false;
       const items = await fetchAllFeed();
       saveFeedCache(items);
       return items;
     },
-    initialData: cachedFeed?.items,
+    initialData: cachedFeed && Date.now() - cachedFeed.ts < FEED_CACHE_TTL ? cachedFeed.items : undefined,
     staleTime: Infinity,
     refetchInterval: false,
     retry: 1,
