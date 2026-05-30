@@ -112,19 +112,17 @@ function titleHasKnownBrand(title: string): boolean {
 // ─── Unified Feed Item Type ───────────────────────────────────────────────────
 type FeedItem = {
   id: string;
-  type: "news" | "linkedin" | "reddit";
+  type: "news" | "linkedin";
   title: string;
   body: string | null;
   url: string;
   source: string;
   publishedAt: string;
   matchedKeywords: string[];
-  // linkedin / reddit extras
+  // linkedin extras
   authorUrl?: string;
   likes?: number;
   comments?: number;
-  // reddit extras
-  subreddit?: string;
   category?: string;
 };
 
@@ -281,65 +279,17 @@ async function fetchLinkedIn(): Promise<FeedItem[]> {
   } catch { return []; }
 }
 
-// ─── Fetch: Reddit directly from browser (Reddit blocks EC2, not browsers) ───
-const REDDIT_SUBREDDITS = [
-  "BusinessTodayNews", "IndiaBusiness", "indianstartups",
-  "TechnologyNewsIndia", "IndianStockMarket", "IndianWorkplace", "india",
-];
-
-async function fetchReddit(): Promise<FeedItem[]> {
-  const results = await Promise.allSettled(
-    REDDIT_SUBREDDITS.map((sub) =>
-      fetch(`https://www.reddit.com/r/${sub}/hot.json?limit=25`, {
-        headers: { "Accept": "application/json" },
-        signal: AbortSignal.timeout(12000),
-      }).then((r) => r.ok ? r.json() : null)
-    )
-  );
-
-  const posts: FeedItem[] = [];
-  const seen = new Set<string>();
-
-  results.forEach((result, i) => {
-    if (result.status !== "fulfilled" || !result.value) return;
-    const children = result.value?.data?.children ?? [];
-    for (const child of children) {
-      const p = child.data;
-      if (!p?.id || seen.has(p.id)) continue;
-      seen.add(p.id);
-      const body = (p.selftext || "").trim();
-      posts.push({
-        id: `reddit-${p.id}`,
-        type: "reddit",
-        title: p.title || "",
-        body: body ? body.slice(0, 500) : null,
-        url: p.is_self ? `https://reddit.com${p.permalink}` : (p.url || `https://reddit.com${p.permalink}`),
-        source: `r/${p.subreddit || REDDIT_SUBREDDITS[i]}`,
-        publishedAt: p.created_utc ? new Date(p.created_utc * 1000).toISOString() : new Date().toISOString(),
-        matchedKeywords: getMatchedKeywords(`${p.title} ${body}`),
-        likes: p.score || 0,
-        comments: p.num_comments || 0,
-        authorUrl: p.author ? `https://reddit.com/user/${p.author}` : undefined,
-        subreddit: p.subreddit || REDDIT_SUBREDDITS[i],
-      });
-    }
-  });
-
-  return posts;
-}
 
 // ─── Fetch: All Sources Combined ─────────────────────────────────────────────
 async function fetchAllFeed(): Promise<FeedItem[]> {
-  const [news, linkedin, redditItems] = await Promise.allSettled([
+  const [news, linkedin] = await Promise.allSettled([
     fetchNews(),
     fetchLinkedIn(),
-    fetchReddit(),
   ]);
 
   const all: FeedItem[] = [
     ...(news.status === "fulfilled" ? news.value : []),
     ...(linkedin.status === "fulfilled" ? linkedin.value : []),
-    ...(redditItems.status === "fulfilled" ? redditItems.value : []),
   ];
 
   return all.sort((a, b) => {
@@ -505,14 +455,6 @@ function SourceBadge({ item }: { item: FeedItem }) {
       </span>
     );
   }
-  if (item.type === "reddit") {
-    return (
-      <span className="inline-flex items-center gap-1 text-[9px] font-black tracking-[0.3em] uppercase text-orange-400/90 font-sans">
-        <MessageSquare className="w-2.5 h-2.5" />
-        {item.subreddit ? `r/${item.subreddit}` : "Reddit"}
-      </span>
-    );
-  }
   return (
     <span className="text-[9px] font-black tracking-[0.3em] uppercase text-amber-400/80 font-sans">
       {item.source}
@@ -593,23 +535,6 @@ function FeedCard({
               </div>
             )}
 
-            {/* Reddit upvotes + comment count */}
-            {item.type === "reddit" && (
-              <div className="flex items-center gap-4 mt-2">
-                {(item.likes || 0) > 0 && (
-                  <div className="flex items-center gap-1 text-[10px] text-orange-500/70">
-                    <TrendingUp className="w-3 h-3" />
-                    {formatCompact(item.likes || 0)} upvotes
-                  </div>
-                )}
-                {(item.comments || 0) > 0 && (
-                  <div className="flex items-center gap-1 text-[10px] text-zinc-600">
-                    <MessageSquare className="w-3 h-3" />
-                    {formatCompact(item.comments || 0)}
-                  </div>
-                )}
-              </div>
-            )}
 
             {/* Keyword tags */}
             {item.matchedKeywords.length > 0 && (
@@ -632,7 +557,7 @@ function FeedCard({
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-xs text-zinc-300 hover:text-white hover:border-white/20 transition-colors"
             >
               <ExternalLink className="w-3 h-3" />
-              {item.type === "linkedin" ? "View Post" : item.type === "reddit" ? "View Thread" : "Read"}
+              {item.type === "linkedin" ? "View Post" : "Read"}
             </a>
 
             {/* Yes / No feedback */}
@@ -681,8 +606,8 @@ function FeedCard({
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-type FilterTab = "All" | "News" | "LinkedIn" | "Reddit" | "Saved";
-const FILTER_TABS: FilterTab[] = ["All", "News", "LinkedIn", "Reddit", "Saved"];
+type FilterTab = "All" | "News" | "LinkedIn" | "Saved";
+const FILTER_TABS: FilterTab[] = ["All", "News", "LinkedIn", "Saved"];
 
 export default function NewsFeed() {
   const [filter, setFilter] = useState<FilterTab>("All");
@@ -768,8 +693,7 @@ export default function NewsFeed() {
       filter === "All" ||
       filter === "Saved" ||
       (filter === "News" && item.type === "news") ||
-      (filter === "LinkedIn" && item.type === "linkedin") ||
-      (filter === "Reddit" && item.type === "reddit");
+      (filter === "LinkedIn" && item.type === "linkedin");
 
     const text = `${item.title} ${item.body || ""}`.toLowerCase();
     const matchesSearch = !search.trim() || text.includes(search.toLowerCase());
@@ -787,7 +711,6 @@ export default function NewsFeed() {
     const t = new Date(i.publishedAt).getTime();
     return isNaN(t) || t >= linkedInCutoff;
   }).length;
-  const redditCount = allItems.filter((i) => i.type === "reddit" && !isArticleBlocked(i, feedback, rules)).length;
 
   return (
     <div className="min-h-screen bg-zinc-950 pt-20 pb-16 px-4 sm:px-6 overflow-x-hidden">
@@ -807,7 +730,7 @@ export default function NewsFeed() {
                 NEWS PIECES
               </h1>
               <p className="text-[9px] tracking-[0.35em] uppercase text-zinc-500 mt-2 font-sans">
-                News · LinkedIn · Reddit
+                News · LinkedIn
               </p>
             </div>
             <div className="text-right pb-1">
@@ -856,7 +779,6 @@ export default function NewsFeed() {
                 )}
               >
                 {tab === "LinkedIn" && <Linkedin className="w-2.5 h-2.5" />}
-                {tab === "Reddit" && <MessageSquare className="w-2.5 h-2.5" />}
                 {tab === "News" && <Newspaper className="w-2.5 h-2.5" />}
                 {tab}
                 {tab === "News" && newsCount > 0 && (
@@ -864,9 +786,6 @@ export default function NewsFeed() {
                 )}
                 {tab === "LinkedIn" && linkedinCount > 0 && (
                   <span className="text-[8px] text-zinc-600 font-mono">({linkedinCount})</span>
-                )}
-                {tab === "Reddit" && redditCount > 0 && (
-                  <span className="text-[8px] text-zinc-600 font-mono">({redditCount})</span>
                 )}
               </button>
             ))}
@@ -923,11 +842,6 @@ export default function NewsFeed() {
             {linkedinCount > 0 && (
               <span className="inline-flex items-center gap-1 text-[9px] px-2 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
                 <Linkedin className="w-2.5 h-2.5" /> {linkedinCount} LinkedIn posts
-              </span>
-            )}
-            {redditCount > 0 && (
-              <span className="inline-flex items-center gap-1 text-[9px] px-2 py-1 rounded-full bg-orange-500/10 text-orange-400 border border-orange-500/20">
-                <MessageSquare className="w-2.5 h-2.5" /> {redditCount} Reddit posts
               </span>
             )}
           </div>
