@@ -4661,7 +4661,68 @@ async def x_feed():
         "tweets": tweets[:20],
         "as_of": datetime.now(timezone.utc).isoformat(),
     }
-    return {"success": True}
+
+
+# ===================== Reddit Feed =====================
+
+_REDDIT_SUBREDDITS = [
+    ("BusinessTodayNews", "hot"),
+    ("IndiaBusiness", "hot"),
+    ("indianstartups", "hot"),
+    ("TechnologyNewsIndia", "hot"),
+    ("IndianStockMarket", "hot"),
+    ("IndianWorkplace", "hot"),
+    ("india", "hot"),
+]
+
+_REDDIT_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (compatible; NewsFeedReader/1.0)",
+    "Accept": "application/json",
+}
+
+
+@app.get("/api/v1/reddit-feed")
+async def reddit_feed():
+    posts: list[dict] = []
+    seen_ids: set = set()
+
+    for subreddit, sort in _REDDIT_SUBREDDITS:
+        try:
+            resp = http_req.get(
+                f"https://www.reddit.com/r/{subreddit}/{sort}.json",
+                params={"limit": "25", "t": "day"},
+                headers=_REDDIT_HEADERS,
+                timeout=12,
+            )
+            if resp.status_code != 200:
+                continue
+            for child in (resp.json().get("data", {}).get("children") or []):
+                post = child.get("data", {})
+                pid = post.get("id")
+                if not pid or pid in seen_ids:
+                    continue
+                seen_ids.add(pid)
+                body = (post.get("selftext") or "").strip()
+                posts.append({
+                    "id": pid,
+                    "title": post.get("title", ""),
+                    "body": body[:500] if body else None,
+                    "url": post.get("url", ""),
+                    "permalink": f"https://reddit.com{post.get('permalink', '')}",
+                    "subreddit": post.get("subreddit", subreddit),
+                    "score": post.get("score", 0),
+                    "num_comments": post.get("num_comments", 0),
+                    "author": post.get("author", ""),
+                    "created_utc": post.get("created_utc", 0),
+                    "is_self": post.get("is_self", False),
+                })
+        except Exception:
+            pass
+
+    return {
+        "posts": posts,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 # ===================== LinkedIn Feed =====================
