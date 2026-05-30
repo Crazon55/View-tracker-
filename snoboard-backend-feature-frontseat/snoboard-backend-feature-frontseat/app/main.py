@@ -4689,7 +4689,7 @@ async def reddit_feed():
     for subreddit, sort in _REDDIT_SUBREDDITS:
         try:
             resp = http_req.get(
-                f"https://www.reddit.com/r/{subreddit}/{sort}.json",
+                f"https://old.reddit.com/r/{subreddit}/{sort}.json",
                 params={"limit": "25", "t": "day"},
                 headers=_REDDIT_HEADERS,
                 timeout=12,
