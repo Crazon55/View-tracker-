@@ -495,8 +495,10 @@ function writeBackup(key: string, rows: string[]) {
   try { localStorage.setItem(SLIDES_BK + key, JSON.stringify(rows)); } catch {}
 }
 
-/** True if `local` has content in a slide where `server` is empty — i.e. backup is richer. */
+/** True if `local` has content in a slide where `server` is empty — i.e. backup is richer.
+ * If backup has MORE slides than server, server wins — writer intentionally deleted slides. */
 function backupIsRicher(local: string[], server: string[]): boolean {
+  if (local.length > server.length) return false;
   return local.some((s, i) => s.trim().length > 0 && !(server[i] ?? "").trim().length);
 }
 
