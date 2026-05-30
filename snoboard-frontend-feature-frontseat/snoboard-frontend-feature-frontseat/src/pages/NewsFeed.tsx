@@ -281,32 +281,51 @@ async function fetchLinkedIn(): Promise<FeedItem[]> {
   } catch { return []; }
 }
 
-// ─── Fetch: Reddit (r/indianstartups, r/india, r/IndianStreetBets, r/IndiaInvestments) ──
+// ─── Fetch: Reddit directly from browser (Reddit blocks EC2, not browsers) ───
+const REDDIT_SUBREDDITS = [
+  "BusinessTodayNews", "IndiaBusiness", "indianstartups",
+  "TechnologyNewsIndia", "IndianStockMarket", "IndianWorkplace", "india",
+];
+
 async function fetchReddit(): Promise<FeedItem[]> {
-  try {
-    const res = await fetch(`${BACKEND_URL}/api/v1/reddit-feed`, {
-      signal: AbortSignal.timeout(20000),
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    const asOf: string = data.as_of || new Date().toISOString();
-    return (data.posts ?? []).map((post: any): FeedItem => ({
-      id: `reddit-${post.id}`,
-      type: "reddit",
-      title: post.title,
-      body: post.body || null,
-      url: post.is_self ? post.permalink : (post.url || post.permalink),
-      source: `r/${post.subreddit}`,
-      publishedAt: post.created_utc ? new Date(post.created_utc * 1000).toISOString() : asOf,
-      matchedKeywords: getMatchedKeywords(`${post.title} ${post.body || ""}`),
-      likes: post.score || 0,
-      comments: post.num_comments || 0,
-      authorUrl: post.author ? `https://reddit.com/user/${post.author}` : undefined,
-      subreddit: post.subreddit,
-    }));
-  } catch {
-    return [];
-  }
+  const results = await Promise.allSettled(
+    REDDIT_SUBREDDITS.map((sub) =>
+      fetch(`https://www.reddit.com/r/${sub}/hot.json?limit=25`, {
+        headers: { "Accept": "application/json" },
+        signal: AbortSignal.timeout(12000),
+      }).then((r) => r.ok ? r.json() : null)
+    )
+  );
+
+  const posts: FeedItem[] = [];
+  const seen = new Set<string>();
+
+  results.forEach((result, i) => {
+    if (result.status !== "fulfilled" || !result.value) return;
+    const children = result.value?.data?.children ?? [];
+    for (const child of children) {
+      const p = child.data;
+      if (!p?.id || seen.has(p.id)) continue;
+      seen.add(p.id);
+      const body = (p.selftext || "").trim();
+      posts.push({
+        id: `reddit-${p.id}`,
+        type: "reddit",
+        title: p.title || "",
+        body: body ? body.slice(0, 500) : null,
+        url: p.is_self ? `https://reddit.com${p.permalink}` : (p.url || `https://reddit.com${p.permalink}`),
+        source: `r/${p.subreddit || REDDIT_SUBREDDITS[i]}`,
+        publishedAt: p.created_utc ? new Date(p.created_utc * 1000).toISOString() : new Date().toISOString(),
+        matchedKeywords: getMatchedKeywords(`${p.title} ${body}`),
+        likes: p.score || 0,
+        comments: p.num_comments || 0,
+        authorUrl: p.author ? `https://reddit.com/user/${p.author}` : undefined,
+        subreddit: p.subreddit || REDDIT_SUBREDDITS[i],
+      });
+    }
+  });
+
+  return posts;
 }
 
 // ─── Fetch: All Sources Combined ─────────────────────────────────────────────
