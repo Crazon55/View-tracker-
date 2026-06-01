@@ -1,6 +1,9 @@
 """FastAPI app for Instagram View Tracker."""
+import json
 import os
+import re
 import hashlib
+import time
 import requests as http_req
 from dotenv import load_dotenv
 from datetime import datetime, timezone, timedelta
@@ -4755,6 +4758,113 @@ async def reddit_feed():
     return {
         "posts": posts,
         "as_of": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+# ===================== Inshorts Feed =====================
+
+_INSHORTS_CATEGORIES = ["startup", "business", "technology"]
+_INSHORTS_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+_INSHORTS_STATE_RE = re.compile(r"window\.__STATE__\s*=\s*(\{.*?\})\s*;\s*</script>", re.DOTALL)
+_inshorts_cache: dict = {"articles": [], "as_of": "", "expires_at": 0.0}
+
+
+def _parse_inshorts_html(html: str, category: str) -> list[dict]:
+    match = _INSHORTS_STATE_RE.search(html)
+    if not match:
+        return []
+
+    try:
+        state = json.loads(match.group(1))
+    except json.JSONDecodeError:
+        return []
+
+    articles: list[dict] = []
+    for entry in (state.get("news_list") or {}).get("list") or []:
+        obj = entry.get("news_obj") or {}
+        hash_id = (obj.get("hash_id") or "").strip()
+        title = (obj.get("title") or "").strip()
+        if not hash_id or not title:
+            continue
+
+        created_ms = obj.get("created_at")
+        published_at = ""
+        if isinstance(created_ms, (int, float)) and created_ms > 1e12:
+            published_at = datetime.fromtimestamp(created_ms / 1000, tz=timezone.utc).isoformat()
+
+        old_hash_id = (obj.get("old_hash_id") or "").strip()
+        inshorts_url = (
+            f"https://inshorts.com/en/news/{old_hash_id}"
+            if old_hash_id
+            else (obj.get("shortened_url") or "").strip()
+        )
+        source_url = (obj.get("source_url") or "").strip()
+
+        articles.append({
+            "id": hash_id,
+            "hash_id": hash_id,
+            "title": title,
+            "content": (obj.get("content") or "").strip(),
+            "author": (obj.get("author_name") or "").strip(),
+            "source_name": (obj.get("source_name") or "").strip(),
+            "source_url": source_url,
+            "inshorts_url": inshorts_url,
+            "url": source_url or inshorts_url,
+            "category": category,
+            "published_at": published_at,
+        })
+    return articles
+
+
+def _fetch_inshorts_articles() -> tuple[list[dict], str]:
+    now = time.time()
+    if _inshorts_cache["articles"] and now < _inshorts_cache["expires_at"]:
+        return _inshorts_cache["articles"], _inshorts_cache["as_of"]
+
+    articles: list[dict] = []
+    seen_ids: set[str] = set()
+
+    for category in _INSHORTS_CATEGORIES:
+        try:
+            resp = http_req.get(
+                f"https://inshorts.com/en/read/{category}",
+                headers=_INSHORTS_HEADERS,
+                timeout=15,
+            )
+            if resp.status_code != 200:
+                continue
+            for item in _parse_inshorts_html(resp.text, category):
+                if item["hash_id"] in seen_ids:
+                    continue
+                seen_ids.add(item["hash_id"])
+                articles.append(item)
+        except Exception:
+            pass
+
+    articles.sort(
+        key=lambda a: a.get("published_at") or "",
+        reverse=True,
+    )
+
+    as_of = datetime.now(timezone.utc).isoformat()
+    _inshorts_cache["articles"] = articles
+    _inshorts_cache["as_of"] = as_of
+    _inshorts_cache["expires_at"] = now + 600  # 10 min
+
+    return articles, as_of
+
+
+@app.get("/api/v1/inshorts-feed")
+async def inshorts_feed():
+    articles, as_of = _fetch_inshorts_articles()
+    return {
+        "articles": articles,
+        "as_of": as_of,
+        "count": len(articles),
     }
 
 

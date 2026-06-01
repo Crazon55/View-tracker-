@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ExternalLink, RefreshCw, Bookmark, BookmarkCheck, Search, Linkedin, TrendingUp, Newspaper, ThumbsUp, ThumbsDown, MessageSquare, Heart, Repeat2 } from "lucide-react";
+import { ExternalLink, RefreshCw, Bookmark, BookmarkCheck, Search, Linkedin, Newspaper, ThumbsUp, ThumbsDown, MessageSquare, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ─── API Keys ─────────────────────────────────────────────────────────────────
@@ -112,7 +112,7 @@ function titleHasKnownBrand(title: string): boolean {
 // ─── Unified Feed Item Type ───────────────────────────────────────────────────
 type FeedItem = {
   id: string;
-  type: "news" | "linkedin";
+  type: "news" | "linkedin" | "inshorts";
   title: string;
   body: string | null;
   url: string;
@@ -279,17 +279,42 @@ async function fetchLinkedIn(): Promise<FeedItem[]> {
   } catch { return []; }
 }
 
+// ─── Fetch: Inshorts (live scrape via backend, cached 10 min) ────────────────
+async function fetchInshorts(): Promise<FeedItem[]> {
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/v1/inshorts-feed`, { signal: AbortSignal.timeout(30000) });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.articles ?? []).map((item: any): FeedItem => {
+      const text = `${item.title} ${item.content || ""}`;
+      return {
+        id: item.hash_id || item.id,
+        type: "inshorts",
+        title: item.title,
+        body: item.content || null,
+        url: item.source_url || item.url || item.inshorts_url,
+        source: item.source_name || "Inshorts",
+        publishedAt: item.published_at || "",
+        matchedKeywords: getMatchedKeywords(text),
+        category: item.category,
+      };
+    });
+  } catch { return []; }
+}
+
 
 // ─── Fetch: All Sources Combined ─────────────────────────────────────────────
 async function fetchAllFeed(): Promise<FeedItem[]> {
-  const [news, linkedin] = await Promise.allSettled([
+  const [news, linkedin, inshorts] = await Promise.allSettled([
     fetchNews(),
     fetchLinkedIn(),
+    fetchInshorts(),
   ]);
 
   const all: FeedItem[] = [
     ...(news.status === "fulfilled" ? news.value : []),
     ...(linkedin.status === "fulfilled" ? linkedin.value : []),
+    ...(inshorts.status === "fulfilled" ? inshorts.value : []),
   ];
 
   return all.sort((a, b) => {
@@ -455,6 +480,14 @@ function SourceBadge({ item }: { item: FeedItem }) {
       </span>
     );
   }
+  if (item.type === "inshorts") {
+    return (
+      <span className="inline-flex items-center gap-1 text-[9px] font-black tracking-[0.3em] uppercase text-orange-400/90 font-sans">
+        <Zap className="w-2.5 h-2.5" />
+        Inshorts{item.source ? ` · ${item.source}` : ""}
+      </span>
+    );
+  }
   return (
     <span className="text-[9px] font-black tracking-[0.3em] uppercase text-amber-400/80 font-sans">
       {item.source}
@@ -606,8 +639,8 @@ function FeedCard({
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-type FilterTab = "All" | "News" | "LinkedIn" | "Saved";
-const FILTER_TABS: FilterTab[] = ["All", "News", "LinkedIn", "Saved"];
+type FilterTab = "All" | "News" | "Inshorts" | "LinkedIn" | "Saved";
+const FILTER_TABS: FilterTab[] = ["All", "News", "Inshorts", "LinkedIn", "Saved"];
 
 export default function NewsFeed() {
   const [filter, setFilter] = useState<FilterTab>("All");
@@ -693,6 +726,7 @@ export default function NewsFeed() {
       filter === "All" ||
       filter === "Saved" ||
       (filter === "News" && item.type === "news") ||
+      (filter === "Inshorts" && item.type === "inshorts") ||
       (filter === "LinkedIn" && item.type === "linkedin");
 
     const text = `${item.title} ${item.body || ""}`.toLowerCase();
@@ -705,6 +739,7 @@ export default function NewsFeed() {
   const learnedPatterns = getLearnedPatternCount();
 
   const newsCount = allItems.filter((i) => i.type === "news" && !isArticleBlocked(i, feedback, rules)).length;
+  const inshortsCount = allItems.filter((i) => i.type === "inshorts" && !isArticleBlocked(i, feedback, rules)).length;
   const linkedinCount = allItems.filter((i) => {
     if (i.type !== "linkedin" || isArticleBlocked(i, feedback, rules)) return false;
     if (!i.publishedAt) return true; // unknown date → assume recent
@@ -730,7 +765,7 @@ export default function NewsFeed() {
                 NEWS PIECES
               </h1>
               <p className="text-[9px] tracking-[0.35em] uppercase text-zinc-500 mt-2 font-sans">
-                News · LinkedIn
+                News · Inshorts · LinkedIn
               </p>
             </div>
             <div className="text-right pb-1">
@@ -780,9 +815,13 @@ export default function NewsFeed() {
               >
                 {tab === "LinkedIn" && <Linkedin className="w-2.5 h-2.5" />}
                 {tab === "News" && <Newspaper className="w-2.5 h-2.5" />}
+                {tab === "Inshorts" && <Zap className="w-2.5 h-2.5" />}
                 {tab}
                 {tab === "News" && newsCount > 0 && (
                   <span className="text-[8px] text-zinc-600 font-mono">({newsCount})</span>
+                )}
+                {tab === "Inshorts" && inshortsCount > 0 && (
+                  <span className="text-[8px] text-zinc-600 font-mono">({inshortsCount})</span>
                 )}
                 {tab === "LinkedIn" && linkedinCount > 0 && (
                   <span className="text-[8px] text-zinc-600 font-mono">({linkedinCount})</span>
@@ -837,6 +876,11 @@ export default function NewsFeed() {
             {newsCount > 0 && (
               <span className="inline-flex items-center gap-1 text-[9px] px-2 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
                 <Newspaper className="w-2.5 h-2.5" /> {newsCount} news articles
+              </span>
+            )}
+            {inshortsCount > 0 && (
+              <span className="inline-flex items-center gap-1 text-[9px] px-2 py-1 rounded-full bg-orange-500/10 text-orange-400 border border-orange-500/20">
+                <Zap className="w-2.5 h-2.5" /> {inshortsCount} Inshorts cards
               </span>
             )}
             {linkedinCount > 0 && (
