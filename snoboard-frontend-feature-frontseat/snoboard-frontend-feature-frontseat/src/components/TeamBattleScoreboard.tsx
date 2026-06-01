@@ -23,7 +23,10 @@ async function fetchTeams() {
   const ym = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, "0")}`;
   try {
     const data = await getTeamsPerformance();
-    if (data && (data as any).views_period != null) return data as any;
+    const hasAllTeams = ["garfields", "goofies", "sheruses"].every(
+      (k) => (data as any)?.teams?.some((t: any) => t.key === k)
+    );
+    if (data && (data as any).views_period != null && hasAllTeams) return data as any;
   } catch { /* fall through to client compute */ }
   const [ideas, niches, sixDay] = await Promise.all([
     getTrackerIdeas(),
