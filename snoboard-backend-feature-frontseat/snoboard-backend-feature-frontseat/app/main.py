@@ -284,6 +284,23 @@ def _month_start() -> str:
     return today.replace(day=1).isoformat()
 
 
+def _dashboard_range() -> tuple[str, str]:
+    """Return (start, end) for the dashboard reach period.
+    On the 1st of the month show the full previous month so the number isn't zero.
+    From the 2nd onwards show the current month up to today."""
+    today = datetime.now(timezone.utc).date()
+    if today.day == 1:
+        # Previous month
+        first_of_current = today
+        last_of_prev = first_of_current - timedelta(days=1)
+        start = last_of_prev.replace(day=1).isoformat()
+        end = last_of_prev.isoformat()
+    else:
+        start = today.replace(day=1).isoformat()
+        end = today.isoformat()
+    return start, end
+
+
 def _filter_current_month(items: list, date_field: str = "posted_at") -> list:
     """Filter items to only include those from the current month."""
     month_start = _month_start()
@@ -357,18 +374,22 @@ async def dashboard_stats():
     client = get_supabase_client()
 
     pages = get_page_repository().get_all()
-    current_month = _month_start()
+    current_month, range_end = _dashboard_range()
 
     # Fetch all content entries
     all_entries = client.table("content_entries").select("*").execute().data or []
-    month_entries = [e for e in all_entries if (e.get("upload_date") or "")[:10] >= current_month]
+    month_entries = [
+        e for e in all_entries
+        if (e.get("upload_date") or "")[:10] >= current_month
+        and (e.get("upload_date") or "")[:10] <= range_end
+    ]
 
     # Also include legacy reels/posts
     all_reels = get_reel_repository().get_all()
     all_posts = get_post_repository().get_all()
 
-    month_reels = _filter_current_month(all_reels, "posted_at")
-    month_posts = _filter_current_month(all_posts, "posted_at")
+    month_reels = [r for r in all_reels if current_month <= (r.get("posted_at") or "")[:10] <= range_end]
+    month_posts = [p for p in all_posts if current_month <= (p.get("posted_at") or "")[:10] <= range_end]
 
     # 6-day tracker overrides for the current month:
     # - If `six_day_monthly_actuals.actual_views` exists for a page/month, use it as the source of truth
@@ -427,7 +448,7 @@ async def dashboard_stats():
         pid = page["id"]
         # Content entries for this page
         page_entries = [e for e in all_entries if e.get("page_id") == pid]
-        page_month_entries = [e for e in page_entries if (e.get("upload_date") or "")[:10] >= current_month]
+        page_month_entries = [e for e in page_entries if current_month <= (e.get("upload_date") or "")[:10] <= range_end]
         # Legacy
         page_reels = [r for r in all_reels if r["page_id"] == pid]
         page_posts = [p for p in all_posts if p["page_id"] == pid]

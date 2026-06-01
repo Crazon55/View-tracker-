@@ -634,8 +634,16 @@ export default function Dashboard() {
                     <TrendingUp className="w-3.5 h-3.5" />
                     {(() => {
                       const now = new Date();
-                      const monthName = now.toLocaleString("default", { month: "long" });
                       const day = now.getDate();
+                      if (day === 1) {
+                        // On the 1st, show the full previous month
+                        const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                        const prevMonthName = prev.toLocaleString("default", { month: "long" });
+                        const prevYear = prev.getFullYear();
+                        const lastDay = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+                        return `${prevMonthName} 1 — ${prevMonthName} ${lastDay}, ${prevYear}`;
+                      }
+                      const monthName = now.toLocaleString("default", { month: "long" });
                       const year = now.getFullYear();
                       return `${monthName} 1 — ${monthName} ${day}, ${year}`;
                     })()}
