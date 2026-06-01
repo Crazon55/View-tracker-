@@ -21,13 +21,13 @@ const KEYWORDS = [
 
 // ─── LinkedIn Founders ────────────────────────────────────────────────────────
 const LINKEDIN_HANDLES = [
-  { name: "Namita Thapar",  username: "linkedin.com/in/namita-thapar",           url: "https://www.linkedin.com/in/namita-thapar" },
-  { name: "Anupam Mittal",  username: "linkedin.com/in/anupammittal007",         url: "https://www.linkedin.com/in/anupammittal007" },
-  { name: "Aman Gupta",     username: "linkedin.com/in/aman-gupta-7217a515",     url: "https://www.linkedin.com/in/aman-gupta-7217a515" },
-  { name: "Kunal Shah",     username: "linkedin.com/in/kunalshah1",              url: "https://www.linkedin.com/in/kunalshah1" },
-  { name: "Ghazal Alagh",   username: "linkedin.com/in/ghazal-alagh-9755a0128", url: "https://www.linkedin.com/in/ghazal-alagh-9755a0128" },
-  { name: "Nikhil Kamath",  username: "linkedin.com/in/nikhilkamathcio",         url: "https://www.linkedin.com/in/nikhilkamathcio" },
-  { name: "Nithin Kamath",  username: "linkedin.com/in/nithin-kamath-81136242",  url: "https://www.linkedin.com/in/nithin-kamath-81136242" },
+  { name: "Namita Thapar", username: "linkedin.com/in/namita-thapar", url: "https://www.linkedin.com/in/namita-thapar" },
+  { name: "Anupam Mittal", username: "linkedin.com/in/anupammittal007", url: "https://www.linkedin.com/in/anupammittal007" },
+  { name: "Aman Gupta", username: "linkedin.com/in/aman-gupta-7217a515", url: "https://www.linkedin.com/in/aman-gupta-7217a515" },
+  { name: "Kunal Shah", username: "linkedin.com/in/kunalshah1", url: "https://www.linkedin.com/in/kunalshah1" },
+  { name: "Ghazal Alagh", username: "linkedin.com/in/ghazal-alagh-9755a0128", url: "https://www.linkedin.com/in/ghazal-alagh-9755a0128" },
+  { name: "Nikhil Kamath", username: "linkedin.com/in/nikhilkamathcio", url: "https://www.linkedin.com/in/nikhilkamathcio" },
+  { name: "Nithin Kamath", username: "linkedin.com/in/nithin-kamath-81136242", url: "https://www.linkedin.com/in/nithin-kamath-81136242" },
 ];
 
 // ─── News Domains ─────────────────────────────────────────────────────────────
@@ -170,8 +170,8 @@ function parseRelativeTime(val: string): string | null {
     const u = m[2].toLowerCase();
     const ms = u.startsWith("mo") ? 2592000000 : u.startsWith("m") ? 60000 :
       u.startsWith("s") ? 1000 : u.startsWith("h") ? 3600000 :
-      u.startsWith("d") ? 86400000 : u.startsWith("w") ? 604800000 :
-      u.startsWith("y") ? 31536000000 : 0;
+        u.startsWith("d") ? 86400000 : u.startsWith("w") ? 604800000 :
+          u.startsWith("y") ? 31536000000 : 0;
     if (ms) return new Date(now - n * ms).toISOString();
   }
   return null;
@@ -179,7 +179,7 @@ function parseRelativeTime(val: string): string | null {
 
 function parseLinkedInDate(item: any): string {
   // 1. Relative fields first — unambiguous about how old the post is
-  for (const f of ["timeSincePosted","relative","relativeTime","timeAgo","postTime","postedAgo","postedTime"]) {
+  for (const f of ["timeSincePosted", "relative", "relativeTime", "timeAgo", "postTime", "postedAgo", "postedTime"]) {
     const v = item[f];
     if (v && typeof v === "string") {
       const parsed = parseRelativeTime(v);
@@ -188,7 +188,7 @@ function parseLinkedInDate(item: any): string {
   }
 
   // 2. Absolute date fields — prefer post-time fields (timestamp/date) over scrape-time fields (createdAt/publishedAt)
-  for (const f of ["timestamp","date","postedAt","postedDate","postDate","datePosted","published_at","dateCreated","publishedAt","createdAt","created_at"]) {
+  for (const f of ["timestamp", "date", "postedAt", "postedDate", "postDate", "datePosted", "published_at", "dateCreated", "publishedAt", "createdAt", "created_at"]) {
     const v = item[f];
     if (v == null || v === "") continue;
     if (typeof v === "number" && v > 1e9) return new Date(v > 1e12 ? v : v * 1000).toISOString();
@@ -220,6 +220,73 @@ function parseLinkedInDate(item: any): string {
 function getMatchedKeywords(text: string): string[] {
   const lower = text.toLowerCase();
   return KEYWORDS.filter((k) => lower.includes(k.toLowerCase())).slice(0, 3);
+}
+
+// ─── Topic filters (Tech / Startup / Founder / Political) ─────────────────────
+type TopicFilter = "all" | "tech" | "startup" | "founder" | "political";
+
+const TOPIC_FILTERS: { key: TopicFilter; label: string }[] = [
+  { key: "all", label: "All Topics" },
+  { key: "tech", label: "Tech" },
+  { key: "startup", label: "Startup" },
+  { key: "founder", label: "Founder" },
+  { key: "political", label: "Political" },
+];
+
+const TOPIC_KEYWORDS: Record<Exclude<TopicFilter, "all">, string[]> = {
+  tech: [
+    "tech", "technology", "technolog", "ai ", " ai", "artificial intelligence",
+    "software", " app ", "digital", "chip", "semiconductor", "iphone", "android",
+    "saas", "cloud", "cyber", "5g", "robot", "machine learning", "openai",
+    "google", "microsoft", "apple", "amd", "intel", "nvidia", "smartphone",
+    "electric vehicle", " oled", "gaming", "data centre", "data center",
+    "infosys", "wipro", "tcs", "hcl", "tech mahindra", "gadget", "laptop",
+    "smartwatch", "blockchain", "crypto", "fintech platform",
+  ],
+  startup: [
+    "startup", "start-up", "start up", "unicorn", "decacorn", "series a",
+    "series b", "series c", "series d", "funding round", "raised", "venture capital",
+    " vc ", "seed round", "pre-seed", "ipo", "valuation", "incubator",
+    "accelerator", "y combinator", "shark tank", "d2c", "msme", "startup india",
+    "zepto", "zomato", "swiggy", "ola", "cred", "nykaa", "meesho", "blinkit",
+    "groww", "zerodha", "razorpay", "freshworks", "boAt", "mamaearth",
+  ],
+  founder: [
+    "founder", "co-founder", "cofounder", " ceo ", "entrepreneur", "industrialist",
+    "billionaire", "promoter", "managing director", "mukesh ambani", "ratan tata",
+    "gautam adani", "noel tata", "kunal shah", "nikhil kamath", "nithin kamath",
+    "namita thapar", "anupam mittal", "aman gupta", "ghazal alagh", "peyush bansal",
+    "vineeta singh", "azim premji", "tata sons", "founders", "entrepreneurs",
+    "shark tank india", "self-made", "family office",
+  ],
+  political: [
+    "politic", "election", "bjp", "congress party", "modi", "parliament",
+    "lok sabha", "rajya sabha", "minister", "government", "govt", "policy",
+    "regulation", " rbi ", "budget", "democracy", "campaign", "chief minister",
+    "narendra", "rahul gandhi", "nda", "opposition", "diplomat", "sanction",
+    "cabinet", "legislat", "bill passed", "protest", "alliance", "coalition",
+    "state assembly", "municipal", "bureaucrat",
+  ],
+};
+
+function matchesTopic(item: FeedItem, topic: TopicFilter): boolean {
+  if (topic === "all") return true;
+
+  if (item.type === "inshorts" && item.category) {
+    const cat = item.category.toLowerCase();
+    if (topic === "tech" && cat === "technology") return true;
+    if (topic === "startup" && cat === "startup") return true;
+  }
+
+  const text = `${item.title} ${item.body || ""}`.toLowerCase();
+  return TOPIC_KEYWORDS[topic].some((kw) => text.includes(kw));
+}
+
+function detectPrimaryTopic(item: FeedItem): TopicFilter | null {
+  for (const { key } of TOPIC_FILTERS) {
+    if (key !== "all" && matchesTopic(item, key)) return key;
+  }
+  return null;
 }
 
 function formatCompact(n: number): string {
@@ -495,6 +562,20 @@ function SourceBadge({ item }: { item: FeedItem }) {
   );
 }
 
+const TOPIC_LABELS: Record<Exclude<TopicFilter, "all">, string> = {
+  tech: "Tech",
+  startup: "Startup",
+  founder: "Founder",
+  political: "Political",
+};
+
+const TOPIC_CHIP_COLORS: Record<Exclude<TopicFilter, "all">, string> = {
+  tech: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
+  startup: "bg-violet-500/10 text-violet-400 border-violet-500/20",
+  founder: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  political: "bg-rose-500/10 text-rose-400 border-rose-500/20",
+};
+
 // ─── Feed Card ────────────────────────────────────────────────────────────────
 function FeedCard({
   item,
@@ -568,6 +649,20 @@ function FeedCard({
               </div>
             )}
 
+
+            {/* Topic tag */}
+            {(() => {
+              const topic = detectPrimaryTopic(item);
+              if (!topic) return null;
+              return (
+                <span className={cn(
+                  "text-[9px] px-2 py-0.5 rounded-full border font-sans",
+                  TOPIC_CHIP_COLORS[topic],
+                )}>
+                  {TOPIC_LABELS[topic]}
+                </span>
+              );
+            })()}
 
             {/* Keyword tags */}
             {item.matchedKeywords.length > 0 && (
@@ -644,6 +739,7 @@ const FILTER_TABS: FilterTab[] = ["All", "News", "Inshorts", "LinkedIn", "Saved"
 
 export default function NewsFeed() {
   const [filter, setFilter] = useState<FilterTab>("All");
+  const [topicFilter, setTopicFilter] = useState<TopicFilter>("all");
   const [search, setSearch] = useState("");
   const [saved, setSaved] = useState<Map<string, FeedItem>>(new Map());
   const [feedback, setFeedback] = useState<Record<string, Vote>>({});
@@ -731,9 +827,34 @@ export default function NewsFeed() {
 
     const text = `${item.title} ${item.body || ""}`.toLowerCase();
     const matchesSearch = !search.trim() || text.includes(search.toLowerCase());
+    const matchesTopicFilter = matchesTopic(item, topicFilter);
 
-    return matchesFilter && matchesSearch;
+    return matchesFilter && matchesSearch && matchesTopicFilter;
   });
+
+  const visibleBase = baseList.filter((item) => {
+    if (filter !== "Saved" && isArticleBlocked(item, feedback, rules)) return false;
+    if (item.type === "linkedin" && filter !== "Saved") {
+      if (item.publishedAt) {
+        const t = new Date(item.publishedAt).getTime();
+        if (!isNaN(t) && t < linkedInCutoff) return false;
+      }
+    }
+    const matchesFilter =
+      filter === "All" ||
+      filter === "Saved" ||
+      (filter === "News" && item.type === "news") ||
+      (filter === "Inshorts" && item.type === "inshorts") ||
+      (filter === "LinkedIn" && item.type === "linkedin");
+    return matchesFilter;
+  });
+
+  const topicCounts = Object.fromEntries(
+    TOPIC_FILTERS.filter((t) => t.key !== "all").map(({ key }) => [
+      key,
+      visibleBase.filter((item) => matchesTopic(item, key)).length,
+    ]),
+  ) as Record<Exclude<TopicFilter, "all">, number>;
 
   const noCount = Object.values(feedback).filter((v) => v === "no").length;
   const learnedPatterns = getLearnedPatternCount();
@@ -856,6 +977,34 @@ export default function NewsFeed() {
           </div>
         </div>
 
+        {/* Topic filters */}
+        {filter !== "Saved" && (
+          <div className="mb-6 flex items-center gap-2 flex-wrap">
+            <span className="text-[9px] uppercase tracking-wider text-zinc-600 font-sans shrink-0">Topic:</span>
+            {TOPIC_FILTERS.map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setTopicFilter(key)}
+                className={cn(
+                  "inline-flex items-center gap-1 text-[9px] px-2.5 py-1 rounded-full border font-sans transition-colors",
+                  topicFilter === key
+                    ? key === "all"
+                      ? "bg-amber-500/15 text-amber-300 border-amber-500/40"
+                      : TOPIC_CHIP_COLORS[key as Exclude<TopicFilter, "all">] + " ring-1 ring-white/10"
+                    : "bg-zinc-900/50 text-zinc-500 border-zinc-800 hover:text-zinc-300 hover:border-zinc-700",
+                )}
+              >
+                {label}
+                {key !== "all" && topicCounts[key as Exclude<TopicFilter, "all">] > 0 && (
+                  <span className="text-[8px] opacity-70 font-mono">
+                    ({topicCounts[key as Exclude<TopicFilter, "all">]})
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Count */}
         <div className="flex items-center gap-3 mb-6">
           <div className="h-px flex-1 bg-zinc-800" />
@@ -863,8 +1012,8 @@ export default function NewsFeed() {
             {isLoading
               ? "Loading edition…"
               : filter === "Saved"
-              ? `${filtered.length} saved item${filtered.length !== 1 ? "s" : ""}`
-              : `${filtered.length} item${filtered.length !== 1 ? "s" : ""} in circulation`}
+                ? `${filtered.length} saved item${filtered.length !== 1 ? "s" : ""}`
+                : `${filtered.length} item${filtered.length !== 1 ? "s" : ""} in circulation`}
           </p>
           <div className="h-px flex-1 bg-zinc-800" />
         </div>
