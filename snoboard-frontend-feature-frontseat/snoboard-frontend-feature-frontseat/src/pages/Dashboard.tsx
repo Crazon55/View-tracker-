@@ -359,6 +359,19 @@ export default function Dashboard() {
 
   const allReels = [...autoReels, ...manualReels];
 
+  const isFirstOfMonth = new Date().getDate() === 1;
+  const prevMonthStr = (() => {
+    const d = new Date();
+    const prev = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+    return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
+  })();
+  const { data: prevMonthSixDay } = useQuery({
+    queryKey: ["six-day-month", prevMonthStr],
+    queryFn: () => getSixDayMonth(prevMonthStr),
+    enabled: isFirstOfMonth,
+    staleTime: 10 * 60_000,
+  });
+
   const dashHandleToNicheId = useMemo(() => {
     const m = new Map<string, string>();
     for (const n of (trackerNiches as any[]) || []) {
@@ -488,6 +501,11 @@ export default function Dashboard() {
 
   const stats = data;
   const totalViews = stats?.total_views ?? 0;
+  const reachTotal = isFirstOfMonth && prevMonthSixDay?.page_summaries
+    ? (prevMonthSixDay.page_summaries as any[]).reduce(
+        (s: number, p: any) => s + (p.actual_views ?? p.cycle_views_sum ?? 0), 0
+      )
+    : totalViews;
   const allPagesRaw = stats?.pages ?? [];
   const allPages = dashHandleToNicheId.size > 0
     ? allPagesRaw.filter((p: any) => dashHandleToNicheId.has(String(p.handle || "").replace(/^@/, "").trim().toLowerCase()))
@@ -628,7 +646,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <div className="space-y-3">
                   <p className="text-5xl sm:text-6xl lg:text-7xl font-black text-white tabular-nums tracking-tight leading-none">
-                    {formatCompact(totalViews)}
+                    {formatCompact(reachTotal)}
                   </p>
                   <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold px-3 py-1.5 rounded-full">
                     <TrendingUp className="w-3.5 h-3.5" />
@@ -711,7 +729,7 @@ export default function Dashboard() {
                       </svg>
                       <div className="absolute inset-0 flex flex-col items-center justify-center">
                         <p className="text-[8px] uppercase tracking-widest text-zinc-500">Total</p>
-                        <p className="text-xl font-black text-white tabular-nums">{formatCompact(total)}</p>
+                        <p className="text-xl font-black text-white tabular-nums">{formatCompact(reachTotal)}</p>
                       </div>
                     </div>
                   );
