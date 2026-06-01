@@ -1756,6 +1756,13 @@ TEAM_PERFORMANCE_CONFIG: dict[str, dict] = {
         "members": ["Arohi", "Harish", "Pulkit"],
         "niche_match": ("goofies",),
     },
+    "sheruses": {
+        "key": "sheruses",
+        "label": "The Sherus",
+        "emoji": "\U0001F981",  # lion
+        "members": ["Sheru"],
+        "niche_match": ("sheru", "sheerus", "changing order"),
+    },
 }
 
 
