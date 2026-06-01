@@ -44,6 +44,7 @@ const GOOFIES_ACTIVE_HANDLES = [
   "startupsinthelast24hrs",
   "startupcoded",
   "indiastartupstory",
+  "entrepreneurial.india",
 ] as const;
 
 const SHERUS_ACTIVE_HANDLES = ["thechangingorder"] as const;
