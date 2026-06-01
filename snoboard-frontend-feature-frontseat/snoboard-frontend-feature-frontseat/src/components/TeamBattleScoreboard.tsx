@@ -19,8 +19,10 @@ const SKIN: Record<string, { grad: string; text: string; tagline: string }> = {
 };
 
 async function fetchTeams() {
-  const y = new Date();
-  const ym = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, "0")}`;
+  const now = new Date();
+  const ym = now.getDate() === 1
+    ? `${new Date(now.getFullYear(), now.getMonth() - 1, 1).getFullYear()}-${String(new Date(now.getFullYear(), now.getMonth() - 1, 1).getMonth() + 1).padStart(2, "0")}`
+    : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   try {
     const data = await getTeamsPerformance();
     const hasAllTeams = ["garfields", "goofies", "sheruses"].every(

@@ -1770,16 +1770,18 @@ def _team_views_6d_from_six_day_tracker(
     client,
     team_accounts: dict[str, set[str]],
     today,
+    month_date: str | None = None,
 ) -> dict[str, int] | None:
-    """If the current month has at least one `six_day_entries` row (any cycle),
+    """If the target month has at least one `six_day_entries` row (any cycle),
     return per-team view totals summed across the full month; otherwise return
     None to keep posting-based rolling-6d.
 
-    `today` must be the org calendar date (Asia/Kolkata) so month rollover matches
-    the 6-day tracker and monthly wrap.
+    `today` must be the org calendar date (Asia/Kolkata).
+    `month_date` overrides the derived month (used when showing previous month on the 1st).
     """
-    y, m = today.year, today.month
-    month_date = f"{y}-{m:02d}-01"
+    if month_date is None:
+        y, m = today.year, today.month
+        month_date = f"{y}-{m:02d}-01"
     entries = (
         client.table("six_day_entries")
         .select("page_id,views")
@@ -1911,8 +1913,11 @@ async def teams_performance():
     month_start = today.replace(day=1)
     cutoff_6d = today - timedelta(days=6)
 
+    # On the 1st of the month use the previous month's six-day data (current month has none yet)
+    effective_month, _ = _dashboard_range()
+
     try:
-        six_day_team_6d = _team_views_6d_from_six_day_tracker(client, team_accounts, today)
+        six_day_team_6d = _team_views_6d_from_six_day_tracker(client, team_accounts, today, month_date=effective_month)
     except Exception:
         six_day_team_6d = None
 
