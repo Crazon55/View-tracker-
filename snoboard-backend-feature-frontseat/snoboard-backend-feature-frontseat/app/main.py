@@ -1373,6 +1373,14 @@ async def get_idea_comments(idea_id: str):
     data = client.table("idea_comments").select("*").eq("idea_id", idea_id).order("created_at").execute().data or []
     return {"success": True, "data": data}
 
+@app.delete("/api/v1/ideas/{idea_id}/comments/{comment_id}")
+async def delete_idea_comment(idea_id: str, comment_id: str):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    client.table("idea_comments").delete().eq("id", comment_id).eq("idea_id", idea_id).execute()
+    return {"success": True}
+
+
 @app.post("/api/v1/ideas/{idea_id}/comments")
 async def post_idea_comment(idea_id: str, req: dict):
     from app.database.client import get_supabase_client
