@@ -100,6 +100,7 @@ function AnimalPicker({ userId }: { userId: string | undefined }) {
   const [panelTab, setPanelTab] = useState<"notifications" | "avatar">("notifications");
   const ref = useRef<HTMLDivElement>(null);
   const { notifications, unreadCount, markAllRead } = useNotifications();
+  const navigate = useNavigate();
 
   const { data: taskDeadlines = [] } = useQuery<any[]>({
     queryKey: ["deadlines", role],
@@ -204,23 +205,31 @@ function AnimalPicker({ userId }: { userId: string | undefined }) {
                 <p className="text-xs text-zinc-600 text-center py-6">No notifications yet</p>
               ) : (
                 <div className="p-2 space-y-1">
-                  {notifications.map((n) => (
-                    <div
-                      key={n.id}
-                      className={`rounded-lg px-3 py-2.5 ${!n.read ? "bg-violet-500/8 border border-violet-500/20" : "bg-zinc-800/40"}`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-start gap-2 min-w-0">
-                          <span className="text-sm mt-0.5 shrink-0">{TYPE_ICON[n.type] ?? "🔔"}</span>
-                          <p className="text-[11px] text-zinc-300 leading-snug">{n.message}</p>
+                  {notifications.map((n) => {
+                    const hasLink = !!n.idea_id;
+                    const trackerPath = n.tracker_type === "post" ? "/post-tracker" : "/content-tracker";
+                    const href = hasLink ? `${trackerPath}?idea=${n.idea_id}` : null;
+                    return (
+                      <div
+                        key={n.id}
+                        onClick={() => {
+                          if (href) { navigate(href); setShowPanel(false); }
+                        }}
+                        className={`rounded-lg px-3 py-2.5 transition-colors ${hasLink ? "cursor-pointer hover:bg-zinc-700/50" : ""} ${!n.read ? "bg-violet-500/8 border border-violet-500/20" : "bg-zinc-800/40"}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-start gap-2 min-w-0">
+                            <span className="text-sm mt-0.5 shrink-0">{TYPE_ICON[n.type] ?? "🔔"}</span>
+                            <p className="text-[11px] text-zinc-300 leading-snug">{n.message}</p>
+                          </div>
+                          <span className="text-[9px] text-zinc-600 shrink-0">{timeAgoShort(n.created_at)}</span>
                         </div>
-                        <span className="text-[9px] text-zinc-600 shrink-0">{timeAgoShort(n.created_at)}</span>
+                        {n.idea_title && (
+                          <p className="text-[10px] text-zinc-500 mt-1 truncate pl-6">📌 {n.idea_title} {hasLink && <span className="text-violet-500">→ open</span>}</p>
+                        )}
                       </div>
-                      {n.idea_title && (
-                        <p className="text-[10px] text-zinc-500 mt-1 truncate pl-6">📌 {n.idea_title}</p>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

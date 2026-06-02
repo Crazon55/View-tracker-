@@ -34,6 +34,7 @@ export interface AppNotification {
   idea_title: string | null;
   from_name: string | null;
   message: string | null;
+  tracker_type: string | null;
   read: boolean;
   created_at: string;
 }
