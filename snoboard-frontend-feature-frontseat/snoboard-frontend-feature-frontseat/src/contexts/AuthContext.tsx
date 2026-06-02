@@ -28,6 +28,7 @@ interface AuthContextType {
   roleName: string | null;
   needsRole: boolean;
   setRole: (role: string) => Promise<void>;
+  clearRole: () => void;
   signOut: () => Promise<void>;
   ROLES: typeof ROLES;
 }
@@ -41,6 +42,7 @@ const AuthContext = createContext<AuthContextType>({
   roleName: null,
   needsRole: false,
   setRole: async () => {},
+  clearRole: () => {},
   signOut: async () => {},
   ROLES,
 });
@@ -62,6 +64,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setDomainError(false);
     setRoleState(null);
     setNeedsRole(false);
+  };
+
+  const clearRole = () => {
+    if (user?.email) localStorage.removeItem(`role_${user.email}`);
+    setRoleState(null);
+    setRoleName(null);
+    setNeedsRole(true);
   };
 
   const handleSetRole = async (newRole: string) => {
@@ -147,7 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, domainError, role, roleName, needsRole, setRole: handleSetRole, signOut, ROLES }}>
+    <AuthContext.Provider value={{ user, session, loading, domainError, role, roleName, needsRole, setRole: handleSetRole, clearRole, signOut, ROLES }}>
       {children}
     </AuthContext.Provider>
   );
