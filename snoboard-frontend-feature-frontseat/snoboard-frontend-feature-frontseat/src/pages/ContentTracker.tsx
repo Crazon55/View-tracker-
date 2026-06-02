@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { hasPermission } from "@/lib/permissions";
 import { PEOPLE_SEED, lookupPerson } from "@/lib/peopleSeed";
+import IdeaThread from "@/components/IdeaThread";
 import { toast } from "sonner";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -1573,6 +1574,11 @@ export default function ContentTracker(){
                 <div style={{marginTop:8,fontSize:11,color:"#52525b"}}>{pp.length}/{effectiveCdPages.length} pages selected</div>
               </div>
             )}
+            <IdeaThread
+              ideaId={cd.id}
+              active={cdStage !== "new"}
+              trackerType="reel"
+            />
             {canDeleteThisIdea(cd) && <button onClick={()=>deleteIdea(cd.id)} style={{...bs,color:"#FF7070",borderColor:"#3f3f46",marginTop:6,fontSize:12}}>Delete idea</button>}
           </div>);})()}
       </Modal>
