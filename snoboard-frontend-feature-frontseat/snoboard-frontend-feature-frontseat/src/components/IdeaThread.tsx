@@ -144,34 +144,32 @@ export default function IdeaThread({ ideaId, active, trackerType }: IdeaThreadPr
   });
 
   const commentMut = useMutation({
-    mutationFn: () =>
-      postIdeaComment(ideaId, { author_email: authorEmail, author_name: authorName, text: commentText.trim(), type: commentType }),
-    onMutate: async () => {
-      // Optimistic update — show message immediately
+    // Pass text + type as variables so they're captured before any state clears
+    mutationFn: ({ text, type }: { text: string; type: CommentType }) =>
+      postIdeaComment(ideaId, { author_email: authorEmail, author_name: authorName, text, type }),
+    onMutate: async ({ text, type }) => {
       const optimistic = {
         id: `optimistic-${Date.now()}`,
         idea_id: ideaId,
         author_email: authorEmail,
         author_name: authorName,
-        text: commentText.trim(),
-        type: commentType,
+        text,
+        type,
         created_at: new Date().toISOString(),
         _optimistic: true,
       };
       queryClient.setQueryData(["idea-comments", ideaId], (old: any[]) => [...(old || []), optimistic]);
-      const snapshot = commentText.trim();
       setCommentText("");
-      return { snapshot };
+      return { snapshot: text };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["idea-comments", ideaId] });
       setTimeout(() => threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: "smooth" }), 100);
     },
     onError: (_err, _vars, context: any) => {
-      // Roll back optimistic update and restore text
       queryClient.invalidateQueries({ queryKey: ["idea-comments", ideaId] });
       setCommentText(context?.snapshot || "");
-      toast.error("Failed to send — make sure the database tables are set up and backend is deployed.");
+      toast.error("Failed to send — check backend logs.");
     },
   });
 
@@ -312,7 +310,7 @@ export default function IdeaThread({ ideaId, active, trackerType }: IdeaThreadPr
             placeholder="Add a comment, flag a blocker, or request a review..."
             rows={2}
             style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1.5px solid #3f3f46", background: "#09090b", color: "#e4e4e7", fontSize: 13, resize: "vertical", fontFamily: "inherit" }}
-            onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && commentText.trim()) commentMut.mutate(); }}
+            onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && commentText.trim()) commentMut.mutate({ text: commentText.trim(), type: commentType }); }}
           />
 
           <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
@@ -327,7 +325,7 @@ export default function IdeaThread({ ideaId, active, trackerType }: IdeaThreadPr
             })}
             <button
               disabled={!commentText.trim() || commentMut.isPending}
-              onClick={() => commentMut.mutate()}
+              onClick={() => commentMut.mutate({ text: commentText.trim(), type: commentType })}
               style={{ marginLeft: "auto", padding: "4px 14px", borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: "pointer", border: "none", background: commentText.trim() ? "#534AB7" : "#27272a", color: commentText.trim() ? "#fff" : "#52525b", transition: "all 0.15s" }}
             >
               {commentMut.isPending ? "Sending..." : "Send →"}
