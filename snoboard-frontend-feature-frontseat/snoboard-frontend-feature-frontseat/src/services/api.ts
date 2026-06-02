@@ -407,6 +407,12 @@ export const postIdeaComment = (ideaId: string, data: { author_email: string; au
 export const deleteIdeaComment = (ideaId: string, commentId: string) =>
   fetchApi<any>(`/api/v1/ideas/${ideaId}/comments/${commentId}`, { method: "DELETE" });
 
+// Notifications
+export const getNotifications = (email: string) =>
+  fetchApi<any[]>(`/api/v1/notifications?email=${encodeURIComponent(email)}`);
+export const markAllNotificationsRead = (email: string) =>
+  fetchApi<any>(`/api/v1/notifications/read-all?email=${encodeURIComponent(email)}`, { method: "PATCH" });
+
 // Blue Ocean Ideas — direct Supabase (bypasses backend, works without redeploy)
 import { supabase as _sb } from "@/lib/supabase";
 

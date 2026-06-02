@@ -8,6 +8,7 @@ import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate } from 
 import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, BarChart3, Scissors, ClipboardList, Trophy, LayoutGrid, Ticket, Newspaper, Waves, Bell, Sparkles, ShieldCheck } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { isRouteAllowed, hasFullNav } from "@/lib/permissions";
+import { useNotifications } from "@/hooks/useNotifications";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -96,8 +97,9 @@ function AnimalPicker({ userId }: { userId: string | undefined }) {
   const { animal, pickAnimal, hasChosen } = useAnimalAvatar(userId);
   const { role, user } = useAuth();
   const [showPanel, setShowPanel] = useState(false);
-  const [panelTab, setPanelTab] = useState<"deadlines" | "avatar">("deadlines");
+  const [panelTab, setPanelTab] = useState<"notifications" | "avatar">("notifications");
   const ref = useRef<HTMLDivElement>(null);
+  const { notifications, unreadCount, markAllRead } = useNotifications();
 
   const { data: taskDeadlines = [] } = useQuery<any[]>({
     queryKey: ["deadlines", role],
@@ -152,25 +154,30 @@ function AnimalPicker({ userId }: { userId: string | undefined }) {
     return () => document.removeEventListener("mousedown", handleClick);
   }, [showPanel]);
 
-  const urgentCount = deadlines.filter((d: any) => {
-    const dl = d.deadline?.slice(0, 10);
-    if (!dl) return false;
-    const today = new Date().toISOString().slice(0, 10);
-    const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-    return dl <= tomorrow;
-  }).length;
+  const TYPE_ICON: Record<string, string> = {
+    comment: "💬", blocker: "🔴", update: "🟡", review_request: "👁", assignment: "🏷️",
+  };
+
+  function timeAgoShort(iso: string) {
+    const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+    if (m < 1) return "now";
+    if (m < 60) return `${m}m`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h`;
+    return `${Math.floor(h / 24)}d`;
+  }
 
   return (
     <div className="relative" ref={ref}>
       <button
-        onClick={() => { setShowPanel(!showPanel); setPanelTab("deadlines"); }}
+        onClick={() => { setShowPanel(!showPanel); setPanelTab("notifications"); if (showPanel === false) markAllRead(); }}
         className="text-xl hover:scale-110 transition-transform cursor-pointer relative"
         title="Notifications & Avatar"
       >
         {animal || "\u{2753}"}
-        {deadlines.length > 0 && (
-          <span className={`absolute -top-1 -right-1 min-w-[16px] h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 ${urgentCount > 0 ? "bg-red-500 animate-pulse" : "bg-violet-500"}`}>
-            {deadlines.length}
+        {unreadCount > 0 && (
+          <span className="absolute -top-1 -right-1 min-w-[16px] h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 bg-violet-500 animate-pulse">
+            {unreadCount}
           </span>
         )}
       </button>
@@ -178,10 +185,10 @@ function AnimalPicker({ userId }: { userId: string | undefined }) {
         <div className="absolute top-full right-0 mt-2 bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl z-[100] w-80 overflow-hidden">
           <div className="flex border-b border-zinc-800">
             <button
-              onClick={() => setPanelTab("deadlines")}
-              className={`flex-1 text-xs font-medium py-2.5 transition-colors ${panelTab === "deadlines" ? "text-violet-400 border-b-2 border-violet-500" : "text-zinc-500 hover:text-zinc-300"}`}
+              onClick={() => { setPanelTab("notifications"); markAllRead(); }}
+              className={`flex-1 text-xs font-medium py-2.5 transition-colors ${panelTab === "notifications" ? "text-violet-400 border-b-2 border-violet-500" : "text-zinc-500 hover:text-zinc-300"}`}
             >
-              Deadlines {deadlines.length > 0 && `(${deadlines.length})`}
+              Notifications {unreadCount > 0 && <span className="ml-1 px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 text-[9px] font-bold">{unreadCount}</span>}
             </button>
             <button
               onClick={() => setPanelTab("avatar")}
@@ -191,39 +198,29 @@ function AnimalPicker({ userId }: { userId: string | undefined }) {
             </button>
           </div>
 
-          {panelTab === "deadlines" && (
-            <div className="max-h-64 overflow-y-auto">
-              {deadlines.length === 0 ? (
-                <p className="text-xs text-zinc-600 text-center py-6">No upcoming deadlines</p>
+          {panelTab === "notifications" && (
+            <div className="max-h-72 overflow-y-auto">
+              {notifications.length === 0 ? (
+                <p className="text-xs text-zinc-600 text-center py-6">No notifications yet</p>
               ) : (
                 <div className="p-2 space-y-1">
-                  {deadlines.map((d: any) => {
-                    const dl = d.deadline?.slice(0, 10) || "";
-                    const today = new Date().toISOString().slice(0, 10);
-                    const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-                    const isUrgent = dl <= tomorrow;
-                    const isOverdue = dl < today || d._kind === "six-day";
-                    const isSixDay = d._kind === "six-day";
-                    const Wrapper: any = isSixDay ? NavLink : "div";
-                    const wrapperProps: any = isSixDay
-                      ? { to: "/six-day-tracker", onClick: () => setShowPanel(false), className: `block rounded-lg px-3 py-2 bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-colors` }
-                      : { className: `rounded-lg px-3 py-2 ${isOverdue ? "bg-red-500/10 border border-red-500/30" : isUrgent ? "bg-amber-500/10 border border-amber-500/30" : "bg-zinc-800/50"}` };
-                    return (
-                      <Wrapper key={d.id} {...wrapperProps}>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-medium text-white truncate max-w-[180px]">{d.idea_name}</span>
-                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${isOverdue ? "bg-red-500/20 text-red-400" : isUrgent ? "bg-amber-500/20 text-amber-400" : "bg-zinc-700 text-zinc-400"}`}>
-                            {isOverdue ? "OVERDUE" : isUrgent ? "TOMORROW" : dl}
-                          </span>
+                  {notifications.map((n) => (
+                    <div
+                      key={n.id}
+                      className={`rounded-lg px-3 py-2.5 ${!n.read ? "bg-violet-500/8 border border-violet-500/20" : "bg-zinc-800/40"}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2 min-w-0">
+                          <span className="text-sm mt-0.5 shrink-0">{TYPE_ICON[n.type] ?? "🔔"}</span>
+                          <p className="text-[11px] text-zinc-300 leading-snug">{n.message}</p>
                         </div>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-[9px] text-zinc-500 uppercase">{d.content_type}</span>
-                          <span className="text-[9px] text-zinc-600 truncate max-w-[180px]">{d.ips || ""}</span>
-                          <span className="text-[9px] text-zinc-600 ml-auto">{d.idea_status}</span>
-                        </div>
-                      </Wrapper>
-                    );
-                  })}
+                        <span className="text-[9px] text-zinc-600 shrink-0">{timeAgoShort(n.created_at)}</span>
+                      </div>
+                      {n.idea_title && (
+                        <p className="text-[10px] text-zinc-500 mt-1 truncate pl-6">📌 {n.idea_title}</p>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
