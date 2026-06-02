@@ -85,7 +85,7 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
 
   // Other roles
   ops_manager:      ['view_all_ideas', 'comment_on_idea', 'view_scheduled', 'view_scheduled_any'],
-  content_creators: CS_CW_PERMISSIONS,
+  content_creators: ['view_all_ideas', 'create_idea', 'edit_own_idea', 'delete_own_idea', 'comment_on_idea'],
 
   // ── Backwards compatibility aliases ───────────────────────────────────────
   // Users who had these old role values in localStorage still get correct access.
@@ -113,7 +113,7 @@ export const ROLE_NAV: Record<string, '*' | string[]> = {
 
   smm:              ['/', '/content-tracker', '/post-tracker', '/growth', '/stage1-tracker'],
   ops_manager:      '*',
-  content_creators: ['/', '/growth'],
+  content_creators: ['/', '/post-ips', '/stage1-tracker', '/six-day-tracker', '/team-performance', '/workboard', '/tickets', '/news', '/blue-ocean', '/podcast-alerts', '/growth', '/pages'],
 }
 
 export function isRouteAllowed(role: string | null, path: string): boolean {
