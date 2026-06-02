@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { hasPermission } from "@/lib/permissions";
+import { PEOPLE_SEED } from "@/lib/peopleSeed";
 import { toast } from "sonner";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -860,6 +861,7 @@ export default function ContentTracker(){
   const [newIdea,setNewIdea]=useState({title:"",source:"original",nicheIds:[] as string[],hook_variations:"",music_ref:"",yt_url:"",yt_timestamps:"",comp_link:"",frame_link:""});
   const [viewMode,setViewMode]=useState("board");
   const [nicheFilter,setNicheFilter]=useState("all");
+  const [personFilter,setPersonFilter]=useState("all");
   const [pageFilter,setPageFilter]=useState("all");
   const [weekStart,setWeekStart]=useState(getMonday(today()));
   const [scheduleDate,setScheduleDate]=useState<Record<string,any>>({});
@@ -904,12 +906,16 @@ export default function ContentTracker(){
 
   // RBAC: scope visible ideas based on the current user's role
   const rbacFilteredIdeas = useMemo(() => {
-    if (hasPermission(role, 'view_all_ideas')) return searchFilteredIdeas;
-    if (hasPermission(role, 'view_own_ideas')) return searchFilteredIdeas.filter((i: any) => i.created_by === userName);
-    if (hasPermission(role, 'view_assigned_ideas')) return searchFilteredIdeas.filter((i: any) => i.executor_name === userName);
-    if (hasPermission(role, 'view_scheduled_any')) return searchFilteredIdeas.filter((i: any) => ['scheduled', 'posted'].includes(normalizePipelineStage(i.stage)));
-    return [];
-  }, [searchFilteredIdeas, role, userName]);
+    let base: any[];
+    if (hasPermission(role, 'view_all_ideas')) base = searchFilteredIdeas;
+    else if (hasPermission(role, 'view_own_ideas')) base = searchFilteredIdeas.filter((i: any) => i.created_by === userName);
+    else if (hasPermission(role, 'view_assigned_ideas')) base = searchFilteredIdeas.filter((i: any) => i.executor_name === userName);
+    else if (hasPermission(role, 'view_scheduled_any')) base = searchFilteredIdeas.filter((i: any) => ['scheduled', 'posted'].includes(normalizePipelineStage(i.stage)));
+    else base = [];
+    // Admin person filter
+    if (personFilter !== "all") base = base.filter((i: any) => i.created_by === personFilter);
+    return base;
+  }, [searchFilteredIdeas, role, userName, personFilter]);
 
   const ideaSearchSuggestions = useMemo(() => {
     const q = ideaSearchQuery.trim().toLowerCase();
@@ -1231,6 +1237,12 @@ export default function ContentTracker(){
           </div>
         </div>
         <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap",alignItems:"center"}}>
+          {can('filter_by_person') && (
+            <select value={personFilter} onChange={e=>setPersonFilter(e.target.value)} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #534AB7",fontSize:12,background:"#09090b",cursor:"pointer",color:"#B49EFF",fontWeight:600}}>
+              <option value="all">👥 Everyone</option>
+              {PEOPLE_SEED.map(p=><option key={p.name} value={p.name}>{p.emoji} {p.name}</option>)}
+            </select>
+          )}
           <select value={nicheFilter} onChange={e=>{setNicheFilter(e.target.value);setPageFilter("all");}} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #3f3f46",fontSize:12,background:"#09090b",cursor:"pointer"}}>
             <option value="all">All niches</option>
             {niches.map(n=><option key={n.id} value={n.id}>{n.name}</option>)}

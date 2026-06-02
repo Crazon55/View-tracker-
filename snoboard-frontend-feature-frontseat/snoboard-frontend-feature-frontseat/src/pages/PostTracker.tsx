@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { hasPermission } from "@/lib/permissions";
+import { PEOPLE_SEED } from "@/lib/peopleSeed";
 import { toast } from "sonner";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -1243,6 +1244,7 @@ export default function PostTracker(){
   const [newIdea,setNewIdea]=useState({title:"",source:"original",nicheIds:[] as string[],format:"static",caption:"",canva_link:"",content_pillars: [] as string[],content_buckets: [] as string[],comp_link:"",hook_text:"",carousel_slides: [""] as string[]});
   const [viewMode,setViewMode]=useState("board");
   const [nicheFilter,setNicheFilter]=useState("all");
+  const [personFilter,setPersonFilter]=useState("all");
   const [pageFilter,setPageFilter]=useState("all");
   const [weekStart,setWeekStart]=useState(getMonday(today()));
   const [scheduleDate,setScheduleDate]=useState<Record<string,any>>({});
@@ -1342,14 +1344,22 @@ export default function PostTracker(){
   // RBAC: scope visible ideas by role.
   // Designer override: view_all_ideas everywhere EXCEPT Post Tracker where only tagged ideas show.
   const rbacFilteredIdeas = useMemo(() => {
+    let base: any[];
     if (hasPermission(role, 'post_tracker_assigned_only')) {
-      return searchFilteredIdeas.filter((i: any) => i.executor_name === userName || i.created_by === userName);
+      base = searchFilteredIdeas.filter((i: any) => i.executor_name === userName || i.created_by === userName);
+    } else if (hasPermission(role, 'view_all_ideas')) {
+      base = searchFilteredIdeas;
+    } else if (hasPermission(role, 'view_own_ideas')) {
+      base = searchFilteredIdeas.filter((i: any) => i.created_by === userName);
+    } else if (hasPermission(role, 'view_assigned_ideas')) {
+      base = searchFilteredIdeas.filter((i: any) => i.executor_name === userName);
+    } else {
+      base = [];
     }
-    if (hasPermission(role, 'view_all_ideas')) return searchFilteredIdeas;
-    if (hasPermission(role, 'view_own_ideas')) return searchFilteredIdeas.filter((i: any) => i.created_by === userName);
-    if (hasPermission(role, 'view_assigned_ideas')) return searchFilteredIdeas.filter((i: any) => i.executor_name === userName);
-    return [];
-  }, [searchFilteredIdeas, role, userName]);
+    // Admin person filter
+    if (personFilter !== "all") base = base.filter((i: any) => i.created_by === personFilter);
+    return base;
+  }, [searchFilteredIdeas, role, userName, personFilter]);
 
   const ideaSearchSuggestions = useMemo(() => {
     const q = ideaSearchQuery.trim().toLowerCase();
@@ -1598,6 +1608,12 @@ export default function PostTracker(){
             <option value="all">All niches</option>
             {niches.map(n=><option key={n.id} value={n.id}>{n.name}</option>)}
           </select>
+          {can('filter_by_person') && (
+            <select value={personFilter} onChange={e=>setPersonFilter(e.target.value)} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #534AB7",fontSize:12,background:"#09090b",cursor:"pointer",color:"#B49EFF",fontWeight:600}}>
+              <option value="all">👥 Everyone</option>
+              {PEOPLE_SEED.map(p=><option key={p.name} value={p.name}>{p.emoji} {p.name}</option>)}
+            </select>
+          )}
           <div style={{display:"flex",background:"#27272a",borderRadius:7,overflow:"hidden",border:"1px solid #3f3f46"}}>
             {([["all","All"],["original","Original"],["competitor","Comp"]] as const).map(([val,label])=>(
               <button key={val} onClick={()=>setSourceFilter(val)} style={{padding:"5px 12px",border:"none",fontSize:12,fontWeight:500,cursor:"pointer",background:sourceFilter===val?(val==="original"?"#1A5E3A":val==="competitor"?"#534AB7":"#3f3f46"):"transparent",color:sourceFilter===val?"#fff":"#71717a"}}>{label}</button>

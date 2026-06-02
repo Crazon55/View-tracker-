@@ -4,7 +4,7 @@ import { getAllUserRoles, setUserRole } from "@/services/api";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { ShieldCheck, RefreshCw } from "lucide-react";
+import { ShieldCheck, RefreshCw, ChevronDown } from "lucide-react";
 
 const ROLE_LABELS: Record<string, string> = {
   senior_cs:         "Senior CS",
@@ -38,7 +38,8 @@ export default function TeamRolesPage() {
   const { can } = usePermissions();
   const { ROLES } = useAuth();
   const queryClient = useQueryClient();
-  const [pendingChanges, setPendingChanges] = useState<Record<string, string>>({});
+  const [pendingChanges, setPendingChanges] = useState<Record<string, string[]>>({});
+  const [openPicker, setOpenPicker] = useState<string | null>(null);
 
   const { data: users = [], isLoading, error } = useQuery({
     queryKey: ["user-roles-all"],
@@ -50,11 +51,8 @@ export default function TeamRolesPage() {
       setUserRole({ email, role, name }),
     onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ["user-roles-all"] });
-      setPendingChanges((prev) => {
-        const next = { ...prev };
-        delete next[vars.email];
-        return next;
-      });
+      setPendingChanges((prev) => { const next = { ...prev }; delete next[vars.email]; return next; });
+      setOpenPicker(null);
       toast.success(`Role updated for ${vars.name}`);
     },
     onError: (_err, vars) => toast.error(`Failed to update role for ${vars.name}`),
@@ -103,55 +101,69 @@ export default function TeamRolesPage() {
         {users.length > 0 && (
           <div className="space-y-2">
             {users.map((u) => {
-              const selected = pendingChanges[u.email] ?? u.role;
-              const isDirty = selected !== u.role;
+              const currentRoles = (u.role || "").split(",").map((r: string) => r.trim()).filter(Boolean);
+              const selectedRoles = pendingChanges[u.email] ?? currentRoles;
+              const isDirty = selectedRoles.join(",") !== currentRoles.join(",");
+              const isOpen = openPicker === u.email;
+
+              const toggleRole = (rv: string) => {
+                const next = selectedRoles.includes(rv)
+                  ? selectedRoles.filter((r) => r !== rv)
+                  : [...selectedRoles, rv];
+                setPendingChanges((prev) => ({ ...prev, [u.email]: next }));
+              };
 
               return (
-                <div
-                  key={u.email}
-                  className="flex items-center justify-between gap-4 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-white truncate">{u.name || u.email.split("@")[0]}</p>
-                    <p className="text-xs text-zinc-500 truncate">{u.email}</p>
+                <div key={u.email} className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-white truncate">{u.name || u.email.split("@")[0]}</p>
+                      <p className="text-xs text-zinc-500 truncate">{u.email}</p>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {/* Current role badges */}
+                      <div className="flex gap-1 flex-wrap justify-end">
+                        {currentRoles.map((r: string) => (
+                          <span key={r} className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider ${ROLE_COLOR[r] ?? "bg-zinc-800 text-zinc-400 border-zinc-700"}`}>
+                            {ROLE_LABELS[r] ?? r}
+                          </span>
+                        ))}
+                      </div>
+
+                      {/* Role picker toggle */}
+                      <button
+                        onClick={() => setOpenPicker(isOpen ? null : u.email)}
+                        className="flex items-center gap-1 text-xs bg-zinc-800 border border-zinc-700 text-zinc-300 rounded-lg px-2.5 py-1.5 hover:border-violet-500 transition-colors"
+                      >
+                        Edit roles <ChevronDown className={`w-3 h-3 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                      </button>
+
+                      {/* Save button */}
+                      <button
+                        disabled={!isDirty || updateRoleMut.isPending}
+                        onClick={() => updateRoleMut.mutate({ email: u.email, role: selectedRoles.join(","), name: u.name })}
+                        className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all ${isDirty ? "bg-violet-600 hover:bg-violet-700 text-white" : "bg-zinc-800 text-zinc-600 cursor-not-allowed"}`}
+                      >
+                        {updateRoleMut.isPending ? "Saving..." : "Save"}
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    {/* Current role badge */}
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider ${ROLE_COLOR[u.role] ?? "bg-zinc-800 text-zinc-400 border-zinc-700"}`}>
-                      {ROLE_LABELS[u.role] ?? u.role}
-                    </span>
-
-                    {/* Role selector */}
-                    <select
-                      value={selected}
-                      onChange={(e) =>
-                        setPendingChanges((prev) => ({ ...prev, [u.email]: e.target.value }))
-                      }
-                      className="bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs rounded-lg px-2 py-1.5 focus:border-violet-500 focus:outline-none"
-                    >
-                      {ROLES.map((r) => (
-                        <option key={r.value} value={r.value}>
-                          {r.label}
-                        </option>
-                      ))}
-                    </select>
-
-                    {/* Save button — only visible when role changed */}
-                    <button
-                      disabled={!isDirty || updateRoleMut.isPending}
-                      onClick={() =>
-                        updateRoleMut.mutate({ email: u.email, role: selected, name: u.name })
-                      }
-                      className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all ${
-                        isDirty
-                          ? "bg-violet-600 hover:bg-violet-700 text-white"
-                          : "bg-zinc-800 text-zinc-600 cursor-not-allowed"
-                      }`}
-                    >
-                      {updateRoleMut.isPending ? "Saving..." : "Save"}
-                    </button>
-                  </div>
+                  {/* Expanded role checkboxes */}
+                  {isOpen && (
+                    <div className="mt-3 pt-3 border-t border-zinc-800 grid grid-cols-2 gap-1.5">
+                      {ROLES.map((r) => {
+                        const checked = selectedRoles.includes(r.value);
+                        return (
+                          <label key={r.value} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer text-xs transition-colors ${checked ? "bg-violet-500/10 text-white border border-violet-500/30" : "text-zinc-400 hover:bg-zinc-800 border border-transparent"}`}>
+                            <input type="checkbox" checked={checked} onChange={() => toggleRole(r.value)} className="rounded border-zinc-700 bg-zinc-800 text-violet-500 w-3 h-3" />
+                            {r.label}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}

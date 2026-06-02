@@ -393,7 +393,8 @@ function AppLayout() {
     location.pathname === "/blue-ocean" ||
     location.pathname === "/podcast-alerts" ||
     location.pathname.startsWith("/post-ips/") ||
-    location.pathname.startsWith("/page/");
+    location.pathname.startsWith("/page/") ||
+    location.pathname === "/team-roles";
 
   return (
     <>

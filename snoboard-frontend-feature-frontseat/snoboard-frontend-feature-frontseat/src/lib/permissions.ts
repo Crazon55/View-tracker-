@@ -118,25 +118,35 @@ export const ROLE_NAV: Record<string, '*' | string[]> = {
 
 export function isRouteAllowed(role: string | null, path: string): boolean {
   if (!role) return false
-  const allowed = ROLE_NAV[role]
-  // Unknown role (or role not in ROLE_NAV) → full access
-  if (!allowed || allowed === '*') return true
-  return (allowed as string[]).includes(path)
+  // Multi-role: allowed if ANY role permits the route
+  return parseRoles(role).some((r) => {
+    const allowed = ROLE_NAV[r]
+    if (!allowed || allowed === '*') return true
+    return (allowed as string[]).includes(path)
+  })
 }
 
 export function hasFullNav(role: string | null): boolean {
   if (!role) return false
-  const allowed = ROLE_NAV[role]
-  return !allowed || allowed === '*'
+  return parseRoles(role).some((r) => {
+    const allowed = ROLE_NAV[r]
+    return !allowed || allowed === '*'
+  })
 }
 
 // ── Helper functions ──────────────────────────────────────────────────────────
 
+// Splits "cs,cw" into ["cs", "cw"] — single roles work as-is
+function parseRoles(role: string): string[] {
+  return role.split(',').map((r) => r.trim()).filter(Boolean)
+}
+
 export function hasPermission(role: string | null, permission: Permission): boolean {
   if (!role) return false
-  // Unknown role → treat as admin so no one gets accidentally locked out
-  if (!(role in ROLE_PERMISSIONS)) return true
-  return (ROLE_PERMISSIONS[role] ?? []).includes(permission)
+  return parseRoles(role).some((r) => {
+    if (!(r in ROLE_PERMISSIONS)) return true // unknown role = full access
+    return (ROLE_PERMISSIONS[r] ?? []).includes(permission)
+  })
 }
 
 export function canEditIdea(
