@@ -1421,11 +1421,12 @@ async def post_idea_comment(idea_id: str, req: dict):
     }).execute().data[0]
     # Notify all other people in this thread (assignees + idea creator)
     try:
-        idea = client.table("tracker_ideas").select("title,created_by").eq("id", idea_id).execute().data
+        idea = client.table("tracker_ideas").select("title,created_by,type").eq("id", idea_id).execute().data
         idea_title = idea[0]["title"] if idea else "an idea"
         creator_name = idea[0].get("created_by", "") if idea else ""
-        # Use tracker_type from request (most reliable), fall back to DB lookup
-        tracker_type = req_tracker_type or "reel"
+        # Use tracker_type from request body first, fall back to DB type column
+        db_type = idea[0].get("type") if idea else None
+        tracker_type = req_tracker_type or db_type or "reel"
 
         assignments = client.table("idea_assignments").select("assignee_email").eq("idea_id", idea_id).execute().data or []
         to_notify = {a["assignee_email"] for a in assignments if a["assignee_email"] != author_email}
