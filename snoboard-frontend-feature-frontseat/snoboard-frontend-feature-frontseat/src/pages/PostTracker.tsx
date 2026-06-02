@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { hasPermission } from "@/lib/permissions";
-import { PEOPLE_SEED } from "@/lib/peopleSeed";
+import { PEOPLE_SEED, lookupPerson } from "@/lib/peopleSeed";
 import { toast } from "sonner";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -1356,8 +1356,13 @@ export default function PostTracker(){
     } else {
       base = [];
     }
-    // Admin person filter
-    if (personFilter !== "all") base = base.filter((i: any) => i.created_by === personFilter);
+    // Admin person filter — normalize against PEOPLE_SEED so "Kaavya" matches "Kaavya Mahajan"
+    if (personFilter !== "all") {
+      base = base.filter((i: any) => {
+        const person = lookupPerson(i.created_by);
+        return i.created_by === personFilter || person?.name === personFilter;
+      });
+    }
     return base;
   }, [searchFilteredIdeas, role, userName, personFilter]);
 
