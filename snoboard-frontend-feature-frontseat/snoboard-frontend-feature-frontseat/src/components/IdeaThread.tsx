@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { supabase } from "@/lib/supabase";
+import { toast } from "sonner";
 import {
   getAllUserRoles,
   getIdeaAssignments,
@@ -133,20 +134,44 @@ export default function IdeaThread({ ideaId, active, trackerType }: IdeaThreadPr
     mutationFn: (u: { email: string; name: string }) =>
       addIdeaAssignment(ideaId, { assignee_email: u.email, assignee_name: u.name, assigned_by_email: authorEmail }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["idea-assignments", ideaId] }),
+    onError: () => toast.error("Failed to tag — backend may not be deployed yet."),
   });
 
   const unassignMut = useMutation({
     mutationFn: (assignmentId: string) => removeIdeaAssignment(ideaId, assignmentId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["idea-assignments", ideaId] }),
+    onError: () => toast.error("Failed to remove — backend may not be deployed yet."),
   });
 
   const commentMut = useMutation({
     mutationFn: () =>
       postIdeaComment(ideaId, { author_email: authorEmail, author_name: authorName, text: commentText.trim(), type: commentType }),
-    onSuccess: () => {
+    onMutate: async () => {
+      // Optimistic update — show message immediately
+      const optimistic = {
+        id: `optimistic-${Date.now()}`,
+        idea_id: ideaId,
+        author_email: authorEmail,
+        author_name: authorName,
+        text: commentText.trim(),
+        type: commentType,
+        created_at: new Date().toISOString(),
+        _optimistic: true,
+      };
+      queryClient.setQueryData(["idea-comments", ideaId], (old: any[]) => [...(old || []), optimistic]);
+      const snapshot = commentText.trim();
       setCommentText("");
+      return { snapshot };
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["idea-comments", ideaId] });
       setTimeout(() => threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: "smooth" }), 100);
+    },
+    onError: (_err, _vars, context: any) => {
+      // Roll back optimistic update and restore text
+      queryClient.invalidateQueries({ queryKey: ["idea-comments", ideaId] });
+      setCommentText(context?.snapshot || "");
+      toast.error("Failed to send — make sure the database tables are set up and backend is deployed.");
     },
   });
 
