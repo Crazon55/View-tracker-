@@ -90,7 +90,6 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
   // ── Backwards compatibility aliases ───────────────────────────────────────
   // Users who had these old role values in localStorage still get correct access.
   admin:          ADMIN_PERMISSIONS,
-  cdi:            ADMIN_PERMISSIONS,
   ai_automations: ADMIN_PERMISSIONS,
   post_designer:  COLLABORATOR_PERMISSIONS,
 }
