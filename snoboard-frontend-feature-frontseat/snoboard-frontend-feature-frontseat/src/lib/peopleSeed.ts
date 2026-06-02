@@ -32,11 +32,11 @@ export const PEOPLE_SEED: SeedPerson[] = [
   { name: "Om Verma", role: "cs",  niche: "garfields", emoji: "🧠" }, // CS lead
   { name: "Deepak",   role: "cs",  niche: "garfields", emoji: "🧠" },
   { name: "Kaavya",   role: "cw",  niche: "garfields", aliases: ["Kaavya Mahajan"], emoji: "📝" },
-  { name: "Swati",    role: "cdi", niche: "garfields", emoji: "🎬" },
+  { name: "Swati",    role: "cs",  niche: "garfields", emoji: "🧠" },
   // Goofies
   { name: "Arohi",  role: "cs",  niche: "goofies", emoji: "🧠" },
   { name: "Harish", role: "cw",  niche: "goofies", aliases: ["Harish R"], emoji: "📝" },
-  { name: "Pulkit",   role: "cdi", niche: "goofies", emoji: "🎬" },
+  { name: "Pulkit",   role: "cs",  niche: "goofies", emoji: "🧠" },
   { name: "Samiksha", role: "cdi", niche: "goofies", emoji: "🎬" },
   // The Sherus
   { name: "Sugam",  role: "cs", niche: "sheruses", emoji: "🦁" },
