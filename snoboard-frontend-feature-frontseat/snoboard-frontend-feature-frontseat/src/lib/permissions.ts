@@ -113,7 +113,7 @@ export const ROLE_NAV: Record<string, '*' | string[]> = {
 
   smm:              ['/', '/content-tracker', '/post-tracker', '/growth', '/stage1-tracker'],
   ops_manager:      '*',
-  content_creators: ['/', '/post-ips', '/stage1-tracker', '/six-day-tracker', '/team-performance', '/workboard', '/tickets', '/news', '/blue-ocean', '/podcast-alerts', '/growth', '/pages'],
+  content_creators: ['/', '/six-day-tracker', '/team-performance', '/workboard', '/tickets', '/news', '/blue-ocean', '/growth'],
 }
 
 export function isRouteAllowed(role: string | null, path: string): boolean {
