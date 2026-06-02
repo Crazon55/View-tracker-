@@ -36,7 +36,6 @@ export const PEOPLE_SEED: SeedPerson[] = [
   { name: "Arohi",    role: "cs", niche: "goofies", emoji: "🧠" },
   { name: "Harish",   role: "cw", niche: "goofies", aliases: ["Harish R"], emoji: "📝" },
   { name: "Pulkit",   role: "cs", niche: "goofies", emoji: "🧠" },
-  { name: "Samiksha", role: "cs", niche: "goofies", emoji: "🧠" },
   // The Sherus
   { name: "Sugam",  role: "cs", niche: "sheruses", emoji: "🦁" },
   { name: "Nitesh", role: "cs", niche: "sheruses", emoji: "🦁" },
