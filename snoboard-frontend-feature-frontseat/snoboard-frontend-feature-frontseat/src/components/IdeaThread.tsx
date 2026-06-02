@@ -147,7 +147,7 @@ export default function IdeaThread({ ideaId, active, trackerType }: IdeaThreadPr
   const commentMut = useMutation({
     // Pass text + type as variables so they're captured before any state clears
     mutationFn: ({ text, type }: { text: string; type: CommentType }) =>
-      postIdeaComment(ideaId, { author_email: authorEmail, author_name: authorName, text, type }),
+      postIdeaComment(ideaId, { author_email: authorEmail, author_name: authorName, text, type, tracker_type: trackerType }),
     onMutate: async ({ text, type }) => {
       const optimistic = {
         id: `optimistic-${Date.now()}`,
