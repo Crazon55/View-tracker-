@@ -1416,12 +1416,27 @@ async def post_idea_comment(idea_id: str, req: dict):
         "type": comment_type,
         "attachment_url": attachment_url,
     }).execute().data[0]
-    # Notify all other people in this thread
+    # Notify all other people in this thread (assignees + idea creator)
     try:
-        idea = client.table("tracker_ideas").select("title").eq("id", idea_id).execute().data
+        idea = client.table("tracker_ideas").select("title,created_by").eq("id", idea_id).execute().data
         idea_title = idea[0]["title"] if idea else "an idea"
+        creator_name = idea[0].get("created_by", "") if idea else ""
+
         assignments = client.table("idea_assignments").select("assignee_email").eq("idea_id", idea_id).execute().data or []
         to_notify = {a["assignee_email"] for a in assignments if a["assignee_email"] != author_email}
+
+        # Also notify the idea creator — look up their email by name in user_roles
+        if creator_name:
+            creator_rows = client.table("user_roles").select("email").ilike("name", creator_name).execute().data
+            if not creator_rows:
+                # Try first-name match (e.g. "Kaavya" matches "Kaavya Mahajan")
+                first = creator_name.split()[0]
+                creator_rows = client.table("user_roles").select("email").ilike("name", f"{first}%").execute().data
+            if creator_rows:
+                creator_email = creator_rows[0]["email"]
+                if creator_email != author_email:
+                    to_notify.add(creator_email)
+
         type_labels = {"comment": "commented", "blocker": "flagged a blocker", "update": "posted an update", "review_request": "requested a review"}
         verb = type_labels.get(comment_type, "commented")
         preview = text[:80] + ("..." if len(text) > 80 else "")
