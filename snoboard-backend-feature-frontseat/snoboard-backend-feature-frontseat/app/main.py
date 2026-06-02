@@ -1345,9 +1345,9 @@ async def add_idea_assignment(idea_id: str, req: dict):
     assignee_email = req.get("assignee_email")
     assignee_name = req.get("assignee_name", "")
     assigned_by_email = req.get("assigned_by_email", "")
+    assigned_by_name = req.get("assigned_by_name", "Someone")
     if not assignee_email:
         raise HTTPException(status_code=400, detail="assignee_email required")
-    # Avoid duplicate assignments
     existing = client.table("idea_assignments").select("id").eq("idea_id", idea_id).eq("assignee_email", assignee_email).execute().data
     if existing:
         return {"success": True, "data": existing[0]}
@@ -1357,6 +1357,20 @@ async def add_idea_assignment(idea_id: str, req: dict):
         "assignee_name": assignee_name,
         "assigned_by_email": assigned_by_email,
     }).execute().data[0]
+    # Notify the assignee
+    try:
+        idea = client.table("tracker_ideas").select("title").eq("id", idea_id).execute().data
+        idea_title = idea[0]["title"] if idea else "an idea"
+        client.table("notifications").insert({
+            "user_email": assignee_email,
+            "type": "assignment",
+            "idea_id": idea_id,
+            "idea_title": idea_title,
+            "from_name": assigned_by_name,
+            "message": f"You've been tagged on \"{idea_title}\"",
+        }).execute()
+    except Exception:
+        pass
     return {"success": True, "data": entry}
 
 @app.delete("/api/v1/ideas/{idea_id}/assignments/{assignment_id}")
@@ -1402,7 +1416,44 @@ async def post_idea_comment(idea_id: str, req: dict):
         "type": comment_type,
         "attachment_url": attachment_url,
     }).execute().data[0]
+    # Notify all other people in this thread
+    try:
+        idea = client.table("tracker_ideas").select("title").eq("id", idea_id).execute().data
+        idea_title = idea[0]["title"] if idea else "an idea"
+        assignments = client.table("idea_assignments").select("assignee_email").eq("idea_id", idea_id).execute().data or []
+        to_notify = {a["assignee_email"] for a in assignments if a["assignee_email"] != author_email}
+        type_labels = {"comment": "commented", "blocker": "flagged a blocker", "update": "posted an update", "review_request": "requested a review"}
+        verb = type_labels.get(comment_type, "commented")
+        preview = text[:80] + ("..." if len(text) > 80 else "")
+        for email in to_notify:
+            client.table("notifications").insert({
+                "user_email": email,
+                "type": comment_type,
+                "idea_id": idea_id,
+                "idea_title": idea_title,
+                "from_name": author_name,
+                "message": f"{author_name} {verb} on \"{idea_title}\": {preview}",
+            }).execute()
+    except Exception:
+        pass
     return {"success": True, "data": entry}
+
+
+# --- Notifications ---
+
+@app.get("/api/v1/notifications")
+async def get_notifications(email: str):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    data = client.table("notifications").select("*").eq("user_email", email).order("created_at", desc=True).limit(50).execute().data or []
+    return {"success": True, "data": data}
+
+@app.patch("/api/v1/notifications/read-all")
+async def mark_all_notifications_read(email: str):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    client.table("notifications").update({"read": True}).eq("user_email", email).eq("read", False).execute()
+    return {"success": True}
 
 
 # --- Growth Data ---
