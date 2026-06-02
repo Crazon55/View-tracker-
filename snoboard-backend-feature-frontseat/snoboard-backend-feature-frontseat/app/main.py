@@ -1329,6 +1329,74 @@ async def set_user_role(req: dict):
     return {"success": True, "data": entry}
 
 
+# --- Idea Thread: Assignments + Comments ---
+
+@app.get("/api/v1/ideas/{idea_id}/assignments")
+async def get_idea_assignments(idea_id: str):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    data = client.table("idea_assignments").select("*").eq("idea_id", idea_id).order("created_at").execute().data or []
+    return {"success": True, "data": data}
+
+@app.post("/api/v1/ideas/{idea_id}/assignments")
+async def add_idea_assignment(idea_id: str, req: dict):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    assignee_email = req.get("assignee_email")
+    assignee_name = req.get("assignee_name", "")
+    assigned_by_email = req.get("assigned_by_email", "")
+    if not assignee_email:
+        raise HTTPException(status_code=400, detail="assignee_email required")
+    # Avoid duplicate assignments
+    existing = client.table("idea_assignments").select("id").eq("idea_id", idea_id).eq("assignee_email", assignee_email).execute().data
+    if existing:
+        return {"success": True, "data": existing[0]}
+    entry = client.table("idea_assignments").insert({
+        "idea_id": idea_id,
+        "assignee_email": assignee_email,
+        "assignee_name": assignee_name,
+        "assigned_by_email": assigned_by_email,
+    }).execute().data[0]
+    return {"success": True, "data": entry}
+
+@app.delete("/api/v1/ideas/{idea_id}/assignments/{assignment_id}")
+async def remove_idea_assignment(idea_id: str, assignment_id: str):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    client.table("idea_assignments").delete().eq("id", assignment_id).eq("idea_id", idea_id).execute()
+    return {"success": True}
+
+@app.get("/api/v1/ideas/{idea_id}/comments")
+async def get_idea_comments(idea_id: str):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    data = client.table("idea_comments").select("*").eq("idea_id", idea_id).order("created_at").execute().data or []
+    return {"success": True, "data": data}
+
+@app.post("/api/v1/ideas/{idea_id}/comments")
+async def post_idea_comment(idea_id: str, req: dict):
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    author_email = req.get("author_email")
+    author_name = req.get("author_name", "")
+    text = req.get("text", "").strip()
+    comment_type = req.get("type", "comment")
+    attachment_url = req.get("attachment_url")
+    if not author_email or not text:
+        raise HTTPException(status_code=400, detail="author_email and text required")
+    if comment_type not in ("comment", "blocker", "update", "review_request"):
+        comment_type = "comment"
+    entry = client.table("idea_comments").insert({
+        "idea_id": idea_id,
+        "author_email": author_email,
+        "author_name": author_name,
+        "text": text,
+        "type": comment_type,
+        "attachment_url": attachment_url,
+    }).execute().data[0]
+    return {"success": True, "data": entry}
+
+
 # --- Growth Data ---
 @app.get("/api/v1/growth")
 async def get_growth_data():
