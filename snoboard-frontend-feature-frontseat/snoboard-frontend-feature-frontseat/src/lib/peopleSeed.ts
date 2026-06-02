@@ -1,10 +1,9 @@
-﻿/**
+/**
  * People seed for the Bandwidth Tracker.
  *
- * Hardcoded role (CS / CDI / CW / …) and niche (garfields / goofies) for every
- * person who produces reel-tracker work. The Bandwidth page joins this seed
- * against `created_by` / `base_edit_by` / `pintu_set_by` / `posted_by` from
- * the backend.
+ * Hardcoded role and niche for every person who produces reel/post tracker work.
+ * The Bandwidth page joins this seed against `created_by` / `base_edit_by` /
+ * `pintu_set_by` / `posted_by` from the backend.
  *
  * EDIT THIS when the team changes — no backend redeploy needed.
  *
@@ -13,7 +12,7 @@
  * `aliases` (common nicknames / email local parts) are matched.
  */
 
-export type PersonRole = "cs" | "cdi" | "cw" | "design" | "ai_automations" | "ops_manager" | "editors" | "content_creators";
+export type PersonRole = "senior_cs" | "cs" | "cw" | "design" | "ai_dev" | "ops_manager" | "editors" | "content_creators" | "carousel_designer" | "smm";
 export type PersonNiche = "garfields" | "goofies" | "sheruses";
 
 export type SeedPerson = {
@@ -29,41 +28,45 @@ export type SeedPerson = {
 // Role / niche assignments. Edit here when the team changes.
 export const PEOPLE_SEED: SeedPerson[] = [
   // Garfields
-  { name: "Om Verma", role: "cs",  niche: "garfields", emoji: "🧠" }, // CS lead
-  { name: "Deepak",   role: "cs",  niche: "garfields", emoji: "🧠" },
-  { name: "Kaavya",   role: "cw",  niche: "garfields", aliases: ["Kaavya Mahajan"], emoji: "📝" },
-  { name: "Swati",    role: "cs",  niche: "garfields", emoji: "🧠" },
+  { name: "Om Verma",  role: "senior_cs", niche: "garfields", emoji: "⭐" },
+  { name: "Deepak",    role: "cs",        niche: "garfields", emoji: "🧠" },
+  { name: "Kaavya",    role: "cw",        niche: "garfields", aliases: ["Kaavya Mahajan"], emoji: "📝" },
+  { name: "Swati",     role: "cs",        niche: "garfields", emoji: "🧠" },
   // Goofies
-  { name: "Arohi",  role: "cs",  niche: "goofies", emoji: "🧠" },
-  { name: "Harish", role: "cw",  niche: "goofies", aliases: ["Harish R"], emoji: "📝" },
-  { name: "Pulkit",   role: "cs",  niche: "goofies", emoji: "🧠" },
-  { name: "Samiksha", role: "cdi", niche: "goofies", emoji: "🎬" },
+  { name: "Arohi",    role: "cs", niche: "goofies", emoji: "🧠" },
+  { name: "Harish",   role: "cw", niche: "goofies", aliases: ["Harish R"], emoji: "📝" },
+  { name: "Pulkit",   role: "cs", niche: "goofies", emoji: "🧠" },
+  { name: "Samiksha", role: "cs", niche: "goofies", emoji: "🧠" },
   // The Sherus
   { name: "Sugam",  role: "cs", niche: "sheruses", emoji: "🦁" },
   { name: "Nitesh", role: "cs", niche: "sheruses", emoji: "🦁" },
 ];
 
 export const ROLE_LABEL: Record<PersonRole, string> = {
-  cs: "CS",
-  cdi: "CDI",
-  cw: "CW",
-  design: "Design",
-  ai_automations: "AI / Automations",
-  ops_manager: "Ops",
-  editors: "Editors",
-  content_creators: "Creators",
+  senior_cs:         "Senior CS",
+  cs:                "CS",
+  cw:                "CW",
+  design:            "Designer",
+  ai_dev:            "AI Dev",
+  ops_manager:       "Ops",
+  editors:           "Editor",
+  content_creators:  "Creator",
+  carousel_designer: "Carousel Designer",
+  smm:               "SMM",
 };
 
 export const ROLE_COLOR: Record<PersonRole, { text: string; bg: string; border: string }> = {
-  cs:              { text: "#7BB0FF", bg: "rgba(74,127,212,0.15)",  border: "rgba(74,127,212,0.40)" },
-  cdi:             { text: "#F0A050", bg: "rgba(212,118,42,0.15)",  border: "rgba(212,118,42,0.40)" },
-  cw:              { text: "#50E0B0", bg: "rgba(29,158,117,0.15)",  border: "rgba(29,158,117,0.40)" },
-  design:          { text: "#B49EFF", bg: "rgba(123,97,196,0.15)",  border: "rgba(123,97,196,0.40)" },
-  ai_automations:  { text: "#9B8FFF", bg: "rgba(83,74,183,0.15)",   border: "rgba(83,74,183,0.40)" },
-  ops_manager:     { text: "#F0C060", bg: "rgba(212,149,42,0.15)",  border: "rgba(212,149,42,0.40)" },
-  editors:         { text: "#FF7070", bg: "rgba(201,59,59,0.15)",   border: "rgba(201,59,59,0.40)" },
-  content_creators:{ text: "#5AE0A0", bg: "rgba(45,158,95,0.15)",   border: "rgba(45,158,95,0.40)" },
-};
+  senior_cs:         { text: "#C084FC", bg: "rgba(192,132,252,0.15)", border: "rgba(192,132,252,0.40)" },
+  cs:                { text: "#7BB0FF", bg: "rgba(74,127,212,0.15)",  border: "rgba(74,127,212,0.40)" },
+  cw:                { text: "#50E0B0", bg: "rgba(29,158,117,0.15)",  border: "rgba(29,158,117,0.40)" },
+  design:            { text: "#B49EFF", bg: "rgba(123,97,196,0.15)",  border: "rgba(123,97,196,0.40)" },
+  ai_dev:            { text: "#9B8FFF", bg: "rgba(83,74,183,0.15)",   border: "rgba(83,74,183,0.40)" },
+  ops_manager:       { text: "#F0C060", bg: "rgba(212,149,42,0.15)",  border: "rgba(212,149,42,0.40)" },
+  editors:           { text: "#FF7070", bg: "rgba(201,59,59,0.15)",   border: "rgba(201,59,59,0.40)" },
+  content_creators:  { text: "#5AE0A0", bg: "rgba(45,158,95,0.15)",   border: "rgba(45,158,95,0.40)" },
+  carousel_designer: { text: "#FFA07A", bg: "rgba(255,160,122,0.15)", border: "rgba(255,160,122,0.40)" },
+  smm:               { text: "#F472B6", bg: "rgba(244,114,182,0.15)", border: "rgba(244,114,182,0.40)" },
+} as any;
 
 export const NICHE_LABEL: Record<PersonNiche | "unassigned", string> = {
   garfields: "Garfields",
