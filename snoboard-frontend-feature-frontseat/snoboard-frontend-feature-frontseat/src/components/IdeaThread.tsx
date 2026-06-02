@@ -11,6 +11,7 @@ import {
   removeIdeaAssignment,
   getIdeaComments,
   postIdeaComment,
+  deleteIdeaComment,
 } from "@/services/api";
 
 type TrackerType = "reel" | "post";
@@ -173,6 +174,20 @@ export default function IdeaThread({ ideaId, active, trackerType }: IdeaThreadPr
     },
   });
 
+  const deleteCommentMut = useMutation({
+    mutationFn: (commentId: string) => deleteIdeaComment(ideaId, commentId),
+    onMutate: async (commentId) => {
+      queryClient.setQueryData(["idea-comments", ideaId], (old: any[]) =>
+        (old || []).filter((c: any) => c.id !== commentId)
+      );
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["idea-comments", ideaId] }),
+    onError: () => {
+      queryClient.invalidateQueries({ queryKey: ["idea-comments", ideaId] });
+      toast.error("Failed to delete comment.");
+    },
+  });
+
   useEffect(() => {
     if (threadRef.current && typeFilter === "all") {
       threadRef.current.scrollTop = threadRef.current.scrollHeight;
@@ -284,6 +299,17 @@ export default function IdeaThread({ ideaId, active, trackerType }: IdeaThreadPr
                       {meta.emoji} {meta.label}
                     </span>
                     <span style={{ fontSize: 10, color: "#52525b", marginLeft: "auto" }}>{timeAgo(c.created_at)}</span>
+                    {(isMe || can('delete_any_idea')) && !c._optimistic && (
+                      <button
+                        onClick={() => deleteCommentMut.mutate(c.id)}
+                        title="Delete message"
+                        style={{ background: "none", border: "none", color: "#52525b", cursor: "pointer", fontSize: 13, padding: "0 2px", lineHeight: 1 }}
+                        onMouseEnter={(e) => (e.currentTarget.style.color = "#FF7070")}
+                        onMouseLeave={(e) => (e.currentTarget.style.color = "#52525b")}
+                      >
+                        ×
+                      </button>
+                    )}
                   </div>
                   <p style={{ fontSize: 13, color: "#d4d4d8", margin: 0, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{c.text}</p>
                   {c.attachment_url && (

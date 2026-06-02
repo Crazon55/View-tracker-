@@ -404,6 +404,8 @@ export const removeIdeaAssignment = (ideaId: string, assignmentId: string) =>
 export const getIdeaComments = (ideaId: string) => fetchApi<any[]>(`/api/v1/ideas/${ideaId}/comments`);
 export const postIdeaComment = (ideaId: string, data: { author_email: string; author_name: string; text: string; type: string; attachment_url?: string }) =>
   fetchApi<any>(`/api/v1/ideas/${ideaId}/comments`, { method: "POST", body: JSON.stringify(data) });
+export const deleteIdeaComment = (ideaId: string, commentId: string) =>
+  fetchApi<any>(`/api/v1/ideas/${ideaId}/comments/${commentId}`, { method: "DELETE" });
 
 // Blue Ocean Ideas — direct Supabase (bypasses backend, works without redeploy)
 import { supabase as _sb } from "@/lib/supabase";
