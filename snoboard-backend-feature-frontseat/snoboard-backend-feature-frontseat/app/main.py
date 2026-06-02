@@ -1359,8 +1359,9 @@ async def add_idea_assignment(idea_id: str, req: dict):
     }).execute().data[0]
     # Notify the assignee
     try:
-        idea = client.table("tracker_ideas").select("title").eq("id", idea_id).execute().data
+        idea = client.table("tracker_ideas").select("title,type").eq("id", idea_id).execute().data
         idea_title = idea[0]["title"] if idea else "an idea"
+        tracker_type = idea[0].get("type", "reel") if idea else "reel"
         client.table("notifications").insert({
             "user_email": assignee_email,
             "type": "assignment",
@@ -1368,6 +1369,7 @@ async def add_idea_assignment(idea_id: str, req: dict):
             "idea_title": idea_title,
             "from_name": assigned_by_name,
             "message": f"You've been tagged on \"{idea_title}\"",
+            "tracker_type": tracker_type,
         }).execute()
     except Exception:
         pass
@@ -1418,9 +1420,10 @@ async def post_idea_comment(idea_id: str, req: dict):
     }).execute().data[0]
     # Notify all other people in this thread (assignees + idea creator)
     try:
-        idea = client.table("tracker_ideas").select("title,created_by").eq("id", idea_id).execute().data
+        idea = client.table("tracker_ideas").select("title,created_by,type").eq("id", idea_id).execute().data
         idea_title = idea[0]["title"] if idea else "an idea"
         creator_name = idea[0].get("created_by", "") if idea else ""
+        tracker_type = idea[0].get("type", "reel") if idea else "reel"
 
         assignments = client.table("idea_assignments").select("assignee_email").eq("idea_id", idea_id).execute().data or []
         to_notify = {a["assignee_email"] for a in assignments if a["assignee_email"] != author_email}
@@ -1429,7 +1432,6 @@ async def post_idea_comment(idea_id: str, req: dict):
         if creator_name:
             creator_rows = client.table("user_roles").select("email").ilike("name", creator_name).execute().data
             if not creator_rows:
-                # Try first-name match (e.g. "Kaavya" matches "Kaavya Mahajan")
                 first = creator_name.split()[0]
                 creator_rows = client.table("user_roles").select("email").ilike("name", f"{first}%").execute().data
             if creator_rows:
@@ -1448,6 +1450,7 @@ async def post_idea_comment(idea_id: str, req: dict):
                 "idea_title": idea_title,
                 "from_name": author_name,
                 "message": f"{author_name} {verb} on \"{idea_title}\": {preview}",
+                "tracker_type": tracker_type,
             }).execute()
     except Exception:
         pass
