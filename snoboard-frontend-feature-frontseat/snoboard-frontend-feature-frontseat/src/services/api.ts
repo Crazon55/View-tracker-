@@ -395,6 +395,16 @@ export const setUserRole = (data: { email: string; role: string; name?: string }
   fetchApi<any>("/api/v1/user-role", { method: "POST", body: JSON.stringify(data) });
 export const getAllUserRoles = () => fetchApi<{ email: string; name: string; role: string }[]>("/api/v1/user-roles");
 
+// Idea Thread — assignments + comments
+export const getIdeaAssignments = (ideaId: string) => fetchApi<any[]>(`/api/v1/ideas/${ideaId}/assignments`);
+export const addIdeaAssignment = (ideaId: string, data: { assignee_email: string; assignee_name: string; assigned_by_email: string }) =>
+  fetchApi<any>(`/api/v1/ideas/${ideaId}/assignments`, { method: "POST", body: JSON.stringify(data) });
+export const removeIdeaAssignment = (ideaId: string, assignmentId: string) =>
+  fetchApi<any>(`/api/v1/ideas/${ideaId}/assignments/${assignmentId}`, { method: "DELETE" });
+export const getIdeaComments = (ideaId: string) => fetchApi<any[]>(`/api/v1/ideas/${ideaId}/comments`);
+export const postIdeaComment = (ideaId: string, data: { author_email: string; author_name: string; text: string; type: string; attachment_url?: string }) =>
+  fetchApi<any>(`/api/v1/ideas/${ideaId}/comments`, { method: "POST", body: JSON.stringify(data) });
+
 // Blue Ocean Ideas — direct Supabase (bypasses backend, works without redeploy)
 import { supabase as _sb } from "@/lib/supabase";
 
