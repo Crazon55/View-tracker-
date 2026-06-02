@@ -393,6 +393,7 @@ export const getDeadlines = (role?: string) =>
 export const getUserRole = (email: string) => fetchApi<any>(`/api/v1/user-role/${encodeURIComponent(email)}`);
 export const setUserRole = (data: { email: string; role: string; name?: string }) =>
   fetchApi<any>("/api/v1/user-role", { method: "POST", body: JSON.stringify(data) });
+export const getAllUserRoles = () => fetchApi<{ email: string; name: string; role: string }[]>("/api/v1/user-roles");
 
 // Blue Ocean Ideas — direct Supabase (bypasses backend, works without redeploy)
 import { supabase as _sb } from "@/lib/supabase";

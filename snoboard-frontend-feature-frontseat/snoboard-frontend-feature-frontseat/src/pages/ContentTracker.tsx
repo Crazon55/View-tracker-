@@ -1,6 +1,8 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePermissions } from "@/hooks/usePermissions";
+import { hasPermission } from "@/lib/permissions";
 import { toast } from "sonner";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -740,6 +742,7 @@ function AnalyticsView({ideas,niches,nicheFilter,pageFilter,dateFrom,dateTo,setD
 
 export default function ContentTracker(){
   const { user } = useAuth();
+  const { can, canDeleteThisIdea, userName, role } = usePermissions();
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -899,6 +902,15 @@ export default function ContentTracker(){
     return filteredIdeas.filter((i) => fuzzyMatchesIdea(q, i));
   }, [filteredIdeas, ideaSearchDebounced]);
 
+  // RBAC: scope visible ideas based on the current user's role
+  const rbacFilteredIdeas = useMemo(() => {
+    if (hasPermission(role, 'view_all_ideas')) return searchFilteredIdeas;
+    if (hasPermission(role, 'view_own_ideas')) return searchFilteredIdeas.filter((i: any) => i.created_by === userName);
+    if (hasPermission(role, 'view_assigned_ideas')) return searchFilteredIdeas.filter((i: any) => i.executor_name === userName);
+    if (hasPermission(role, 'view_scheduled_any')) return searchFilteredIdeas.filter((i: any) => ['scheduled', 'posted'].includes(normalizePipelineStage(i.stage)));
+    return [];
+  }, [searchFilteredIdeas, role, userName]);
+
   const ideaSearchSuggestions = useMemo(() => {
     const q = ideaSearchQuery.trim().toLowerCase();
     if (q.length < 1 || !ideaSearchFocused) return [] as any[];
@@ -915,12 +927,12 @@ export default function ContentTracker(){
     STAGES.forEach((s) => {
       counts[s] = 0;
     });
-    searchFilteredIdeas.forEach((i: any) => {
+    rbacFilteredIdeas.forEach((i: any) => {
       const st = normalizePipelineStage(i.stage);
       if (st in counts) counts[st] = (counts[st] ?? 0) + 1;
     });
     return counts;
-  }, [searchFilteredIdeas]);
+  }, [rbacFilteredIdeas]);
 
   const ideasForHeaderStats = useMemo(() => {
     if (statFilterMode === "all") return ideasAfterBoardFilters;
@@ -1359,7 +1371,7 @@ export default function ContentTracker(){
               </button>
             </div>
             <button onClick={()=>setSettingsOpen(true)} style={bs}>Niches</button>
-            <button onClick={()=>setAddOpen(true)} style={bp}>+ New idea</button>
+            {can('create_idea') && <button onClick={()=>setAddOpen(true)} style={bp}>+ New idea</button>}
           </div>
         </div>
       </div>
@@ -1379,7 +1391,7 @@ export default function ContentTracker(){
                 <span style={{fontSize:10,color:"#52525b",fontWeight:500}}>{ideaStageCounts[stage] ?? 0}</span>
               </div>
               <div style={{minHeight:50,padding:1,borderRadius:9,transition:"all 0.15s",border:dropStage===stage?"2px solid #7c3aed":"2px solid transparent",background:dropStage===stage?"rgba(124,58,237,0.05)":"transparent"}}>
-                {searchFilteredIdeas.filter(i=>normalizePipelineStage(i.stage)===stage).sort((a,b)=>b.createdAt-a.createdAt).map(idea=>(
+                {rbacFilteredIdeas.filter((i: any)=>normalizePipelineStage(i.stage)===stage).sort((a: any,b: any)=>b.createdAt-a.createdAt).map((idea: any)=>(
                   <div key={idea.id} draggable onDragStart={e=>{setDraggingId(idea.id);e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain",idea.id);}} onDragEnd={()=>{setDraggingId(null);setDropStage(null);}} style={{opacity:draggingId===idea.id?0.4:1,transition:"opacity 0.15s"}}>
                     <IdeaCard idea={idea} niches={niches} onClick={()=>openDetail(idea)}/>
                   </div>
@@ -1544,7 +1556,7 @@ export default function ContentTracker(){
                 <div style={{marginTop:8,fontSize:11,color:"#52525b"}}>{pp.length}/{effectiveCdPages.length} pages selected</div>
               </div>
             )}
-            <button onClick={()=>deleteIdea(cd.id)} style={{...bs,color:"#FF7070",borderColor:"#3f3f46",marginTop:6,fontSize:12}}>Delete idea</button>
+            {canDeleteThisIdea(cd) && <button onClick={()=>deleteIdea(cd.id)} style={{...bs,color:"#FF7070",borderColor:"#3f3f46",marginTop:6,fontSize:12}}>Delete idea</button>}
           </div>);})()}
       </Modal>
 

@@ -1,6 +1,8 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePermissions } from "@/hooks/usePermissions";
+import { hasPermission } from "@/lib/permissions";
 import { toast } from "sonner";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -1113,6 +1115,7 @@ function AnalyticsView({ideas,niches,nicheFilter,pageFilter,dateFrom,dateTo,setD
 
 export default function PostTracker(){
   const { user } = useAuth();
+  const { can, canDeleteThisIdea, userName, role } = usePermissions();
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -1336,6 +1339,18 @@ export default function PostTracker(){
     return filteredIdeas.filter((i) => fuzzyMatchesPostIdea(q, i));
   }, [filteredIdeas, ideaSearchDebounced]);
 
+  // RBAC: scope visible ideas by role.
+  // Designer override: view_all_ideas everywhere EXCEPT Post Tracker where only tagged ideas show.
+  const rbacFilteredIdeas = useMemo(() => {
+    if (hasPermission(role, 'post_tracker_assigned_only')) {
+      return searchFilteredIdeas.filter((i: any) => i.executor_name === userName || i.created_by === userName);
+    }
+    if (hasPermission(role, 'view_all_ideas')) return searchFilteredIdeas;
+    if (hasPermission(role, 'view_own_ideas')) return searchFilteredIdeas.filter((i: any) => i.created_by === userName);
+    if (hasPermission(role, 'view_assigned_ideas')) return searchFilteredIdeas.filter((i: any) => i.executor_name === userName);
+    return [];
+  }, [searchFilteredIdeas, role, userName]);
+
   const ideaSearchSuggestions = useMemo(() => {
     const q = ideaSearchQuery.trim().toLowerCase();
     if (q.length < 1 || !ideaSearchFocused) return [] as any[];
@@ -1352,7 +1367,7 @@ export default function PostTracker(){
     STAGES.forEach((s) => {
       counts[s] = 0;
     });
-    searchFilteredIdeas.forEach((i: any) => {
+    rbacFilteredIdeas.forEach((i: any) => {
       const st = normalizePostTrackerStage(i.stage);
       if (st in counts) counts[st] = (counts[st] ?? 0) + 1;
     });
@@ -1723,7 +1738,7 @@ export default function PostTracker(){
               </button>
             </div>
             <button onClick={()=>setSettingsOpen(true)} style={bs}>Niches</button>
-            <button onClick={()=>setAddOpen(true)} style={bp}>+ New idea</button>
+            {can('create_idea') && <button onClick={()=>setAddOpen(true)} style={bp}>+ New idea</button>}
           </div>
         </div>
       </div>
@@ -1743,7 +1758,7 @@ export default function PostTracker(){
                 <span style={{fontSize:10,color:"#52525b",fontWeight:500}}>{ideaStageCounts[stage] ?? 0}</span>
               </div>
               <div style={{minHeight:50,padding:1,borderRadius:9,transition:"all 0.15s",border:dropStage===stage?"2px solid #7c3aed":"2px solid transparent",background:dropStage===stage?"rgba(124,58,237,0.05)":"transparent"}}>
-                {searchFilteredIdeas.filter(i=>normalizePostTrackerStage(i.stage)===stage).sort((a,b)=>b.createdAt-a.createdAt).map(idea=>(
+                {rbacFilteredIdeas.filter((i: any)=>normalizePostTrackerStage(i.stage)===stage).sort((a: any,b: any)=>b.createdAt-a.createdAt).map((idea: any)=>(
                   <div key={idea.id} draggable onDragStart={e=>{setDraggingId(idea.id);e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain",idea.id);}} onDragEnd={()=>{setDraggingId(null);setDropStage(null);}} style={{opacity:draggingId===idea.id?0.4:1,transition:"opacity 0.15s"}}>
                     <IdeaCard idea={idea} niches={niches} onClick={()=>openDetail(idea)}/>
                   </div>
@@ -1756,10 +1771,10 @@ export default function PostTracker(){
       )}
 
       {/* Calendar */}
-      {viewMode==="calendar"&&<CalendarView ideas={searchFilteredIdeas} niches={niches} nicheFilter={nicheFilter} pageFilter={pageFilter} onClickIdea={openDetail} weekStart={weekStart} setWeekStart={setWeekStart}/>}
+      {viewMode==="calendar"&&<CalendarView ideas={rbacFilteredIdeas} niches={niches} nicheFilter={nicheFilter} pageFilter={pageFilter} onClickIdea={openDetail} weekStart={weekStart} setWeekStart={setWeekStart}/>}
 
       {/* Analytics */}
-      {viewMode==="analytics"&&<AnalyticsView ideas={searchFilteredIdeas} niches={niches} nicheFilter={nicheFilter} pageFilter={pageFilter} dateFrom={dateFrom} dateTo={dateTo} setDateFrom={setDateFrom} setDateTo={setDateTo} setPageFilter={setPageFilter} onClickIdea={openDetail}/>}
+      {viewMode==="analytics"&&<AnalyticsView ideas={rbacFilteredIdeas} niches={niches} nicheFilter={nicheFilter} pageFilter={pageFilter} dateFrom={dateFrom} dateTo={dateTo} setDateFrom={setDateFrom} setDateTo={setDateTo} setPageFilter={setPageFilter} onClickIdea={openDetail}/>}
 
       {/* Add Idea */}
       <Modal open={addOpen} onClose={()=>setAddOpen(false)} title="Add new post idea">
@@ -2031,7 +2046,7 @@ export default function PostTracker(){
                 <div style={{marginTop:8,fontSize:11,color:"#52525b"}}>{pp.length}/{cdPages.length} pages selected</div>
               </div>
             )}
-            <button onClick={()=>deleteIdea(cd.id)} style={{...bs,color:"#FF7070",borderColor:"#3f3f46",marginTop:6,fontSize:12}}>Delete idea</button>
+            {canDeleteThisIdea(cd) && <button onClick={()=>deleteIdea(cd.id)} style={{...bs,color:"#FF7070",borderColor:"#3f3f46",marginTop:6,fontSize:12}}>Delete idea</button>}
           </div>);})()}
       </Modal>
 

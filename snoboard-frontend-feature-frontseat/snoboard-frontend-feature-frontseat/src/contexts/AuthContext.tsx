@@ -6,14 +6,17 @@ import { setAccessToken, getUserRole, setUserRole } from "@/services/api";
 const ALLOWED_DOMAIN = "owledmedia.com";
 
 const ROLES = [
-  { value: "cs", label: "CS (Content Strategist)" },
-  { value: "cdi", label: "CDI (Content Director)" },
-  { value: "design", label: "Design" },
-  { value: "ai_automations", label: "AI / Automations" },
-  { value: "ops_manager", label: "Ops Manager (Faceless)" },
-  { value: "cw", label: "Content Writers (CW)" },
-  { value: "editors", label: "Editors" },
-  { value: "content_creators", label: "Content Creators" },
+  { value: "senior_cs",         label: "Senior CS" },
+  { value: "boss_man",          label: "Boss Man" },
+  { value: "ai_dev",            label: "AI Dev" },
+  { value: "cs",                label: "CS (Content Strategist)" },
+  { value: "cw",                label: "Content Writer (CW)" },
+  { value: "editors",           label: "Editor" },
+  { value: "carousel_designer", label: "Carousel Designer" },
+  { value: "design",            label: "Designer" },
+  { value: "smm",               label: "Social Media Manager (SMM)" },
+  { value: "ops_manager",       label: "Ops Manager" },
+  { value: "content_creators",  label: "Content Creator" },
 ];
 
 interface AuthContextType {

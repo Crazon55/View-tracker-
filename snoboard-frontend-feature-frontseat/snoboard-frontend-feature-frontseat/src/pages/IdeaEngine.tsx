@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageDistributionSelect from "@/components/PageDistributionSelect";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePermissions } from "@/hooks/usePermissions";
+import { hasPermission } from "@/lib/permissions";
 import {
   getIdeaEngine,
   getCSList,
@@ -102,7 +104,7 @@ export default function IdeaEngine() {
   // sourceTab removed — this page only shows original ideas
 
   const { user } = useAuth();
-  const userName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "";
+  const { can, canEditThisIdea, canDeleteThisIdea, userName, role } = usePermissions();
 
   // Idea form
   const [hook, setHook] = useState("");
@@ -310,6 +312,15 @@ export default function IdeaEngine() {
       )
     : tabIdeas;
 
+  // RBAC: scope visible ideas based on the current user's role
+  const roleFilteredIdeas = hasPermission(role, 'view_all_ideas')
+    ? filteredIdeas
+    : hasPermission(role, 'view_own_ideas')
+    ? filteredIdeas.filter((i) => i.created_by === userName || i.cs_owner_name === userName)
+    : hasPermission(role, 'view_assigned_ideas')
+    ? filteredIdeas.filter((i) => i.executor_name === userName)
+    : [];
+
   // Helper to get page handles from IDs
   function getPageHandles(pageIds: string[] | null): string[] {
     if (!pageIds) return [];
@@ -341,7 +352,7 @@ export default function IdeaEngine() {
             <p className="text-sm text-zinc-500 mt-1">Track ideas, measure hit-rate, rank your CS team</p>
           </div>
           <div className="flex gap-2">
-            <Dialog open={csOpen} onOpenChange={setCsOpen}>
+            {can('edit_any_idea') && <Dialog open={csOpen} onOpenChange={setCsOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" size="sm" className="border-zinc-700 text-zinc-400 hover:text-white">
                   <UserPlus className="w-4 h-4 mr-2" />
@@ -386,9 +397,9 @@ export default function IdeaEngine() {
                   </div>
                 )}
               </DialogContent>
-            </Dialog>
+            </Dialog>}
 
-            <Dialog open={ideaOpen} onOpenChange={setIdeaOpen}>
+            {can('create_idea') && <Dialog open={ideaOpen} onOpenChange={setIdeaOpen}>
               <DialogTrigger asChild>
                 <Button size="sm" className="bg-violet-600 hover:bg-violet-700 text-white">
                   <Plus className="w-4 h-4 mr-2" />
@@ -485,7 +496,7 @@ export default function IdeaEngine() {
                   </p>
                 </form>
               </DialogContent>
-            </Dialog>
+            </Dialog>}
           </div>
         </div>
 
@@ -683,16 +694,20 @@ export default function IdeaEngine() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredIdeas.length === 0 ? (
+              {roleFilteredIdeas.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={16} className="text-center text-zinc-500 py-8">
                     {ideas.length === 0
                       ? "No ideas yet. Click \"New Idea\" to create your first one."
+                      : can('view_own_ideas')
+                      ? "No ideas created by you yet."
+                      : can('view_assigned_ideas')
+                      ? "No ideas assigned to you yet."
                       : "No ideas matching your search."}
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredIdeas.map((idea) => {
+                roleFilteredIdeas.map((idea) => {
                   const ideaLabel = `${idea.idea_code} — ${idea.hook}`.trim();
                   const distributedEntries = allContentEntries.filter((e: any) => e.idea_name === ideaLabel || e.idea_name === idea.hook);
                   const isExpanded = expandedIdeaId === idea.id;
@@ -700,7 +715,7 @@ export default function IdeaEngine() {
                   <TableRow key={idea.id} className="cursor-pointer" onClick={() => { setSelectedIdea(idea); setSheetEdit({ hook: idea.hook, hook_variations: (idea.hook_variations || []).join("\n"), executor_name: idea.executor_name || "", format: idea.format || "reel", status: idea.status || "draft", deadline: idea.deadline?.slice(0, 10) || "", yt_url: idea.yt_url || "", timestamps: idea.timestamps || "", base_drive_link: idea.base_drive_link || "", pintu_batch_link: idea.pintu_batch_link || "", distributed_to: idea.distributed_to || [] }); }}>
                     {(() => {
                       const isRowEdit = editingRowId === idea.id;
-                      const startEdit = (e: React.MouseEvent) => { e.stopPropagation(); if (!isRowEdit) { setEditingRowId(idea.id); setEditRowData({ hook: idea.hook, hook_variations: (idea.hook_variations || []).join("\n"), executor_name: idea.executor_name || "", format: idea.format, deadline: idea.deadline || "", yt_url: idea.yt_url || "", timestamps: idea.timestamps || "", base_drive_link: idea.base_drive_link || "", pintu_batch_link: idea.pintu_batch_link || "" }); } };
+                      const startEdit = (e: React.MouseEvent) => { e.stopPropagation(); if (!canEditThisIdea(idea)) return; if (!isRowEdit) { setEditingRowId(idea.id); setEditRowData({ hook: idea.hook, hook_variations: (idea.hook_variations || []).join("\n"), executor_name: idea.executor_name || "", format: idea.format, deadline: idea.deadline || "", yt_url: idea.yt_url || "", timestamps: idea.timestamps || "", base_drive_link: idea.base_drive_link || "", pintu_batch_link: idea.pintu_batch_link || "" }); } };
                       return (<>
                     <TableCell>
                       <span className="font-mono text-xs font-bold text-violet-400">{idea.idea_code}</span>
@@ -843,13 +858,15 @@ export default function IdeaEngine() {
                             <ExternalLink className="w-3.5 h-3.5" />
                           </a>
                         )}
-                        <Button
-                          variant="ghost" size="icon"
-                          className="h-7 w-7 text-zinc-600 hover:text-red-400"
-                          onClick={(e) => { e.stopPropagation(); deleteIdeaMutation.mutate(idea.id); }}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
+                        {canDeleteThisIdea(idea) && (
+                          <Button
+                            variant="ghost" size="icon"
+                            className="h-7 w-7 text-zinc-600 hover:text-red-400"
+                            onClick={(e) => { e.stopPropagation(); deleteIdeaMutation.mutate(idea.id); }}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
                         </>)}
                       </div>
                     </TableCell>

@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAllContentEntries, updateContentEntry, deleteContentEntry, getPages } from "@/services/api";
 import type { Page } from "@/types";
+import { usePermissions } from "@/hooks/usePermissions";
+import { hasPermission } from "@/lib/permissions";
 import { Badge } from "@/components/ui/badge";
 import { ExternalLink, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -21,6 +23,7 @@ const PIPELINE_STAGES = [
 
 export default function PipelineView() {
   const queryClient = useQueryClient();
+  const { can, userName, role } = usePermissions();
   const [filterPage, setFilterPage] = useState("all");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
@@ -75,11 +78,27 @@ export default function PipelineView() {
       : pageFiltered.filter((e: any) => e.content_type === "carousel" || e.content_type === "static");
 
   // Filter by month
-  const entries = typeFiltered.filter((e: any) => {
+  const monthFiltered = typeFiltered.filter((e: any) => {
     const d = (e.upload_date || e.created_at || "")?.slice(0, 7);
     if (!d) return true;
     return d === monthPrefix;
   });
+
+  // RBAC: scope visible entries based on the current user's role
+  const entries = hasPermission(role, 'view_all_ideas')
+    ? monthFiltered
+    : hasPermission(role, 'view_own_ideas')
+    ? monthFiltered.filter((e: any) => e.created_by === userName)
+    : hasPermission(role, 'view_assigned_ideas')
+    ? monthFiltered.filter((e: any) => e.assigned_role === userName || e.created_by === userName)
+    : hasPermission(role, 'view_scheduled_any')
+    ? monthFiltered.filter((e: any) => ['scheduled', 'posted'].includes(e.idea_status || ''))
+    : [];
+
+  // SMM sees only scheduled + posted stages; everyone else sees all stages
+  const visibleStages = hasPermission(role, 'view_scheduled_any') && !hasPermission(role, 'view_all_ideas') && !hasPermission(role, 'view_own_ideas')
+    ? PIPELINE_STAGES.filter((s) => s.value === 'scheduled' || s.value === 'posted')
+    : PIPELINE_STAGES;
 
   function getPageHandle(entry: any): string {
     if (entry.ips) return entry.ips;
@@ -170,8 +189,8 @@ export default function PipelineView() {
         </div>
 
         {/* Kanban columns */}
-        <div className="grid grid-cols-6 gap-3 items-start">
-          {PIPELINE_STAGES.map((stage) => {
+        <div className="grid gap-3 items-start" style={{ gridTemplateColumns: `repeat(${visibleStages.length}, minmax(0, 1fr))` }}>
+          {visibleStages.map((stage) => {
             const stageEntries = entries.filter((e: any) => (e.idea_status || "idea") === stage.value);
             const isDropping = dropTarget === stage.value;
 
@@ -238,13 +257,15 @@ export default function PipelineView() {
                               <ExternalLink className="w-3 h-3" /> Link
                             </a>
                           ) : <span />}
-                          <button
-                            onClick={(e) => { e.stopPropagation(); deleteMut.mutate(entry.id); }}
-                            className="text-zinc-600 hover:text-red-400 transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {(can('delete_any_idea') || (can('delete_own_idea') && entry.created_by === userName)) && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); deleteMut.mutate(entry.id); }}
+                              className="text-zinc-600 hover:text-red-400 transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </div>
                     );

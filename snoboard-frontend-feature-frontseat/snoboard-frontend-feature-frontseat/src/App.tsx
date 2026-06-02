@@ -5,7 +5,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { getDeadlines, getSixDayConfig, getSixDayDeadlines, getTickets } from "@/services/api";
 import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, BarChart3, Scissors, ClipboardList, Trophy, LayoutGrid, Ticket, Newspaper, Waves, Bell, Sparkles } from "lucide-react";
+import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, BarChart3, Scissors, ClipboardList, Trophy, LayoutGrid, Ticket, Newspaper, Waves, Bell, Sparkles, ShieldCheck } from "lucide-react";
+import { usePermissions } from "@/hooks/usePermissions";
+import { isRouteAllowed, hasFullNav } from "@/lib/permissions";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -35,6 +37,7 @@ import NewsFeed from "./pages/NewsFeed";
 import BlueOceanIdeas from "./pages/BlueOceanIdeas";
 import PodcastAlerts from "./pages/PodcastAlerts";
 import RoleSelect from "./pages/RoleSelect";
+import TeamRolesPage from "./pages/TeamRolesPage";
 import NotFound from "./pages/NotFound";
 import { MonthlyWrapRoot, MonthlyWrapOpenButton } from "./components/MonthlyWrapHost";
 import { stashWrapMonthFromUrl } from "@/lib/monthlyWrap";
@@ -277,6 +280,10 @@ function HamburgerMenu() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const { can, role } = usePermissions();
+  const allowedNavItems = navItems.filter((item) =>
+    item.external ? hasFullNav(role) : isRouteAllowed(role, item.to)
+  );
 
   const { data: assignedTickets = [] } = useQuery<any[]>({
     queryKey: ["tickets-assigned-badge", (user?.email || "").toLowerCase()],
@@ -305,7 +312,7 @@ function HamburgerMenu() {
             <p className="text-xs text-muted-foreground mt-0.5">Frontseat Media</p>
           </div>
           <nav className="px-3 py-4 space-y-1 flex-1 overflow-y-auto">
-            {navItems.map(({ to, label, icon: Icon, external }) => (
+            {allowedNavItems.map(({ to, label, icon: Icon, external }) => (
               <button
                 key={to}
                 onClick={() => {
@@ -330,6 +337,15 @@ function HamburgerMenu() {
           </nav>
           <div className="px-3 py-4 border-t border-zinc-800">
             <p className="px-3 text-xs text-zinc-600 truncate mb-2">{user?.email}</p>
+            {can('filter_by_person') && (
+              <button
+                onClick={() => { navigate("/team-roles"); setOpen(false); }}
+                className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors w-full text-left text-violet-400 hover:text-violet-300 hover:bg-zinc-900"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                Manage Team Roles
+              </button>
+            )}
             <button
               onClick={signOut}
               className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors w-full text-left text-red-400 hover:text-red-300 hover:bg-zinc-900"
@@ -347,6 +363,10 @@ function HamburgerMenu() {
 function AppLayout() {
   const location = useLocation();
   const { user, signOut } = useAuth();
+  const { role: layoutRole } = usePermissions();
+  const sidebarNavItems = navItems.filter((item) =>
+    item.external ? hasFullNav(layoutRole) : isRouteAllowed(layoutRole, item.to)
+  );
 
   const { data: assignedTicketsSidebar = [] } = useQuery<any[]>({
     queryKey: ["tickets-assigned-badge-sidebar", (user?.email || "").toLowerCase()],
@@ -420,6 +440,7 @@ function AppLayout() {
             <Route path="/podcast-alerts" element={<PodcastAlerts />} />
             <Route path="/ideas" element={<IdeaEngine />} />
             <Route path="/competitor-ideas" element={<CompetitorIdeas />} />
+            <Route path="/team-roles" element={<TeamRolesPage />} />
           </Routes>
         </div>
       ) : (
@@ -432,7 +453,7 @@ function AppLayout() {
             </div>
 
             <nav className="flex-1 px-3 py-4 space-y-1">
-              {navItems.map(({ to, label, icon: Icon, external }) => (
+              {sidebarNavItems.map(({ to, label, icon: Icon, external }) => (
                 external ? (
                   <a
                     key={to}

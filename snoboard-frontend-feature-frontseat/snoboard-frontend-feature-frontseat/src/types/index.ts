@@ -120,3 +120,25 @@ export interface IdeaEngineData {
   ideas: IdeaStat[];
   cs_leaderboard: CSStat[];
 }
+
+// ── RBAC supporting types ─────────────────────────────────────────────────────
+
+export interface IdeaAssignment {
+  id: string;
+  idea_id: string;
+  assignee_email: string;
+  assignee_name: string;
+  assigned_by_email: string;
+  created_at: string;
+}
+
+export interface IdeaComment {
+  id: string;
+  idea_id: string;
+  author_email: string;
+  author_name: string;
+  text: string;
+  type: 'comment' | 'blocker' | 'update' | 'review_request';
+  attachment_url?: string;
+  created_at: string;
+}
