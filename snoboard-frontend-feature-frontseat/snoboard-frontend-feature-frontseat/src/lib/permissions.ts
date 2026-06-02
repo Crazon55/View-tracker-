@@ -86,6 +86,13 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
   // Other roles
   ops_manager:      ['view_all_ideas', 'comment_on_idea', 'view_scheduled', 'view_scheduled_any'],
   content_creators: COLLABORATOR_PERMISSIONS,
+
+  // ── Backwards compatibility aliases ───────────────────────────────────────
+  // Users who had these old role values in localStorage still get correct access.
+  admin:          ADMIN_PERMISSIONS,
+  cdi:            ADMIN_PERMISSIONS,
+  ai_automations: ADMIN_PERMISSIONS,
+  post_designer:  COLLABORATOR_PERMISSIONS,
 }
 
 // ── Role → allowed nav routes ─────────────────────────────────────────────────
@@ -113,6 +120,7 @@ export const ROLE_NAV: Record<string, '*' | string[]> = {
 export function isRouteAllowed(role: string | null, path: string): boolean {
   if (!role) return false
   const allowed = ROLE_NAV[role]
+  // Unknown role (or role not in ROLE_NAV) → full access
   if (!allowed || allowed === '*') return true
   return (allowed as string[]).includes(path)
 }
@@ -127,6 +135,8 @@ export function hasFullNav(role: string | null): boolean {
 
 export function hasPermission(role: string | null, permission: Permission): boolean {
   if (!role) return false
+  // Unknown role → treat as admin so no one gets accidentally locked out
+  if (!(role in ROLE_PERMISSIONS)) return true
   return (ROLE_PERMISSIONS[role] ?? []).includes(permission)
 }
 
