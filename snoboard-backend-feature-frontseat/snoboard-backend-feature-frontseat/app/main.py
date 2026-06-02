@@ -1303,6 +1303,14 @@ async def get_all_deadlines():
     return {"success": True, "data": entries}
 
 
+@app.get("/api/v1/user-roles")
+async def get_all_user_roles():
+    from app.database.client import get_supabase_client
+    client = get_supabase_client()
+    data = client.table("user_roles").select("email,name,role").order("name").execute().data or []
+    return {"success": True, "data": data}
+
+
 @app.post("/api/v1/user-role")
 async def set_user_role(req: dict):
     from app.database.client import get_supabase_client
