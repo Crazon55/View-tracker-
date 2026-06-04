@@ -468,42 +468,47 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose }: {
 }
 
 // ---------------------------------------------------------------------------
-// Archive card (read-only — used in Content Bank)
+// Archive card (Content Bank) — clickable, opens full IdeaDetailModal
 // ---------------------------------------------------------------------------
-function ArchiveRow({ item }: { item: any }) {
-  const [expanded, setExpanded] = useState(false);
+function ArchiveRow({ item, onUpdate, onDelete }: { item: any; onUpdate: (id: string, data: any) => void; onDelete: (id: string) => void }) {
+  const [detailOpen, setDetailOpen] = useState(false);
   const pc = PAGE_COLORS[item.page_handle] || "#a1a1aa";
-  const ss = STATUS_STYLE[item.status] || STATUS_STYLE.draft;
+  const ss = STATUS_STYLE[item.status || "new"] || STATUS_STYLE.new;
+
   return (
-    <div style={{ background: "#111113", border: "1px solid #27272a", borderRadius: 8, overflow: "hidden" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", flexWrap: "wrap" }}>
-        <span style={{ fontSize: 10, fontWeight: 700, color: pc, background: pc + "22", borderRadius: 4, padding: "2px 7px" }}>
-          {item.page_handle}
-        </span>
-        <span style={{ fontSize: 10, color: "#71717a", background: "#27272a", borderRadius: 4, padding: "2px 7px" }}>
-          {item.content_type}
-        </span>
-        <span style={{ fontSize: 10, fontWeight: 600, color: ss.text, background: ss.bg, borderRadius: 4, padding: "2px 6px" }}>
-          {item.status}
-        </span>
-        <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: "#e4e4e7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {item.topic || <em style={{ color: "#52525b" }}>No topic</em>}
-        </span>
-        <span style={{ fontSize: 12, fontWeight: 600, color: item.views > 0 ? "#50E0B0" : "#3f3f46" }}>
-          {item.views > 0 ? fmt(item.views) : "—"}
-        </span>
-        {item.script && (
-          <button onClick={() => setExpanded(e => !e)} style={{ background: "none", border: "none", color: "#52525b", cursor: "pointer", fontSize: 11 }}>
-            {expanded ? "▲" : "▼"}
-          </button>
-        )}
-      </div>
-      {expanded && item.script && (
-        <div style={{ borderTop: "1px solid #1f1f22", padding: "8px 12px", background: "#0d0d0f" }}>
-          <p style={{ margin: 0, fontSize: 11, color: "#71717a", lineHeight: 1.5 }}>{item.script}</p>
+    <>
+      <div
+        onClick={() => setDetailOpen(true)}
+        style={{
+          background: "#111113", border: "1px solid #27272a", borderRadius: 8,
+          cursor: "pointer", transition: "border-color 0.12s",
+        }}
+        onMouseEnter={e => (e.currentTarget.style.borderColor = "#3f3f46")}
+        onMouseLeave={e => (e.currentTarget.style.borderColor = "#27272a")}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", flexWrap: "wrap" }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: pc, background: pc + "22", borderRadius: 4, padding: "2px 7px" }}>{item.page_handle}</span>
+          <span style={{ fontSize: 10, color: "#71717a", background: "#27272a", borderRadius: 4, padding: "2px 7px" }}>{item.content_type}</span>
+          <span style={{ fontSize: 10, fontWeight: 600, color: ss.text, background: ss.bg, borderRadius: 4, padding: "2px 6px" }}>{STAGE_LABEL[item.status] || item.status}</span>
+          <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: "#e4e4e7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {item.topic || <em style={{ color: "#52525b" }}>No topic</em>}
+          </span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: item.views > 0 ? "#50E0B0" : "#3f3f46" }}>
+            {item.views > 0 ? fmt(item.views) : "—"}
+          </span>
+          <span style={{ fontSize: 10, color: "#52525b" }}>Open →</span>
         </div>
+      </div>
+
+      {detailOpen && (
+        <IdeaDetailModal
+          idea={item}
+          onUpdate={onUpdate}
+          onDelete={onDelete}
+          onClose={() => setDetailOpen(false)}
+        />
       )}
-    </div>
+    </>
   );
 }
 
@@ -550,50 +555,49 @@ function WorkingIdeaDetailModal({ item, onClose }: { item: any; onClose: () => v
           <p style={{ color: "#52525b", fontSize: 12 }}>Loading idea content…</p>
         ) : (
           <>
-            {idea.hook_variations && (
-              <div>
-                <label style={ls}>Hook variations</label>
-                <pre style={{ ...fieldStyle, margin: 0, whiteSpace: "pre-wrap", fontFamily: "inherit" }}>{idea.hook_variations}</pre>
+            <div>
+              <label style={ls}>Hook variations</label>
+              <pre style={{ ...fieldStyle, margin: 0, whiteSpace: "pre-wrap", fontFamily: "inherit", color: idea.hook_variations ? "#e4e4e7" : "#3f3f46", minHeight: 60 }}>
+                {idea.hook_variations || "No hook variations added"}
+              </pre>
+            </div>
+            <div>
+              <label style={ls}>Script / notes</label>
+              <pre style={{ ...fieldStyle, margin: 0, whiteSpace: "pre-wrap", fontFamily: "inherit", color: idea.script ? "#e4e4e7" : "#3f3f46", minHeight: 60 }}>
+                {idea.script || "No script added"}
+              </pre>
+            </div>
+            <div>
+              <label style={ls}>Music reference</label>
+              <div style={{ ...fieldStyle, color: idea.music_ref ? "#e4e4e7" : "#3f3f46" }}>{idea.music_ref || "—"}</div>
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <div style={{ flex: 1 }}>
+                <label style={ls}>YT link</label>
+                {idea.yt_url
+                  ? <a href={idea.yt_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block" }}>{idea.yt_url}</a>
+                  : <div style={{ ...fieldStyle, color: "#3f3f46" }}>—</div>
+                }
               </div>
-            )}
-            {idea.script && (
-              <div>
-                <label style={ls}>Script / notes</label>
-                <pre style={{ ...fieldStyle, margin: 0, whiteSpace: "pre-wrap", fontFamily: "inherit" }}>{idea.script}</pre>
+              <div style={{ flex: "0 0 140px" }}>
+                <label style={ls}>Timestamps</label>
+                <div style={{ ...fieldStyle, color: idea.yt_timestamps ? "#e4e4e7" : "#3f3f46" }}>{idea.yt_timestamps || "—"}</div>
               </div>
-            )}
-            {idea.music_ref && (
-              <div>
-                <label style={ls}>Music reference</label>
-                <div style={fieldStyle}>{idea.music_ref}</div>
-              </div>
-            )}
-            {idea.frame_link && (
-              <div>
-                <label style={ls}>Frame link</label>
-                <a href={idea.frame_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block" }}>{idea.frame_link}</a>
-              </div>
-            )}
-            {idea.yt_url && (
-              <div style={{ display: "flex", gap: 10 }}>
-                <div style={{ flex: 1 }}>
-                  <label style={ls}>YT link</label>
-                  <a href={idea.yt_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block" }}>{idea.yt_url}</a>
-                </div>
-                {idea.yt_timestamps && (
-                  <div style={{ flex: "0 0 140px" }}>
-                    <label style={ls}>Timestamps</label>
-                    <div style={{ fontSize: 13, color: "#e4e4e7" }}>{idea.yt_timestamps}</div>
-                  </div>
-                )}
-              </div>
-            )}
-            {idea.comp_link && (
-              <div>
-                <label style={ls}>Comp link</label>
-                <a href={idea.comp_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block" }}>{idea.comp_link}</a>
-              </div>
-            )}
+            </div>
+            <div>
+              <label style={ls}>Frame link</label>
+              {idea.frame_link
+                ? <a href={idea.frame_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block" }}>{idea.frame_link}</a>
+                : <div style={{ ...fieldStyle, color: "#3f3f46" }}>—</div>
+              }
+            </div>
+            <div>
+              <label style={ls}>Comp link</label>
+              {idea.comp_link
+                ? <a href={idea.comp_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block" }}>{idea.comp_link}</a>
+                : <div style={{ ...fieldStyle, color: "#3f3f46" }}>—</div>
+              }
+            </div>
           </>
         )}
       </div>
@@ -1055,8 +1059,20 @@ function IdeaBankTab({ pageFilter, search }: { pageFilter: string; search: strin
 // Content Bank tab (full archive — month / week / day / search)
 // ---------------------------------------------------------------------------
 function ContentBankTab({ pageFilter, search }: { pageFilter: string; search: string }) {
+  const qc = useQueryClient();
   const now = new Date();
   const [monthYear, setMonthYear] = useState({ year: now.getFullYear(), month: now.getMonth() });
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => updateExpIdea(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["exp-idea-bank-all-for-cb"] }); qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }); },
+    onError: (e: any) => toast.error(e?.message || "Failed to update"),
+  });
+  const deleteMut = useMutation({
+    mutationFn: deleteExpIdea,
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["exp-idea-bank-all-for-cb"] }); qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }); },
+    onError: () => toast.error("Failed to delete"),
+  });
   const [weekFilter, setWeekFilter] = useState<number | "all">("all");
   const [dayFilter, setDayFilter]   = useState<string | "all">("all");
 
@@ -1182,7 +1198,14 @@ function ContentBankTab({ pageFilter, search }: { pageFilter: string; search: st
       ) : (
         grouped.map(([day, items]) => (
           <DayGroup key={day} dateStr={day} count={items.length}>
-            {items.map(item => <ArchiveRow key={item.id} item={item} />)}
+            {items.map(item => (
+              <ArchiveRow
+                key={item.id}
+                item={item}
+                onUpdate={(id, data) => updateMut.mutate({ id, data })}
+                onDelete={id => deleteMut.mutate(id)}
+              />
+            ))}
           </DayGroup>
         ))
       )}
