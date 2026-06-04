@@ -223,6 +223,40 @@ function KanbanCard({ idea, onUpdate, onDelete, onClick }: {
   );
 }
 
+// Always-visible views input used when idea is in Posted stage
+function PostedViewsInput({ value, onSave }: { value: number; onSave: (v: number) => void }) {
+  const [draft, setDraft] = useState(value > 0 ? String(value) : "");
+  const dirty = useRef(false);
+  useEffect(() => { if (!dirty.current) setDraft(value > 0 ? String(value) : ""); }, [value]);
+  const save = () => {
+    dirty.current = false;
+    const n = parseInt(draft.replace(/[^0-9]/g, ""), 10);
+    if (!isNaN(n) && n !== value) onSave(n);
+  };
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={draft}
+        placeholder="e.g. 85000"
+        onChange={e => { dirty.current = true; setDraft(e.target.value); }}
+        onBlur={save}
+        onKeyDown={e => { if (e.key === "Enter") save(); }}
+        style={{
+          width: 160, padding: "9px 13px", border: "1.5px solid #2D9E5F",
+          borderRadius: 9, fontSize: 14, fontWeight: 700,
+          outline: "none", background: "#09090b", color: "#50E0B0",
+          boxSizing: "border-box",
+        }}
+      />
+      {value > 0 && (
+        <span style={{ fontSize: 13, color: "#50E0B0", fontWeight: 600 }}>{fmt(value)}</span>
+      )}
+    </div>
+  );
+}
+
 // Stage action buttons — same progression as Content Tracker
 const STAGE_ACTIONS: Record<string, { label: string; stage: string; bg: string; color: string }[]> = {
   new:          [{ label: "Approve", stage: "approved", bg: "#7c3aed", color: "#fff" }, { label: "Reject", stage: "kill", bg: "transparent", color: "#C93B3B" }],
@@ -405,10 +439,17 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose }: {
           {idea.comp_link && <a href={idea.comp_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block", marginTop: 4 }}>{idea.comp_link}</a>}
         </div>
 
-        {/* Views */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <label style={{ ...ls, margin: 0 }}>Views</label>
-          <ViewsEdit value={idea.views || 0} onSave={v => onUpdate(idea.id, { views: v })} />
+        {/* Views — always-visible input when posted, click-to-edit otherwise */}
+        <div>
+          <label style={ls}>Views</label>
+          {stage === "posted" ? (
+            <PostedViewsInput value={idea.views || 0} onSave={v => onUpdate(idea.id, { views: v })} />
+          ) : (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <ViewsEdit value={idea.views || 0} onSave={v => onUpdate(idea.id, { views: v })} />
+              <span style={{ fontSize: 11, color: "#52525b" }}>(click to edit)</span>
+            </div>
+          )}
         </div>
 
         {/* Discussion thread */}
