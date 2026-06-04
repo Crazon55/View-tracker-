@@ -923,8 +923,8 @@ function ContentBankTab({ pageFilter, search }: { pageFilter: string; search: st
   const monthEndStr = toLocalISO(monthEnd);
 
   const { data: rawItems = [], isLoading } = useQuery({
-    queryKey: ["exp-content-bank-month", monthYear.year, monthYear.month, pageFilter],
-    queryFn: () => getExpContentBank({ page: pageFilter !== "all" ? pageFilter : undefined }),
+    queryKey: ["exp-idea-bank-all-for-cb", pageFilter],
+    queryFn: () => getExpIdeaBank({ page: pageFilter !== "all" ? pageFilter : undefined }),
   });
 
   // Filter to selected month
@@ -934,11 +934,11 @@ function ContentBankTab({ pageFilter, search }: { pageFilter: string; search: st
       return d >= monthStart && d <= monthEndStr;
     }), [rawItems, monthStart, monthEndStr]);
 
-  // Available weeks within this month
+  // Available weeks within this month (compute label from week_number)
   const weeksInMonth = useMemo(() => {
     const seen = new Map<number, string>();
     for (const i of monthItems) {
-      if (!seen.has(i.week_number)) seen.set(i.week_number, i.week_label || `Week ${i.week_number}`);
+      if (!seen.has(i.week_number)) seen.set(i.week_number, `Week ${i.week_number}`);
     }
     return [...seen.entries()].sort((a, b) => a[0] - b[0]);
   }, [monthItems]);
@@ -1034,7 +1034,7 @@ function ContentBankTab({ pageFilter, search }: { pageFilter: string; search: st
         <p style={{ color: "#52525b", fontSize: 12 }}>Loading…</p>
       ) : grouped.length === 0 ? (
         <p style={{ color: "#52525b", fontSize: 12 }}>
-          {search ? "No ideas match your search." : monthItems.length === 0 ? "Nothing archived for this month yet." : "No ideas match the selected week."}
+          {search ? "No ideas match your search." : monthItems.length === 0 ? "No ideas for this month yet." : "No ideas match the selected filters."}
         </p>
       ) : (
         grouped.map(([day, items]) => (
