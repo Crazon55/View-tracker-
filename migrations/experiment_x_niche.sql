@@ -1,16 +1,15 @@
 -- =====================================================================
 -- Experiment X Niche Setup
 --
--- 1. Ensure all 5 Experiment X page handles exist in the pages table
--- 2. Create FBS - Experiment X niche
--- 3. Remove the 5 handles from Garfields and Goofies
--- 4. Assign them to Experiment X
+-- Only indianfoundersco (IFC) is moving from Garfields to Experiment X.
+-- indiafounderscore + indianfoundersdaily are brand new pages.
+-- indiastartupstory and indianbusinesscom stay in their original teams.
 --
 -- Safe to re-run.
 -- =====================================================================
 
 -- ------------------------------------------------------------------
--- 1. Ensure new pages exist
+-- 1. Add the 2 brand new pages
 -- ------------------------------------------------------------------
 INSERT INTO pages (handle, name, profile_url, auto_scrape, stage)
 VALUES
@@ -19,33 +18,26 @@ VALUES
 ON CONFLICT (handle) DO NOTHING;
 
 -- ------------------------------------------------------------------
--- 2. Create Experiment X niche (skip if already exists)
+-- 2. Create FBS - Experiment X niche (skip if already exists)
 -- ------------------------------------------------------------------
 INSERT INTO tracker_niches (name, pages)
 SELECT 'FBS - Experiment X', '{}'::text[]
 WHERE NOT EXISTS (SELECT 1 FROM tracker_niches WHERE name = 'FBS - Experiment X');
 
 -- ------------------------------------------------------------------
--- 3. Assign the 5 pages to Experiment X
+-- 3. Assign IFC + 2 new pages to Experiment X
+--    (IFC stays in Garfields too so Post Tracker still shows it)
 -- ------------------------------------------------------------------
 UPDATE tracker_niches
 SET pages = ARRAY[
   'indianfoundersco',
-  'indianbusinesscom',
-  'indiastartupstory',
   'indiafounderscore',
   'indianfoundersdaily'
 ]::text[]
 WHERE name = 'FBS - Experiment X';
 
 -- ------------------------------------------------------------------
--- 4. Keep all 5 pages in their original teams too
---    (Post Tracker and other views still show them)
---    No removal needed — Experiment X is additive.
--- ------------------------------------------------------------------
-
--- ------------------------------------------------------------------
--- 6. Verify
+-- 4. Verify
 -- ------------------------------------------------------------------
 SELECT name, cardinality(pages) AS page_count, pages
 FROM tracker_niches
