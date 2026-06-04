@@ -5408,6 +5408,15 @@ async def exp_create_idea(req: ExpIdeaCreate):
     return {"success": True, "data": created}
 
 
+@app.get("/api/v1/experiment/idea-bank/{idea_id}")
+async def exp_get_idea(idea_id: str):
+    client = get_supabase_client()
+    data = client.table("exp_idea_bank").select("*").eq("id", idea_id).limit(1).execute().data
+    if not data:
+        raise HTTPException(status_code=404, detail="Idea not found")
+    return {"success": True, "data": data[0]}
+
+
 @app.patch("/api/v1/experiment/idea-bank/{idea_id}")
 async def exp_update_idea(idea_id: str, req: ExpIdeaUpdate):
     client = get_supabase_client()

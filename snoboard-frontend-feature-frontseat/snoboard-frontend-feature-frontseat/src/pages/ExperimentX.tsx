@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import IdeaThread from "@/components/IdeaThread";
 import {
   getExpSettings, updateExpSettings,
-  getExpIdeaBank, createExpIdea, updateExpIdea, deleteExpIdea, archiveExpWeek,
+  getExpIdeaBank, getExpIdeaById, createExpIdea, updateExpIdea, deleteExpIdea, archiveExpWeek,
   getExpContentBank, getExpContentBankWeeks,
   getExpWorkingIdeas, distributeExpWorkingIdea,
 } from "@/services/api";
@@ -508,50 +508,152 @@ function ArchiveRow({ item }: { item: any }) {
 }
 
 // ---------------------------------------------------------------------------
+// Working idea detail modal — fetches full idea from exp_idea_bank by source_id
+// ---------------------------------------------------------------------------
+function WorkingIdeaDetailModal({ item, onClose }: { item: any; onClose: () => void }) {
+  const { data: fullIdea, isLoading } = useQuery({
+    queryKey: ["exp-idea-by-id", item.source_id],
+    queryFn: () => getExpIdeaById(item.source_id),
+    enabled: !!item.source_id,
+  });
+
+  const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "#71717a", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
+  const fieldStyle: React.CSSProperties = { width: "100%", padding: "9px 13px", border: "1.5px solid #27272a", borderRadius: 9, fontSize: 13, background: "#09090b", color: "#e4e4e7", boxSizing: "border-box" };
+  const pc = PAGE_COLORS[item.page_handle] || "#a1a1aa";
+  const idea = fullIdea || item;
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center" }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} />
+      <div onClick={e => e.stopPropagation()} style={{
+        position: "relative", background: "#18181b", borderRadius: 16,
+        padding: "24px 28px", maxWidth: 620, width: "94%",
+        maxHeight: "88vh", overflowY: "auto",
+        boxShadow: "0 24px 80px rgba(0,0,0,0.5)", border: "1px solid #27272a",
+        display: "flex", flexDirection: "column", gap: 14,
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "#fff" }}>{item.topic || "Untitled"}</h2>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#71717a" }}>✕</button>
+        </div>
+
+        {/* Tags */}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: pc, background: pc + "22", borderRadius: 99, padding: "3px 10px" }}>{item.page_handle}</span>
+          <span style={{ fontSize: 11, color: "#71717a", background: "#27272a", borderRadius: 99, padding: "3px 10px" }}>{item.content_type}</span>
+          <span style={{ fontSize: 11, color: "#71717a", background: "#27272a", borderRadius: 99, padding: "3px 10px" }}>Week {item.week_number}</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: "#50E0B0", marginLeft: "auto" }}>{fmt(item.views_achieved)} views</span>
+        </div>
+
+        {isLoading ? (
+          <p style={{ color: "#52525b", fontSize: 12 }}>Loading idea content…</p>
+        ) : (
+          <>
+            {idea.hook_variations && (
+              <div>
+                <label style={ls}>Hook variations</label>
+                <pre style={{ ...fieldStyle, margin: 0, whiteSpace: "pre-wrap", fontFamily: "inherit" }}>{idea.hook_variations}</pre>
+              </div>
+            )}
+            {idea.script && (
+              <div>
+                <label style={ls}>Script / notes</label>
+                <pre style={{ ...fieldStyle, margin: 0, whiteSpace: "pre-wrap", fontFamily: "inherit" }}>{idea.script}</pre>
+              </div>
+            )}
+            {idea.music_ref && (
+              <div>
+                <label style={ls}>Music reference</label>
+                <div style={fieldStyle}>{idea.music_ref}</div>
+              </div>
+            )}
+            {idea.frame_link && (
+              <div>
+                <label style={ls}>Frame link</label>
+                <a href={idea.frame_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block" }}>{idea.frame_link}</a>
+              </div>
+            )}
+            {idea.yt_url && (
+              <div style={{ display: "flex", gap: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={ls}>YT link</label>
+                  <a href={idea.yt_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block" }}>{idea.yt_url}</a>
+                </div>
+                {idea.yt_timestamps && (
+                  <div style={{ flex: "0 0 140px" }}>
+                    <label style={ls}>Timestamps</label>
+                    <div style={{ fontSize: 13, color: "#e4e4e7" }}>{idea.yt_timestamps}</div>
+                  </div>
+                )}
+              </div>
+            )}
+            {idea.comp_link && (
+              <div>
+                <label style={ls}>Comp link</label>
+                <a href={idea.comp_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block" }}>{idea.comp_link}</a>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Working idea card
 // ---------------------------------------------------------------------------
 function WorkingRow({ item, onDistribute }: { item: any; onDistribute: (id: string) => void }) {
-  const [expanded, setExpanded] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
   const pc = PAGE_COLORS[item.page_handle] || "#a1a1aa";
+
   return (
-    <div style={{
-      background: "#111113",
-      border: `1px solid ${item.distributed ? "#27272a" : "#4c1d95"}`,
-      borderRadius: 8, overflow: "hidden",
-      opacity: item.distributed ? 0.6 : 1,
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", flexWrap: "wrap" }}>
-        <span style={{ fontSize: 10, fontWeight: 700, color: pc, background: pc + "22", borderRadius: 4, padding: "2px 7px" }}>
-          {item.page_handle}
-        </span>
-        <span style={{ fontSize: 10, color: "#71717a", background: "#27272a", borderRadius: 4, padding: "2px 7px" }}>
-          Week {item.week_number}
-        </span>
-        <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: "#e4e4e7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {item.topic || <em style={{ color: "#52525b" }}>No topic</em>}
-        </span>
-        <span style={{ fontSize: 13, fontWeight: 700, color: "#50E0B0", whiteSpace: "nowrap" }}>
-          {fmt(item.views_achieved)}
-        </span>
-        {item.distributed ? (
-          <span style={{ fontSize: 10, color: "#52525b", fontStyle: "italic" }}>Distributed</span>
-        ) : (
-          <button onClick={() => onDistribute(item.id)} style={{ ...btnPrimary, padding: "4px 12px", fontSize: 11 }}>
-            Distribute to all pages
-          </button>
-        )}
-        {item.script && (
-          <button onClick={() => setExpanded(e => !e)} style={{ background: "none", border: "none", color: "#52525b", cursor: "pointer", fontSize: 11 }}>
-            {expanded ? "▲" : "▼"}
-          </button>
-        )}
-      </div>
-      {expanded && item.script && (
-        <div style={{ borderTop: "1px solid #1f1f22", padding: "8px 12px", background: "#0d0d0f" }}>
-          <p style={{ margin: 0, fontSize: 11, color: "#71717a", lineHeight: 1.5 }}>{item.script}</p>
+    <>
+      <div
+        onClick={() => setDetailOpen(true)}
+        style={{
+          background: "#111113",
+          border: `1px solid ${item.distributed ? "#27272a" : "#4c1d95"}`,
+          borderRadius: 8, overflow: "hidden",
+          opacity: item.distributed ? 0.6 : 1,
+          cursor: "pointer",
+          transition: "border-color 0.12s",
+        }}
+        onMouseEnter={e => (e.currentTarget.style.borderColor = item.distributed ? "#3f3f46" : "#7c3aed")}
+        onMouseLeave={e => (e.currentTarget.style.borderColor = item.distributed ? "#27272a" : "#4c1d95")}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", flexWrap: "wrap" }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: pc, background: pc + "22", borderRadius: 4, padding: "2px 7px" }}>
+            {item.page_handle}
+          </span>
+          <span style={{ fontSize: 10, color: "#71717a", background: "#27272a", borderRadius: 4, padding: "2px 7px" }}>
+            Week {item.week_number}
+          </span>
+          <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: "#e4e4e7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {item.topic || <em style={{ color: "#52525b" }}>No topic</em>}
+          </span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#50E0B0", whiteSpace: "nowrap" }}>
+            {fmt(item.views_achieved)}
+          </span>
+          {item.distributed ? (
+            <span style={{ fontSize: 10, color: "#52525b", fontStyle: "italic" }}>Distributed</span>
+          ) : (
+            <button
+              onClick={e => { e.stopPropagation(); onDistribute(item.id); }}
+              style={{ ...btnPrimary, padding: "4px 12px", fontSize: 11 }}
+            >
+              Distribute to all pages
+            </button>
+          )}
+          <span style={{ fontSize: 10, color: "#52525b" }}>Open →</span>
         </div>
+      </div>
+
+      {detailOpen && (
+        <WorkingIdeaDetailModal item={item} onClose={() => setDetailOpen(false)} />
       )}
-    </div>
+    </>
   );
 }
 

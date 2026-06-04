@@ -647,6 +647,9 @@ export const getExpIdeaBank = (params?: { week?: number; page?: string }) => {
   return fetchApi<any[]>(`/api/v1/experiment/idea-bank${qs ? `?${qs}` : ""}`);
 };
 
+export const getExpIdeaById = (id: string) =>
+  fetchApi<any>(`/api/v1/experiment/idea-bank/${id}`);
+
 export const createExpIdea = (data: {
   page_handle: string; content_type?: string; topic?: string;
   script?: string; status?: string; views?: number; day_date?: string;
