@@ -27,13 +27,35 @@ const PAGE_COLORS: Record<string, string> = {
   indianfoundersdaily: "#FF9580",
 };
 
-const STATUS_STYLE: Record<string, { bg: string; text: string }> = {
-  draft:  { bg: "rgba(74,127,212,0.15)",  text: "#7BB0FF" },
-  posted: { bg: "rgba(45,158,95,0.15)",   text: "#5AE0A0" },
-  killed: { bg: "rgba(201,59,59,0.15)",   text: "#FF7070" },
+const STAGES = ["new","approved","base_edit","testing","proven_ideas","scheduled","posted","kill"] as const;
+type IdeaStage = (typeof STAGES)[number];
+
+const STAGE_LABEL: Record<IdeaStage, string> = {
+  new:          "New",
+  approved:     "Approved",
+  base_edit:    "Base edit",
+  testing:      "Testing",
+  proven_ideas: "Proven",
+  scheduled:    "Scheduled",
+  posted:       "Posted",
+  kill:         "Killed",
 };
 
-type TabMode = "all" | "content-bank" | "working-ideas";
+const STATUS_STYLE: Record<string, { bg: string; text: string }> = {
+  new:          { bg: "rgba(74,127,212,0.15)",   text: "#7BB0FF" },
+  approved:     { bg: "rgba(45,158,95,0.15)",    text: "#5AE0A0" },
+  base_edit:    { bg: "rgba(123,97,196,0.15)",   text: "#B49EFF" },
+  testing:      { bg: "rgba(212,149,42,0.15)",   text: "#F0C060" },
+  proven_ideas: { bg: "rgba(29,158,117,0.15)",   text: "#50E0B0" },
+  scheduled:    { bg: "rgba(83,74,183,0.15)",    text: "#9B8FFF" },
+  posted:       { bg: "rgba(45,158,95,0.15)",    text: "#5AE0A0" },
+  kill:         { bg: "rgba(201,59,59,0.15)",    text: "#FF7070" },
+  // legacy fallbacks
+  draft:        { bg: "rgba(74,127,212,0.15)",   text: "#7BB0FF" },
+  killed:       { bg: "rgba(201,59,59,0.15)",    text: "#FF7070" },
+};
+
+type TabMode = "idea-bank" | "content-bank" | "working-ideas";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -185,13 +207,11 @@ function IdeaRow({ idea, onUpdate, onDelete }: {
           {idea.content_type}
         </span>
         <select
-          value={idea.status}
+          value={idea.status || "new"}
           onChange={e => onUpdate(idea.id, { status: e.target.value })}
           style={{ fontSize: 10, fontWeight: 600, color: ss.text, background: ss.bg, border: "none", borderRadius: 4, padding: "2px 6px", cursor: "pointer" }}
         >
-          <option value="draft">Draft</option>
-          <option value="posted">Posted</option>
-          <option value="killed">Killed</option>
+          {STAGES.map(s => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}
         </select>
 
         {/* Topic — inline edit */}
@@ -355,6 +375,7 @@ function WorkingRow({ item, onDistribute }: { item: any; onDistribute: (id: stri
 function AddIdeaForm({ onAdd, onCancel }: { onAdd: (d: any) => void; onCancel: () => void }) {
   const [page, setPage] = useState(EXP_PAGES[0]);
   const [type, setType] = useState("reel");
+  const [status, setStatus] = useState<IdeaStage>("new");
   const [topic, setTopic] = useState("");
   const [script, setScript] = useState("");
   const [date, setDate] = useState(toLocalISO(new Date()));
@@ -377,13 +398,16 @@ function AddIdeaForm({ onAdd, onCancel }: { onAdd: (d: any) => void; onCancel: (
             }}>{t === "reel" ? "Reel" : "Post"}</button>
           ))}
         </div>
+        <select value={status} onChange={e => setStatus(e.target.value as IdeaStage)} style={sel}>
+          {STAGES.map(s => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}
+        </select>
         <input type="date" value={date} onChange={e => setDate(e.target.value)}
           style={{ ...sel, width: "auto" }} />
       </div>
       <input
         autoFocus placeholder="Topic / hook *"
         value={topic} onChange={e => setTopic(e.target.value)}
-        onKeyDown={e => { if (e.key === "Enter" && topic.trim()) onAdd({ page_handle: page, content_type: type, topic: topic.trim(), script, day_date: date }); }}
+        onKeyDown={e => { if (e.key === "Enter" && topic.trim()) onAdd({ page_handle: page, content_type: type, status, topic: topic.trim(), script, day_date: date }); }}
         style={inp}
       />
       <textarea
@@ -393,7 +417,7 @@ function AddIdeaForm({ onAdd, onCancel }: { onAdd: (d: any) => void; onCancel: (
       />
       <div style={{ display: "flex", gap: 8 }}>
         <button
-          onClick={() => { if (topic.trim()) onAdd({ page_handle: page, content_type: type, topic: topic.trim(), script, day_date: date }); }}
+          onClick={() => { if (topic.trim()) onAdd({ page_handle: page, content_type: type, status, topic: topic.trim(), script, day_date: date }); }}
           disabled={!topic.trim()}
           style={{ ...btnPrimary, opacity: !topic.trim() ? 0.4 : 1 }}
         >
@@ -526,6 +550,7 @@ function ContentBankTab({ pageFilter, search }: { pageFilter: string; search: st
   const now = new Date();
   const [monthYear, setMonthYear] = useState({ year: now.getFullYear(), month: now.getMonth() });
   const [weekFilter, setWeekFilter] = useState<number | "all">("all");
+  const [dayFilter, setDayFilter]   = useState<string | "all">("all");
 
   // Load ideas for the selected month (by day_date range)
   const monthStart = `${monthYear.year}-${String(monthYear.month + 1).padStart(2, "0")}-01`;
@@ -558,15 +583,30 @@ function ContentBankTab({ pageFilter, search }: { pageFilter: string; search: st
     weekFilter === "all" ? monthItems : monthItems.filter((i: any) => i.week_number === weekFilter),
     [monthItems, weekFilter]);
 
+  // Days available within selected week
+  const daysInWeek = useMemo(() => {
+    const seen = new Set<string>();
+    for (const i of weekFiltered) {
+      const d = (i.day_date || "").slice(0, 10);
+      if (d) seen.add(d);
+    }
+    return [...seen].sort();
+  }, [weekFiltered]);
+
+  // Apply day filter
+  const dayFiltered = useMemo(() =>
+    dayFilter === "all" ? weekFiltered : weekFiltered.filter((i: any) => (i.day_date || "").slice(0, 10) === dayFilter),
+    [weekFiltered, dayFilter]);
+
   // Apply search
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    if (!q) return weekFiltered;
-    return weekFiltered.filter((i: any) =>
+    if (!q) return dayFiltered;
+    return dayFiltered.filter((i: any) =>
       (i.topic || "").toLowerCase().includes(q) ||
       (i.script || "").toLowerCase().includes(q)
     );
-  }, [weekFiltered, search]);
+  }, [dayFiltered, search]);
 
   const grouped = useMemo(() => groupByDay(filtered), [filtered]);
 
@@ -592,15 +632,32 @@ function ContentBankTab({ pageFilter, search }: { pageFilter: string; search: st
         {weeksInMonth.length > 0 && (
           <div style={{ display: "flex", background: "#27272a", borderRadius: 7, overflow: "hidden", border: "1px solid #3f3f46" }}>
             <button
-              onClick={() => setWeekFilter("all")}
+              onClick={() => { setWeekFilter("all"); setDayFilter("all"); }}
               style={{ padding: "5px 12px", border: "none", fontSize: 11, fontWeight: 500, cursor: "pointer", background: weekFilter === "all" ? "#3f3f46" : "transparent", color: weekFilter === "all" ? "#fff" : "#71717a" }}
             >All weeks</button>
             {weeksInMonth.map(([wn, label]) => (
               <button
                 key={wn}
-                onClick={() => setWeekFilter(wn)}
+                onClick={() => { setWeekFilter(wn); setDayFilter("all"); }}
                 style={{ padding: "5px 12px", border: "none", fontSize: 11, fontWeight: 500, cursor: "pointer", background: weekFilter === wn ? "#3f3f46" : "transparent", color: weekFilter === wn ? "#fff" : "#71717a" }}
               >{label}</button>
+            ))}
+          </div>
+        )}
+
+        {/* Day filter — only shows when a week is selected */}
+        {weekFilter !== "all" && daysInWeek.length > 0 && (
+          <div style={{ display: "flex", background: "#27272a", borderRadius: 7, overflow: "hidden", border: "1px solid #3f3f46" }}>
+            <button
+              onClick={() => setDayFilter("all")}
+              style={{ padding: "5px 12px", border: "none", fontSize: 11, fontWeight: 500, cursor: "pointer", background: dayFilter === "all" ? "#3f3f46" : "transparent", color: dayFilter === "all" ? "#fff" : "#71717a" }}
+            >All days</button>
+            {daysInWeek.map(d => (
+              <button
+                key={d}
+                onClick={() => setDayFilter(d)}
+                style={{ padding: "5px 12px", border: "none", fontSize: 11, fontWeight: 500, cursor: "pointer", background: dayFilter === d ? "#3f3f46" : "transparent", color: dayFilter === d ? "#fff" : "#71717a" }}
+              >{fmtDay(d)}</button>
             ))}
           </div>
         )}
@@ -714,18 +771,18 @@ function WorkingIdeasTab({ pageFilter, search }: { pageFilter: string; search: s
 // Main page
 // ---------------------------------------------------------------------------
 export default function ExperimentX() {
-  const [tab, setTab] = useState<TabMode>("all");
+  const [tab, setTab] = useState<TabMode>("idea-bank");
   const [pageFilter, setPageFilter] = useState("all");
   const [search, setSearch] = useState("");
 
   const tabColors: Record<TabMode, string> = {
-    "all": "#3f3f46",
-    "content-bank": "#1A5E3A",
+    "idea-bank":     "#3f3f46",
+    "content-bank":  "#1A5E3A",
     "working-ideas": "#534AB7",
   };
   const tabLabels: Record<TabMode, string> = {
-    "all": "All",
-    "content-bank": "Content Bank",
+    "idea-bank":     "Idea Bank",
+    "content-bank":  "Content Bank",
     "working-ideas": "Working Ideas",
   };
 
@@ -751,7 +808,7 @@ export default function ExperimentX() {
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22, flexWrap: "wrap" }}>
         {/* Tab switcher */}
         <div style={{ display: "flex", background: "#27272a", borderRadius: 7, overflow: "hidden", border: "1px solid #3f3f46" }}>
-          {(["all", "content-bank", "working-ideas"] as TabMode[]).map(t => (
+          {(["idea-bank", "content-bank", "working-ideas"] as TabMode[]).map(t => (
             <button
               key={t}
               onClick={() => { setTab(t); setSearch(""); }}
@@ -783,7 +840,7 @@ export default function ExperimentX() {
 
       {/* Tab content */}
       <div style={{ maxWidth: 860 }}>
-        {tab === "all"           && <IdeaBankTab    pageFilter={pageFilter} search={search} />}
+        {tab === "idea-bank"     && <IdeaBankTab    pageFilter={pageFilter} search={search} />}
         {tab === "content-bank"  && <ContentBankTab pageFilter={pageFilter} search={search} />}
         {tab === "working-ideas" && <WorkingIdeasTab pageFilter={pageFilter} search={search} />}
       </div>
