@@ -168,9 +168,17 @@ class ExpIdeaCreate(BaseModel):
     content_type: str = "reel"
     topic: str = ""
     script: str = ""
-    status: str = "draft"
+    status: str = "new"
     views: int = 0
-    day_date: str | None = None   # YYYY-MM-DD, defaults to today
+    day_date: str | None = None
+    source: str = "original"
+    hook_variations: str = ""
+    music_ref: str = ""
+    frame_link: str = ""
+    yt_url: str = ""
+    yt_timestamps: str = ""
+    comp_link: str = ""
+    created_by: str = ""
 
 
 class ExpIdeaUpdate(BaseModel):
@@ -181,6 +189,14 @@ class ExpIdeaUpdate(BaseModel):
     status: str | None = None
     views: int | None = None
     day_date: str | None = None
+    source: str | None = None
+    hook_variations: str | None = None
+    music_ref: str | None = None
+    frame_link: str | None = None
+    yt_url: str | None = None
+    yt_timestamps: str | None = None
+    comp_link: str | None = None
+    created_by: str | None = None
 
 
 class ExpSettingsUpdate(BaseModel):

@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   getExpSettings, updateExpSettings,
   getExpIdeaBank, createExpIdea, updateExpIdea, deleteExpIdea, archiveExpWeek,
@@ -379,60 +380,220 @@ function WorkingRow({ item, onDistribute }: { item: any; onDistribute: (id: stri
 }
 
 // ---------------------------------------------------------------------------
-// Add idea inline form
+// Add idea modal — matches Content Tracker "Add new idea" form exactly
 // ---------------------------------------------------------------------------
-function AddIdeaForm({ onAdd, onCancel }: { onAdd: (d: any) => void; onCancel: () => void }) {
-  const [page, setPage] = useState(EXP_PAGES[0]);
-  const [type, setType] = useState("reel");
-  const [status, setStatus] = useState<IdeaStage>("new");
-  const [topic, setTopic] = useState("");
-  const [script, setScript] = useState("");
-  const [date, setDate] = useState(toLocalISO(new Date()));
+function AddIdeaModal({ open, onAdd, onClose }: {
+  open: boolean;
+  onAdd: (d: any) => void;
+  onClose: () => void;
+}) {
+  const { user } = useAuth();
+  const createdBy = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "";
+
+  const [page, setPage]           = useState(EXP_PAGES[0] as string);
+  const [type, setType]           = useState("reel");
+  const [source, setSource]       = useState("original");
+  const [topic, setTopic]         = useState("");
+  const [hookVars, setHookVars]   = useState("");
+  const [musicRef, setMusicRef]   = useState("");
+  const [frameLink, setFrameLink] = useState("");
+  const [ytUrl, setYtUrl]         = useState("");
+  const [ytTs, setYtTs]           = useState("");
+  const [compLink, setCompLink]   = useState("");
+  const [date, setDate]           = useState(toLocalISO(new Date()));
+
+  const reset = () => {
+    setPage(EXP_PAGES[0]); setType("reel"); setSource("original");
+    setTopic(""); setHookVars(""); setMusicRef(""); setFrameLink("");
+    setYtUrl(""); setYtTs(""); setCompLink(""); setDate(toLocalISO(new Date()));
+  };
+
+  const submit = () => {
+    if (!topic.trim()) return;
+    onAdd({
+      page_handle: page, content_type: type, status: "new",
+      topic: topic.trim(), source, hook_variations: hookVars,
+      music_ref: musicRef, frame_link: frameLink,
+      yt_url: source === "original" ? ytUrl : "",
+      yt_timestamps: source === "original" ? ytTs : "",
+      comp_link: source === "competitor" ? compLink : "",
+      created_by: createdBy, day_date: date,
+    });
+    reset();
+  };
+
+  if (!open) return null;
+
+  // Shared label + input styles matching Content Tracker exactly
+  const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "#71717a", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
+  const is: React.CSSProperties = { width: "100%", padding: "9px 13px", border: "1.5px solid #3f3f46", borderRadius: 9, fontSize: 13, outline: "none", background: "#09090b", color: "#e4e4e7", boxSizing: "border-box" };
 
   return (
-    <div style={{
-      background: "#111113", border: "1px solid #3f3f46", borderRadius: 10,
-      padding: "14px 16px", marginBottom: 14, display: "flex", flexDirection: "column", gap: 10,
-    }}>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <select value={page} onChange={e => setPage(e.target.value as any)} style={sel}>
-          {EXP_PAGES.map(p => <option key={p} value={p}>{p}</option>)}
-        </select>
-        <div style={{ display: "flex", background: "#27272a", borderRadius: 7, overflow: "hidden", border: "1px solid #3f3f46" }}>
-          {["reel", "post"].map(t => (
-            <button key={t} onClick={() => setType(t)} style={{
-              padding: "5px 12px", border: "none", fontSize: 12, fontWeight: 500, cursor: "pointer",
-              background: type === t ? "#3f3f46" : "transparent",
-              color: type === t ? "#fff" : "#71717a",
-            }}>{t === "reel" ? "Reel" : "Post"}</button>
-          ))}
+    <div
+      style={{ position: "fixed", inset: 0, zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center" }}
+      onClick={onClose}
+    >
+      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} />
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          position: "relative", background: "#18181b", borderRadius: 16,
+          padding: "24px 28px", maxWidth: 520, width: "94%",
+          maxHeight: "88vh", overflowY: "auto",
+          boxShadow: "0 24px 80px rgba(0,0,0,0.5)", border: "1px solid #27272a",
+          display: "flex", flexDirection: "column", gap: 14,
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 600, color: "#fff", letterSpacing: "-0.02em" }}>Add new idea</h2>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#71717a", padding: "4px 8px", borderRadius: 6 }}>✕</button>
         </div>
-        <select value={status} onChange={e => setStatus(e.target.value as IdeaStage)} style={sel}>
-          {STAGES.map(s => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}
-        </select>
-        <input type="date" value={date} onChange={e => setDate(e.target.value)}
-          style={{ ...sel, width: "auto" }} />
-      </div>
-      <input
-        autoFocus placeholder="Topic / hook *"
-        value={topic} onChange={e => setTopic(e.target.value)}
-        onKeyDown={e => { if (e.key === "Enter" && topic.trim()) onAdd({ page_handle: page, content_type: type, status, topic: topic.trim(), script, day_date: date }); }}
-        style={inp}
-      />
-      <textarea
-        placeholder="Script or notes (optional)"
-        value={script} onChange={e => setScript(e.target.value)}
-        rows={2} style={{ ...inp, resize: "none" }}
-      />
-      <div style={{ display: "flex", gap: 8 }}>
+
+        {/* Title */}
+        <div>
+          <label style={ls}>Title / description *</label>
+          <input
+            autoFocus value={topic} onChange={e => setTopic(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") submit(); }}
+            placeholder="e.g. How Ambani built his first business"
+            style={{ ...is, color: "#e4e4e7" }}
+          />
+        </div>
+
+        {/* Source + Page */}
+        <div style={{ display: "flex", gap: 14 }}>
+          <div style={{ flex: 1 }}>
+            <label style={ls}>Source</label>
+            <div style={{ display: "flex", gap: 6 }}>
+              {["original", "competitor"].map(s => (
+                <button
+                  key={s} onClick={() => setSource(s)}
+                  style={{
+                    flex: 1, padding: "8px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                    border: source === s ? "2px solid #7c3aed" : "1.5px solid #3f3f46",
+                    background: source === s ? "#27272a" : "#18181b",
+                    color: source === s ? "#fff" : "#71717a",
+                    textTransform: "capitalize",
+                  }}
+                >
+                  {s === "original" ? "Original" : "Competitor"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={ls}>Page *</label>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {EXP_PAGES.map(p => {
+                const pc = PAGE_COLORS[p] || "#a1a1aa";
+                const sel2 = page === p;
+                return (
+                  <button
+                    key={p} type="button" onClick={() => setPage(p)}
+                    style={{
+                      padding: "6px 10px", borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: "pointer",
+                      border: sel2 ? `2px solid ${pc}` : "1.5px solid #3f3f46",
+                      background: sel2 ? pc + "22" : "#18181b",
+                      color: sel2 ? pc : "#71717a",
+                    }}
+                  >
+                    {p}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Type + Date */}
+        <div style={{ display: "flex", gap: 14 }}>
+          <div style={{ flex: 1 }}>
+            <label style={ls}>Content type</label>
+            <div style={{ display: "flex", gap: 6 }}>
+              {["reel", "post"].map(t => (
+                <button key={t} onClick={() => setType(t)} style={{
+                  flex: 1, padding: "8px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                  border: type === t ? "2px solid #7c3aed" : "1.5px solid #3f3f46",
+                  background: type === t ? "#27272a" : "#18181b",
+                  color: type === t ? "#fff" : "#71717a",
+                  textTransform: "capitalize",
+                }}>
+                  {t === "reel" ? "Reel" : "Post"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={ls}>Date</label>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...is, color: "#e4e4e7" }} />
+          </div>
+        </div>
+
+        {/* Created by */}
+        <div>
+          <label style={ls}>Created by</label>
+          <div style={{ ...is, background: "#27272a", color: "#a1a1aa" }}>{createdBy || "—"}</div>
+        </div>
+
+        {/* Hook variations */}
+        <div>
+          <label style={ls}>Hook variations (one per line)</label>
+          <textarea
+            value={hookVars} onChange={e => setHookVars(e.target.value)}
+            rows={4} placeholder={"Hook variation 1\nHook variation 2\nHook variation 3"}
+            style={{ ...is, resize: "vertical", minHeight: 80, color: "#e4e4e7" }}
+          />
+        </div>
+
+        {/* Music ref */}
+        <div>
+          <label style={ls}>Music reference / suggestions</label>
+          <input value={musicRef} onChange={e => setMusicRef(e.target.value)}
+            placeholder="e.g. Dark cinematic, trending audio XYZ" style={{ ...is, color: "#e4e4e7" }} />
+        </div>
+
+        {/* Frame link */}
+        <div>
+          <label style={ls}>Frame link</label>
+          <input value={frameLink} onChange={e => setFrameLink(e.target.value)}
+            placeholder="Google Drive / reference frames link" style={{ ...is, color: "#e4e4e7" }} />
+        </div>
+
+        {/* YT / Comp links */}
+        {source === "original" && (
+          <div style={{ display: "flex", gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <label style={ls}>YT link (original source)</label>
+              <input value={ytUrl} onChange={e => setYtUrl(e.target.value)}
+                placeholder="https://youtube.com/watch?v=..." style={{ ...is, color: "#e4e4e7" }} />
+            </div>
+            <div style={{ flex: "0 0 140px" }}>
+              <label style={ls}>YT timestamps</label>
+              <input value={ytTs} onChange={e => setYtTs(e.target.value)}
+                placeholder="0:30–1:45" style={{ ...is, color: "#e4e4e7" }} />
+            </div>
+          </div>
+        )}
+        {source === "competitor" && (
+          <div>
+            <label style={ls}>Comp link</label>
+            <input value={compLink} onChange={e => setCompLink(e.target.value)}
+              placeholder="Competitor reel / post URL" style={{ ...is, color: "#e4e4e7" }} />
+          </div>
+        )}
+
+        {/* Submit */}
         <button
-          onClick={() => { if (topic.trim()) onAdd({ page_handle: page, content_type: type, status, topic: topic.trim(), script, day_date: date }); }}
-          disabled={!topic.trim()}
-          style={{ ...btnPrimary, opacity: !topic.trim() ? 0.4 : 1 }}
+          onClick={submit} disabled={!topic.trim()}
+          style={{
+            padding: "10px 20px", background: "#7c3aed", color: "#fff", border: "none",
+            borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer",
+            opacity: !topic.trim() ? 0.4 : 1, marginTop: 4,
+          }}
         >
           Add idea
         </button>
-        <button onClick={onCancel} style={btnSecondary}>Cancel</button>
       </div>
     </div>
   );
@@ -450,7 +611,7 @@ const STAGE_DOT: Record<string, string> = {
 // ---------------------------------------------------------------------------
 function IdeaBankTab({ pageFilter, search }: { pageFilter: string; search: string }) {
   const qc = useQueryClient();
-  const [showAdd, setShowAdd] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [detailIdea, setDetailIdea] = useState<any>(null);
   const [dropStage, setDropStage] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -488,7 +649,7 @@ function IdeaBankTab({ pageFilter, search }: { pageFilter: string; search: strin
 
   const createMut = useMutation({
     mutationFn: createExpIdea,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }); setShowAdd(false); toast.success("Idea added"); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }); setAddOpen(false); toast.success("Idea added"); },
     onError: (e: any) => toast.error(e?.message || "Failed to add idea"),
   });
   const updateMut = useMutation({
@@ -529,14 +690,16 @@ function IdeaBankTab({ pageFilter, search }: { pageFilter: string; search: strin
       {/* Toolbar */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
         <span style={{ fontSize: 12, color: "#71717a" }}>Week {currentWeek} · {ideas.length} idea{ideas.length !== 1 ? "s" : ""}</span>
-        <button onClick={() => setShowAdd(s => !s)} style={{ ...btnPrimary, padding: "5px 14px" }}>
-          {showAdd ? "Cancel" : "+ New idea"}
+        <button onClick={() => setAddOpen(true)} style={{ ...btnPrimary, padding: "5px 14px" }}>
+          + New idea
         </button>
       </div>
 
-      {showAdd && (
-        <AddIdeaForm onAdd={data => createMut.mutate(data)} onCancel={() => setShowAdd(false)} />
-      )}
+      <AddIdeaModal
+        open={addOpen}
+        onAdd={data => createMut.mutate(data)}
+        onClose={() => setAddOpen(false)}
+      />
 
       {/* Kanban board */}
       <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 20, minHeight: "calc(100vh - 260px)" }}>

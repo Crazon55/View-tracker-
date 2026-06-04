@@ -5458,10 +5458,18 @@ async def exp_archive_week(request: Request):
             "topic": i.get("topic", ""),
             "script": i.get("script", ""),
             "views": i.get("views", 0),
-            "status": i.get("status", "draft"),
+            "status": i.get("status", "new"),
             "week_number": week_number,
             "week_label": label,
             "day_date": str(i.get("day_date", "")),
+            "source": i.get("source", "original"),
+            "hook_variations": i.get("hook_variations", ""),
+            "music_ref": i.get("music_ref", ""),
+            "frame_link": i.get("frame_link", ""),
+            "yt_url": i.get("yt_url", ""),
+            "yt_timestamps": i.get("yt_timestamps", ""),
+            "comp_link": i.get("comp_link", ""),
+            "created_by": i.get("created_by", ""),
         } for i in to_insert]
         client.table("exp_content_bank").insert(rows).execute()
         for i in to_insert:
