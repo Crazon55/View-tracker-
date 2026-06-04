@@ -126,7 +126,7 @@ export const ROLE_NAV: Record<string, '*' | string[]> = {
   smm:              ['/', '/content-tracker', '/post-tracker', '/growth', '/stage1-tracker'],
   ops_manager:      '*',
   content_creators: ['/', '/six-day-tracker', '/team-performance', '/workboard', '/tickets', '/news', '/blue-ocean', '/growth'],
-  experiment_x:     ['/', '/experiment-x', '/content-tracker', '/tickets'],
+  experiment_x:     '*',
 }
 
 export function isRouteAllowed(role: string | null, path: string): boolean {
