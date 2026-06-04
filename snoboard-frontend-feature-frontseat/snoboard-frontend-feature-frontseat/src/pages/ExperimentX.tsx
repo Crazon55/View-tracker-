@@ -174,109 +174,118 @@ function DayGroup({ dateStr, count, children }: { dateStr: string; count: number
 }
 
 // ---------------------------------------------------------------------------
-// Idea row card (editable — used in Idea Bank)
+// Kanban card (used in Idea Bank board)
 // ---------------------------------------------------------------------------
-function IdeaRow({ idea, onUpdate, onDelete }: {
+function KanbanCard({ idea, onUpdate, onDelete, onClick }: {
   idea: any;
   onUpdate: (id: string, data: any) => void;
   onDelete: (id: string) => void;
+  onClick: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const [editTopic, setEditTopic] = useState(false);
-  const [topicDraft, setTopicDraft] = useState(idea.topic || "");
-  const [editScript, setEditScript] = useState(false);
-  const [scriptDraft, setScriptDraft] = useState(idea.script || "");
-
   const pc = PAGE_COLORS[idea.page_handle] || "#a1a1aa";
-  const ss = STATUS_STYLE[idea.status] || STATUS_STYLE.draft;
-
-  const saveTopic = () => { setEditTopic(false); if (topicDraft !== idea.topic) onUpdate(idea.id, { topic: topicDraft }); };
-  const saveScript = () => { setEditScript(false); if (scriptDraft !== idea.script) onUpdate(idea.id, { script: scriptDraft }); };
-
   return (
-    <div style={{
-      background: "#111113", border: "1px solid #27272a", borderRadius: 8,
-      overflow: "hidden",
-    }}>
-      {/* Main row */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", flexWrap: "wrap" }}>
-        <span style={{ fontSize: 10, fontWeight: 700, color: pc, background: pc + "22", borderRadius: 4, padding: "2px 7px", whiteSpace: "nowrap" }}>
+    <div
+      draggable
+      onDragStart={e => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", idea.id); }}
+      onClick={onClick}
+      style={{
+        background: "#18181b", border: "1px solid #27272a", borderRadius: 9,
+        padding: "10px 12px", marginBottom: 6, cursor: "pointer",
+        transition: "border-color 0.12s",
+      }}
+      onMouseEnter={e => (e.currentTarget.style.borderColor = "#3f3f46")}
+      onMouseLeave={e => (e.currentTarget.style.borderColor = "#27272a")}
+    >
+      <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 600, color: "#e4e4e7", lineHeight: 1.35 }}>
+        {idea.topic || <em style={{ color: "#52525b", fontWeight: 400 }}>Untitled</em>}
+      </p>
+      <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: pc, background: pc + "22", borderRadius: 4, padding: "1px 6px" }}>
           {idea.page_handle}
         </span>
-        <span style={{ fontSize: 10, color: "#71717a", background: "#27272a", borderRadius: 4, padding: "2px 7px" }}>
+        <span style={{ fontSize: 10, color: "#52525b", background: "#27272a", borderRadius: 4, padding: "1px 6px" }}>
           {idea.content_type}
         </span>
-        <select
-          value={idea.status || "new"}
-          onChange={e => onUpdate(idea.id, { status: e.target.value })}
-          style={{ fontSize: 10, fontWeight: 600, color: ss.text, background: ss.bg, border: "none", borderRadius: 4, padding: "2px 6px", cursor: "pointer" }}
-        >
-          {STAGES.map(s => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}
-        </select>
-
-        {/* Topic — inline edit */}
-        {editTopic ? (
-          <input
-            autoFocus value={topicDraft}
-            onChange={e => setTopicDraft(e.target.value)}
-            onBlur={saveTopic}
-            onKeyDown={e => { if (e.key === "Enter") saveTopic(); if (e.key === "Escape") setEditTopic(false); }}
-            style={{ flex: 1, minWidth: 140, ...inp, padding: "3px 8px", fontSize: 12 }}
-          />
-        ) : (
-          <span
-            onClick={() => { setTopicDraft(idea.topic || ""); setEditTopic(true); }}
-            style={{
-              flex: 1, minWidth: 100, fontSize: 12, fontWeight: 500,
-              color: idea.topic ? "#e4e4e7" : "#52525b", cursor: "pointer",
-              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-            }}
-            title={idea.topic || "Click to add topic"}
-          >
-            {idea.topic || "Click to add topic…"}
+        {(idea.views || 0) > 0 && (
+          <span style={{ fontSize: 10, fontWeight: 700, color: "#50E0B0", marginLeft: "auto" }}>
+            {fmt(idea.views)}
           </span>
         )}
-
-        <ViewsEdit value={idea.views || 0} onSave={v => onUpdate(idea.id, { views: v })} />
-
-        <button
-          onClick={() => setExpanded(e => !e)}
-          style={{ background: "none", border: "none", color: "#52525b", cursor: "pointer", fontSize: 11, padding: "0 4px" }}
-          title="Expand"
-        >
-          {expanded ? "▲" : "▼"}
-        </button>
-        <button
-          onClick={() => { if (confirm("Delete this idea?")) onDelete(idea.id); }}
-          style={{ background: "none", border: "none", color: "#3f3f46", cursor: "pointer", fontSize: 14, padding: "0 2px", lineHeight: 1 }}
-          title="Delete"
-        >
-          ×
-        </button>
       </div>
-
-      {/* Expanded script area */}
-      {expanded && (
-        <div style={{ borderTop: "1px solid #1f1f22", padding: "8px 12px", background: "#0d0d0f" }}>
-          <p style={{ margin: "0 0 4px", fontSize: 10, color: "#52525b", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Script / notes</p>
-          {editScript ? (
-            <textarea
-              autoFocus value={scriptDraft}
-              onChange={e => setScriptDraft(e.target.value)}
-              onBlur={saveScript}
-              rows={3}
-              style={{ ...inp, resize: "vertical", fontSize: 11 }}
-            />
-          ) : (
-            <p
-              onClick={() => { setScriptDraft(idea.script || ""); setEditScript(true); }}
-              style={{ margin: 0, fontSize: 11, color: idea.script ? "#a1a1aa" : "#3f3f46", cursor: "pointer", lineHeight: 1.5 }}
-            >
-              {idea.script || "Click to add script or notes…"}
-            </p>
-          )}
-        </div>
+      {idea.script && (
+        <p style={{ margin: "6px 0 0", fontSize: 10, color: "#52525b", lineHeight: 1.4, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
+          {idea.script}
+        </p>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Idea detail modal (click on kanban card)
+// ---------------------------------------------------------------------------
+function IdeaDetailModal({ idea, onUpdate, onDelete, onClose }: {
+  idea: any;
+  onUpdate: (id: string, data: any) => void;
+  onDelete: (id: string) => void;
+  onClose: () => void;
+}) {
+  const [topic, setTopic] = useState(idea.topic || "");
+  const [script, setScript] = useState(idea.script || "");
+  const pc = PAGE_COLORS[idea.page_handle] || "#a1a1aa";
+  const ss = STATUS_STYLE[idea.status || "new"] || STATUS_STYLE.new;
+
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div style={{ background: "#111113", border: "1px solid #3f3f46", borderRadius: 14, padding: "24px 28px", width: "100%", maxWidth: 520, display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: pc, background: pc + "22", borderRadius: 4, padding: "2px 8px" }}>{idea.page_handle}</span>
+          <span style={{ fontSize: 10, color: "#71717a", background: "#27272a", borderRadius: 4, padding: "2px 8px" }}>{idea.content_type}</span>
+          <select
+            value={idea.status || "new"}
+            onChange={e => onUpdate(idea.id, { status: e.target.value })}
+            style={{ fontSize: 10, fontWeight: 600, color: ss.text, background: ss.bg, border: "none", borderRadius: 4, padding: "2px 8px", cursor: "pointer", marginLeft: "auto" }}
+          >
+            {STAGES.map(s => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}
+          </select>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "#52525b", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "0 4px" }}>×</button>
+        </div>
+
+        <div>
+          <p style={{ margin: "0 0 4px", fontSize: 10, color: "#52525b", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Topic / hook</p>
+          <input
+            value={topic}
+            onChange={e => setTopic(e.target.value)}
+            onBlur={() => { if (topic !== idea.topic) onUpdate(idea.id, { topic }); }}
+            style={{ ...inp }}
+          />
+        </div>
+
+        <div>
+          <p style={{ margin: "0 0 4px", fontSize: 10, color: "#52525b", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Script / notes</p>
+          <textarea
+            value={script}
+            onChange={e => setScript(e.target.value)}
+            onBlur={() => { if (script !== idea.script) onUpdate(idea.id, { script }); }}
+            rows={4}
+            style={{ ...inp, resize: "vertical" }}
+          />
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 12, color: "#71717a" }}>Views:</span>
+          <ViewsEdit value={idea.views || 0} onSave={v => onUpdate(idea.id, { views: v })} />
+          <button
+            onClick={() => { if (confirm("Delete this idea?")) { onDelete(idea.id); onClose(); } }}
+            style={{ marginLeft: "auto", ...btnSecondary, color: "#ef4444", borderColor: "#ef4444", fontSize: 11 }}
+          >
+            Delete
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -429,12 +438,22 @@ function AddIdeaForm({ onAdd, onCancel }: { onAdd: (d: any) => void; onCancel: (
   );
 }
 
+// Stage column dot colors
+const STAGE_DOT: Record<string, string> = {
+  new: "#4A7FD4", approved: "#2D9E5F", base_edit: "#7B61C4",
+  testing: "#D4952A", proven_ideas: "#1D9E75", scheduled: "#534AB7",
+  posted: "#2D9E5F", kill: "#C93B3B",
+};
+
 // ---------------------------------------------------------------------------
-// Idea Bank tab (All — current week, editable, auto-archives past weeks)
+// Idea Bank tab — kanban board (same layout as Content Tracker)
 // ---------------------------------------------------------------------------
 function IdeaBankTab({ pageFilter, search }: { pageFilter: string; search: string }) {
   const qc = useQueryClient();
   const [showAdd, setShowAdd] = useState(false);
+  const [detailIdea, setDetailIdea] = useState<any>(null);
+  const [dropStage, setDropStage] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
   const autoArchiveDone = useRef(false);
 
   const { data: settings } = useQuery({ queryKey: ["exp-settings"], queryFn: getExpSettings });
@@ -444,35 +463,26 @@ function IdeaBankTab({ pageFilter, search }: { pageFilter: string; search: strin
     return computeCurrentWeek(start);
   }, [settings]);
 
-  // Auto-archive any past weeks that haven't been archived yet
+  // Auto-archive past weeks silently
   const archiveMut = useMutation({ mutationFn: archiveExpWeek });
   const { data: allIdeas = [] } = useQuery({
     queryKey: ["exp-idea-bank-all"],
     queryFn: () => getExpIdeaBank(),
     enabled: !!settings,
   });
-
   useEffect(() => {
     if (!settings || autoArchiveDone.current || allIdeas.length === 0) return;
-    const pastWeeks = [...new Set(allIdeas
-      .filter((i: any) => i.week_number < currentWeek)
-      .map((i: any) => i.week_number as number)
+    const pastWeeks = [...new Set(
+      allIdeas.filter((i: any) => i.week_number < currentWeek).map((i: any) => i.week_number as number)
     )];
-    if (pastWeeks.length === 0) return;
+    if (!pastWeeks.length) return;
     autoArchiveDone.current = true;
-    pastWeeks.forEach(w => {
-      archiveMut.mutate(w, {
-        onSuccess: () => qc.invalidateQueries({ queryKey: ["exp-content-bank"] }),
-      });
-    });
+    pastWeeks.forEach(w => archiveMut.mutate(w, { onSuccess: () => qc.invalidateQueries({ queryKey: ["exp-content-bank"] }) }));
   }, [settings, allIdeas, currentWeek]);
 
   const { data: ideas = [], isLoading } = useQuery({
     queryKey: ["exp-idea-bank", currentWeek, pageFilter],
-    queryFn: () => getExpIdeaBank({
-      week: currentWeek,
-      page: pageFilter !== "all" ? pageFilter : undefined,
-    }),
+    queryFn: () => getExpIdeaBank({ week: currentWeek, page: pageFilter !== "all" ? pageFilter : undefined }),
     enabled: !!settings,
   });
 
@@ -483,7 +493,12 @@ function IdeaBankTab({ pageFilter, search }: { pageFilter: string; search: strin
   });
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => updateExpIdea(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }); qc.invalidateQueries({ queryKey: ["exp-working-ideas"] }); },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["exp-idea-bank"] });
+      qc.invalidateQueries({ queryKey: ["exp-working-ideas"] });
+      // keep detail modal in sync
+      setDetailIdea((prev: any) => prev?.id === vars.id ? { ...prev, ...vars.data } : prev);
+    },
     onError: (e: any) => toast.error(e?.message || "Failed to update"),
   });
   const deleteMut = useMutation({
@@ -496,16 +511,23 @@ function IdeaBankTab({ pageFilter, search }: { pageFilter: string; search: strin
     const q = search.toLowerCase().trim();
     if (!q) return ideas;
     return ideas.filter((i: any) =>
-      (i.topic || "").toLowerCase().includes(q) ||
-      (i.script || "").toLowerCase().includes(q)
+      (i.topic || "").toLowerCase().includes(q) || (i.script || "").toLowerCase().includes(q)
     );
   }, [ideas, search]);
 
-  const grouped = useMemo(() => groupByDay(filtered), [filtered]);
+  const stageCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    STAGES.forEach(s => { c[s] = 0; });
+    filtered.forEach((i: any) => { const s = i.status || "new"; if (s in c) c[s]++; });
+    return c;
+  }, [filtered]);
+
+  if (isLoading) return <p style={{ color: "#52525b", fontSize: 12, padding: "20px 0" }}>Loading…</p>;
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+      {/* Toolbar */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
         <span style={{ fontSize: 12, color: "#71717a" }}>Week {currentWeek} · {ideas.length} idea{ideas.length !== 1 ? "s" : ""}</span>
         <button onClick={() => setShowAdd(s => !s)} style={{ ...btnPrimary, padding: "5px 14px" }}>
           {showAdd ? "Cancel" : "+ New idea"}
@@ -513,31 +535,76 @@ function IdeaBankTab({ pageFilter, search }: { pageFilter: string; search: strin
       </div>
 
       {showAdd && (
-        <AddIdeaForm
-          onAdd={data => createMut.mutate(data)}
-          onCancel={() => setShowAdd(false)}
-        />
+        <AddIdeaForm onAdd={data => createMut.mutate(data)} onCancel={() => setShowAdd(false)} />
       )}
 
-      {isLoading ? (
-        <p style={{ color: "#52525b", fontSize: 12 }}>Loading…</p>
-      ) : grouped.length === 0 ? (
-        <p style={{ color: "#52525b", fontSize: 12 }}>
-          {search ? "No ideas match your search." : "No ideas for this week yet. Add the first one!"}
-        </p>
-      ) : (
-        grouped.map(([day, items]) => (
-          <DayGroup key={day} dateStr={day} count={items.length}>
-            {items.map(idea => (
-              <IdeaRow
-                key={idea.id}
-                idea={idea}
-                onUpdate={(id, data) => updateMut.mutate({ id, data })}
-                onDelete={id => deleteMut.mutate(id)}
-              />
-            ))}
-          </DayGroup>
-        ))
+      {/* Kanban board */}
+      <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 20, minHeight: "calc(100vh - 260px)" }}>
+        {STAGES.filter(s => s !== "kill").concat(["kill"] as IdeaStage[]).map(stage => (
+          <div
+            key={stage}
+            style={{ minWidth: 200, maxWidth: 240, flex: "1 0 200px" }}
+            onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropStage(stage); }}
+            onDragLeave={() => setDropStage(null)}
+            onDrop={e => {
+              e.preventDefault();
+              const id = e.dataTransfer.getData("text/plain");
+              if (id) updateMut.mutate({ id, data: { status: stage } });
+              setDraggingId(null); setDropStage(null);
+            }}
+          >
+            {/* Column header */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 4px 10px" }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: STAGE_DOT[stage] || "#52525b", flexShrink: 0 }} />
+              <span style={{ fontSize: 11, fontWeight: 600, color: STATUS_STYLE[stage]?.text || "#a1a1aa" }}>{STAGE_LABEL[stage]}</span>
+              <span style={{ fontSize: 10, color: "#52525b", fontWeight: 500 }}>{stageCounts[stage] ?? 0}</span>
+            </div>
+
+            {/* Drop zone */}
+            <div style={{
+              minHeight: 60, padding: 2, borderRadius: 9,
+              border: dropStage === stage ? "2px solid #7c3aed" : "2px solid transparent",
+              background: dropStage === stage ? "rgba(124,58,237,0.05)" : "transparent",
+              transition: "all 0.12s",
+            }}>
+              {filtered
+                .filter((i: any) => (i.status || "new") === stage)
+                .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                .map((idea: any) => (
+                  <div
+                    key={idea.id}
+                    draggable
+                    onDragStart={e => { setDraggingId(idea.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", idea.id); }}
+                    onDragEnd={() => { setDraggingId(null); setDropStage(null); }}
+                    style={{ opacity: draggingId === idea.id ? 0.4 : 1, transition: "opacity 0.12s" }}
+                  >
+                    <KanbanCard
+                      idea={idea}
+                      onUpdate={(id, data) => updateMut.mutate({ id, data })}
+                      onDelete={id => deleteMut.mutate(id)}
+                      onClick={() => setDetailIdea(idea)}
+                    />
+                  </div>
+                ))
+              }
+              {(stageCounts[stage] ?? 0) === 0 && (
+                <div style={{ padding: "20px 10px", textAlign: "center", color: "#3f3f46", fontSize: 11, border: "1.5px dashed #27272a", borderRadius: 9 }}>
+                  Empty
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Detail modal */}
+      {detailIdea && (
+        <IdeaDetailModal
+          idea={detailIdea}
+          onUpdate={(id, data) => updateMut.mutate({ id, data })}
+          onDelete={id => deleteMut.mutate(id)}
+          onClose={() => setDetailIdea(null)}
+        />
       )}
     </div>
   );
@@ -839,7 +906,7 @@ export default function ExperimentX() {
       </div>
 
       {/* Tab content */}
-      <div style={{ maxWidth: 860 }}>
+      <div style={{ maxWidth: tab === "idea-bank" ? "none" : 860 }}>
         {tab === "idea-bank"     && <IdeaBankTab    pageFilter={pageFilter} search={search} />}
         {tab === "content-bank"  && <ContentBankTab pageFilter={pageFilter} search={search} />}
         {tab === "working-ideas" && <WorkingIdeasTab pageFilter={pageFilter} search={search} />}
