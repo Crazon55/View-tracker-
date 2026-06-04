@@ -989,7 +989,7 @@ function IdeaBankTab({ pageFilter, search }: { pageFilter: string; search: strin
 
       {/* Kanban board */}
       <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 20, minHeight: "calc(100vh - 260px)" }}>
-        {STAGES.filter(s => s !== "kill").concat(["kill"] as IdeaStage[]).map(stage => (
+        {STAGES.filter(s => s !== "kill" && s !== "scheduled" && s !== "posted").concat(["kill"] as IdeaStage[]).map(stage => (
           <div
             key={stage}
             style={{ minWidth: 200, maxWidth: 240, flex: "1 0 200px" }}
@@ -1090,11 +1090,12 @@ function ContentBankTab({ pageFilter, search }: { pageFilter: string; search: st
     queryFn: () => getExpIdeaBank({ page: pageFilter !== "all" ? pageFilter : undefined }),
   });
 
-  // Filter to selected month
+  // Filter to selected month — only approved and proven ideas go into the content bank
   const monthItems = useMemo(() =>
     rawItems.filter((i: any) => {
       const d = (i.day_date || "").slice(0, 10);
-      return d >= monthStart && d <= monthEndStr;
+      const validStatus = i.status === "proven_ideas" || i.status === "approved";
+      return d >= monthStart && d <= monthEndStr && validStatus;
     }), [rawItems, monthStart, monthEndStr]);
 
   // Available weeks within this month (compute label from week_number)
@@ -1318,7 +1319,7 @@ export default function ExperimentX() {
   const tabLabels: Record<TabMode, string> = {
     "idea-bank":     "Idea Bank",
     "content-bank":  "Content Bank",
-    "working-ideas": "Working Ideas",
+    "working-ideas": "Proven Ideas",
   };
 
   return (
