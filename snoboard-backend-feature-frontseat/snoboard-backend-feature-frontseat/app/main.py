@@ -5356,13 +5356,17 @@ async def exp_get_settings():
 
 @app.patch("/api/v1/experiment/settings")
 async def exp_update_settings(req: ExpSettingsUpdate):
+    from datetime import date
     client = get_supabase_client()
-    row = (client.table("exp_settings").select("id").limit(1).execute().data or [None])[0]
-    if not row:
-        raise HTTPException(status_code=404, detail="Settings row not found — run migration first")
     update_data = {k: v for k, v in req.model_dump().items() if v is not None}
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    result = client.table("exp_settings").update(update_data).eq("id", row["id"]).execute()
+    existing = (client.table("exp_settings").select("id").limit(1).execute().data or [])
+    if existing:
+        result = client.table("exp_settings").update(update_data).eq("id", existing[0]["id"]).execute()
+    else:
+        update_data.setdefault("view_goal", 100000)
+        update_data.setdefault("experiment_start_date", str(date.today()))
+        result = client.table("exp_settings").insert(update_data).execute()
     return {"success": True, "data": result.data[0] if result.data else {}}
 
 
