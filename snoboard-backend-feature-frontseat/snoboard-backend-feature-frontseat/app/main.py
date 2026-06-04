@@ -288,24 +288,10 @@ def _month_start() -> str:
     return today.replace(day=1).isoformat()
 
 
-# TEMP: Pin reach card to a full calendar month (YYYY-MM). Set to None to revert to live month logic.
-_DASHBOARD_PIN_MONTH: str | None = "2026-05"
-
-
 def _dashboard_range() -> tuple[str, str]:
     """Return (start, end) for the dashboard reach period.
     On the 1st of the month show the full previous month so the number isn't zero.
     From the 2nd onwards show the current month up to today."""
-    if _DASHBOARD_PIN_MONTH:
-        y = int(_DASHBOARD_PIN_MONTH[:4])
-        m = int(_DASHBOARD_PIN_MONTH[5:7])
-        start = datetime(y, m, 1, tzinfo=timezone.utc).date().isoformat()
-        if m == 12:
-            end = datetime(y + 1, 1, 1, tzinfo=timezone.utc).date() - timedelta(days=1)
-        else:
-            end = datetime(y, m + 1, 1, tzinfo=timezone.utc).date() - timedelta(days=1)
-        return start, end.isoformat()
-
     today = datetime.now(timezone.utc).date()
     if today.day == 1:
         # Previous month
