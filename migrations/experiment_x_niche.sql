@@ -39,18 +39,10 @@ SET pages = ARRAY[
 WHERE name = 'FBS - Experiment X';
 
 -- ------------------------------------------------------------------
--- 4. Remove those handles from Garfields
+-- 4. Keep all 5 pages in their original teams too
+--    (Post Tracker and other views still show them)
+--    No removal needed — Experiment X is additive.
 -- ------------------------------------------------------------------
-UPDATE tracker_niches
-SET pages = array_remove(array_remove(pages, 'indianfoundersco'), 'indianbusinesscom')
-WHERE name = 'FBS - Garfields';
-
--- ------------------------------------------------------------------
--- 5. Remove indiastartupstory from Goofies
--- ------------------------------------------------------------------
-UPDATE tracker_niches
-SET pages = array_remove(pages, 'indiastartupstory')
-WHERE name = 'FBS - Goofies';
 
 -- ------------------------------------------------------------------
 -- 6. Verify
