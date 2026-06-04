@@ -631,3 +631,56 @@ export async function deleteBlueOceanScrapedPost(id: string): Promise<void> {
   const { error } = await _sb.from("blue_ocean_scraped_posts").delete().eq("id", id);
   if (error) throw new Error(error.message);
 }
+
+// --- Experiment X ---
+export const getExpSettings = () =>
+  fetchApi<any>("/api/v1/experiment/settings");
+
+export const updateExpSettings = (data: { view_goal?: number; experiment_start_date?: string }) =>
+  fetchApi<any>("/api/v1/experiment/settings", { method: "PATCH", body: JSON.stringify(data) });
+
+export const getExpIdeaBank = (params?: { week?: number; page?: string }) => {
+  const q = new URLSearchParams();
+  if (params?.week != null) q.set("week", String(params.week));
+  if (params?.page) q.set("page", params.page);
+  const qs = q.toString();
+  return fetchApi<any[]>(`/api/v1/experiment/idea-bank${qs ? `?${qs}` : ""}`);
+};
+
+export const createExpIdea = (data: {
+  page_handle: string; content_type?: string; topic?: string;
+  script?: string; status?: string; views?: number; day_date?: string;
+}) => fetchApi<any>("/api/v1/experiment/idea-bank", { method: "POST", body: JSON.stringify(data) });
+
+export const updateExpIdea = (id: string, data: {
+  page_handle?: string; content_type?: string; topic?: string;
+  script?: string; status?: string; views?: number; day_date?: string;
+}) => fetchApi<any>(`/api/v1/experiment/idea-bank/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+
+export const deleteExpIdea = (id: string) =>
+  fetchApi<any>(`/api/v1/experiment/idea-bank/${id}`, { method: "DELETE" });
+
+export const archiveExpWeek = (week_number: number) =>
+  fetchApi<any>("/api/v1/experiment/idea-bank/archive", { method: "POST", body: JSON.stringify({ week_number }) });
+
+export const getExpContentBank = (params?: { week?: number; page?: string }) => {
+  const q = new URLSearchParams();
+  if (params?.week != null) q.set("week", String(params.week));
+  if (params?.page) q.set("page", params.page);
+  const qs = q.toString();
+  return fetchApi<any[]>(`/api/v1/experiment/content-bank${qs ? `?${qs}` : ""}`);
+};
+
+export const getExpContentBankWeeks = () =>
+  fetchApi<any[]>("/api/v1/experiment/content-bank/weeks");
+
+export const getExpWorkingIdeas = (params?: { week?: number; page?: string }) => {
+  const q = new URLSearchParams();
+  if (params?.week != null) q.set("week", String(params.week));
+  if (params?.page) q.set("page", params.page);
+  const qs = q.toString();
+  return fetchApi<any[]>(`/api/v1/experiment/working-ideas${qs ? `?${qs}` : ""}`);
+};
+
+export const distributeExpWorkingIdea = (id: string) =>
+  fetchApi<any>(`/api/v1/experiment/working-ideas/${id}/distribute`, { method: "POST" });

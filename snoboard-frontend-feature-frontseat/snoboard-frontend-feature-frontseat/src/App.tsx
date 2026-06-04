@@ -5,7 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { getDeadlines, getSixDayConfig, getSixDayDeadlines, getTickets } from "@/services/api";
 import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, BarChart3, Scissors, ClipboardList, Trophy, LayoutGrid, Ticket, Newspaper, Waves, Bell, Sparkles, ShieldCheck } from "lucide-react";
+import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, BarChart3, Scissors, ClipboardList, Trophy, LayoutGrid, Ticket, Newspaper, Waves, Bell, Sparkles, ShieldCheck, FlaskConical } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { isRouteAllowed, hasFullNav } from "@/lib/permissions";
 import { useNotifications } from "@/hooks/useNotifications";
@@ -39,6 +39,7 @@ import BlueOceanIdeas from "./pages/BlueOceanIdeas";
 import PodcastAlerts from "./pages/PodcastAlerts";
 import RoleSelect from "./pages/RoleSelect";
 import TeamRolesPage from "./pages/TeamRolesPage";
+import ExperimentX from "./pages/ExperimentX";
 import NotFound from "./pages/NotFound";
 import { MonthlyWrapRoot, MonthlyWrapOpenButton } from "./components/MonthlyWrapHost";
 import { stashWrapMonthFromUrl } from "@/lib/monthlyWrap";
@@ -280,6 +281,7 @@ const navItems: NavItem[] = [
   { to: "/growth", label: "Growth", icon: TrendingUp },
   { to: "/pages", label: "IP's", icon: Users },
   { to: "http://16.112.125.207:5173/", label: "Pintu", icon: Scissors, external: true },
+  { to: "/experiment-x", label: "Experiment X", icon: FlaskConical },
 ];
 
 function HamburgerMenu() {
@@ -400,7 +402,8 @@ function AppLayout() {
     location.pathname === "/podcast-alerts" ||
     location.pathname.startsWith("/post-ips/") ||
     location.pathname.startsWith("/page/") ||
-    location.pathname === "/team-roles";
+    location.pathname === "/team-roles" ||
+    location.pathname === "/experiment-x";
 
   return (
     <>
@@ -448,6 +451,7 @@ function AppLayout() {
             <Route path="/ideas" element={<IdeaEngine />} />
             <Route path="/competitor-ideas" element={<CompetitorIdeas />} />
             <Route path="/team-roles" element={<TeamRolesPage />} />
+            <Route path="/experiment-x" element={<ExperimentX />} />
           </Routes>
         </div>
       ) : (

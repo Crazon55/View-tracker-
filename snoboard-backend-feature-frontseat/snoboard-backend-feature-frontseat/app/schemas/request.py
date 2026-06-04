@@ -160,3 +160,29 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     history: list[ChatMessage] = []
+
+
+# --- Experiment X ---
+class ExpIdeaCreate(BaseModel):
+    page_handle: str
+    content_type: str = "reel"
+    topic: str = ""
+    script: str = ""
+    status: str = "draft"
+    views: int = 0
+    day_date: str | None = None   # YYYY-MM-DD, defaults to today
+
+
+class ExpIdeaUpdate(BaseModel):
+    page_handle: str | None = None
+    content_type: str | None = None
+    topic: str | None = None
+    script: str | None = None
+    status: str | None = None
+    views: int | None = None
+    day_date: str | None = None
+
+
+class ExpSettingsUpdate(BaseModel):
+    view_goal: int | None = None
+    experiment_start_date: str | None = None  # YYYY-MM-DD

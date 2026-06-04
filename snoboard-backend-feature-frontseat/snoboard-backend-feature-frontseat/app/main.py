@@ -25,6 +25,7 @@ from app.schemas.request import (
     ReelCreate, ReelUpdate, ScrapeRequest,
     CSCreate, CSUpdate, IdeaCreate, IdeaUpdate,
     ChatRequest, ContentEntryCreate, ContentEntryUpdate,
+    ExpIdeaCreate, ExpIdeaUpdate, ExpSettingsUpdate,
 )
 from app.schemas.response import ScrapeStatusResponse
 
@@ -5295,3 +5296,214 @@ async def news_feed_saved_list():
     client = get_supabase_client()
     data = client.table("news_feed_saved").select("article_url,article_data").order("created_at", desc=True).execute().data
     return {"success": True, "data": data}
+
+
+# =============================================================================
+# Experiment X — Idea Tracking System
+# =============================================================================
+
+def _exp_compute_week_number(client, day_date_str: str) -> int:
+    """Compute 1-based week number relative to experiment_start_date in exp_settings."""
+    from datetime import date
+    row = (client.table("exp_settings").select("experiment_start_date").limit(1).execute().data or [{}])[0]
+    start_raw = row.get("experiment_start_date") or str(date.today())
+    start = date.fromisoformat(str(start_raw)[:10])
+    target = date.fromisoformat(str(day_date_str)[:10])
+    delta = (target - start).days
+    return max(1, (delta // 7) + 1)
+
+
+def _exp_week_label(client, week_number: int) -> str:
+    """Generate 'Week N · Mon DD – Mon DD' label."""
+    from datetime import date, timedelta
+    row = (client.table("exp_settings").select("experiment_start_date").limit(1).execute().data or [{}])[0]
+    start_raw = row.get("experiment_start_date") or str(date.today())
+    start = date.fromisoformat(str(start_raw)[:10])
+    week_start = start + timedelta(weeks=week_number - 1)
+    week_end = week_start + timedelta(days=6)
+    try:
+        fmt = lambda d: d.strftime("%b %-d")
+        return f"Week {week_number} · {fmt(week_start)} – {fmt(week_end)}"
+    except Exception:
+        return f"Week {week_number}"
+
+
+def _exp_flag_working_idea(client, idea: dict, view_goal: int):
+    """Insert into exp_working_ideas if not already flagged for this source_id."""
+    source_id = idea.get("id")
+    existing = client.table("exp_working_ideas").select("id").eq("source_id", source_id).execute().data
+    if existing:
+        return
+    client.table("exp_working_ideas").insert({
+        "source_id": source_id,
+        "page_handle": idea.get("page_handle", ""),
+        "content_type": idea.get("content_type", "reel"),
+        "topic": idea.get("topic", ""),
+        "script": idea.get("script", ""),
+        "views_achieved": idea.get("views", 0),
+        "goal_threshold": view_goal,
+        "week_number": idea.get("week_number", 1),
+        "day_date": str(idea.get("day_date", "")),
+    }).execute()
+
+
+@app.get("/api/v1/experiment/settings")
+async def exp_get_settings():
+    client = get_supabase_client()
+    data = client.table("exp_settings").select("*").limit(1).execute().data
+    return {"success": True, "data": data[0] if data else {}}
+
+
+@app.patch("/api/v1/experiment/settings")
+async def exp_update_settings(req: ExpSettingsUpdate):
+    client = get_supabase_client()
+    row = (client.table("exp_settings").select("id").limit(1).execute().data or [None])[0]
+    if not row:
+        raise HTTPException(status_code=404, detail="Settings row not found — run migration first")
+    update_data = {k: v for k, v in req.model_dump().items() if v is not None}
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    result = client.table("exp_settings").update(update_data).eq("id", row["id"]).execute()
+    return {"success": True, "data": result.data[0] if result.data else {}}
+
+
+@app.get("/api/v1/experiment/idea-bank")
+async def exp_list_idea_bank(week: int | None = None, page: str | None = None):
+    client = get_supabase_client()
+    q = client.table("exp_idea_bank").select("*").order("day_date", desc=False).order("created_at", desc=False)
+    if week is not None:
+        q = q.eq("week_number", week)
+    if page:
+        q = q.eq("page_handle", page)
+    data = q.execute().data or []
+    return {"success": True, "data": data}
+
+
+@app.post("/api/v1/experiment/idea-bank")
+async def exp_create_idea(req: ExpIdeaCreate):
+    from datetime import date
+    client = get_supabase_client()
+    day_str = req.day_date or str(date.today())
+    week_num = _exp_compute_week_number(client, day_str)
+    row = {
+        "page_handle": req.page_handle,
+        "content_type": req.content_type,
+        "topic": req.topic,
+        "script": req.script,
+        "status": req.status,
+        "views": req.views,
+        "week_number": week_num,
+        "day_date": day_str,
+    }
+    result = client.table("exp_idea_bank").insert(row).execute()
+    created = result.data[0] if result.data else row
+    if req.views > 0:
+        settings = (client.table("exp_settings").select("view_goal").limit(1).execute().data or [{}])[0]
+        goal = settings.get("view_goal", 100000)
+        if req.views >= goal:
+            _exp_flag_working_idea(client, created, goal)
+    return {"success": True, "data": created}
+
+
+@app.patch("/api/v1/experiment/idea-bank/{idea_id}")
+async def exp_update_idea(idea_id: str, req: ExpIdeaUpdate):
+    client = get_supabase_client()
+    update_data = {k: v for k, v in req.model_dump().items() if v is not None}
+    if "day_date" in update_data:
+        update_data["week_number"] = _exp_compute_week_number(client, update_data["day_date"])
+    result = client.table("exp_idea_bank").update(update_data).eq("id", idea_id).execute()
+    updated = result.data[0] if result.data else {}
+    if "views" in update_data and updated:
+        settings = (client.table("exp_settings").select("view_goal").limit(1).execute().data or [{}])[0]
+        goal = settings.get("view_goal", 100000)
+        if update_data["views"] >= goal:
+            _exp_flag_working_idea(client, updated, goal)
+    return {"success": True, "data": updated}
+
+
+@app.delete("/api/v1/experiment/idea-bank/{idea_id}")
+async def exp_delete_idea(idea_id: str):
+    client = get_supabase_client()
+    client.table("exp_idea_bank").delete().eq("id", idea_id).execute()
+    return {"success": True}
+
+
+@app.post("/api/v1/experiment/idea-bank/archive")
+async def exp_archive_week(request: Request):
+    body = await request.json()
+    week_number = body.get("week_number")
+    if not week_number:
+        raise HTTPException(status_code=400, detail="week_number required")
+    client = get_supabase_client()
+    ideas = client.table("exp_idea_bank").select("*").eq("week_number", week_number).execute().data or []
+    if not ideas:
+        return {"success": True, "archived": 0}
+    settings = (client.table("exp_settings").select("view_goal").limit(1).execute().data or [{}])[0]
+    goal = settings.get("view_goal", 100000)
+    label = _exp_week_label(client, week_number)
+    existing_sources = {
+        r["source_id"]
+        for r in (client.table("exp_content_bank").select("source_id").eq("week_number", week_number).execute().data or [])
+        if r.get("source_id")
+    }
+    to_insert = [i for i in ideas if i.get("id") not in existing_sources]
+    if to_insert:
+        rows = [{
+            "source_id": i["id"],
+            "page_handle": i.get("page_handle", ""),
+            "content_type": i.get("content_type", "reel"),
+            "topic": i.get("topic", ""),
+            "script": i.get("script", ""),
+            "views": i.get("views", 0),
+            "status": i.get("status", "draft"),
+            "week_number": week_number,
+            "week_label": label,
+            "day_date": str(i.get("day_date", "")),
+        } for i in to_insert]
+        client.table("exp_content_bank").insert(rows).execute()
+        for i in to_insert:
+            if (i.get("views") or 0) >= goal:
+                _exp_flag_working_idea(client, i, goal)
+    return {"success": True, "archived": len(to_insert), "week_label": label}
+
+
+@app.get("/api/v1/experiment/content-bank")
+async def exp_list_content_bank(week: int | None = None, page: str | None = None):
+    client = get_supabase_client()
+    q = client.table("exp_content_bank").select("*").order("day_date", desc=False).order("archived_at", desc=False)
+    if week is not None:
+        q = q.eq("week_number", week)
+    if page:
+        q = q.eq("page_handle", page)
+    data = q.execute().data or []
+    return {"success": True, "data": data}
+
+
+@app.get("/api/v1/experiment/content-bank/weeks")
+async def exp_list_content_bank_weeks():
+    client = get_supabase_client()
+    data = client.table("exp_content_bank").select("week_number,week_label").order("week_number", desc=False).execute().data or []
+    seen: dict[int, str] = {}
+    for row in data:
+        w = row.get("week_number")
+        if w not in seen:
+            seen[w] = row.get("week_label", f"Week {w}")
+    return {"success": True, "data": [{"week_number": k, "week_label": v} for k, v in seen.items()]}
+
+
+@app.get("/api/v1/experiment/working-ideas")
+async def exp_list_working_ideas(week: int | None = None, page: str | None = None):
+    client = get_supabase_client()
+    q = client.table("exp_working_ideas").select("*").order("flagged_at", desc=True)
+    if week is not None:
+        q = q.eq("week_number", week)
+    if page:
+        q = q.eq("page_handle", page)
+    data = q.execute().data or []
+    return {"success": True, "data": data}
+
+
+@app.post("/api/v1/experiment/working-ideas/{idea_id}/distribute")
+async def exp_distribute_working_idea(idea_id: str):
+    client = get_supabase_client()
+    result = client.table("exp_working_ideas").update({"distributed": True}).eq("id", idea_id).execute()
+    return {"success": True, "data": result.data[0] if result.data else {}}
