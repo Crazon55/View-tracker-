@@ -28,6 +28,7 @@ export type Permission =
   | 'view_top_posts'        // access top posts analytics
   | 'filter_by_person'            // filter board by any team member (admin-level)
   | 'post_tracker_assigned_only'  // in Post Tracker only: see ideas where tagged (designer override)
+  | 'add_experiment_idea'         // create ideas in Experiment X (Pulkit, Varun only)
 
 // ── Reusable permission sets ──────────────────────────────────────────────────
 
@@ -44,6 +45,7 @@ const ADMIN_PERMISSIONS: Permission[] = [
   'add_view_count',
   'view_top_posts',
   'attach_file_to_idea',
+  'add_experiment_idea',
 ]
 
 const CS_CW_PERMISSIONS: Permission[] = [
@@ -83,6 +85,16 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
   // SMM — scheduled/posted content only, can update view counts
   smm: ['view_scheduled_any', 'add_view_count', 'view_top_posts', 'comment_on_idea'],
 
+  // Experiment X creators — Pulkit & Varun only
+  experiment_x: [
+    'view_all_ideas',
+    'create_idea',
+    'edit_own_idea',
+    'delete_own_idea',
+    'comment_on_idea',
+    'add_experiment_idea',
+  ],
+
   // Other roles
   ops_manager:      ['view_all_ideas', 'comment_on_idea', 'view_scheduled', 'view_scheduled_any'],
   content_creators: ['view_all_ideas', 'create_idea', 'edit_own_idea', 'delete_own_idea', 'comment_on_idea'],
@@ -114,6 +126,7 @@ export const ROLE_NAV: Record<string, '*' | string[]> = {
   smm:              ['/', '/content-tracker', '/post-tracker', '/growth', '/stage1-tracker'],
   ops_manager:      '*',
   content_creators: ['/', '/six-day-tracker', '/team-performance', '/workboard', '/tickets', '/news', '/blue-ocean', '/growth'],
+  experiment_x:     ['/', '/experiment-x', '/content-tracker', '/tickets'],
 }
 
 export function isRouteAllowed(role: string | null, path: string): boolean {

@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePermissions } from "@/hooks/usePermissions";
 import IdeaThread from "@/components/IdeaThread";
 import {
   getExpSettings, updateExpSettings,
@@ -893,6 +894,7 @@ const STAGE_DOT: Record<string, string> = {
 // ---------------------------------------------------------------------------
 function IdeaBankTab({ pageFilter, search }: { pageFilter: string; search: string }) {
   const qc = useQueryClient();
+  const { can } = usePermissions();
   const [addOpen, setAddOpen] = useState(false);
   const [detailIdea, setDetailIdea] = useState<any>(null);
   const [dropStage, setDropStage] = useState<string | null>(null);
@@ -972,9 +974,11 @@ function IdeaBankTab({ pageFilter, search }: { pageFilter: string; search: strin
       {/* Toolbar */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
         <span style={{ fontSize: 12, color: "#71717a" }}>Week {currentWeek} · {ideas.length} idea{ideas.length !== 1 ? "s" : ""}</span>
-        <button onClick={() => setAddOpen(true)} style={{ ...btnPrimary, padding: "5px 14px" }}>
-          + New idea
-        </button>
+        {can('add_experiment_idea') && (
+          <button onClick={() => setAddOpen(true)} style={{ ...btnPrimary, padding: "5px 14px" }}>
+            + New idea
+          </button>
+        )}
       </div>
 
       <AddIdeaModal
