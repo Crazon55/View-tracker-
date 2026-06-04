@@ -587,7 +587,7 @@ function WorkingIdeasTab({ pageFilter }: { pageFilter: string }) {
   const updateSettingsMut = useMutation({
     mutationFn: updateExpSettings,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["exp-settings"] }); setEditingGoal(false); },
-    onError: () => toast.error("Failed to update goal"),
+    onError: (e: any) => toast.error(`Failed to update goal: ${e?.message || "unknown error"}`),
   });
 
   const { data: ideas = [], isLoading } = useQuery({
