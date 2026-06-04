@@ -268,6 +268,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/content-tracker", label: "Reel Tracker", icon: ClipboardList },
+  { to: "/experiment-x", label: "Experiment X", icon: FlaskConical },
   { to: "/post-tracker", label: "Post Tracker", icon: Image },
   { to: "/post-ips", label: "Post IPs", icon: Image },
   { to: "/stage1-tracker", label: "Stage 1 Tracker", icon: BarChart3 },
@@ -281,7 +282,6 @@ const navItems: NavItem[] = [
   { to: "/growth", label: "Growth", icon: TrendingUp },
   { to: "/pages", label: "IP's", icon: Users },
   { to: "http://16.112.125.207:5173/", label: "Pintu", icon: Scissors, external: true },
-  { to: "/experiment-x", label: "Experiment X", icon: FlaskConical },
 ];
 
 function HamburgerMenu() {
