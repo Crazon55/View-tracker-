@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import IdeaThread from "@/components/IdeaThread";
 import {
   getExpSettings, updateExpSettings,
   getExpIdeaBank, createExpIdea, updateExpIdea, deleteExpIdea, archiveExpWeek,
@@ -222,8 +223,50 @@ function KanbanCard({ idea, onUpdate, onDelete, onClick }: {
   );
 }
 
+// Stage action buttons — same progression as Content Tracker
+const STAGE_ACTIONS: Record<string, { label: string; stage: string; bg: string; color: string }[]> = {
+  new:          [{ label: "Approve", stage: "approved", bg: "#7c3aed", color: "#fff" }, { label: "Reject", stage: "kill", bg: "transparent", color: "#C93B3B" }],
+  approved:     [{ label: "Start base edit", stage: "base_edit", bg: "#7c3aed", color: "#fff" }],
+  base_edit:    [{ label: "Start testing", stage: "testing", bg: "#7c3aed", color: "#fff" }],
+  testing:      [{ label: "Proven / Batch edit", stage: "proven_ideas", bg: "#1D9E75", color: "#fff" }, { label: "Kill it", stage: "kill", bg: "transparent", color: "#C93B3B" }],
+  proven_ideas: [{ label: "Schedule", stage: "scheduled", bg: "#534AB7", color: "#fff" }],
+  scheduled:    [{ label: "Mark posted", stage: "posted", bg: "#2D9E5F", color: "#fff" }],
+  posted: [], kill: [],
+};
+
+// Inline save text input — same as SafeTextInput in ContentTracker
+function SafeField({ value, onSave, placeholder, style }: { value: string | null; onSave: (v: string) => void; placeholder?: string; style?: React.CSSProperties }) {
+  const [local, setLocal] = useState(value || "");
+  const dirty = useRef(false);
+  useEffect(() => { if (!dirty.current) setLocal(value || ""); }, [value]);
+  return (
+    <input
+      value={local}
+      onChange={e => { dirty.current = true; setLocal(e.target.value); }}
+      onBlur={() => { const next = local.trim(); dirty.current = false; if (next !== (value || "").trim()) onSave(next); }}
+      placeholder={placeholder}
+      style={{ width: "100%", padding: "9px 13px", border: "1.5px solid #3f3f46", borderRadius: 9, fontSize: 13, outline: "none", background: "#09090b", color: "#e4e4e7", boxSizing: "border-box", ...style }}
+    />
+  );
+}
+
+function SafeArea({ value, onSave, placeholder, rows }: { value: string; onSave: (v: string) => void; placeholder?: string; rows?: number }) {
+  const [local, setLocal] = useState(value || "");
+  const dirty = useRef(false);
+  useEffect(() => { if (!dirty.current) setLocal(value || ""); }, [value]);
+  return (
+    <textarea
+      value={local} rows={rows || 3}
+      onChange={e => { dirty.current = true; setLocal(e.target.value); }}
+      onBlur={() => { dirty.current = false; if (local !== value) onSave(local); }}
+      placeholder={placeholder}
+      style={{ width: "100%", padding: "9px 13px", border: "1.5px solid #3f3f46", borderRadius: 9, fontSize: 13, outline: "none", background: "#09090b", color: "#e4e4e7", boxSizing: "border-box", resize: "vertical", minHeight: 60 }}
+    />
+  );
+}
+
 // ---------------------------------------------------------------------------
-// Idea detail modal (click on kanban card)
+// Idea detail modal — full Content Tracker parity
 // ---------------------------------------------------------------------------
 function IdeaDetailModal({ idea, onUpdate, onDelete, onClose }: {
   idea: any;
@@ -231,61 +274,153 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose }: {
   onDelete: (id: string) => void;
   onClose: () => void;
 }) {
-  const [topic, setTopic] = useState(idea.topic || "");
-  const [script, setScript] = useState(idea.script || "");
+  const stage = idea.status || "new";
+  const ss = STATUS_STYLE[stage] || STATUS_STYLE.new;
   const pc = PAGE_COLORS[idea.page_handle] || "#a1a1aa";
-  const ss = STATUS_STYLE[idea.status || "new"] || STATUS_STYLE.new;
+  const actions = STAGE_ACTIONS[stage] || [];
+
+  const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "#71717a", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
 
   return (
     <div
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+      style={{ position: "fixed", inset: 0, zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center" }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div style={{ background: "#111113", border: "1px solid #3f3f46", borderRadius: 14, padding: "24px 28px", width: "100%", maxWidth: 520, display: "flex", flexDirection: "column", gap: 14 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-          <span style={{ fontSize: 10, fontWeight: 700, color: pc, background: pc + "22", borderRadius: 4, padding: "2px 8px" }}>{idea.page_handle}</span>
-          <span style={{ fontSize: 10, color: "#71717a", background: "#27272a", borderRadius: 4, padding: "2px 8px" }}>{idea.content_type}</span>
-          <select
-            value={idea.status || "new"}
-            onChange={e => onUpdate(idea.id, { status: e.target.value })}
-            style={{ fontSize: 10, fontWeight: 600, color: ss.text, background: ss.bg, border: "none", borderRadius: 4, padding: "2px 8px", cursor: "pointer", marginLeft: "auto" }}
-          >
-            {STAGES.map(s => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}
-          </select>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: "#52525b", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "0 4px" }}>×</button>
+      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} />
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          position: "relative", background: "#18181b", borderRadius: 16,
+          padding: "24px 28px", maxWidth: 680, width: "94%",
+          maxHeight: "88vh", overflowY: "auto",
+          boxShadow: "0 24px 80px rgba(0,0,0,0.5)", border: "1px solid #27272a",
+          display: "flex", flexDirection: "column", gap: 14,
+        }}
+      >
+        {/* Title + close */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+          <SafeField
+            value={idea.topic}
+            onSave={v => onUpdate(idea.id, { topic: v })}
+            placeholder="Topic / hook"
+            style={{ fontSize: 16, fontWeight: 600, color: "#fff", border: "none", background: "transparent", padding: "0" }}
+          />
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#71717a", padding: "0 4px", flexShrink: 0 }}>✕</button>
         </div>
 
+        {/* Stage + source + page tags */}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 99, background: ss.bg, color: ss.text }}>
+            {STAGE_LABEL[stage] || stage}
+          </span>
+          <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, background: idea.source === "competitor" ? "#EEEDFE" : "#E8F5EE", color: idea.source === "competitor" ? "#534AB7" : "#1A5E3A", fontWeight: 500 }}>
+            {idea.source === "competitor" ? "Competitor" : "Original"}
+          </span>
+          <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, background: pc + "22", color: pc, fontWeight: 600 }}>
+            {idea.page_handle}
+          </span>
+          <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, background: "#27272a", color: "#71717a" }}>
+            {idea.content_type}
+          </span>
+        </div>
+
+        {/* Stage action buttons */}
+        {actions.length > 0 && (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {actions.map(a => (
+              <button
+                key={a.stage}
+                onClick={() => onUpdate(idea.id, { status: a.stage })}
+                style={{
+                  padding: "8px 18px", borderRadius: 8, border: a.bg === "transparent" ? `1.5px solid ${a.color}` : "none",
+                  background: a.bg, color: a.color, fontSize: 13, fontWeight: 600, cursor: "pointer",
+                }}
+              >
+                {a.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Page selector */}
         <div>
-          <p style={{ margin: "0 0 4px", fontSize: 10, color: "#52525b", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Topic / hook</p>
-          <input
-            value={topic}
-            onChange={e => setTopic(e.target.value)}
-            onBlur={() => { if (topic !== idea.topic) onUpdate(idea.id, { topic }); }}
-            style={{ ...inp }}
+          <label style={ls}>Page</label>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {EXP_PAGES.map(p => {
+              const c = PAGE_COLORS[p] || "#a1a1aa";
+              const active = idea.page_handle === p;
+              return (
+                <button key={p} type="button" onClick={() => onUpdate(idea.id, { page_handle: p })} style={{
+                  padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                  border: active ? `2px solid ${c}` : "1.5px solid #3f3f46",
+                  background: active ? c + "22" : "#18181b",
+                  color: active ? c : "#71717a",
+                }}>{p}</button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Hook variations */}
+        <div>
+          <label style={ls}>Hook variations</label>
+          <SafeArea
+            value={idea.hook_variations || ""}
+            onSave={v => onUpdate(idea.id, { hook_variations: v })}
+            placeholder="One hook per line"
+            rows={3}
           />
         </div>
 
+        {/* Music ref */}
         <div>
-          <p style={{ margin: "0 0 4px", fontSize: 10, color: "#52525b", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Script / notes</p>
-          <textarea
-            value={script}
-            onChange={e => setScript(e.target.value)}
-            onBlur={() => { if (script !== idea.script) onUpdate(idea.id, { script }); }}
-            rows={4}
-            style={{ ...inp, resize: "vertical" }}
-          />
+          <label style={ls}>Music reference / suggestions</label>
+          <SafeField value={idea.music_ref} onSave={v => onUpdate(idea.id, { music_ref: v })} placeholder="e.g. Dark cinematic, trending audio" />
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 12, color: "#71717a" }}>Views:</span>
+        {/* Frame link */}
+        <div>
+          <label style={ls}>Frame link</label>
+          <SafeField value={idea.frame_link} onSave={v => onUpdate(idea.id, { frame_link: v })} placeholder="Google Drive / reference frames link" />
+          {idea.frame_link && <a href={idea.frame_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block", marginTop: 4 }}>{idea.frame_link}</a>}
+        </div>
+
+        {/* YT link + timestamps */}
+        <div style={{ display: "flex", gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            <label style={ls}>YT link (original source)</label>
+            <SafeField value={idea.yt_url} onSave={v => onUpdate(idea.id, { yt_url: v })} placeholder="https://youtube.com/watch?v=..." />
+          </div>
+          <div style={{ flex: "0 0 140px" }}>
+            <label style={ls}>YT timestamps</label>
+            <SafeField value={idea.yt_timestamps} onSave={v => onUpdate(idea.id, { yt_timestamps: v })} placeholder="0:30–1:45" />
+          </div>
+        </div>
+        {idea.yt_url && <a href={idea.yt_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all" }}>{idea.yt_url}</a>}
+
+        {/* Comp link */}
+        <div>
+          <label style={ls}>Comp link</label>
+          <SafeField value={idea.comp_link} onSave={v => onUpdate(idea.id, { comp_link: v })} placeholder="Competitor reel / post URL" />
+          {idea.comp_link && <a href={idea.comp_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block", marginTop: 4 }}>{idea.comp_link}</a>}
+        </div>
+
+        {/* Views */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <label style={{ ...ls, margin: 0 }}>Views</label>
           <ViewsEdit value={idea.views || 0} onSave={v => onUpdate(idea.id, { views: v })} />
-          <button
-            onClick={() => { if (confirm("Delete this idea?")) { onDelete(idea.id); onClose(); } }}
-            style={{ marginLeft: "auto", ...btnSecondary, color: "#ef4444", borderColor: "#ef4444", fontSize: 11 }}
-          >
-            Delete
-          </button>
         </div>
+
+        {/* Discussion thread */}
+        <IdeaThread ideaId={idea.id} active={stage !== "new"} trackerType="reel" />
+
+        {/* Delete */}
+        <button
+          onClick={() => { if (confirm("Delete this idea?")) { onDelete(idea.id); onClose(); } }}
+          style={{ padding: "9px 20px", background: "transparent", color: "#FF7070", border: "1.5px solid #3f3f46", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: "pointer", marginTop: 4 }}
+        >
+          Delete idea
+        </button>
       </div>
     </div>
   );
