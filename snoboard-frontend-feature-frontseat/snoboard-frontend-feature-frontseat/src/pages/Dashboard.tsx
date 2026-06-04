@@ -22,6 +22,9 @@ type TimePeriod = "all" | "monthly" | "custom";
 
 const TRACKER_MONTH_KEY = "fs-dashboard-tracker-ym";
 
+/** TEMP: Pin Total Ecosystem Reach to a full month (YYYY-MM). Set to null to revert. */
+const DASHBOARD_REACH_PIN_MONTH: string | null = "2026-05";
+
 function readTrackerMonthFromStorage(): string {
   if (typeof window === "undefined") return "";
   try {
@@ -365,10 +368,12 @@ export default function Dashboard() {
     const prev = new Date(d.getFullYear(), d.getMonth() - 1, 1);
     return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
   })();
+  const reachPinYm = DASHBOARD_REACH_PIN_MONTH || (isFirstOfMonth ? prevMonthStr : "");
+  const showPinnedReachMonth = Boolean(reachPinYm);
   const { data: prevMonthSixDay } = useQuery({
-    queryKey: ["six-day-month", prevMonthStr],
-    queryFn: () => getSixDayMonth(prevMonthStr),
-    enabled: isFirstOfMonth,
+    queryKey: ["six-day-month", reachPinYm],
+    queryFn: () => getSixDayMonth(reachPinYm),
+    enabled: showPinnedReachMonth,
     staleTime: 10 * 60_000,
   });
 
@@ -501,11 +506,13 @@ export default function Dashboard() {
 
   const stats = data;
   const totalViews = stats?.total_views ?? 0;
-  const reachTotal = isFirstOfMonth && prevMonthSixDay?.page_summaries
-    ? (prevMonthSixDay.page_summaries as any[]).reduce(
-        (s: number, p: any) => s + (p.actual_views ?? p.cycle_views_sum ?? 0), 0
-      )
-    : totalViews;
+  const reachTotal =
+    showPinnedReachMonth && prevMonthSixDay?.page_summaries
+      ? (prevMonthSixDay.page_summaries as any[]).reduce(
+          (s: number, p: any) => s + (p.actual_views ?? p.cycle_views_sum ?? 0),
+          0,
+        )
+      : totalViews;
   const allPagesRaw = stats?.pages ?? [];
   const allPages = dashHandleToNicheId.size > 0
     ? allPagesRaw.filter((p: any) => dashHandleToNicheId.has(String(p.handle || "").replace(/^@/, "").trim().toLowerCase()))
@@ -651,10 +658,20 @@ export default function Dashboard() {
                   <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold px-3 py-1.5 rounded-full">
                     <TrendingUp className="w-3.5 h-3.5" />
                     {(() => {
+                      const pinBounds = DASHBOARD_REACH_PIN_MONTH
+                        ? monthRangeFromYYYYMM(DASHBOARD_REACH_PIN_MONTH)
+                        : null;
+                      if (pinBounds) {
+                        const start = new Date(pinBounds.from + "T12:00:00");
+                        const end = new Date(pinBounds.to + "T12:00:00");
+                        const monthName = start.toLocaleString("default", { month: "long" });
+                        const year = start.getFullYear();
+                        const lastDay = end.getDate();
+                        return `${monthName} 1 — ${monthName} ${lastDay}, ${year}`;
+                      }
                       const now = new Date();
                       const day = now.getDate();
                       if (day === 1) {
-                        // On the 1st, show the full previous month
                         const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
                         const prevMonthName = prev.toLocaleString("default", { month: "long" });
                         const prevYear = prev.getFullYear();
