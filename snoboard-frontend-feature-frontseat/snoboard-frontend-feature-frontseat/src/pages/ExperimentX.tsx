@@ -488,9 +488,6 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose }: {
           )}
         </div>
 
-        {/* Discussion thread */}
-        <IdeaThread ideaId={idea.id} active={stage !== "new"} trackerType="reel" />
-
         {/* Delete */}
         <button
           onClick={() => { if (confirm("Delete this idea?")) { onDelete(idea.id); onClose(); } }}
