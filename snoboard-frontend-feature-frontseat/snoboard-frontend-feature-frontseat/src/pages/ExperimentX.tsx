@@ -218,6 +218,11 @@ function KanbanCard({ idea, onUpdate, onDelete, onClick }: {
         <span style={{ fontSize: 10, color: "#52525b", background: "#27272a", borderRadius: 4, padding: "1px 6px" }}>
           {idea.content_type}
         </span>
+        {idea.video_format && (
+          <span style={{ fontSize: 10, fontWeight: 600, color: "#50E0B0", background: "rgba(80,224,176,0.1)", borderRadius: 4, padding: "1px 6px" }}>
+            {idea.video_format}
+          </span>
+        )}
         {(idea.views || 0) > 0 && (
           <span style={{ fontSize: 10, fontWeight: 700, color: "#50E0B0", marginLeft: "auto" }}>
             {fmt(idea.views)}
@@ -435,6 +440,30 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose }: {
             </div>
           </div>
         )}
+
+        {/* Video format */}
+        <div>
+          <label style={ls}>Video format</label>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {VIDEO_FORMATS.map(fmt => {
+              const active = idea.video_format === fmt;
+              return (
+                <button
+                  key={fmt}
+                  type="button"
+                  onClick={() => onUpdate(idea.id, { video_format: active ? "" : fmt })}
+                  style={{
+                    padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+                    cursor: "pointer",
+                    border: active ? "2px solid #50E0B0" : "1.5px solid #3f3f46",
+                    background: active ? "rgba(80,224,176,0.12)" : "#18181b",
+                    color: active ? "#50E0B0" : "#71717a",
+                  }}
+                >{fmt}</button>
+              );
+            })}
+          </div>
+        </div>
 
         {/* Hook variations */}
         <div>
@@ -785,20 +814,21 @@ function AddIdeaModal({ open, onAdd, onClose }: {
   const { user } = useAuth();
   const createdBy = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "";
 
-  const [page, setPage]           = useState(EXP_PAGES[0] as string);
-  const [type, setType]           = useState("reel");
-  const [source, setSource]       = useState("original");
-  const [topic, setTopic]         = useState("");
-  const [hookVars, setHookVars]   = useState("");
-  const [musicRef, setMusicRef]   = useState("");
-  const [frameLink, setFrameLink] = useState("");
-  const [ytUrl, setYtUrl]         = useState("");
-  const [ytTs, setYtTs]           = useState("");
-  const [compLink, setCompLink]   = useState("");
-  const [date, setDate]           = useState(toLocalISO(new Date()));
+  const [page, setPage]               = useState(EXP_PAGES[0] as string);
+  const [type, setType]               = useState("reel");
+  const [source, setSource]           = useState("original");
+  const [videoFormat, setVideoFormat] = useState("");
+  const [topic, setTopic]             = useState("");
+  const [hookVars, setHookVars]       = useState("");
+  const [musicRef, setMusicRef]       = useState("");
+  const [frameLink, setFrameLink]     = useState("");
+  const [ytUrl, setYtUrl]             = useState("");
+  const [ytTs, setYtTs]               = useState("");
+  const [compLink, setCompLink]       = useState("");
+  const [date, setDate]               = useState(toLocalISO(new Date()));
 
   const reset = () => {
-    setPage(EXP_PAGES[0]); setType("reel"); setSource("original");
+    setPage(EXP_PAGES[0]); setType("reel"); setSource("original"); setVideoFormat("");
     setTopic(""); setHookVars(""); setMusicRef(""); setFrameLink("");
     setYtUrl(""); setYtTs(""); setCompLink(""); setDate(toLocalISO(new Date()));
   };
@@ -812,7 +842,7 @@ function AddIdeaModal({ open, onAdd, onClose }: {
       yt_url: source === "original" ? ytUrl : "",
       yt_timestamps: source === "original" ? ytTs : "",
       comp_link: source === "competitor" ? compLink : "",
-      created_by: createdBy, day_date: date,
+      created_by: createdBy, day_date: date, video_format: videoFormat,
     });
     reset();
   };
@@ -931,6 +961,26 @@ function AddIdeaModal({ open, onAdd, onClose }: {
           <div style={{ ...is, background: "#27272a", color: "#a1a1aa" }}>{createdBy || "—"}</div>
         </div>
 
+        {/* Video format */}
+        <div>
+          <label style={ls}>Video format</label>
+          <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+            {VIDEO_FORMATS.map(fmt => (
+              <button
+                key={fmt} type="button"
+                onClick={() => setVideoFormat(v => v === fmt ? "" : fmt)}
+                style={{
+                  padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+                  cursor: "pointer",
+                  border: videoFormat === fmt ? "2px solid #50E0B0" : "1.5px solid #3f3f46",
+                  background: videoFormat === fmt ? "rgba(80,224,176,0.12)" : "#18181b",
+                  color: videoFormat === fmt ? "#50E0B0" : "#71717a",
+                }}
+              >{fmt}</button>
+            ))}
+          </div>
+        </div>
+
         {/* Hook variations */}
         <div>
           <label style={ls}>Hook variations (one per line)</label>
@@ -993,6 +1043,16 @@ function AddIdeaModal({ open, onAdd, onClose }: {
     </div>
   );
 }
+
+// Video format options
+const VIDEO_FORMATS = [
+  "Viral a-roll",
+  "A-roll massy",
+  "A-roll info",
+  "News",
+  "Shark Tank",
+  "Creator videos",
+] as const;
 
 // Testing performance result config
 const TEST_RESULTS = [

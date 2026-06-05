@@ -181,6 +181,7 @@ class ExpIdeaCreate(BaseModel):
     created_by: str = ""
     edited_by: str = ""
     test_result: str = ""
+    video_format: str = ""
 
 
 class ExpIdeaUpdate(BaseModel):
@@ -202,6 +203,7 @@ class ExpIdeaUpdate(BaseModel):
     currently_editing_by: str | None = None
     edited_by: str | None = None
     test_result: str | None = None
+    video_format: str | None = None
 
 
 class ExpSettingsUpdate(BaseModel):
