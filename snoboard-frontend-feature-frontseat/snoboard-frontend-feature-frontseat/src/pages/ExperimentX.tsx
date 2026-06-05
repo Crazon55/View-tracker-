@@ -220,6 +220,16 @@ function KanbanCard({ idea, onUpdate, onDelete, onClick }: {
           {idea.script}
         </p>
       )}
+      <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap", alignItems: "center" }}>
+        {idea.created_by && (
+          <span style={{ fontSize: 9, color: "#52525b" }}>by {idea.created_by}</span>
+        )}
+        {idea.currently_editing_by && (
+          <span style={{ fontSize: 9, color: "#f59e0b", background: "rgba(245,158,11,0.12)", borderRadius: 3, padding: "1px 5px" }}>
+            ✏ {idea.currently_editing_by}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -309,6 +319,15 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose }: {
   onDelete: (id: string) => void;
   onClose: () => void;
 }) {
+  const { user } = useAuth();
+  const me = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "";
+
+  useEffect(() => {
+    if (me) onUpdate(idea.id, { currently_editing_by: me });
+    return () => { onUpdate(idea.id, { currently_editing_by: "" }); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const stage = idea.status || "new";
   const ss = STATUS_STYLE[stage] || STATUS_STYLE.new;
   const pc = PAGE_COLORS[idea.page_handle] || "#a1a1aa";
@@ -494,6 +513,14 @@ function ArchiveRow({ item, onUpdate, onDelete }: { item: any; onUpdate: (id: st
           <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: "#e4e4e7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {item.topic || <em style={{ color: "#52525b" }}>No topic</em>}
           </span>
+          {item.created_by && (
+            <span style={{ fontSize: 10, color: "#52525b", whiteSpace: "nowrap" }}>by {item.created_by}</span>
+          )}
+          {item.currently_editing_by && (
+            <span style={{ fontSize: 10, color: "#f59e0b", background: "rgba(245,158,11,0.12)", borderRadius: 4, padding: "2px 6px", whiteSpace: "nowrap" }}>
+              ✏ {item.currently_editing_by}
+            </span>
+          )}
           <span style={{ fontSize: 12, fontWeight: 600, color: item.views > 0 ? "#50E0B0" : "#3f3f46" }}>
             {item.views > 0 ? fmt(item.views) : "—"}
           </span>
@@ -638,6 +665,9 @@ function WorkingRow({ item, onDistribute }: { item: any; onDistribute: (id: stri
           <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: "#e4e4e7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {item.topic || <em style={{ color: "#52525b" }}>No topic</em>}
           </span>
+          {item.created_by && (
+            <span style={{ fontSize: 10, color: "#52525b", whiteSpace: "nowrap" }}>by {item.created_by}</span>
+          )}
           <span style={{ fontSize: 13, fontWeight: 700, color: "#50E0B0", whiteSpace: "nowrap" }}>
             {fmt(item.views_achieved)}
           </span>
@@ -1065,7 +1095,8 @@ function IdeaBankTab({ pageFilter, search }: { pageFilter: string; search: strin
 function ContentBankTab({ pageFilter, search }: { pageFilter: string; search: string }) {
   const qc = useQueryClient();
   const now = new Date();
-  const [monthYear, setMonthYear] = useState({ year: now.getFullYear(), month: now.getMonth() });
+  // null = all time; set to a specific month to filter
+  const [monthFilter, setMonthFilter] = useState<{ year: number; month: number } | null>(null);
 
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => updateExpIdea(id, data),
@@ -1080,23 +1111,45 @@ function ContentBankTab({ pageFilter, search }: { pageFilter: string; search: st
   const [weekFilter, setWeekFilter] = useState<number | "all">("all");
   const [dayFilter, setDayFilter]   = useState<string | "all">("all");
 
-  // Load ideas for the selected month (by day_date range)
-  const monthStart = `${monthYear.year}-${String(monthYear.month + 1).padStart(2, "0")}-01`;
-  const monthEnd   = new Date(monthYear.year, monthYear.month + 1, 0);
-  const monthEndStr = toLocalISO(monthEnd);
-
   const { data: rawItems = [], isLoading } = useQuery({
     queryKey: ["exp-idea-bank-all-for-cb", pageFilter],
     queryFn: () => getExpIdeaBank({ page: pageFilter !== "all" ? pageFilter : undefined }),
   });
 
-  // Filter to selected month — only approved and proven ideas go into the content bank
-  const monthItems = useMemo(() =>
-    rawItems.filter((i: any) => {
+  // ALL approved + proven ideas regardless of date — Content Bank is the full store
+  const allValidItems = useMemo(() =>
+    rawItems.filter((i: any) => i.status === "proven_ideas" || i.status === "approved"),
+    [rawItems]);
+
+  // Apply optional month filter on top
+  const monthItems = useMemo(() => {
+    if (!monthFilter) return allValidItems;
+    const ms = `${monthFilter.year}-${String(monthFilter.month + 1).padStart(2, "0")}-01`;
+    const me = toLocalISO(new Date(monthFilter.year, monthFilter.month + 1, 0));
+    return allValidItems.filter((i: any) => {
       const d = (i.day_date || "").slice(0, 10);
-      const validStatus = i.status === "proven_ideas" || i.status === "approved";
-      return d >= monthStart && d <= monthEndStr && validStatus;
-    }), [rawItems, monthStart, monthEndStr]);
+      return d >= ms && d <= me;
+    });
+  }, [allValidItems, monthFilter]);
+
+  // Derive available months from all valid items for the navigator
+  const availableMonths = useMemo(() => {
+    const seen = new Map<string, { year: number; month: number }>();
+    for (const i of allValidItems) {
+      const d = (i.day_date || "").slice(0, 7); // "YYYY-MM"
+      if (d && !seen.has(d)) {
+        const [y, m] = d.split("-").map(Number);
+        seen.set(d, { year: y, month: m - 1 });
+      }
+    }
+    return [...seen.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(e => e[1]);
+  }, [allValidItems]);
+
+  // Helpers for the selected month label
+  const monthStart = monthFilter
+    ? `${monthFilter.year}-${String(monthFilter.month + 1).padStart(2, "0")}-01`
+    : "";
+  const monthEndStr = monthFilter ? toLocalISO(new Date(monthFilter.year, monthFilter.month + 1, 0)) : "";
 
   // Available weeks within this month (compute label from week_number)
   const weeksInMonth = useMemo(() => {
@@ -1145,16 +1198,19 @@ function ContentBankTab({ pageFilter, search }: { pageFilter: string; search: st
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 4, background: "#27272a", borderRadius: 7, border: "1px solid #3f3f46", padding: "2px 4px" }}>
           <button
-            onClick={() => setMonthYear(m => m.month === 0 ? { year: m.year - 1, month: 11 } : { ...m, month: m.month - 1 })}
-            style={{ padding: "4px 8px", background: "none", border: "none", color: "#a1a1aa", cursor: "pointer", fontSize: 12 }}
-          >←</button>
-          <span style={{ fontSize: 12, fontWeight: 600, color: "#e4e4e7", minWidth: 110, textAlign: "center" }}>
-            {fmtMonthLabel(monthYear.year, monthYear.month)}
-          </span>
-          <button
-            onClick={() => setMonthYear(m => m.month === 11 ? { year: m.year + 1, month: 0 } : { ...m, month: m.month + 1 })}
-            style={{ padding: "4px 8px", background: "none", border: "none", color: "#a1a1aa", cursor: "pointer", fontSize: 12 }}
-          >→</button>
+            onClick={() => { setMonthFilter(null); setWeekFilter("all"); setDayFilter("all"); }}
+            style={{ padding: "4px 10px", background: !monthFilter ? "#3f3f46" : "none", border: "none", color: !monthFilter ? "#fff" : "#a1a1aa", cursor: "pointer", fontSize: 11, fontWeight: 600, borderRadius: 5 }}
+          >All time</button>
+          {availableMonths.map(({ year, month }) => {
+            const active = monthFilter?.year === year && monthFilter?.month === month;
+            return (
+              <button
+                key={`${year}-${month}`}
+                onClick={() => { setMonthFilter({ year, month }); setWeekFilter("all"); setDayFilter("all"); }}
+                style={{ padding: "4px 10px", background: active ? "#3f3f46" : "none", border: "none", color: active ? "#fff" : "#a1a1aa", cursor: "pointer", fontSize: 11, fontWeight: active ? 600 : 400, borderRadius: 5, whiteSpace: "nowrap" }}
+              >{fmtMonthLabel(year, month)}</button>
+            );
+          })}
         </div>
 
         {/* Week filter */}
@@ -1198,7 +1254,7 @@ function ContentBankTab({ pageFilter, search }: { pageFilter: string; search: st
         <p style={{ color: "#52525b", fontSize: 12 }}>Loading…</p>
       ) : grouped.length === 0 ? (
         <p style={{ color: "#52525b", fontSize: 12 }}>
-          {search ? "No ideas match your search." : monthItems.length === 0 ? "No ideas for this month yet." : "No ideas match the selected filters."}
+          {search ? "No ideas match your search." : allValidItems.length === 0 ? "No approved or proven ideas yet." : monthFilter ? "No ideas in this month." : "No ideas match the selected filters."}
         </p>
       ) : (
         grouped.map(([day, items]) => (
@@ -1248,8 +1304,10 @@ function WorkingIdeasTab({ pageFilter, search }: { pageFilter: string; search: s
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    if (!q) return ideas;
-    return ideas.filter((i: any) =>
+    // Exclude entries whose source idea was deleted from the idea bank (source_id becomes null)
+    const valid = ideas.filter((i: any) => i.source_id != null);
+    if (!q) return valid;
+    return valid.filter((i: any) =>
       (i.topic || "").toLowerCase().includes(q) ||
       (i.script || "").toLowerCase().includes(q)
     );
