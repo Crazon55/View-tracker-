@@ -5397,6 +5397,14 @@ async def exp_create_idea(req: ExpIdeaCreate):
         "views": req.views,
         "week_number": week_num,
         "day_date": day_str,
+        "source": req.source,
+        "hook_variations": req.hook_variations,
+        "music_ref": req.music_ref,
+        "frame_link": req.frame_link,
+        "yt_url": req.yt_url,
+        "yt_timestamps": req.yt_timestamps,
+        "comp_link": req.comp_link,
+        "created_by": req.created_by,
     }
     result = client.table("exp_idea_bank").insert(row).execute()
     created = result.data[0] if result.data else row
