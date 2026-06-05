@@ -222,16 +222,20 @@ function KanbanCard({ idea, onUpdate, onDelete, onClick }: {
           {idea.script}
         </p>
       )}
-      <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap", alignItems: "center" }}>
-        {idea.created_by && (
-          <span style={{ fontSize: 9, color: "#52525b" }}>by {idea.created_by}</span>
-        )}
-        {idea.currently_editing_by && (
-          <span style={{ fontSize: 9, color: "#f59e0b", background: "rgba(245,158,11,0.12)", borderRadius: 3, padding: "1px 5px" }}>
-            ✏ {idea.currently_editing_by}
-          </span>
-        )}
-      </div>
+      {(idea.created_by || idea.currently_editing_by) && (
+        <div style={{ display: "flex", gap: 8, marginTop: 7, flexWrap: "wrap", alignItems: "center", borderTop: "1px solid #1f1f22", paddingTop: 6 }}>
+          {idea.created_by && (
+            <span style={{ fontSize: 11, color: "#71717a" }}>
+              <span style={{ color: "#52525b", fontSize: 10 }}>Created by </span>{idea.created_by}
+            </span>
+          )}
+          {idea.currently_editing_by && (
+            <span style={{ fontSize: 11, color: "#f59e0b", background: "rgba(245,158,11,0.1)", borderRadius: 4, padding: "2px 7px", fontWeight: 500 }}>
+              ✏ Editing: {idea.currently_editing_by}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -529,10 +533,12 @@ function ArchiveRow({ item, onUpdate, onDelete }: { item: any; onUpdate: (id: st
             {item.topic || <em style={{ color: "#52525b" }}>No topic</em>}
           </span>
           {item.created_by && (
-            <span style={{ fontSize: 10, color: "#52525b", whiteSpace: "nowrap" }}>by {item.created_by}</span>
+            <span style={{ fontSize: 11, color: "#71717a", whiteSpace: "nowrap" }}>
+              <span style={{ color: "#52525b", fontSize: 10 }}>by </span>{item.created_by}
+            </span>
           )}
           {item.currently_editing_by && (
-            <span style={{ fontSize: 10, color: "#f59e0b", background: "rgba(245,158,11,0.12)", borderRadius: 4, padding: "2px 6px", whiteSpace: "nowrap" }}>
+            <span style={{ fontSize: 11, color: "#f59e0b", background: "rgba(245,158,11,0.1)", borderRadius: 4, padding: "2px 7px", fontWeight: 500, whiteSpace: "nowrap" }}>
               ✏ {item.currently_editing_by}
             </span>
           )}
@@ -682,7 +688,9 @@ function WorkingRow({ item, onDistribute }: { item: any; onDistribute: (id: stri
             {item.topic || <em style={{ color: "#52525b" }}>No topic</em>}
           </span>
           {item.created_by && (
-            <span style={{ fontSize: 10, color: "#52525b", whiteSpace: "nowrap" }}>by {item.created_by}</span>
+            <span style={{ fontSize: 11, color: "#71717a", whiteSpace: "nowrap" }}>
+              <span style={{ color: "#52525b", fontSize: 10 }}>by </span>{item.created_by}
+            </span>
           )}
           <span style={{ fontSize: 13, fontWeight: 700, color: "#50E0B0", whiteSpace: "nowrap" }}>
             {fmt(item.views_achieved)}
