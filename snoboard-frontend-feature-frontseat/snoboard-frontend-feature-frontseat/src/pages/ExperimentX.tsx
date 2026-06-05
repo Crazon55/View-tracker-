@@ -185,7 +185,8 @@ function KanbanCard({ idea, onUpdate, onDelete, onClick }: {
   onDelete: (id: string) => void;
   onClick: () => void;
 }) {
-  const pc = PAGE_COLORS[idea.page_handle] || "#a1a1aa";
+  const pages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+  const pc = PAGE_COLORS[pages[0]] || "#a1a1aa";
   return (
     <div
       draggable
@@ -203,9 +204,10 @@ function KanbanCard({ idea, onUpdate, onDelete, onClick }: {
         {idea.topic || <em style={{ color: "#52525b", fontWeight: 400 }}>Untitled</em>}
       </p>
       <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
-        <span style={{ fontSize: 10, fontWeight: 700, color: pc, background: pc + "22", borderRadius: 4, padding: "1px 6px" }}>
-          {idea.page_handle}
-        </span>
+        {pages.map((pg: string) => {
+          const pgc = PAGE_COLORS[pg] || "#a1a1aa";
+          return <span key={pg} style={{ fontSize: 10, fontWeight: 700, color: pgc, background: pgc + "22", borderRadius: 4, padding: "1px 6px" }}>{pg}</span>;
+        })}
         <span style={{ fontSize: 10, color: "#52525b", background: "#27272a", borderRadius: 4, padding: "1px 6px" }}>
           {idea.content_type}
         </span>
@@ -330,8 +332,10 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose }: {
 
   const stage = idea.status || "new";
   const ss = STATUS_STYLE[stage] || STATUS_STYLE.new;
-  const pc = PAGE_COLORS[idea.page_handle] || "#a1a1aa";
+  const primaryPage = (idea.page_handle || "").split(",")[0].trim();
+  const pc = PAGE_COLORS[primaryPage] || "#a1a1aa";
   const actions = STAGE_ACTIONS[stage] || [];
+  const selectedPages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
 
   const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "#71717a", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
 
@@ -340,7 +344,7 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose }: {
       style={{ position: "fixed", inset: 0, zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center" }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} />
+      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} />
       <div
         onClick={e => e.stopPropagation()}
         style={{
@@ -370,9 +374,10 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose }: {
           <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, background: idea.source === "competitor" ? "#EEEDFE" : "#E8F5EE", color: idea.source === "competitor" ? "#534AB7" : "#1A5E3A", fontWeight: 500 }}>
             {idea.source === "competitor" ? "Competitor" : "Original"}
           </span>
-          <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, background: pc + "22", color: pc, fontWeight: 600 }}>
-            {idea.page_handle}
-          </span>
+          {selectedPages.map((pg: string) => {
+            const pgc = PAGE_COLORS[pg] || "#a1a1aa";
+            return <span key={pg} style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, background: pgc + "22", color: pgc, fontWeight: 600 }}>{pg}</span>;
+          })}
           <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, background: "#27272a", color: "#71717a" }}>
             {idea.content_type}
           </span>
@@ -396,24 +401,31 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose }: {
           </div>
         )}
 
-        {/* Page selector */}
-        <div>
-          <label style={ls}>Page</label>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {EXP_PAGES.map(p => {
-              const c = PAGE_COLORS[p] || "#a1a1aa";
-              const active = idea.page_handle === p;
-              return (
-                <button key={p} type="button" onClick={() => onUpdate(idea.id, { page_handle: p })} style={{
-                  padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                  border: active ? `2px solid ${c}` : "1.5px solid #3f3f46",
-                  background: active ? c + "22" : "#18181b",
-                  color: active ? c : "#71717a",
-                }}>{p}</button>
-              );
-            })}
+        {/* Page selector — multi-select, only visible in Testing and Proven stages */}
+        {(stage === "testing" || stage === "proven_ideas") && (
+          <div>
+            <label style={ls}>Pages (select all that apply)</label>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {EXP_PAGES.map(p => {
+                const c = PAGE_COLORS[p] || "#a1a1aa";
+                const active = selectedPages.includes(p);
+                return (
+                  <button key={p} type="button" onClick={() => {
+                    const next = active
+                      ? selectedPages.filter((x: string) => x !== p)
+                      : [...selectedPages, p];
+                    if (next.length > 0) onUpdate(idea.id, { page_handle: next.join(",") });
+                  }} style={{
+                    padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                    border: active ? `2px solid ${c}` : "1.5px solid #3f3f46",
+                    background: active ? c + "22" : "#18181b",
+                    color: active ? c : "#71717a",
+                  }}>{p}</button>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Hook variations */}
         <div>
@@ -492,7 +504,7 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose }: {
 // ---------------------------------------------------------------------------
 function ArchiveRow({ item, onUpdate, onDelete }: { item: any; onUpdate: (id: string, data: any) => void; onDelete: (id: string) => void }) {
   const [detailOpen, setDetailOpen] = useState(false);
-  const pc = PAGE_COLORS[item.page_handle] || "#a1a1aa";
+  const pages = (item.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
   const ss = STATUS_STYLE[item.status || "new"] || STATUS_STYLE.new;
 
   return (
@@ -507,7 +519,10 @@ function ArchiveRow({ item, onUpdate, onDelete }: { item: any; onUpdate: (id: st
         onMouseLeave={e => (e.currentTarget.style.borderColor = "#27272a")}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", flexWrap: "wrap" }}>
-          <span style={{ fontSize: 10, fontWeight: 700, color: pc, background: pc + "22", borderRadius: 4, padding: "2px 7px" }}>{item.page_handle}</span>
+          {pages.map((pg: string) => {
+            const pgc = PAGE_COLORS[pg] || "#a1a1aa";
+            return <span key={pg} style={{ fontSize: 10, fontWeight: 700, color: pgc, background: pgc + "22", borderRadius: 4, padding: "2px 7px" }}>{pg}</span>;
+          })}
           <span style={{ fontSize: 10, color: "#71717a", background: "#27272a", borderRadius: 4, padding: "2px 7px" }}>{item.content_type}</span>
           <span style={{ fontSize: 10, fontWeight: 600, color: ss.text, background: ss.bg, borderRadius: 4, padding: "2px 6px" }}>{STAGE_LABEL[item.status] || item.status}</span>
           <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: "#e4e4e7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -638,7 +653,7 @@ function WorkingIdeaDetailModal({ item, onClose }: { item: any; onClose: () => v
 // ---------------------------------------------------------------------------
 function WorkingRow({ item, onDistribute }: { item: any; onDistribute: (id: string) => void }) {
   const [detailOpen, setDetailOpen] = useState(false);
-  const pc = PAGE_COLORS[item.page_handle] || "#a1a1aa";
+  const pages = (item.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
 
   return (
     <>
@@ -656,9 +671,10 @@ function WorkingRow({ item, onDistribute }: { item: any; onDistribute: (id: stri
         onMouseLeave={e => (e.currentTarget.style.borderColor = item.distributed ? "#27272a" : "#4c1d95")}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", flexWrap: "wrap" }}>
-          <span style={{ fontSize: 10, fontWeight: 700, color: pc, background: pc + "22", borderRadius: 4, padding: "2px 7px" }}>
-            {item.page_handle}
-          </span>
+          {pages.map((pg: string) => {
+            const pgc = PAGE_COLORS[pg] || "#a1a1aa";
+            return <span key={pg} style={{ fontSize: 10, fontWeight: 700, color: pgc, background: pgc + "22", borderRadius: 4, padding: "2px 7px" }}>{pg}</span>;
+          })}
           <span style={{ fontSize: 10, color: "#71717a", background: "#27272a", borderRadius: 4, padding: "2px 7px" }}>
             Week {item.week_number}
           </span>
