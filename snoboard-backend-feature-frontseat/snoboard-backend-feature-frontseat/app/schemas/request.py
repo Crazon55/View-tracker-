@@ -180,6 +180,7 @@ class ExpIdeaCreate(BaseModel):
     comp_link: str = ""
     created_by: str = ""
     edited_by: str = ""
+    test_result: str = ""
 
 
 class ExpIdeaUpdate(BaseModel):
@@ -200,6 +201,7 @@ class ExpIdeaUpdate(BaseModel):
     created_by: str | None = None
     currently_editing_by: str | None = None
     edited_by: str | None = None
+    test_result: str | None = None
 
 
 class ExpSettingsUpdate(BaseModel):

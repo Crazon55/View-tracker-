@@ -5406,6 +5406,7 @@ async def exp_create_idea(req: ExpIdeaCreate):
         "comp_link": req.comp_link,
         "created_by": req.created_by,
         "edited_by": req.edited_by,
+        "test_result": req.test_result,
     }
     result = client.table("exp_idea_bank").insert(row).execute()
     created = result.data[0] if result.data else row

@@ -187,18 +187,25 @@ function KanbanCard({ idea, onUpdate, onDelete, onClick }: {
 }) {
   const pages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
   const pc = PAGE_COLORS[pages[0]] || "#a1a1aa";
+  const isTesting = idea.status === "testing";
+  const testCfg = isTesting ? TEST_RESULTS.find(r => r.value === idea.test_result) : null;
+  const borderColor = testCfg ? testCfg.color : "#27272a";
+  const hoverBorder = testCfg ? testCfg.color : "#3f3f46";
   return (
     <div
       draggable
       onDragStart={e => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", idea.id); }}
       onClick={onClick}
       style={{
-        background: "#18181b", border: "1px solid #27272a", borderRadius: 9,
+        background: testCfg ? testCfg.bg : "#18181b",
+        border: `1.5px solid ${borderColor}`,
+        borderLeft: testCfg ? `4px solid ${testCfg.color}` : `1.5px solid ${borderColor}`,
+        borderRadius: 9,
         padding: "10px 12px", marginBottom: 6, cursor: "pointer",
         transition: "border-color 0.12s",
       }}
-      onMouseEnter={e => (e.currentTarget.style.borderColor = "#3f3f46")}
-      onMouseLeave={e => (e.currentTarget.style.borderColor = "#27272a")}
+      onMouseEnter={e => (e.currentTarget.style.borderColor = hoverBorder)}
+      onMouseLeave={e => (e.currentTarget.style.borderColor = borderColor)}
     >
       <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 600, color: "#e4e4e7", lineHeight: 1.35 }}>
         {idea.topic || <em style={{ color: "#52525b", fontWeight: 400 }}>Untitled</em>}
@@ -221,6 +228,13 @@ function KanbanCard({ idea, onUpdate, onDelete, onClick }: {
         <p style={{ margin: "6px 0 0", fontSize: 10, color: "#52525b", lineHeight: 1.4, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
           {idea.script}
         </p>
+      )}
+      {testCfg && (
+        <div style={{ marginTop: 6 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: testCfg.color, background: testCfg.bg, borderRadius: 4, padding: "2px 8px" }}>
+            {testCfg.label}
+          </span>
+        </div>
       )}
       {(idea.created_by || idea.edited_by) && (
         <div style={{ display: "flex", gap: 8, marginTop: 7, flexWrap: "wrap", alignItems: "center", borderTop: "1px solid #1f1f22", paddingTop: 6 }}>
@@ -478,6 +492,32 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose }: {
             </div>
           )}
         </div>
+
+        {/* Test result — only in Testing stage */}
+        {stage === "testing" && (
+          <div>
+            <label style={ls}>Testing result</label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {TEST_RESULTS.map(({ value, label, color, bg }) => {
+                const active = idea.test_result === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => onUpdate(idea.id, { test_result: active ? "" : value })}
+                    style={{
+                      padding: "7px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+                      cursor: "pointer",
+                      border: active ? `2px solid ${color}` : "1.5px solid #3f3f46",
+                      background: active ? bg : "#18181b",
+                      color: active ? color : "#71717a",
+                    }}
+                  >{label}</button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Edited by */}
         <div>
@@ -953,6 +993,14 @@ function AddIdeaModal({ open, onAdd, onClose }: {
     </div>
   );
 }
+
+// Testing performance result config
+const TEST_RESULTS = [
+  { value: "below_baseline", label: "Below baseline", color: "#C93B3B", bg: "rgba(201,59,59,0.12)" },
+  { value: "baseline",       label: "Baseline",       color: "#D4952A", bg: "rgba(212,149,42,0.12)" },
+  { value: "above_baseline", label: "Above baseline", color: "#4A7FD4", bg: "rgba(74,127,212,0.12)"  },
+  { value: "top_line",       label: "Top line",       color: "#2D9E5F", bg: "rgba(45,158,95,0.12)"  },
+] as const;
 
 // Stage column dot colors
 const STAGE_DOT: Record<string, string> = {
