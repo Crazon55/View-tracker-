@@ -660,7 +660,7 @@ export const updateExpIdea = (id: string, data: {
   script?: string; status?: string; views?: number; day_date?: string;
   hook_variations?: string; music_ref?: string; frame_link?: string;
   yt_url?: string; yt_timestamps?: string; comp_link?: string;
-  currently_editing_by?: string;
+  currently_editing_by?: string; edited_by?: string;
 }) => fetchApi<any>(`/api/v1/experiment/idea-bank/${id}`, { method: "PATCH", body: JSON.stringify(data) });
 
 export const deleteExpIdea = (id: string) =>

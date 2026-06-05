@@ -179,6 +179,7 @@ class ExpIdeaCreate(BaseModel):
     yt_timestamps: str = ""
     comp_link: str = ""
     created_by: str = ""
+    edited_by: str = ""
 
 
 class ExpIdeaUpdate(BaseModel):
@@ -198,6 +199,7 @@ class ExpIdeaUpdate(BaseModel):
     comp_link: str | None = None
     created_by: str | None = None
     currently_editing_by: str | None = None
+    edited_by: str | None = None
 
 
 class ExpSettingsUpdate(BaseModel):

@@ -222,16 +222,16 @@ function KanbanCard({ idea, onUpdate, onDelete, onClick }: {
           {idea.script}
         </p>
       )}
-      {(idea.created_by || idea.currently_editing_by) && (
+      {(idea.created_by || idea.edited_by) && (
         <div style={{ display: "flex", gap: 8, marginTop: 7, flexWrap: "wrap", alignItems: "center", borderTop: "1px solid #1f1f22", paddingTop: 6 }}>
           {idea.created_by && (
             <span style={{ fontSize: 11, color: "#71717a" }}>
               <span style={{ color: "#52525b", fontSize: 10 }}>Created by </span>{idea.created_by}
             </span>
           )}
-          {idea.currently_editing_by && (
-            <span style={{ fontSize: 11, color: "#f59e0b", background: "rgba(245,158,11,0.1)", borderRadius: 4, padding: "2px 7px", fontWeight: 500 }}>
-              ✏ Editing: {idea.currently_editing_by}
+          {idea.edited_by && (
+            <span style={{ fontSize: 11, color: "#a78bfa", background: "rgba(124,58,237,0.1)", borderRadius: 4, padding: "2px 7px", fontWeight: 500 }}>
+              Edited by {idea.edited_by}
             </span>
           )}
         </div>
@@ -325,15 +325,6 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose }: {
   onDelete: (id: string) => void;
   onClose: () => void;
 }) {
-  const { user } = useAuth();
-  const me = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "";
-
-  useEffect(() => {
-    if (me) onUpdate(idea.id, { currently_editing_by: me });
-    return () => { onUpdate(idea.id, { currently_editing_by: "" }); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const stage = idea.status || "new";
   const ss = STATUS_STYLE[stage] || STATUS_STYLE.new;
   const primaryPage = (idea.page_handle || "").split(",")[0].trim();
@@ -488,6 +479,36 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose }: {
           )}
         </div>
 
+        {/* Edited by */}
+        <div>
+          <label style={ls}>Edited by</label>
+          <div style={{ display: "flex", gap: 8 }}>
+            {["Pulkit", "Varun"].map(name => {
+              const active = idea.edited_by === name;
+              return (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => onUpdate(idea.id, { edited_by: active ? "" : name })}
+                  style={{
+                    padding: "7px 20px", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                    cursor: "pointer", border: active ? "2px solid #7c3aed" : "1.5px solid #3f3f46",
+                    background: active ? "#7c3aed22" : "#18181b",
+                    color: active ? "#a78bfa" : "#71717a",
+                  }}
+                >{name}</button>
+              );
+            })}
+            {idea.edited_by && (
+              <button
+                type="button"
+                onClick={() => onUpdate(idea.id, { edited_by: "" })}
+                style={{ padding: "7px 12px", borderRadius: 8, fontSize: 12, cursor: "pointer", border: "1.5px solid #3f3f46", background: "transparent", color: "#52525b" }}
+              >Clear</button>
+            )}
+          </div>
+        </div>
+
         {/* Delete */}
         <button
           onClick={() => { if (confirm("Delete this idea?")) { onDelete(idea.id); onClose(); } }}
@@ -534,9 +555,9 @@ function ArchiveRow({ item, onUpdate, onDelete }: { item: any; onUpdate: (id: st
               <span style={{ color: "#52525b", fontSize: 10 }}>by </span>{item.created_by}
             </span>
           )}
-          {item.currently_editing_by && (
-            <span style={{ fontSize: 11, color: "#f59e0b", background: "rgba(245,158,11,0.1)", borderRadius: 4, padding: "2px 7px", fontWeight: 500, whiteSpace: "nowrap" }}>
-              ✏ {item.currently_editing_by}
+          {item.edited_by && (
+            <span style={{ fontSize: 11, color: "#a78bfa", background: "rgba(124,58,237,0.1)", borderRadius: 4, padding: "2px 7px", fontWeight: 500, whiteSpace: "nowrap" }}>
+              Edited by {item.edited_by}
             </span>
           )}
           <span style={{ fontSize: 12, fontWeight: 600, color: item.views > 0 ? "#50E0B0" : "#3f3f46" }}>
