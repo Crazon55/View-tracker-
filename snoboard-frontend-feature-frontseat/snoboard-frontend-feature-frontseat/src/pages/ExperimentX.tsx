@@ -1659,24 +1659,24 @@ function FrontseatPoolCard({ idea, letter, onDragStart, onClick }: {
 // ---------------------------------------------------------------------------
 // Frontseat — page column card (clickable, status colour-coded)
 // ---------------------------------------------------------------------------
-function FrontseatPageCard({ idea, letter, onClick }: {
-  idea: any; letter: string; onClick: () => void;
+function FrontseatPageCard({ idea, letter, onClick, onResetToPool }: {
+  idea: any; letter: string; onClick: () => void; onResetToPool?: () => void;
 }) {
   const stage = idea.status || "new";
   const ss = STATUS_STYLE[stage] || STATUS_STYLE.new;
   return (
     <div
-      onClick={onClick}
       style={{
         background: "#18181b", borderRadius: 8,
         borderTop: "1.5px solid #27272a", borderRight: "1.5px solid #27272a",
         borderBottom: "1.5px solid #27272a", borderLeft: `3px solid ${ss.text}`,
         padding: "8px 10px", cursor: "pointer", marginBottom: 6, transition: "opacity 0.12s",
+        position: "relative",
       }}
       onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
       onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
+      <div onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
         <span style={{ fontSize: 10, fontWeight: 800, color: "#a78bfa", background: "#7c3aed22", borderRadius: 4, padding: "1px 6px" }}>{letter}</span>
         <span style={{ fontSize: 10, fontWeight: 600, color: ss.text, background: ss.bg, borderRadius: 4, padding: "1px 6px" }}>
           {STAGE_LABEL[stage as IdeaStage] || stage}
@@ -1684,14 +1684,26 @@ function FrontseatPageCard({ idea, letter, onClick }: {
         {idea.content_type && (
           <span style={{ fontSize: 10, color: "#52525b", background: "#27272a", borderRadius: 4, padding: "1px 5px" }}>{idea.content_type}</span>
         )}
+        {onResetToPool && stage !== "new" && (
+          <button
+            onClick={e => { e.stopPropagation(); onResetToPool(); }}
+            title="Reset to Pool"
+            style={{
+              marginLeft: "auto", padding: "1px 5px", fontSize: 9, fontWeight: 700,
+              background: "#27272a", color: "#a1a1aa", border: "none", borderRadius: 3, cursor: "pointer",
+            }}
+          >↩ pool</button>
+        )}
       </div>
-      <p style={{ margin: 0, fontSize: 12, fontWeight: 500, color: "#e4e4e7", lineHeight: 1.4,
-        overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
-        {idea.topic || <em style={{ color: "#52525b" }}>Untitled</em>}
-      </p>
-      {idea.video_format && (
-        <p style={{ margin: "4px 0 0", fontSize: 10, color: "#50E0B0", fontWeight: 600 }}>{idea.video_format}</p>
-      )}
+      <div onClick={onClick}>
+        <p style={{ margin: 0, fontSize: 12, fontWeight: 500, color: "#e4e4e7", lineHeight: 1.4,
+          overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
+          {idea.topic || <em style={{ color: "#52525b" }}>Untitled</em>}
+        </p>
+        {idea.video_format && (
+          <p style={{ margin: "4px 0 0", fontSize: 10, color: "#50E0B0", fontWeight: 600 }}>{idea.video_format}</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -1763,11 +1775,11 @@ function FrontseatTab() {
     return map;
   }, [poolIdeas]);
 
-  // Page columns: all ideas (whole week) assigned to that page, sorted by creation order
+  // Page columns: today's ideas assigned to that page, sorted by creation order
   const ideasByPage = useMemo(() => {
     const result: Record<string, any[]> = {};
     EXP_PAGES.forEach(p => { result[p] = []; });
-    (ideas as any[]).forEach((idea: any) => {
+    todayIdeas.forEach((idea: any) => {
       const pages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
       pages.forEach((p: string) => { if (result[p]) result[p].push(idea); });
     });
@@ -1777,7 +1789,7 @@ function FrontseatTab() {
       );
     });
     return result;
-  }, [ideas]);
+  }, [todayIdeas]);
 
   const handleDrop = (page: string, e: React.DragEvent) => {
     e.preventDefault();
@@ -1915,6 +1927,7 @@ function FrontseatTab() {
                     idea={idea}
                     letter={ideaLetterMap[idea.id] || "?"}
                     onClick={() => setDetailIdea(idea)}
+                    onResetToPool={() => updateMut.mutate({ id: idea.id, data: { status: "new" } })}
                   />
                 ))}
               </div>
