@@ -1659,8 +1659,8 @@ function FrontseatPoolCard({ idea, letter, onDragStart, onClick }: {
 // ---------------------------------------------------------------------------
 // Frontseat — page column card (clickable, status colour-coded)
 // ---------------------------------------------------------------------------
-function FrontseatPageCard({ idea, letter, onClick, onResetToPool }: {
-  idea: any; letter: string; onClick: () => void; onResetToPool?: () => void;
+function FrontseatPageCard({ idea, letter, onClick, onRemoveFromPage }: {
+  idea: any; letter: string; onClick: () => void; onRemoveFromPage?: () => void;
 }) {
   const stage = idea.status || "new";
   const ss = STATUS_STYLE[stage] || STATUS_STYLE.new;
@@ -1684,15 +1684,15 @@ function FrontseatPageCard({ idea, letter, onClick, onResetToPool }: {
         {idea.content_type && (
           <span style={{ fontSize: 10, color: "#52525b", background: "#27272a", borderRadius: 4, padding: "1px 5px" }}>{idea.content_type}</span>
         )}
-        {onResetToPool && stage !== "new" && (
+        {onRemoveFromPage && (
           <button
-            onClick={e => { e.stopPropagation(); onResetToPool(); }}
-            title="Reset to Pool"
+            onClick={e => { e.stopPropagation(); onRemoveFromPage(); }}
+            title="Remove from this page"
             style={{
               marginLeft: "auto", padding: "1px 5px", fontSize: 9, fontWeight: 700,
               background: "#27272a", color: "#a1a1aa", border: "none", borderRadius: 3, cursor: "pointer",
             }}
-          >↩ pool</button>
+          >✕</button>
         )}
       </div>
       <div onClick={onClick}>
@@ -1927,7 +1927,11 @@ function FrontseatTab() {
                     idea={idea}
                     letter={ideaLetterMap[idea.id] || "?"}
                     onClick={() => setDetailIdea(idea)}
-                    onResetToPool={() => updateMut.mutate({ id: idea.id, data: { status: "new" } })}
+                    onRemoveFromPage={() => {
+                      const remaining = (idea.page_handle || "")
+                        .split(",").map((s: string) => s.trim()).filter((p: string) => p && p !== page);
+                      updateMut.mutate({ id: idea.id, data: { page_handle: remaining.join(","), status: "new" } });
+                    }}
                   />
                 ))}
               </div>
