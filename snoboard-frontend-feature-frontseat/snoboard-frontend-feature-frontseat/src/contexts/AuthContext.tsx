@@ -89,26 +89,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const fetchRole = async (email: string) => {
-    // Check localStorage first
+    // Show cached role instantly, then always sync from backend
     const localRole = localStorage.getItem(`role_${email}`);
     if (localRole) {
       setRoleState(localRole);
       setRoleName(ROLES.find((r) => r.value === localRole)?.label || localRole);
       setNeedsRole(false);
-      return;
     }
     try {
       const data = await getUserRole(email);
       if (data?.role) {
+        localStorage.setItem(`role_${email}`, data.role);
         setRoleState(data.role);
         setRoleName(ROLES.find((r) => r.value === data.role)?.label || data.role);
         setNeedsRole(false);
-        localStorage.setItem(`role_${email}`, data.role);
-      } else {
+      } else if (!localRole) {
         setNeedsRole(true);
       }
     } catch {
-      setNeedsRole(true);
+      if (!localRole) setNeedsRole(true);
     }
   };
 
