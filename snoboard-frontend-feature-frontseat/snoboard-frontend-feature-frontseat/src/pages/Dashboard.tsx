@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getDashboard, getAutoReels, getManualReels, getPosts, getSixDayMonth, getTrackerNiches, getExpIdeaBank, getExpSettings } from "@/services/api";
+import { getDashboard, getAutoReels, getManualReels, getPosts, getSixDayMonth, getTrackerNiches } from "@/services/api";
 import TeamBattleScoreboard from "@/components/TeamBattleScoreboard";
 import { MonthlyWrapBanner } from "@/components/MonthlyWrapHost";
 import { useNavigate } from "react-router-dom";
@@ -333,142 +333,6 @@ function TogglePill({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Experiment X dashboard card — per-page breakdown
-// ---------------------------------------------------------------------------
-const EXP_PAGES_DASH = [
-  { key: "indianbusinesscom",   short: "IBC",  color: "#50E0B0" },
-  { key: "indianfoundersco",    short: "IFC",  color: "#7BB0FF" },
-  { key: "indiafounderscore",   short: "IFC2", color: "#B49EFF" },
-  { key: "indianfoundersdaily", short: "IFB",  color: "#F0C060" },
-  { key: "indiastartupstory",   short: "ISS",  color: "#FF9580" },
-] as const;
-
-const EXP_STAGE_DASH = [
-  { key: "new",          label: "New",       color: "#7BB0FF" },
-  { key: "approved",     label: "Approved",  color: "#5AE0A0" },
-  { key: "base_edit",    label: "Base edit", color: "#B49EFF" },
-  { key: "testing",      label: "Testing",   color: "#F0C060" },
-  { key: "proven_ideas", label: "Proven",    color: "#50E0B0" },
-  { key: "kill",         label: "Killed",    color: "#FF7070" },
-] as const;
-
-function ExperimentXCard() {
-  const navigate = useNavigate();
-
-  const { data: settings } = useQuery({
-    queryKey: ["exp-settings"],
-    queryFn: getExpSettings,
-    staleTime: 5 * 60_000,
-  });
-
-  const currentWeek = useMemo(() => {
-    const start = (settings as any)?.experiment_start_date;
-    if (!start) return 1;
-    const s = new Date(start + "T00:00:00");
-    const delta = Math.floor((Date.now() - s.getTime()) / 86400000);
-    return Math.max(1, Math.floor(delta / 7) + 1);
-  }, [settings]);
-
-  const { data: ideas = [] } = useQuery({
-    queryKey: ["exp-idea-bank", currentWeek, "all"],
-    queryFn: () => getExpIdeaBank({ week: currentWeek }),
-    enabled: !!settings,
-    staleTime: 60_000,
-  });
-
-  // Per-page stage counts (ideas assigned to that page, non-new)
-  const pageData = useMemo(() => {
-    return EXP_PAGES_DASH.map(page => {
-      const assigned = (ideas as any[]).filter(i =>
-        i.status !== "new" &&
-        (i.page_handle || "").split(",").map((s: string) => s.trim()).includes(page.key)
-      );
-      const counts: Record<string, number> = {};
-      EXP_STAGE_DASH.forEach(s => { counts[s.key] = 0; });
-      assigned.forEach((i: any) => { const s = i.status || "new"; if (s in counts) counts[s]++; });
-      return { ...page, counts, total: assigned.length };
-    });
-  }, [ideas]);
-
-  // Pool size (new, unassigned ideas)
-  const poolCount = (ideas as any[]).filter(i => i.status === "new").length;
-  const totalIdeas = (ideas as any[]).length;
-
-  const activeStages = EXP_STAGE_DASH.filter(s => s.key !== "new" && s.key !== "kill");
-
-  return (
-    <div
-      onClick={() => navigate("/experiment-x")}
-      className="rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 via-zinc-950 to-zinc-900 p-5 cursor-pointer hover:border-violet-500/40 transition-colors group"
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-2.5">
-          <span className="text-xl">🧪</span>
-          <div>
-            <h2 className="text-sm font-black uppercase tracking-wider text-white">Experiment X</h2>
-            <p className="text-[10px] text-zinc-500 mt-0.5">
-              Week {currentWeek} · {totalIdeas} idea{totalIdeas !== 1 ? "s" : ""}
-              {poolCount > 0 && <span className="ml-1.5 text-violet-400">· {poolCount} in pool</span>}
-            </p>
-          </div>
-        </div>
-        <span className="text-xs text-zinc-600 group-hover:text-zinc-400 transition-colors">open →</span>
-      </div>
-
-      {/* Stage legend */}
-      <div className="flex flex-wrap gap-3 mb-4">
-        {activeStages.map(s => (
-          <div key={s.key} className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: s.color }} />
-            <span className="text-[10px] font-medium" style={{ color: s.color }}>{s.label}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Per-page rows */}
-      <div className="flex flex-col gap-2">
-        {pageData.map(page => (
-          <div
-            key={page.key}
-            className="flex items-center gap-3 rounded-xl px-3 py-2.5 bg-zinc-900/60"
-            style={{ borderLeft: `3px solid ${page.color}`, border: `1px solid ${page.color}20`, borderLeftWidth: 3, borderLeftColor: page.color }}
-          >
-            {/* Page label */}
-            <span className="text-xs font-black w-9 flex-shrink-0" style={{ color: page.color }}>{page.short}</span>
-
-            {/* Stage pills */}
-            <div className="flex flex-wrap gap-1.5 flex-1 min-w-0">
-              {page.total === 0 ? (
-                <span className="text-[10px] text-zinc-600 italic">no ideas assigned yet</span>
-              ) : (
-                activeStages.map(s => {
-                  const n = page.counts[s.key] || 0;
-                  if (!n) return null;
-                  return (
-                    <span
-                      key={s.key}
-                      className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
-                      style={{ background: `${s.color}18`, color: s.color }}
-                    >
-                      {n} {s.label.toLowerCase()}
-                    </span>
-                  );
-                })
-              )}
-            </div>
-
-            {/* Total */}
-            {page.total > 0 && (
-              <span className="text-xs font-black tabular-nums text-zinc-400 flex-shrink-0">{page.total}</span>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -1030,9 +894,6 @@ export default function Dashboard() {
 
           {/* Team Battle */}
           <TeamBattleScoreboard />
-
-          {/* Experiment X */}
-          <ExperimentXCard />
         </div>
 
         {/* YOUR IP'S — title on top, filters tucked underneath */}
