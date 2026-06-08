@@ -373,13 +373,29 @@ export default function Dashboard() {
     staleTime: 10 * 60_000,
   });
 
+  // Hardcoded experiment X handles — covers both DB-assigned and manually listed pages
+  const EXP_X_HANDLES = [
+    "indiafounderscore", "indiastartupstory", "indianfoundersco",
+    "indiabusinesscom", "indiafounderbrief",
+    // also map the "indian" variants in case DB stores them with the extra n
+    "indianfoundersco", "indianbusinesscom", "indianfoundersdaily",
+  ];
+
   const dashHandleToNicheId = useMemo(() => {
     const m = new Map<string, string>();
     for (const n of (trackerNiches as any[]) || []) {
       const nm = String(n?.name || "").toLowerCase();
-      if (!nm.includes("garfields") && !nm.includes("goofies") && !nm.includes("sheru")) continue;
+      const isTeam = nm.includes("garfields") || nm.includes("goofies") || nm.includes("sheru") || nm.includes("experiment");
+      if (!isTeam) continue;
+      // Map pages stored in DB niche record
       for (const h of n?.pages || []) {
         if (h) m.set(String(h).replace(/^@/, "").trim().toLowerCase(), n.id);
+      }
+      // Always map hardcoded experiment X handles so the filter works even if DB pages array is empty
+      if (nm.includes("experiment")) {
+        for (const h of EXP_X_HANDLES) {
+          m.set(h, n.id);
+        }
       }
     }
     return m;
