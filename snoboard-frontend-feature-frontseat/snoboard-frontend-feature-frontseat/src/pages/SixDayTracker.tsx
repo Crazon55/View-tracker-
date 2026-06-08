@@ -43,11 +43,17 @@ const GOOFIES_ACTIVE_HANDLES = [
   "foundersinindia",
   "startupsinthelast24hrs",
   "startupcoded",
-  "indiastartupstory",
   "entrepreneurial.india",
 ] as const;
 
 const SHERUS_ACTIVE_HANDLES = ["thechangingorder"] as const;
+
+const EXPERIMENT_X_HANDLES = [
+  "indiastartupstory",
+  "indianbusinesscom",
+  "indiafoundersscore",
+  "indianfoundersdaily",
+] as const;
 
 const ACTIVE_ROSTER_WEEK3 = new Set([
   "bizzindia",
@@ -63,6 +69,7 @@ const ACTIVE_ROSTER_WEEK4 = new Set([
   ...GARFIELD_WEEK4_HANDLES,
   ...GOOFIES_ACTIVE_HANDLES,
   ...SHERUS_ACTIVE_HANDLES,
+  ...EXPERIMENT_X_HANDLES,
 ]);
 
 const ROSTER_CUTOFF_CYCLE3 = "2026-05-13";
@@ -125,7 +132,7 @@ export default function SixDayTracker() {
      Niches come from tracker_niches; we match by substring on the niche name.
      Multi-select: empty set == "All" (show everything). Otherwise show only
      pages whose niche is in the selected set. */
-  type NicheKey = "garfields" | "goofies" | "sheruses";
+  type NicheKey = "garfields" | "goofies" | "sheruses" | "experimentx";
   const [nicheFilters, setNicheFilters] = useState<NicheKey[]>([]);
   const nicheFilterSet = useMemo(() => new Set(nicheFilters), [nicheFilters]);
   const isAllActive = nicheFilters.length === 0;
@@ -137,13 +144,14 @@ export default function SixDayTracker() {
   const clearNiche = () => setNicheFilters([]);
 
   const handleToNiche = useMemo(() => {
-    const m = new Map<string, "garfields" | "goofies" | "sheruses">();
+    const m = new Map<string, "garfields" | "goofies" | "sheruses" | "experimentx">();
     for (const n of nichesRaw || []) {
       const nm = String(n?.name || "").toLowerCase();
-      let bucket: "garfields" | "goofies" | "sheruses" | null = null;
+      let bucket: "garfields" | "goofies" | "sheruses" | "experimentx" | null = null;
       if (nm.includes("garfields")) bucket = "garfields";
       else if (nm.includes("goofies")) bucket = "goofies";
       else if (nm.includes("sheerus") || nm.includes("sheru") || nm.includes("changing order")) bucket = "sheruses";
+      else if (nm.includes("experiment")) bucket = "experimentx";
       if (!bucket) continue;
       for (const h of n?.pages || []) {
         if (h) m.set(normHandle(h), bucket);
@@ -153,6 +161,7 @@ export default function SixDayTracker() {
     for (const h of GARFIELD_WEEK4_HANDLES) m.set(h, "garfields");
     for (const h of GOOFIES_ACTIVE_HANDLES) m.set(h, "goofies");
     for (const h of SHERUS_ACTIVE_HANDLES) m.set(h, "sheruses");
+    for (const h of EXPERIMENT_X_HANDLES) m.set(h, "experimentx");
     return m;
   }, [nichesRaw]);
 
@@ -175,12 +184,13 @@ export default function SixDayTracker() {
   const allPages = nichePages;
 
   const nicheCounts = useMemo(() => {
-    const c = { all: nichePages.length, garfields: 0, goofies: 0, sheruses: 0 };
+    const c = { all: nichePages.length, garfields: 0, goofies: 0, sheruses: 0, experimentx: 0 };
     for (const p of nichePages) {
       const key = handleToNiche.get(String(p.handle || "").replace(/^@/, "").trim().toLowerCase());
       if (key === "garfields") c.garfields += 1;
       else if (key === "goofies") c.goofies += 1;
       else if (key === "sheruses") c.sheruses += 1;
+      else if (key === "experimentx") c.experimentx += 1;
     }
     return c;
   }, [nichePages, handleToNiche]);
@@ -392,6 +402,7 @@ export default function SixDayTracker() {
             { key: "garfields", label: "Garfields", emoji: "🐱", count: nicheCounts.garfields, active: "bg-gradient-to-r from-orange-500 to-amber-500 text-zinc-900 shadow-md shadow-orange-500/30" },
             { key: "goofies", label: "Goofies", emoji: "🐶", count: nicheCounts.goofies, active: "bg-gradient-to-r from-sky-500 to-indigo-500 text-white shadow-md shadow-indigo-500/30" },
             { key: "sheruses", label: "The Sherus", emoji: "🦁", count: nicheCounts.sheruses, active: "bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-md shadow-rose-500/30" },
+            { key: "experimentx", label: "Experiment X", emoji: "🧪", count: nicheCounts.experimentx, active: "bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-md shadow-violet-500/30" },
           ] as const).map((opt) => {
             const isActive = nicheFilterSet.has(opt.key);
             return (
