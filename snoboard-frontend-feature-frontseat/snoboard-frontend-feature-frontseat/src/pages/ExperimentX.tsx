@@ -814,7 +814,7 @@ function AddIdeaModal({ open, onAdd, onClose }: {
   const { user } = useAuth();
   const createdBy = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "";
 
-  const [page, setPage]               = useState(EXP_PAGES[0] as string);
+  const [page, setPage]               = useState("");
   const [type, setType]               = useState("reel");
   const [source, setSource]           = useState("original");
   const [videoFormat, setVideoFormat] = useState("");
@@ -905,28 +905,6 @@ function AddIdeaModal({ open, onAdd, onClose }: {
                   {s === "original" ? "Original" : "Competitor"}
                 </button>
               ))}
-            </div>
-          </div>
-          <div style={{ flex: 1 }}>
-            <label style={ls}>Page *</label>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {EXP_PAGES.map(p => {
-                const pc = PAGE_COLORS[p] || "#a1a1aa";
-                const sel2 = page === p;
-                return (
-                  <button
-                    key={p} type="button" onClick={() => setPage(p)}
-                    style={{
-                      padding: "6px 10px", borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: "pointer",
-                      border: sel2 ? `2px solid ${pc}` : "1.5px solid #3f3f46",
-                      background: sel2 ? pc + "22" : "#18181b",
-                      color: sel2 ? pc : "#71717a",
-                    }}
-                  >
-                    {p}
-                  </button>
-                );
-              })}
             </div>
           </div>
         </div>
