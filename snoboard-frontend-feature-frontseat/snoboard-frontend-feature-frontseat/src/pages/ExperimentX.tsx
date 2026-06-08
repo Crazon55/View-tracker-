@@ -1745,16 +1745,16 @@ function FrontseatTab() {
     [ideas]
   );
 
-  // Pool = ALL today's ideas, permanently. Ideas never leave the pool.
-  // Sorted by creation order → letters always read a, b, c, d…
+  // Pool = only ideas added via Frontseat "+New idea" today (status stays "new" always).
+  // Dragging NEVER changes status — that's what keeps them in the pool permanently.
   const poolIdeas = useMemo(() =>
-    [...todayIdeas].sort((a: any, b: any) =>
-      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    ),
+    todayIdeas
+      .filter((i: any) => i.status === "new")
+      .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
     [todayIdeas]
   );
 
-  // Letters a, b, c… in creation order — stable regardless of status
+  // Letters a, b, c… in creation order — stable for the whole day
   const ideaLetterMap = useMemo(() => {
     const map: Record<string, string> = {};
     poolIdeas.forEach((idea: any, i: number) => {
@@ -1763,12 +1763,11 @@ function FrontseatTab() {
     return map;
   }, [poolIdeas]);
 
-  // Page columns: all today's ideas that have been assigned to that page
-  // Sorted by creation order so letters read sequentially
+  // Page columns: all ideas (whole week) assigned to that page, sorted by creation order
   const ideasByPage = useMemo(() => {
     const result: Record<string, any[]> = {};
     EXP_PAGES.forEach(p => { result[p] = []; });
-    todayIdeas.forEach((idea: any) => {
+    (ideas as any[]).forEach((idea: any) => {
       const pages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
       pages.forEach((p: string) => { if (result[p]) result[p].push(idea); });
     });
@@ -1778,7 +1777,7 @@ function FrontseatTab() {
       );
     });
     return result;
-  }, [todayIdeas]);
+  }, [ideas]);
 
   const handleDrop = (page: string, e: React.DragEvent) => {
     e.preventDefault();
@@ -1788,11 +1787,9 @@ function FrontseatTab() {
     const idea = (ideas as any[]).find((i: any) => i.id === ideaId);
     if (!idea) return;
     const existingPages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
-    if (existingPages.includes(page)) return; // already on this page
-    // Add page — if still unassigned (new), also move to approved
-    const update: any = { page_handle: [...existingPages, page].join(",") };
-    if (idea.status === "new") update.status = "approved";
-    updateMut.mutate({ id: ideaId, data: update });
+    if (existingPages.includes(page)) return;
+    // Only update page_handle — NEVER touch status so pool ideas stay in pool
+    updateMut.mutate({ id: ideaId, data: { page_handle: [...existingPages, page].join(",") } });
   };
 
   const legendStages: IdeaStage[] = ["approved", "base_edit", "testing", "proven_ideas", "kill"];
