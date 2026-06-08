@@ -1876,9 +1876,8 @@ async def tracker_niches_delete(niche_id: str):
 # Handles are stored lowercase, without the leading "@".
 GARFIELDS_HANDLES: list[str] = [
     "bizzindia",
-    "indianfoundersco",
     "startupbydog",
-    "indiabusinesscom",
+    "indianbusinesscom",
     "entrepreneursindia.co",
     "therealfoundr",
 ]
@@ -1887,17 +1886,20 @@ GOOFIES_HANDLES: list[str] = [
     "101xfounders",
     "foundersinindia",
     "startupcoded",
+]
+
+SHERUS_HANDLES: list[str] = [
+    "thechangingorder",
+    "101xtechnology",
+    "startupswtf",
+]
+
+EXPERIMENT_X_HANDLES: list[str] = [
+    "indianfoundersco",
     "indiastartupstory",
-    "elitefoundrs",
-    "indianfoundrs",
-    "startupsinthelast24hrs",
-    "realindianbusiness",
-    "foundersoncrack",
-    "entrepreneurial.india",
-    "theprimefounder",
-    "indiasbestfounders",
-    "businesscracked",
-    "bestindianpodcast",
+    "indiabusinesscom",
+    "indiafounderscore",
+    "indiafounderbrief",
 ]
 
 
@@ -1907,21 +1909,28 @@ TEAM_PERFORMANCE_CONFIG: dict[str, dict] = {
         "label": "Garfields",
         "emoji": "\U0001F431",  # cat
         "members": ["Deepak", "Kaavya", "Swati"],
-        "niche_match": ("garfields",),  # substring in tracker_niches.name (lowercase)
+        "niche_match": ("garfields",),
     },
     "goofies": {
         "key": "goofies",
         "label": "Goofies",
         "emoji": "\U0001F436",  # dog
-        "members": ["Arohi", "Harish", "Pulkit"],
+        "members": ["Arohi", "Harish"],
         "niche_match": ("goofies",),
     },
     "sheruses": {
         "key": "sheruses",
         "label": "The Sherus",
         "emoji": "\U0001F981",  # lion
-        "members": ["Sheru"],
+        "members": ["Sugam", "Chaitanya"],
         "niche_match": ("sheru", "sheerus", "changing order"),
+    },
+    "experimentx": {
+        "key": "experimentx",
+        "label": "Experiment X",
+        "emoji": "\U0001F9EA",  # test tube
+        "members": ["Pulkit"],
+        "niche_match": ("experiment",),
     },
 }
 
@@ -3441,37 +3450,31 @@ async def tracker_sync_team_niches():
     DISPLAY_NAMES = {
         # Garfields
         "bizzindia": "Bizz India",
-        "indianfoundersco": "Indian Founders Co",
         "startupbydog": "Startupbydog",
-        "founderswtf": "Founders WTF",
-        "entrepreneursindia.co": "Entrepreneursindia.co",
-        "richindianceo": "Rich Indian CEO",
-        "therisingfounder": "The Rising Founder",
-        "millionaire.founders": "Millionaire.founders",
         "indianbusinesscom": "Indian Business Com",
-        "indiabusinesscom": "India Business Com",
-        "ceohustleadvice": "CEO Hustle Advice",
+        "entrepreneursindia.co": "Entrepreneursindia.co",
         "therealfoundr": "The Real Foundr",
         # Goofies
         "101xfounders": "101xfounders",
         "foundersinindia": "Founders In India",
         "startupcoded": "Startup Coded",
+        # Sherus
+        "thechangingorder": "The Changing Order",
+        "101xtechnology": "101x Technology",
+        "startupswtf": "Startups WTF",
+        # Experiment X
+        "indianfoundersco": "Indian Founders Co",
         "indiastartupstory": "India Startup Story",
-        "elitefoundrs": "Elite Founders",
-        "indianfoundrs": "Indian Foundrs",
-        "startupsinthelast24hrs": "Startupsinthelast24hrs",
-        "realindianbusiness": "Real Indian Business",
-        "foundersoncrack": "Foundersoncrack",
-        "entrepreneurial.india": "Entrepreneurial.India",
-        "theprimefounder": "The Prime Founder",
-        "indiasbestfounders": "India's Best Founders",
-        "businesscracked": "Business Cracked",
-        "bestindianpodcast": "Best Indian Podcast",
+        "indiabusinesscom": "India Business Com",
+        "indiafounderscore": "India Founders Core",
+        "indiafounderbrief": "India Founder Brief",
     }
 
     all_handles = sorted({
         *[h.lstrip("@").strip().lower() for h in GARFIELDS_HANDLES],
         *[h.lstrip("@").strip().lower() for h in GOOFIES_HANDLES],
+        *[h.lstrip("@").strip().lower() for h in SHERUS_HANDLES],
+        *[h.lstrip("@").strip().lower() for h in EXPERIMENT_X_HANDLES],
     })
 
     # 1) Ensure each handle has a row in `pages`
@@ -3498,6 +3501,8 @@ async def tracker_sync_team_niches():
     desired = {
         "FBS - Garfields": GARFIELDS_HANDLES,
         "FBS - Goofies": GOOFIES_HANDLES,
+        "FBS - Sherus": SHERUS_HANDLES,
+        "FBS - Experiment X": EXPERIMENT_X_HANDLES,
     }
 
     synced = {}

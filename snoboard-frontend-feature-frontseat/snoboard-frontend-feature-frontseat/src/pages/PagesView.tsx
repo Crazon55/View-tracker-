@@ -50,7 +50,7 @@ export default function PagesView() {
     const s = new Set<string>();
     for (const n of nichesRaw) {
       const nm = String(n?.name || "").toLowerCase();
-      if (!nm.includes("garfields") && !nm.includes("goofies") && !nm.includes("sheru")) continue;
+      if (!nm.includes("garfields") && !nm.includes("goofies") && !nm.includes("sheru") && !nm.includes("experiment")) continue;
       for (const h of n?.pages || []) {
         if (h) s.add(String(h).replace(/^@/, "").trim().toLowerCase());
       }

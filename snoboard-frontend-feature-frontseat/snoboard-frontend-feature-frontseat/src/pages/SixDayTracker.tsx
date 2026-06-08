@@ -28,11 +28,11 @@ function fmt(n: number): string {
 
 const normHandle = (h: string) => String(h || "").replace(/^@/, "").trim().toLowerCase();
 
-/** Garfields — Swati (indiabusinesscom, entrepreneursindia.co, therealfoundr) + Deepak/Kaavya (startupbydog, bizzindia) */
+/** Garfields — Swati (indianbusinesscom, entrepreneursindia.co, therealfoundr) + Deepak/Kaavya (startupbydog, bizzindia) */
 const GARFIELD_WEEK4_HANDLES = [
   "bizzindia",
   "startupbydog",
-  "indiabusinesscom",
+  "indianbusinesscom",
   "entrepreneursindia.co",
   "therealfoundr",
 ] as const;
@@ -44,20 +44,20 @@ const GOOFIES_ACTIVE_HANDLES = [
   "startupcoded",
 ] as const;
 
-/** Sherus — Sugam (thechangingorder) + Chaitanya (startupwtf, 101xtechnology) */
+/** Sherus — Sugam (thechangingorder) + Chaitanya (101xtechnology, startupswtf) */
 const SHERUS_ACTIVE_HANDLES = [
   "thechangingorder",
-  "startupwtf",
   "101xtechnology",
+  "startupswtf",
 ] as const;
 
 /** Experiment X — Pulkit */
 const EXPERIMENT_X_HANDLES = [
   "indianfoundersco",
   "indiastartupstory",
-  "indianbusinesscom",
-  "indiafoundersscore",
-  "indianfoundersdaily",
+  "indiabusinesscom",
+  "indiafounderscore",
+  "indiafounderbrief",
 ] as const;
 
 // Hardcoded to preserve May 2026 (Week 3) history — do not derive from the above constants.
