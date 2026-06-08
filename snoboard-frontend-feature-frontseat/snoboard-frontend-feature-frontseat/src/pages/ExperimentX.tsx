@@ -1927,11 +1927,13 @@ function FrontseatTab() {
                     idea={idea}
                     letter={ideaLetterMap[idea.id] || "?"}
                     onClick={() => setDetailIdea(idea)}
-                    onRemoveFromPage={() => {
+                    onRemoveFromPage={idea.status === "new" ? () => {
+                      // Only remove this page from page_handle — NEVER change status
+                      // so the idea stays constant in the pool for the whole day
                       const remaining = (idea.page_handle || "")
                         .split(",").map((s: string) => s.trim()).filter((p: string) => p && p !== page);
-                      updateMut.mutate({ id: idea.id, data: { page_handle: remaining.join(","), status: "new" } });
-                    }}
+                      updateMut.mutate({ id: idea.id, data: { page_handle: remaining.join(",") } });
+                    } : undefined}
                   />
                 ))}
               </div>
