@@ -13,9 +13,10 @@ function formatViews(n: number | undefined | null): string {
 }
 
 const SKIN: Record<string, { grad: string; text: string; tagline: string }> = {
-  garfields: { grad: "from-orange-500 via-amber-500 to-yellow-400", text: "text-orange-300", tagline: "lasagna-powered" },
-  goofies:   { grad: "from-sky-400 via-indigo-500 to-fuchsia-500",  text: "text-sky-300",    tagline: "hyuck hyuck gang" },
-  sheruses:  { grad: "from-rose-500 via-pink-500 to-fuchsia-400",   text: "text-rose-300",   tagline: "changing the order" },
+  garfields:   { grad: "from-orange-500 via-amber-500 to-yellow-400",  text: "text-orange-300", tagline: "lasagna-powered" },
+  goofies:     { grad: "from-sky-400 via-indigo-500 to-fuchsia-500",   text: "text-sky-300",    tagline: "hyuck hyuck gang" },
+  sheruses:    { grad: "from-rose-500 via-pink-500 to-fuchsia-400",    text: "text-rose-300",   tagline: "changing the order" },
+  experimentx: { grad: "from-violet-500 via-purple-500 to-fuchsia-600", text: "text-violet-300", tagline: "in the lab" },
 };
 
 async function fetchTeams() {
@@ -25,7 +26,7 @@ async function fetchTeams() {
     : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   try {
     const data = await getTeamsPerformance();
-    const hasAllTeams = ["garfields", "goofies", "sheruses"].every(
+    const hasAllTeams = ["garfields", "goofies", "sheruses", "experimentx"].every(
       (k) => (data as any)?.teams?.some((t: any) => t.key === k)
     );
     if (data && (data as any).views_period != null && hasAllTeams) return data as any;
@@ -56,10 +57,12 @@ export default function TeamBattleScoreboard() {
   const teamA = teams.find((t: any) => t.key === "garfields");
   const teamB = teams.find((t: any) => t.key === "goofies");
   const teamC = teams.find((t: any) => t.key === "sheruses");
+  const teamD = teams.find((t: any) => t.key === "experimentx");
 
-  const pctA = totalViews6d > 0 ? Math.max(1, Math.round(((teamA?.views_6d || 0) / totalViews6d) * 100)) : 34;
-  const pctC = totalViews6d > 0 ? Math.max(1, Math.round(((teamC?.views_6d || 0) / totalViews6d) * 100)) : 33;
-  const pctB = Math.max(1, 100 - pctA - pctC);
+  const pctA = totalViews6d > 0 ? Math.max(1, Math.round(((teamA?.views_6d || 0) / totalViews6d) * 100)) : 25;
+  const pctC = totalViews6d > 0 ? Math.max(1, Math.round(((teamC?.views_6d || 0) / totalViews6d) * 100)) : 25;
+  const pctD = totalViews6d > 0 ? Math.max(1, Math.round(((teamD?.views_6d || 0) / totalViews6d) * 100)) : 25;
+  const pctB = Math.max(1, 100 - pctA - pctC - pctD);
 
   return (
     <div
@@ -79,9 +82,9 @@ export default function TeamBattleScoreboard() {
         <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm py-8">Loading…</div>
       ) : (
         <>
-          {/* Team cards — fixed row slots so all three columns align on one line */}
-          <div className="grid grid-cols-3 gap-3 flex-1 items-start content-start">
-            {[teamA, teamB, teamC].filter(Boolean).map((team: any) => {
+          {/* Team cards */}
+          <div className="grid grid-cols-4 gap-3 flex-1 items-start content-start">
+            {[teamA, teamB, teamC, teamD].filter(Boolean).map((team: any) => {
               const skin = SKIN[team.key] ?? SKIN.garfields;
               return (
                 <div key={team.key} className="flex flex-col items-center text-center w-full">
@@ -134,12 +137,22 @@ export default function TeamBattleScoreboard() {
               )}
               {teamC && (
                 <motion.div
-                  initial={{ width: "33%" }}
+                  initial={{ width: "25%" }}
                   animate={{ width: `${pctC}%` }}
                   transition={{ type: "spring", stiffness: 100, damping: 20, delay: 0.3 }}
-                  className={`h-full bg-gradient-to-r ${SKIN.sheruses.grad} flex items-center justify-start pl-1`}
+                  className={`h-full bg-gradient-to-r ${SKIN.sheruses.grad} flex items-center justify-center`}
                 >
                   {pctC >= 8 && <span className="text-[8px] font-black text-zinc-900">{pctC}%</span>}
+                </motion.div>
+              )}
+              {teamD && (
+                <motion.div
+                  initial={{ width: "25%" }}
+                  animate={{ width: `${pctD}%` }}
+                  transition={{ type: "spring", stiffness: 100, damping: 20, delay: 0.3 }}
+                  className={`h-full bg-gradient-to-r ${SKIN.experimentx.grad} flex items-center justify-start pl-1`}
+                >
+                  {pctD >= 8 && <span className="text-[8px] font-black text-zinc-900">{pctD}%</span>}
                 </motion.div>
               )}
             </div>

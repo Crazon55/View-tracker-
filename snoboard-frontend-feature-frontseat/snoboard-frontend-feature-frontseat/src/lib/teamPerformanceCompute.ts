@@ -1,6 +1,6 @@
 /** Mirrors backend /api/v1/teams/performance so the dashboard works if that route is not deployed yet. */
 
-const TEAM_ORDER = ["garfields", "goofies", "sheruses"] as const;
+const TEAM_ORDER = ["garfields", "goofies", "sheruses", "experimentx"] as const;
 export type TeamKey = (typeof TEAM_ORDER)[number];
 
 const TEAM_META: Record<
@@ -16,14 +16,20 @@ const TEAM_META: Record<
   goofies: {
     label: "Goofies",
     emoji: "🐶",
-    members: ["Arohi", "Harish", "Pulkit"],
+    members: ["Arohi", "Harish"],
     nicheMatch: ["goofies"],
   },
   sheruses: {
     label: "The Sherus",
     emoji: "🦁",
-    members: [],
+    members: ["Sugam", "Chaitanya"],
     nicheMatch: ["sheruses", "sherus"],
+  },
+  experimentx: {
+    label: "Experiment X",
+    emoji: "🧪",
+    members: ["Pulkit"],
+    nicheMatch: ["experiment"],
   },
 };
 
@@ -69,7 +75,7 @@ function computeTeamViews6dFromSixDay(
     }
   }
   if (entries.length === 0) return null;
-  const out: Record<TeamKey, number> = { garfields: 0, goofies: 0, sheruses: 0 };
+  const out: Record<TeamKey, number> = { garfields: 0, goofies: 0, sheruses: 0, experimentx: 0 };
   for (const e of entries) {
     const h = pidToH.get(String(e.page_id)) || "";
     const tk = handleToTeam[h];
@@ -248,6 +254,7 @@ export function buildTeamPerformanceFromTracker(
     garfields: new Set(),
     goofies: new Set(),
     sheruses: new Set(),
+    experimentx: new Set(),
   };
   for (const n of niches) {
     const tid = nicheIdToTeam[n.id];
@@ -275,6 +282,7 @@ export function buildTeamPerformanceFromTracker(
     garfields: emptyStats(),
     goofies: emptyStats(),
     sheruses: emptyStats(),
+    experimentx: emptyStats(),
   };
 
   // Views aggregation — match backend: month-to-date postings when six-day tracker
@@ -302,9 +310,10 @@ export function buildTeamPerformanceFromTracker(
     views_by_idea_6d: Map<string, number>;
     views_by_creator: Map<string, CreatorStat>;
   }> = {
-    garfields: { views_total: 0, views_6d: 0, views_by_idea: new Map(), views_by_idea_6d: new Map(), views_by_creator: new Map() },
-    goofies: { views_total: 0, views_6d: 0, views_by_idea: new Map(), views_by_idea_6d: new Map(), views_by_creator: new Map() },
-    sheruses: { views_total: 0, views_6d: 0, views_by_idea: new Map(), views_by_idea_6d: new Map(), views_by_creator: new Map() },
+    garfields:   { views_total: 0, views_6d: 0, views_by_idea: new Map(), views_by_idea_6d: new Map(), views_by_creator: new Map() },
+    goofies:     { views_total: 0, views_6d: 0, views_by_idea: new Map(), views_by_idea_6d: new Map(), views_by_creator: new Map() },
+    sheruses:    { views_total: 0, views_6d: 0, views_by_idea: new Map(), views_by_idea_6d: new Map(), views_by_creator: new Map() },
+    experimentx: { views_total: 0, views_6d: 0, views_by_idea: new Map(), views_by_idea_6d: new Map(), views_by_creator: new Map() },
   };
   const ideaById: Record<string, any> = {};
   const ideaViewsTotal = new Map<string, number>();
