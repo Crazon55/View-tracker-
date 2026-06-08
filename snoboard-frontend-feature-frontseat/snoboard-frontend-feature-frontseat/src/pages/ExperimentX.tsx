@@ -1738,17 +1738,24 @@ function FrontseatTab() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }),
   });
 
-  // Pool: ideas with status "new", sorted by creation time
-  const poolIdeas = useMemo(() =>
-    (ideas as any[])
-      .filter((i: any) => i.status === "new")
-      .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
+  // Frontseat is a TODAY view — filter to the current calendar day
+  const todayStr = toLocalISO(new Date());
+  const todayIdeas = useMemo(() =>
+    (ideas as any[]).filter((i: any) => (i.day_date || "").slice(0, 10) === todayStr),
     [ideas]
   );
 
-  // Assign letters a, b, c… in creation order across all ideas this week
+  // Pool: today's new ideas in creation order (a → first added, b → second, …)
+  const poolIdeas = useMemo(() =>
+    todayIdeas
+      .filter((i: any) => i.status === "new")
+      .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
+    [todayIdeas]
+  );
+
+  // Letters a, b, c… assigned strictly in creation order of TODAY's ideas
   const ideaLetterMap = useMemo(() => {
-    const sorted = [...(ideas as any[])].sort((a: any, b: any) =>
+    const sorted = [...todayIdeas].sort((a: any, b: any) =>
       new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     );
     const map: Record<string, string> = {};
@@ -1756,15 +1763,13 @@ function FrontseatTab() {
       map[idea.id] = String.fromCharCode(97 + (i % 26));
     });
     return map;
-  }, [ideas]);
+  }, [todayIdeas]);
 
-  const STAGE_ORDER = ["approved", "base_edit", "testing", "proven_ideas", "scheduled", "posted", "kill"];
-
-  // Group non-new ideas into their page columns (idea can appear in multiple columns)
+  // Group today's non-new ideas into page columns, sorted by creation order so letters read a→b→c
   const ideasByPage = useMemo(() => {
     const result: Record<string, any[]> = {};
     EXP_PAGES.forEach(p => { result[p] = []; });
-    (ideas as any[])
+    todayIdeas
       .filter((i: any) => i.status !== "new")
       .forEach((idea: any) => {
         const pages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
@@ -1772,11 +1777,11 @@ function FrontseatTab() {
       });
     EXP_PAGES.forEach(p => {
       result[p].sort((a: any, b: any) =>
-        STAGE_ORDER.indexOf(a.status) - STAGE_ORDER.indexOf(b.status)
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       );
     });
     return result;
-  }, [ideas]);
+  }, [todayIdeas]);
 
   const handleDrop = (page: string, e: React.DragEvent) => {
     e.preventDefault();
@@ -1805,7 +1810,9 @@ function FrontseatTab() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <div>
             <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "#a1a1aa", textTransform: "uppercase", letterSpacing: "0.06em" }}>Ideas Pool</p>
-            <p style={{ margin: "2px 0 0", fontSize: 10, color: "#52525b" }}>Drag → assign to page</p>
+            <p style={{ margin: "2px 0 0", fontSize: 10, color: "#52525b" }}>
+              {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · drag to assign
+            </p>
           </div>
           {can("add_experiment_idea") && (
             <button onClick={() => setAddOpen(true)} style={{
@@ -1831,7 +1838,7 @@ function FrontseatTab() {
             <p style={{ color: "#52525b", fontSize: 12 }}>Loading…</p>
           ) : poolIdeas.length === 0 ? (
             <div style={{ padding: "24px 10px", textAlign: "center", color: "#3f3f46", fontSize: 11, border: "1.5px dashed #27272a", borderRadius: 9 }}>
-              No new ideas yet<br />
+              No new ideas today<br />
               <span style={{ fontSize: 10 }}>Add one above</span>
             </div>
           ) : (
