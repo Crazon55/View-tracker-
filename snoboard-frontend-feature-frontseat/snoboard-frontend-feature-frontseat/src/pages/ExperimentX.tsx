@@ -223,6 +223,15 @@ function KanbanCard({ idea, onUpdate, onDelete, onClick }: {
             {idea.video_format}
           </span>
         )}
+        {idea.hook_placement && (
+          <span style={{
+            fontSize: 10, fontWeight: 600, borderRadius: 4, padding: "1px 6px",
+            color: idea.hook_placement === "above_video" ? "#F0C060" : "#FF9580",
+            background: idea.hook_placement === "above_video" ? "rgba(240,192,96,0.1)" : "rgba(255,149,128,0.1)",
+          }}>
+            {idea.hook_placement === "above_video" ? "⬆ above" : "◼ on video"}
+          </span>
+        )}
         {(idea.views || 0) > 0 && (
           <span style={{ fontSize: 10, fontWeight: 700, color: "#50E0B0", marginLeft: "auto" }}>
             {fmt(idea.views)}
@@ -460,6 +469,31 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose }: {
                     color: active ? "#50E0B0" : "#71717a",
                   }}
                 >{fmt}</button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Hook placement */}
+        <div>
+          <label style={ls}>Hook placement</label>
+          <div style={{ display: "flex", gap: 6 }}>
+            {[
+              { value: "above_video", label: "⬆ Text above video", color: "#F0C060" },
+              { value: "on_video",    label: "◼ Text on video",     color: "#FF9580" },
+            ].map(opt => {
+              const active = (idea.hook_placement || "above_video") === opt.value;
+              return (
+                <button
+                  key={opt.value} type="button"
+                  onClick={() => onUpdate(idea.id, { hook_placement: opt.value })}
+                  style={{
+                    flex: 1, padding: "8px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                    border: active ? `2px solid ${opt.color}` : "1.5px solid #3f3f46",
+                    background: active ? opt.color + "22" : "#18181b",
+                    color: active ? opt.color : "#71717a",
+                  }}
+                >{opt.label}</button>
               );
             })}
           </div>
@@ -814,21 +848,23 @@ function AddIdeaModal({ open, onAdd, onClose }: {
   const { user } = useAuth();
   const createdBy = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "";
 
-  const [page, setPage]               = useState("");
-  const [type, setType]               = useState("reel");
-  const [source, setSource]           = useState("original");
-  const [videoFormat, setVideoFormat] = useState("");
-  const [topic, setTopic]             = useState("");
-  const [hookVars, setHookVars]       = useState("");
-  const [musicRef, setMusicRef]       = useState("");
-  const [frameLink, setFrameLink]     = useState("");
-  const [ytUrl, setYtUrl]             = useState("");
-  const [ytTs, setYtTs]               = useState("");
-  const [compLink, setCompLink]       = useState("");
-  const [date, setDate]               = useState(toLocalISO(new Date()));
+  const [page, setPage]                       = useState("");
+  const [type, setType]                       = useState("reel");
+  const [source, setSource]                   = useState("original");
+  const [videoFormat, setVideoFormat]         = useState("");
+  const [hookPlacement, setHookPlacement]     = useState("above_video");
+  const [topic, setTopic]                     = useState("");
+  const [hookVars, setHookVars]               = useState("");
+  const [musicRef, setMusicRef]               = useState("");
+  const [frameLink, setFrameLink]             = useState("");
+  const [ytUrl, setYtUrl]                     = useState("");
+  const [ytTs, setYtTs]                       = useState("");
+  const [compLink, setCompLink]               = useState("");
+  const [date, setDate]                       = useState(toLocalISO(new Date()));
 
   const reset = () => {
     setPage(EXP_PAGES[0]); setType("reel"); setSource("original"); setVideoFormat("");
+    setHookPlacement("above_video");
     setTopic(""); setHookVars(""); setMusicRef(""); setFrameLink("");
     setYtUrl(""); setYtTs(""); setCompLink(""); setDate(toLocalISO(new Date()));
   };
@@ -843,6 +879,7 @@ function AddIdeaModal({ open, onAdd, onClose }: {
       yt_timestamps: source === "original" ? ytTs : "",
       comp_link: source === "competitor" ? compLink : "",
       created_by: createdBy, day_date: date, video_format: videoFormat,
+      hook_placement: hookPlacement,
     });
     reset();
   };
@@ -955,6 +992,28 @@ function AddIdeaModal({ open, onAdd, onClose }: {
                   color: videoFormat === fmt ? "#50E0B0" : "#71717a",
                 }}
               >{fmt}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Hook placement */}
+        <div>
+          <label style={ls}>Hook placement</label>
+          <div style={{ display: "flex", gap: 6 }}>
+            {[
+              { value: "above_video", label: "⬆ Text above video", color: "#F0C060" },
+              { value: "on_video",    label: "◼ Text on video",     color: "#FF9580" },
+            ].map(opt => (
+              <button
+                key={opt.value} type="button"
+                onClick={() => setHookPlacement(opt.value)}
+                style={{
+                  flex: 1, padding: "8px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                  border: hookPlacement === opt.value ? `2px solid ${opt.color}` : "1.5px solid #3f3f46",
+                  background: hookPlacement === opt.value ? opt.color + "22" : "#18181b",
+                  color: hookPlacement === opt.value ? opt.color : "#71717a",
+                }}
+              >{opt.label}</button>
             ))}
           </div>
         </div>
