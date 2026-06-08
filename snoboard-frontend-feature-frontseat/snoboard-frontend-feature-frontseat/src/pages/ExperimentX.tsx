@@ -1745,36 +1745,33 @@ function FrontseatTab() {
     [ideas]
   );
 
-  // Pool: today's new ideas in creation order (a → first added, b → second, …)
+  // Pool = ALL today's ideas, permanently. Ideas never leave the pool.
+  // Sorted by creation order → letters always read a, b, c, d…
   const poolIdeas = useMemo(() =>
-    todayIdeas
-      .filter((i: any) => i.status === "new")
-      .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
+    [...todayIdeas].sort((a: any, b: any) =>
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    ),
     [todayIdeas]
   );
 
-  // Letters a, b, c… assigned strictly in creation order of TODAY's ideas
+  // Letters a, b, c… in creation order — stable regardless of status
   const ideaLetterMap = useMemo(() => {
-    const sorted = [...todayIdeas].sort((a: any, b: any) =>
-      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    );
     const map: Record<string, string> = {};
-    sorted.forEach((idea: any, i: number) => {
+    poolIdeas.forEach((idea: any, i: number) => {
       map[idea.id] = String.fromCharCode(97 + (i % 26));
     });
     return map;
-  }, [todayIdeas]);
+  }, [poolIdeas]);
 
-  // Group today's non-new ideas into page columns, sorted by creation order so letters read a→b→c
+  // Page columns: all today's ideas that have been assigned to that page
+  // Sorted by creation order so letters read sequentially
   const ideasByPage = useMemo(() => {
     const result: Record<string, any[]> = {};
     EXP_PAGES.forEach(p => { result[p] = []; });
-    todayIdeas
-      .filter((i: any) => i.status !== "new")
-      .forEach((idea: any) => {
-        const pages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
-        pages.forEach((p: string) => { if (result[p]) result[p].push(idea); });
-      });
+    todayIdeas.forEach((idea: any) => {
+      const pages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+      pages.forEach((p: string) => { if (result[p]) result[p].push(idea); });
+    });
     EXP_PAGES.forEach(p => {
       result[p].sort((a: any, b: any) =>
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
@@ -1791,7 +1788,8 @@ function FrontseatTab() {
     const idea = (ideas as any[]).find((i: any) => i.id === ideaId);
     if (!idea) return;
     const existingPages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
-    if (existingPages.includes(page)) return; // already assigned
+    if (existingPages.includes(page)) return; // already on this page
+    // Add page — if still unassigned (new), also move to approved
     const update: any = { page_handle: [...existingPages, page].join(",") };
     if (idea.status === "new") update.status = "approved";
     updateMut.mutate({ id: ideaId, data: update });
@@ -1838,20 +1836,37 @@ function FrontseatTab() {
             <p style={{ color: "#52525b", fontSize: 12 }}>Loading…</p>
           ) : poolIdeas.length === 0 ? (
             <div style={{ padding: "24px 10px", textAlign: "center", color: "#3f3f46", fontSize: 11, border: "1.5px dashed #27272a", borderRadius: 9 }}>
-              No new ideas today<br />
+              No ideas today<br />
               <span style={{ fontSize: 10 }}>Add one above</span>
             </div>
           ) : (
-            poolIdeas.map((idea: any) => (
-              <div key={idea.id} style={{ opacity: draggingId === idea.id ? 0.4 : 1, transition: "opacity 0.12s" }}>
-                <FrontseatPoolCard
-                  idea={idea}
-                  letter={ideaLetterMap[idea.id] || "?"}
-                  onDragStart={() => setDraggingId(idea.id)}
-                  onClick={() => setDetailIdea(idea)}
-                />
-              </div>
-            ))
+            poolIdeas.map((idea: any) => {
+              const assignedPages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+              return (
+                <div key={idea.id} style={{ opacity: draggingId === idea.id ? 0.4 : 1, transition: "opacity 0.12s" }}>
+                  <FrontseatPoolCard
+                    idea={idea}
+                    letter={ideaLetterMap[idea.id] || "?"}
+                    onDragStart={() => setDraggingId(idea.id)}
+                    onClick={() => setDetailIdea(idea)}
+                  />
+                  {/* Show assigned page chips below the card */}
+                  {assignedPages.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: -3, marginBottom: 6, paddingLeft: 2 }}>
+                      {assignedPages.map((p: string) => {
+                        const c = PAGE_COLORS[p] || "#a1a1aa";
+                        const short = PAGE_SHORT[p] || p;
+                        return (
+                          <span key={p} style={{ fontSize: 9, fontWeight: 700, color: c, background: c + "22", borderRadius: 3, padding: "1px 5px" }}>
+                            {short}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
       </div>
