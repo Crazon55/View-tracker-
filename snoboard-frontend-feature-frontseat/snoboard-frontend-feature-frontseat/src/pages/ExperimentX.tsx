@@ -58,7 +58,7 @@ const STATUS_STYLE: Record<string, { bg: string; text: string }> = {
   killed:       { bg: "rgba(201,59,59,0.15)",    text: "#FF7070" },
 };
 
-type TabMode = "idea-bank" | "content-bank" | "working-ideas";
+type TabMode = "idea-bank" | "content-bank" | "working-ideas" | "frontseat";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1489,6 +1489,434 @@ function WorkingIdeasTab({ pageFilter, search }: { pageFilter: string; search: s
   );
 }
 
+// Short column labels for Frontseat view
+const PAGE_SHORT: Record<string, string> = {
+  indianbusinesscom:   "IBC",
+  indianfoundersco:    "IFC",
+  indiafounderscore:   "IFC2",
+  indianfoundersdaily: "IFB",
+  indiastartupstory:   "ISS",
+};
+
+// ---------------------------------------------------------------------------
+// Quick Add — simplified form (title + source link + format)
+// ---------------------------------------------------------------------------
+function QuickAddModal({ open, onAdd, onClose }: {
+  open: boolean; onAdd: (d: any) => void; onClose: () => void;
+}) {
+  const { user } = useAuth();
+  const createdBy = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "";
+  const [title, setTitle]             = useState("");
+  const [source, setSource]           = useState<"competitor" | "original">("competitor");
+  const [compLink, setCompLink]       = useState("");
+  const [ytUrl, setYtUrl]             = useState("");
+  const [ytTs, setYtTs]               = useState("");
+  const [format, setFormat]           = useState<"reel" | "post">("reel");
+  const [videoFormat, setVideoFormat] = useState("");
+
+  const reset = () => {
+    setTitle(""); setCompLink(""); setYtUrl(""); setYtTs(""); setFormat("reel"); setVideoFormat("");
+  };
+
+  const submit = () => {
+    if (!title.trim()) return;
+    onAdd({
+      topic: title.trim(), source, content_type: format, video_format: videoFormat,
+      status: "new", page_handle: "",
+      comp_link: source === "competitor" ? compLink : "",
+      yt_url: source === "original" ? ytUrl : "",
+      yt_timestamps: source === "original" ? ytTs : "",
+      created_by: createdBy, day_date: toLocalISO(new Date()),
+    });
+    reset(); onClose();
+  };
+
+  if (!open) return null;
+  const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "#71717a", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
+  const is: React.CSSProperties = { width: "100%", padding: "9px 13px", border: "1.5px solid #3f3f46", borderRadius: 9, fontSize: 13, outline: "none", background: "#09090b", color: "#e4e4e7", boxSizing: "border-box" };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onClose}>
+      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} />
+      <div onClick={e => e.stopPropagation()} style={{
+        position: "relative", background: "#18181b", borderRadius: 16,
+        padding: "24px 28px", maxWidth: 460, width: "94%", maxHeight: "88vh", overflowY: "auto",
+        boxShadow: "0 24px 80px rgba(0,0,0,0.5)", border: "1px solid #27272a",
+        display: "flex", flexDirection: "column", gap: 14,
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "#fff" }}>New idea</h2>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#71717a" }}>✕</button>
+        </div>
+        <div>
+          <label style={ls}>Title *</label>
+          <input autoFocus value={title} onChange={e => setTitle(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") submit(); }}
+            placeholder="e.g. JRD Tata story" style={{ ...is, color: "#e4e4e7" }} />
+        </div>
+        <div>
+          <label style={ls}>Source</label>
+          <div style={{ display: "flex", gap: 6 }}>
+            {(["competitor", "original"] as const).map(s => (
+              <button key={s} onClick={() => setSource(s)} style={{
+                flex: 1, padding: "8px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                border: source === s ? "2px solid #7c3aed" : "1.5px solid #3f3f46",
+                background: source === s ? "#27272a" : "#18181b", color: source === s ? "#fff" : "#71717a",
+              }}>{s === "competitor" ? "Competitor (IG)" : "YouTube"}</button>
+            ))}
+          </div>
+        </div>
+        {source === "competitor" ? (
+          <div>
+            <label style={ls}>Comp link</label>
+            <input value={compLink} onChange={e => setCompLink(e.target.value)}
+              placeholder="https://instagram.com/reel/..." style={{ ...is, color: "#e4e4e7" }} />
+          </div>
+        ) : (
+          <div style={{ display: "flex", gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <label style={ls}>YouTube link</label>
+              <input value={ytUrl} onChange={e => setYtUrl(e.target.value)}
+                placeholder="https://youtube.com/..." style={{ ...is, color: "#e4e4e7" }} />
+            </div>
+            <div style={{ flex: "0 0 130px" }}>
+              <label style={ls}>Timestamp</label>
+              <input value={ytTs} onChange={e => setYtTs(e.target.value)}
+                placeholder="0:30–1:45" style={{ ...is, color: "#e4e4e7" }} />
+            </div>
+          </div>
+        )}
+        <div>
+          <label style={ls}>Format</label>
+          <div style={{ display: "flex", gap: 6 }}>
+            {(["reel", "post"] as const).map(f => (
+              <button key={f} onClick={() => setFormat(f)} style={{
+                flex: 1, padding: "8px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                textTransform: "capitalize",
+                border: format === f ? "2px solid #7c3aed" : "1.5px solid #3f3f46",
+                background: format === f ? "#27272a" : "#18181b", color: format === f ? "#fff" : "#71717a",
+              }}>{f}</button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <label style={ls}>Video format</label>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {VIDEO_FORMATS.map(vf => (
+              <button key={vf} onClick={() => setVideoFormat(v => v === vf ? "" : vf)} style={{
+                padding: "5px 11px", borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: "pointer",
+                border: videoFormat === vf ? "2px solid #50E0B0" : "1.5px solid #3f3f46",
+                background: videoFormat === vf ? "rgba(80,224,176,0.12)" : "#18181b",
+                color: videoFormat === vf ? "#50E0B0" : "#71717a",
+              }}>{vf}</button>
+            ))}
+          </div>
+        </div>
+        <button onClick={submit} disabled={!title.trim()} style={{
+          padding: "10px 20px", background: "#7c3aed", color: "#fff", border: "none",
+          borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer",
+          opacity: !title.trim() ? 0.4 : 1,
+        }}>Add idea</button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Frontseat — pool card (left panel, draggable)
+// ---------------------------------------------------------------------------
+function FrontseatPoolCard({ idea, letter, onDragStart, onClick }: {
+  idea: any; letter: string; onDragStart: () => void; onClick: () => void;
+}) {
+  return (
+    <div
+      draggable
+      onDragStart={e => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", idea.id); onDragStart(); }}
+      onClick={onClick}
+      style={{
+        background: "#18181b", border: "1.5px solid #27272a", borderRadius: 8,
+        padding: "8px 10px", cursor: "grab", marginBottom: 6, transition: "border-color 0.12s",
+      }}
+      onMouseEnter={e => (e.currentTarget.style.borderColor = "#3f3f46")}
+      onMouseLeave={e => (e.currentTarget.style.borderColor = "#27272a")}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
+        <span style={{ fontSize: 10, fontWeight: 800, color: "#a78bfa", background: "#7c3aed22", borderRadius: 4, padding: "1px 6px" }}>{letter}</span>
+        <span style={{ fontSize: 10, color: "#52525b", background: "#27272a", borderRadius: 4, padding: "1px 5px" }}>{idea.content_type}</span>
+        {idea.source === "competitor"
+          ? <span style={{ fontSize: 9, color: "#7BB0FF", background: "#7BB0FF22", borderRadius: 4, padding: "1px 5px" }}>IG</span>
+          : <span style={{ fontSize: 9, color: "#FF9580", background: "#FF958022", borderRadius: 4, padding: "1px 5px" }}>YT</span>
+        }
+      </div>
+      <p style={{ margin: 0, fontSize: 12, fontWeight: 500, color: "#e4e4e7", lineHeight: 1.4,
+        overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
+        {idea.topic || <em style={{ color: "#52525b" }}>Untitled</em>}
+      </p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Frontseat — page column card (clickable, status colour-coded)
+// ---------------------------------------------------------------------------
+function FrontseatPageCard({ idea, letter, onClick }: {
+  idea: any; letter: string; onClick: () => void;
+}) {
+  const stage = idea.status || "new";
+  const ss = STATUS_STYLE[stage] || STATUS_STYLE.new;
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        background: "#18181b", borderRadius: 8,
+        borderTop: "1.5px solid #27272a", borderRight: "1.5px solid #27272a",
+        borderBottom: "1.5px solid #27272a", borderLeft: `3px solid ${ss.text}`,
+        padding: "8px 10px", cursor: "pointer", marginBottom: 6, transition: "opacity 0.12s",
+      }}
+      onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
+      onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
+        <span style={{ fontSize: 10, fontWeight: 800, color: "#a78bfa", background: "#7c3aed22", borderRadius: 4, padding: "1px 6px" }}>{letter}</span>
+        <span style={{ fontSize: 10, fontWeight: 600, color: ss.text, background: ss.bg, borderRadius: 4, padding: "1px 6px" }}>
+          {STAGE_LABEL[stage as IdeaStage] || stage}
+        </span>
+        {idea.content_type && (
+          <span style={{ fontSize: 10, color: "#52525b", background: "#27272a", borderRadius: 4, padding: "1px 5px" }}>{idea.content_type}</span>
+        )}
+      </div>
+      <p style={{ margin: 0, fontSize: 12, fontWeight: 500, color: "#e4e4e7", lineHeight: 1.4,
+        overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
+        {idea.topic || <em style={{ color: "#52525b" }}>Untitled</em>}
+      </p>
+      {idea.video_format && (
+        <p style={{ margin: "4px 0 0", fontSize: 10, color: "#50E0B0", fontWeight: 600 }}>{idea.video_format}</p>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Frontseat tab — current-week ideas organised by page (view layer over Idea Bank)
+// ---------------------------------------------------------------------------
+function FrontseatTab() {
+  const qc = useQueryClient();
+  const { can } = usePermissions();
+  const [addOpen, setAddOpen]       = useState(false);
+  const [detailIdea, setDetailIdea] = useState<any>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+
+  const { data: settings } = useQuery({ queryKey: ["exp-settings"], queryFn: getExpSettings });
+  const currentWeek = useMemo(() => {
+    const start = settings?.experiment_start_date;
+    if (!start) return 1;
+    return computeCurrentWeek(start);
+  }, [settings]);
+
+  const { data: ideas = [], isLoading } = useQuery({
+    queryKey: ["exp-idea-bank", currentWeek, "all"],
+    queryFn: () => getExpIdeaBank({ week: currentWeek }),
+    enabled: !!settings,
+  });
+
+  const createMut = useMutation({
+    mutationFn: createExpIdea,
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }); toast.success("Idea added"); },
+    onError: (e: any) => toast.error(e?.message || "Failed to add idea"),
+  });
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => updateExpIdea(id, data),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["exp-idea-bank"] });
+      setDetailIdea((prev: any) => prev?.id === vars.id ? { ...prev, ...vars.data } : prev);
+    },
+    onError: (e: any) => toast.error(e?.message || "Failed to update"),
+  });
+  const deleteMut = useMutation({
+    mutationFn: deleteExpIdea,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }),
+  });
+
+  // Pool: ideas with status "new", sorted by creation time
+  const poolIdeas = useMemo(() =>
+    (ideas as any[])
+      .filter((i: any) => i.status === "new")
+      .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
+    [ideas]
+  );
+
+  // Assign letters a, b, c… in creation order across all ideas this week
+  const ideaLetterMap = useMemo(() => {
+    const sorted = [...(ideas as any[])].sort((a: any, b: any) =>
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+    const map: Record<string, string> = {};
+    sorted.forEach((idea: any, i: number) => {
+      map[idea.id] = String.fromCharCode(97 + (i % 26));
+    });
+    return map;
+  }, [ideas]);
+
+  const STAGE_ORDER = ["approved", "base_edit", "testing", "proven_ideas", "scheduled", "posted", "kill"];
+
+  // Group non-new ideas into their page columns (idea can appear in multiple columns)
+  const ideasByPage = useMemo(() => {
+    const result: Record<string, any[]> = {};
+    EXP_PAGES.forEach(p => { result[p] = []; });
+    (ideas as any[])
+      .filter((i: any) => i.status !== "new")
+      .forEach((idea: any) => {
+        const pages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+        pages.forEach((p: string) => { if (result[p]) result[p].push(idea); });
+      });
+    EXP_PAGES.forEach(p => {
+      result[p].sort((a: any, b: any) =>
+        STAGE_ORDER.indexOf(a.status) - STAGE_ORDER.indexOf(b.status)
+      );
+    });
+    return result;
+  }, [ideas]);
+
+  const handleDrop = (page: string, e: React.DragEvent) => {
+    e.preventDefault();
+    const ideaId = e.dataTransfer.getData("text/plain");
+    setDropTarget(null); setDraggingId(null);
+    if (!ideaId) return;
+    const idea = (ideas as any[]).find((i: any) => i.id === ideaId);
+    if (!idea) return;
+    const existingPages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+    if (existingPages.includes(page)) return; // already assigned
+    const update: any = { page_handle: [...existingPages, page].join(",") };
+    if (idea.status === "new") update.status = "approved";
+    updateMut.mutate({ id: ideaId, data: update });
+  };
+
+  const legendStages: IdeaStage[] = ["approved", "base_edit", "testing", "proven_ideas", "kill"];
+
+  return (
+    <div style={{ display: "flex", gap: 0, minHeight: "calc(100vh - 220px)" }}>
+
+      {/* ── Left panel: idea pool ── */}
+      <div style={{
+        width: 210, flexShrink: 0, paddingRight: 16, marginRight: 16,
+        borderRight: "1px solid #27272a", display: "flex", flexDirection: "column",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <div>
+            <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "#a1a1aa", textTransform: "uppercase", letterSpacing: "0.06em" }}>Ideas Pool</p>
+            <p style={{ margin: "2px 0 0", fontSize: 10, color: "#52525b" }}>Drag → assign to page</p>
+          </div>
+          {can("add_experiment_idea") && (
+            <button onClick={() => setAddOpen(true)} style={{
+              padding: "4px 10px", background: "#7c3aed", color: "#fff", border: "none",
+              borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer",
+            }}>+ New</button>
+          )}
+        </div>
+
+        {/* Colour legend */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12, padding: "8px 10px", background: "#111113", borderRadius: 7, border: "1px solid #1f1f22" }}>
+          {legendStages.map(s => (
+            <div key={s} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: STATUS_STYLE[s]?.text || "#52525b", flexShrink: 0 }} />
+              <span style={{ fontSize: 10, color: STATUS_STYLE[s]?.text || "#71717a" }}>{STAGE_LABEL[s]}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Pool cards */}
+        <div style={{ flex: 1, overflowY: "auto" }}>
+          {isLoading ? (
+            <p style={{ color: "#52525b", fontSize: 12 }}>Loading…</p>
+          ) : poolIdeas.length === 0 ? (
+            <div style={{ padding: "24px 10px", textAlign: "center", color: "#3f3f46", fontSize: 11, border: "1.5px dashed #27272a", borderRadius: 9 }}>
+              No new ideas yet<br />
+              <span style={{ fontSize: 10 }}>Add one above</span>
+            </div>
+          ) : (
+            poolIdeas.map((idea: any) => (
+              <div key={idea.id} style={{ opacity: draggingId === idea.id ? 0.4 : 1, transition: "opacity 0.12s" }}>
+                <FrontseatPoolCard
+                  idea={idea}
+                  letter={ideaLetterMap[idea.id] || "?"}
+                  onDragStart={() => setDraggingId(idea.id)}
+                  onClick={() => setDetailIdea(idea)}
+                />
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* ── Right panel: page columns ── */}
+      <div style={{ flex: 1, overflowX: "auto", display: "flex", gap: 10, paddingBottom: 20, alignItems: "flex-start" }}>
+        {EXP_PAGES.map(page => {
+          const short    = PAGE_SHORT[page] || page;
+          const color    = PAGE_COLORS[page] || "#a1a1aa";
+          const colIdeas = ideasByPage[page] || [];
+          const isDrop   = dropTarget === page;
+
+          return (
+            <div
+              key={page}
+              style={{ minWidth: 195, flex: "1 0 195px", maxWidth: 250 }}
+              onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropTarget(page); }}
+              onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTarget(null); }}
+              onDrop={e => handleDrop(page, e)}
+            >
+              {/* Column header */}
+              <div style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "6px 8px 8px", marginBottom: 4,
+                borderBottom: `2px solid ${color}30`,
+              }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
+                <span style={{ fontSize: 13, fontWeight: 700, color, letterSpacing: "-0.01em" }}>{short}</span>
+                {colIdeas.length > 0 && (
+                  <span style={{ fontSize: 10, color: "#52525b", fontWeight: 500 }}>{colIdeas.length}</span>
+                )}
+              </div>
+
+              {/* Drop zone + cards */}
+              <div style={{
+                minHeight: 120, padding: "6px 4px", borderRadius: 9,
+                border: isDrop ? "2px dashed #7c3aed" : "2px dashed transparent",
+                background: isDrop ? "rgba(124,58,237,0.05)" : "transparent",
+                transition: "all 0.12s",
+              }}>
+                {colIdeas.length === 0 && !isDrop && (
+                  <div style={{ padding: "24px 10px", textAlign: "center", color: "#3f3f46", fontSize: 10 }}>
+                    Drop an idea here
+                  </div>
+                )}
+                {colIdeas.map((idea: any) => (
+                  <FrontseatPageCard
+                    key={idea.id}
+                    idea={idea}
+                    letter={ideaLetterMap[idea.id] || "?"}
+                    onClick={() => setDetailIdea(idea)}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <QuickAddModal open={addOpen} onAdd={data => createMut.mutate(data)} onClose={() => setAddOpen(false)} />
+      {detailIdea && (
+        <IdeaDetailModal
+          idea={detailIdea}
+          onUpdate={(id, data) => updateMut.mutate({ id, data })}
+          onDelete={id => deleteMut.mutate(id)}
+          onClose={() => setDetailIdea(null)}
+        />
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
@@ -1498,11 +1926,13 @@ export default function ExperimentX() {
   const [search, setSearch] = useState("");
 
   const tabColors: Record<TabMode, string> = {
+    "frontseat":     "#7c3aed",
     "idea-bank":     "#3f3f46",
     "content-bank":  "#1A5E3A",
     "working-ideas": "#534AB7",
   };
   const tabLabels: Record<TabMode, string> = {
+    "frontseat":     "Frontseat",
     "idea-bank":     "Idea Bank",
     "content-bank":  "Content Bank",
     "working-ideas": "Proven Ideas",
@@ -1530,7 +1960,7 @@ export default function ExperimentX() {
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22, flexWrap: "wrap" }}>
         {/* Tab switcher */}
         <div style={{ display: "flex", background: "#27272a", borderRadius: 7, overflow: "hidden", border: "1px solid #3f3f46" }}>
-          {(["idea-bank", "content-bank", "working-ideas"] as TabMode[]).map(t => (
+          {(["frontseat", "idea-bank", "content-bank", "working-ideas"] as TabMode[]).map(t => (
             <button
               key={t}
               onClick={() => { setTab(t); setSearch(""); }}
@@ -1561,7 +1991,8 @@ export default function ExperimentX() {
       </div>
 
       {/* Tab content */}
-      <div style={{ maxWidth: tab === "idea-bank" ? "none" : 860 }}>
+      <div style={{ maxWidth: (tab === "idea-bank" || tab === "frontseat") ? "none" : 860 }}>
+        {tab === "frontseat"     && <FrontseatTab />}
         {tab === "idea-bank"     && <IdeaBankTab    pageFilter={pageFilter} search={search} />}
         {tab === "content-bank"  && <ContentBankTab pageFilter={pageFilter} search={search} />}
         {tab === "working-ideas" && <WorkingIdeasTab pageFilter={pageFilter} search={search} />}
