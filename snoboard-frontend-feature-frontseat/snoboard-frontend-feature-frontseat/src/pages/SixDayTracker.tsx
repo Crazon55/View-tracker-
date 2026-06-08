@@ -28,41 +28,52 @@ function fmt(n: number): string {
 
 const normHandle = (h: string) => String(h || "").replace(/^@/, "").trim().toLowerCase();
 
-/** Garfields Week 4 roster — cycle 4+ and all future months. */
+/** Garfields — Swati (indiabusinesscom, entrepreneursindia.co, therealfoundr) + Deepak/Kaavya (startupbydog, bizzindia) */
 const GARFIELD_WEEK4_HANDLES = [
   "bizzindia",
-  "indianfoundersco",
   "startupbydog",
   "indiabusinesscom",
   "entrepreneursindia.co",
   "therealfoundr",
 ] as const;
 
+/** Goofies — Arohi + Harish */
 const GOOFIES_ACTIVE_HANDLES = [
   "101xfounders",
   "foundersinindia",
-  "startupsinthelast24hrs",
   "startupcoded",
-  "entrepreneurial.india",
 ] as const;
 
-const SHERUS_ACTIVE_HANDLES = ["thechangingorder"] as const;
+/** Sherus — Sugam (thechangingorder) + Chaitanya (startupwtf, 101xtechnology) */
+const SHERUS_ACTIVE_HANDLES = [
+  "thechangingorder",
+  "startupwtf",
+  "101xtechnology",
+] as const;
 
+/** Experiment X — Pulkit */
 const EXPERIMENT_X_HANDLES = [
+  "indianfoundersco",
   "indiastartupstory",
   "indianbusinesscom",
   "indiafoundersscore",
   "indianfoundersdaily",
 ] as const;
 
+// Hardcoded to preserve May 2026 (Week 3) history — do not derive from the above constants.
 const ACTIVE_ROSTER_WEEK3 = new Set([
   "bizzindia",
   "indianfoundersco",
   "startupbydog",
   "indianbusinesscom",
   "entrepreneursindia.co",
-  ...GOOFIES_ACTIVE_HANDLES,
-  ...SHERUS_ACTIVE_HANDLES,
+  "101xfounders",
+  "foundersinindia",
+  "startupsinthelast24hrs",
+  "startupcoded",
+  "indiastartupstory",
+  "entrepreneurial.india",
+  "thechangingorder",
 ]);
 
 const ACTIVE_ROSTER_WEEK4 = new Set([
