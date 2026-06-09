@@ -19,7 +19,7 @@ const EXP_PAGES = [
   "indianbusinesscom",
   "indiastartupstory",
   "indiafounderscore",
-  "indianfoundersdaily",
+  "indiafounderbrief",
 ] as const;
 
 const PAGE_COLORS: Record<string, string> = {
@@ -27,7 +27,7 @@ const PAGE_COLORS: Record<string, string> = {
   indianbusinesscom:   "#50E0B0",
   indiastartupstory:   "#F0C060",
   indiafounderscore:   "#B49EFF",
-  indianfoundersdaily: "#FF9580",
+  indiafounderbrief: "#FF9580",
 };
 
 const STAGES = ["new","approved","base_edit","testing","proven_ideas","scheduled","posted","kill"] as const;
@@ -1703,7 +1703,7 @@ const PAGE_SHORT: Record<string, string> = {
   indianbusinesscom:   "IBC",
   indianfoundersco:    "IFC",
   indiafounderscore:   "IFC2",
-  indianfoundersdaily: "IFB",
+  indiafounderbrief: "IFB",
   indiastartupstory:   "ISS",
 };
 
