@@ -595,25 +595,69 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose }: {
         {stage === "testing" && (
           <div>
             <label style={ls}>Testing result</label>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {TEST_RESULTS.map(({ value, label, color, bg }) => {
-                const active = idea.test_result === value;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => onUpdate(idea.id, { test_result: active ? "" : value })}
-                    style={{
-                      padding: "7px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600,
-                      cursor: "pointer",
-                      border: active ? `2px solid ${color}` : "1.5px solid #3f3f46",
-                      background: active ? bg : "#18181b",
-                      color: active ? color : "#71717a",
-                    }}
-                  >{label}</button>
-                );
-              })}
-            </div>
+            {selectedPages.length > 1 ? (
+              /* Per-page test results */
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {selectedPages.map((pg: string) => {
+                  const pgc = PAGE_COLORS[pg] || "#a1a1aa";
+                  const pgResult = ((idea.page_test_results || {}) as Record<string, string>)[pg] || "";
+                  return (
+                    <div key={pg}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: "50%", background: pgc, flexShrink: 0 }} />
+                        <span style={{ fontSize: 11, fontWeight: 700, color: pgc }}>{pg}</span>
+                      </div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {TEST_RESULTS.map(({ value, label, color, bg }) => {
+                          const active = pgResult === value;
+                          return (
+                            <button
+                              key={value}
+                              type="button"
+                              onClick={() => {
+                                const updated: Record<string, string> = { ...(idea.page_test_results || {}), [pg]: active ? "" : value };
+                                if (!updated[pg]) delete updated[pg];
+                                // derive overall test_result as the best result across all pages
+                                const RANK: Record<string, number> = { top_line: 4, above_baseline: 3, baseline: 2, below_baseline: 1 };
+                                const best = Object.values(updated).reduce<string>((b, c) => (RANK[c] || 0) > (RANK[b] || 0) ? c : b, "");
+                                onUpdate(idea.id, { page_test_results: updated, test_result: best });
+                              }}
+                              style={{
+                                padding: "6px 13px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer",
+                                border: active ? `2px solid ${color}` : "1.5px solid #3f3f46",
+                                background: active ? bg : "#18181b",
+                                color: active ? color : "#71717a",
+                              }}
+                            >{label}</button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              /* Single-page test result */
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {TEST_RESULTS.map(({ value, label, color, bg }) => {
+                  const active = idea.test_result === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => onUpdate(idea.id, { test_result: active ? "" : value })}
+                      style={{
+                        padding: "7px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+                        cursor: "pointer",
+                        border: active ? `2px solid ${color}` : "1.5px solid #3f3f46",
+                        background: active ? bg : "#18181b",
+                        color: active ? color : "#71717a",
+                      }}
+                    >{label}</button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 

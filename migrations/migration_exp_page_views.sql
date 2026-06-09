@@ -6,3 +6,9 @@ ALTER TABLE exp_idea_bank
 
 ALTER TABLE exp_content_bank
   ADD COLUMN IF NOT EXISTS page_views JSONB NOT NULL DEFAULT '{}';
+
+-- Add per-page test results JSON column to exp_idea_bank
+-- Stores {page_handle: result} map, e.g. {"indianfoundersco": "above_baseline", "indianbusinesscom": "top_line"}
+
+ALTER TABLE exp_idea_bank
+  ADD COLUMN IF NOT EXISTS page_test_results JSONB NOT NULL DEFAULT '{}';

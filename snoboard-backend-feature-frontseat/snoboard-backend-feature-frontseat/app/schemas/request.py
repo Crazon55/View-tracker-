@@ -192,6 +192,7 @@ class ExpIdeaUpdate(BaseModel):
     status: str | None = None
     views: int | None = None
     page_views: dict | None = None
+    page_test_results: dict | None = None
     day_date: str | None = None
     source: str | None = None
     hook_variations: str | None = None

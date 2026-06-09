@@ -657,7 +657,7 @@ export const createExpIdea = (data: {
 
 export const updateExpIdea = (id: string, data: {
   page_handle?: string; content_type?: string; topic?: string;
-  script?: string; status?: string; views?: number; page_views?: Record<string, number>; day_date?: string;
+  script?: string; status?: string; views?: number; page_views?: Record<string, number>; page_test_results?: Record<string, string>; day_date?: string;
   hook_variations?: string; music_ref?: string; frame_link?: string;
   yt_url?: string; yt_timestamps?: string; comp_link?: string;
   currently_editing_by?: string; edited_by?: string; test_result?: string; video_format?: string;
