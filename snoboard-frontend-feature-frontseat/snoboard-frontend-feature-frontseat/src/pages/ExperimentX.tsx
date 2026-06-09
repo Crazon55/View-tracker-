@@ -1973,11 +1973,14 @@ function FrontseatTab() {
     [ideas]
   );
 
-  // Pool = permanent ideas added via Frontseat "+ New" (frontseat_pool: true, never change status).
-  // Copies (frontseat_pool: false, source_pool_id set) go through the pipeline on page columns.
+  // Pool = permanent ideas added via Frontseat "+ New".
+  // After migration: frontseat_pool === true. Before migration runs (column is null): fall back to status === "new".
   const poolIdeas = useMemo(() =>
     todayIdeas
-      .filter((i: any) => i.frontseat_pool === true)
+      .filter((i: any) =>
+        i.frontseat_pool === true ||
+        (i.frontseat_pool == null && i.status === "new")
+      )
       .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
     [todayIdeas]
   );
@@ -1991,7 +1994,8 @@ function FrontseatTab() {
     return map;
   }, [poolIdeas]);
 
-  // Page columns: only copies (frontseat_pool !== true), each has page_handle = single page
+  // Page columns: copies only (frontseat_pool === false or null before migration).
+  // !i.frontseat_pool covers both false and null, so old pre-migration ideas still appear.
   const ideasByPage = useMemo(() => {
     const result: Record<string, any[]> = {};
     EXP_PAGES.forEach(p => { result[p] = []; });
