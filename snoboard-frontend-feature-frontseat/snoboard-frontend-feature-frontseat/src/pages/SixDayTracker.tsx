@@ -28,8 +28,9 @@ function fmt(n: number): string {
 
 const normHandle = (h: string) => String(h || "").replace(/^@/, "").trim().toLowerCase();
 
-/** Garfields — Swati (indianbusinesscom, entrepreneursindia.co, therealfoundr) + Deepak/Kaavya (startupbydog, bizzindia) */
+/** Garfields — Swati (indianbusinesscom, entrepreneursindia.co, therealfoundr) + Deepak/Kaavya (startupbydog, bizzindia) + indianfoundersco */
 const GARFIELD_WEEK4_HANDLES = [
+  "indianfoundersco",
   "bizzindia",
   "startupbydog",
   "indianbusinesscom",
