@@ -1953,27 +1953,77 @@ function FrontseatTab() {
     enabled: !!settings,
   });
 
+  const QK = ["exp-idea-bank", currentWeek, "all"] as const;
+
   const createMut = useMutation({
     mutationFn: createExpIdea,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }); toast.success("Idea added"); },
-    onError: (e: any) => toast.error(e?.message || "Failed to add idea"),
+    onMutate: async (newData) => {
+      await qc.cancelQueries({ queryKey: QK });
+      const prev = qc.getQueryData(QK);
+      const optimistic = {
+        id: `temp-${Date.now()}`, ...newData,
+        frontseat_pool: true, week_number: currentWeek,
+        created_at: new Date().toISOString(), views: 0,
+        page_views: {}, page_test_results: {},
+      };
+      qc.setQueryData(QK, (old: any[] = []) => [...old, optimistic]);
+      return { prev };
+    },
+    onSuccess: () => toast.success("Idea added"),
+    onError: (e: any, _v, ctx: any) => {
+      if (ctx?.prev) qc.setQueryData(QK, ctx.prev);
+      toast.error(e?.message || "Failed to add idea");
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }),
   });
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => updateExpIdea(id, data),
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ["exp-idea-bank"] });
-      setDetailIdea((prev: any) => prev?.id === vars.id ? { ...prev, ...vars.data } : prev);
+    onMutate: async ({ id, data }) => {
+      await qc.cancelQueries({ queryKey: QK });
+      const prev = qc.getQueryData(QK);
+      qc.setQueryData(QK, (old: any[] = []) => old.map((i: any) => i.id === id ? { ...i, ...data } : i));
+      setDetailIdea((p: any) => p?.id === id ? { ...p, ...data } : p);
+      return { prev };
     },
-    onError: (e: any) => toast.error(e?.message || "Failed to update"),
+    onError: (e: any, _v, ctx: any) => {
+      if (ctx?.prev) qc.setQueryData(QK, ctx.prev);
+      toast.error(e?.message || "Failed to update");
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["exp-idea-bank"] });
+      qc.invalidateQueries({ queryKey: ["exp-working-ideas"] });
+    },
   });
   const deleteMut = useMutation({
     mutationFn: deleteExpIdea,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }),
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: QK });
+      const prev = qc.getQueryData(QK);
+      qc.setQueryData(QK, (old: any[] = []) => old.filter((i: any) => i.id !== id));
+      return { prev };
+    },
+    onError: (_e, _v, ctx: any) => { if (ctx?.prev) qc.setQueryData(QK, ctx.prev); },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }),
   });
   const createCopyMut = useMutation({
     mutationFn: createExpIdea,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }),
-    onError: (e: any) => toast.error(e?.message || "Failed to assign idea"),
+    onMutate: async (newData) => {
+      await qc.cancelQueries({ queryKey: QK });
+      const prev = qc.getQueryData(QK);
+      const optimistic = {
+        id: `temp-copy-${Date.now()}`, ...newData,
+        frontseat_pool: false, week_number: currentWeek,
+        created_at: new Date().toISOString(), views: 0,
+        page_views: {}, page_test_results: {},
+      };
+      qc.setQueryData(QK, (old: any[] = []) => [...old, optimistic]);
+      return { prev };
+    },
+    onError: (e: any, _v, ctx: any) => {
+      if (ctx?.prev) qc.setQueryData(QK, ctx.prev);
+      toast.error(e?.message || "Failed to assign idea");
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }),
   });
 
   // Frontseat is a TODAY view — filter to the current calendar day
