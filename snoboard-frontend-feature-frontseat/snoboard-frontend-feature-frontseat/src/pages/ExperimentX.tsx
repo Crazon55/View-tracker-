@@ -1947,13 +1947,15 @@ function FrontseatTab() {
     return computeCurrentWeek(start);
   }, [settings]);
 
+  // Fetch by today's local date directly — no settings waterfall, loads immediately on page open
+  const todayStr = toLocalISO(new Date());
   const { data: ideas = [], isLoading } = useQuery({
-    queryKey: ["exp-idea-bank", currentWeek, "all"],
-    queryFn: () => getExpIdeaBank({ week: currentWeek }),
-    enabled: !!settings,
+    queryKey: ["exp-idea-bank", "today", todayStr],
+    queryFn: () => getExpIdeaBank({ day_date: todayStr }),
+    staleTime: 30 * 1000,
   });
 
-  const QK = ["exp-idea-bank", currentWeek, "all"] as const;
+  const QK = ["exp-idea-bank", "today", todayStr] as const;
 
   const createMut = useMutation({
     mutationFn: createExpIdea,
@@ -2026,11 +2028,10 @@ function FrontseatTab() {
     onSettled: () => qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }),
   });
 
-  // Frontseat is a TODAY view — filter to the current calendar day
-  const todayStr = toLocalISO(new Date());
+  // Backend already filters to today; this guards against any stale optimistic entries
   const todayIdeas = useMemo(() =>
     (ideas as any[]).filter((i: any) => (i.day_date || "").slice(0, 10) === todayStr),
-    [ideas]
+    [ideas, todayStr]
   );
 
   // Pool = permanent ideas added via Frontseat "+ New".
@@ -2075,7 +2076,7 @@ function FrontseatTab() {
     e.preventDefault();
     const ideaId = e.dataTransfer.getData("text/plain");
     setDropTarget(null); setDraggingId(null);
-    if (!ideaId) return;
+    if (!ideaId || ideaId.startsWith("temp-")) return; // wait for real DB id
     const idea = (ideas as any[]).find((i: any) => i.id === ideaId);
     if (!idea || !idea.frontseat_pool) return;
     // Prevent duplicate copies for the same pool idea + page combo

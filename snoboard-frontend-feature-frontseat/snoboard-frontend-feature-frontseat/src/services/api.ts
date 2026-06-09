@@ -639,9 +639,10 @@ export const getExpSettings = () =>
 export const updateExpSettings = (data: { view_goal?: number; experiment_start_date?: string }) =>
   fetchApi<any>("/api/v1/experiment/settings", { method: "PATCH", body: JSON.stringify(data) });
 
-export const getExpIdeaBank = (params?: { week?: number; page?: string }) => {
+export const getExpIdeaBank = (params?: { week?: number; page?: string; day_date?: string }) => {
   const q = new URLSearchParams();
-  if (params?.week != null) q.set("week", String(params.week));
+  if (params?.day_date) q.set("day_date", params.day_date);
+  else if (params?.week != null) q.set("week", String(params.week));
   if (params?.page) q.set("page", params.page);
   const qs = q.toString();
   return fetchApi<any[]>(`/api/v1/experiment/idea-bank${qs ? `?${qs}` : ""}`);

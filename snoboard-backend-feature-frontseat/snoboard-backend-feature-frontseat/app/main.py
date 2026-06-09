@@ -5376,10 +5376,12 @@ async def exp_update_settings(req: ExpSettingsUpdate):
 
 
 @app.get("/api/v1/experiment/idea-bank")
-async def exp_list_idea_bank(week: int | None = None, page: str | None = None):
+async def exp_list_idea_bank(week: int | None = None, page: str | None = None, day_date: str | None = None):
     client = get_supabase_client()
     q = client.table("exp_idea_bank").select("*").order("day_date", desc=False).order("created_at", desc=False)
-    if week is not None:
+    if day_date:
+        q = q.eq("day_date", day_date)
+    elif week is not None:
         q = q.eq("week_number", week)
     if page:
         q = q.eq("page_handle", page)
