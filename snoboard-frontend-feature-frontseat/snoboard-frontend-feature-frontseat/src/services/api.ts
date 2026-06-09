@@ -653,6 +653,9 @@ export const getExpIdeaById = (id: string) =>
 export const createExpIdea = (data: {
   page_handle: string; content_type?: string; topic?: string;
   script?: string; status?: string; views?: number; day_date?: string;
+  frontseat_pool?: boolean; source_pool_id?: string;
+  source?: string; video_format?: string; comp_link?: string;
+  yt_url?: string; yt_timestamps?: string; created_by?: string;
 }) => fetchApi<any>("/api/v1/experiment/idea-bank", { method: "POST", body: JSON.stringify(data) });
 
 export const updateExpIdea = (id: string, data: {

@@ -370,11 +370,12 @@ function SafeArea({ value, onSave, placeholder, rows }: { value: string; onSave:
 // ---------------------------------------------------------------------------
 // Idea detail modal — full Content Tracker parity
 // ---------------------------------------------------------------------------
-function IdeaDetailModal({ idea, onUpdate, onDelete, onClose }: {
+function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions }: {
   idea: any;
   onUpdate: (id: string, data: any) => void;
   onDelete?: (id: string) => void;
   onClose: () => void;
+  hideStageActions?: boolean;
 }) {
   const stage = idea.status || "new";
   const ss = STATUS_STYLE[stage] || STATUS_STYLE.new;
@@ -430,7 +431,7 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose }: {
         </div>
 
         {/* Stage action buttons */}
-        {actions.length > 0 && (
+        {!hideStageActions && actions.length > 0 && (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {actions.map(a => (
               <button
@@ -1256,8 +1257,9 @@ function IdeaBankTab({ pageFilter, search }: { pageFilter: string; search: strin
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    if (!q) return ideas;
-    return ideas.filter((i: any) =>
+    const base = (ideas as any[]).filter((i: any) => !i.frontseat_pool);
+    if (!q) return base;
+    return base.filter((i: any) =>
       (i.topic || "").toLowerCase().includes(q) || (i.script || "").toLowerCase().includes(q)
     );
   }, [ideas, search]);
@@ -1275,7 +1277,7 @@ function IdeaBankTab({ pageFilter, search }: { pageFilter: string; search: strin
     <div>
       {/* Toolbar */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 12, color: "#71717a" }}>Week {currentWeek} · {ideas.length} idea{ideas.length !== 1 ? "s" : ""}</span>
+        <span style={{ fontSize: 12, color: "#71717a" }}>Week {currentWeek} · {filtered.length} idea{filtered.length !== 1 ? "s" : ""}</span>
         {can('add_experiment_idea') && (
           <button onClick={() => setAddOpen(true)} style={{ ...btnPrimary, padding: "5px 14px" }}>
             + New idea
@@ -1734,6 +1736,7 @@ function QuickAddModal({ open, onAdd, onClose }: {
       yt_url: source === "original" ? ytUrl : "",
       yt_timestamps: source === "original" ? ytTs : "",
       created_by: createdBy, day_date: toLocalISO(new Date()),
+      frontseat_pool: true,
     });
     reset(); onClose();
   };
@@ -1957,6 +1960,11 @@ function FrontseatTab() {
     mutationFn: deleteExpIdea,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }),
   });
+  const createCopyMut = useMutation({
+    mutationFn: createExpIdea,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }),
+    onError: (e: any) => toast.error(e?.message || "Failed to assign idea"),
+  });
 
   // Frontseat is a TODAY view — filter to the current calendar day
   const todayStr = toLocalISO(new Date());
@@ -1965,11 +1973,11 @@ function FrontseatTab() {
     [ideas]
   );
 
-  // Pool = only ideas added via Frontseat "+New idea" today (status stays "new" always).
-  // Dragging NEVER changes status — that's what keeps them in the pool permanently.
+  // Pool = permanent ideas added via Frontseat "+ New" (frontseat_pool: true, never change status).
+  // Copies (frontseat_pool: false, source_pool_id set) go through the pipeline on page columns.
   const poolIdeas = useMemo(() =>
     todayIdeas
-      .filter((i: any) => i.status === "new")
+      .filter((i: any) => i.frontseat_pool === true)
       .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
     [todayIdeas]
   );
@@ -1983,11 +1991,11 @@ function FrontseatTab() {
     return map;
   }, [poolIdeas]);
 
-  // Page columns: today's ideas assigned to that page, sorted by creation order
+  // Page columns: only copies (frontseat_pool !== true), each has page_handle = single page
   const ideasByPage = useMemo(() => {
     const result: Record<string, any[]> = {};
     EXP_PAGES.forEach(p => { result[p] = []; });
-    todayIdeas.forEach((idea: any) => {
+    todayIdeas.filter((i: any) => !i.frontseat_pool).forEach((idea: any) => {
       const pages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
       pages.forEach((p: string) => { if (result[p]) result[p].push(idea); });
     });
@@ -2005,11 +2013,23 @@ function FrontseatTab() {
     setDropTarget(null); setDraggingId(null);
     if (!ideaId) return;
     const idea = (ideas as any[]).find((i: any) => i.id === ideaId);
-    if (!idea) return;
+    if (!idea || !idea.frontseat_pool) return;
+    // Prevent duplicate copies for the same pool idea + page combo
+    const alreadyAssigned = (ideasByPage[page] || []).some((c: any) => c.source_pool_id === ideaId);
+    if (alreadyAssigned) return;
+    // Create a pipeline copy for this page
+    createCopyMut.mutate({
+      topic: idea.topic, source: idea.source, content_type: idea.content_type,
+      video_format: idea.video_format || "", status: "new", page_handle: page,
+      comp_link: idea.comp_link || "", yt_url: idea.yt_url || "",
+      yt_timestamps: idea.yt_timestamps || "", created_by: idea.created_by || "",
+      day_date: todayStr, frontseat_pool: false, source_pool_id: ideaId,
+    });
+    // Track assigned pages on pool idea (for chip display)
     const existingPages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
-    if (existingPages.includes(page)) return;
-    // Only update page_handle — NEVER touch status so pool ideas stay in pool
-    updateMut.mutate({ id: ideaId, data: { page_handle: [...existingPages, page].join(",") } });
+    if (!existingPages.includes(page)) {
+      updateMut.mutate({ id: ideaId, data: { page_handle: [...existingPages, page].join(",") } });
+    }
   };
 
   const legendStages: IdeaStage[] = ["approved", "base_edit", "testing", "proven_ideas", "kill"];
@@ -2133,12 +2153,18 @@ function FrontseatTab() {
                   <FrontseatPageCard
                     key={idea.id}
                     idea={idea}
-                    letter={ideaLetterMap[idea.id] || "?"}
+                    letter={ideaLetterMap[idea.source_pool_id] || "?"}
                     onClick={() => setDetailIdea(idea)}
                     onRemoveFromPage={() => {
-                      const remaining = (idea.page_handle || "")
-                        .split(",").map((s: string) => s.trim()).filter((p: string) => p && p !== page);
-                      updateMut.mutate({ id: idea.id, data: { page_handle: remaining.join(",") } });
+                      // Delete the copy
+                      deleteMut.mutate(idea.id);
+                      // Remove page from pool idea's chip tracking
+                      const poolIdea = poolIdeas.find((pi: any) => pi.id === idea.source_pool_id);
+                      if (poolIdea) {
+                        const remaining = (poolIdea.page_handle || "")
+                          .split(",").map((s: string) => s.trim()).filter((p: string) => p && p !== page);
+                        updateMut.mutate({ id: poolIdea.id, data: { page_handle: remaining.join(",") } });
+                      }
                     }}
                   />
                 ))}
@@ -2154,6 +2180,7 @@ function FrontseatTab() {
           idea={detailIdea}
           onUpdate={(id, data) => updateMut.mutate({ id, data })}
           onClose={() => setDetailIdea(null)}
+          hideStageActions={detailIdea.frontseat_pool === true}
         />
       )}
     </div>
