@@ -293,6 +293,38 @@ function PostedViewsInput({ value, onSave }: { value: number; onSave: (v: number
   );
 }
 
+// Compact per-page views input (used in multi-page ideas)
+function PerPageViewInput({ value, pageColor, onSave }: { value: number; pageColor: string; onSave: (v: number) => void }) {
+  const [draft, setDraft] = useState(value > 0 ? String(value) : "");
+  const dirty = useRef(false);
+  useEffect(() => { if (!dirty.current) setDraft(value > 0 ? String(value) : ""); }, [value]);
+  const save = () => {
+    dirty.current = false;
+    const n = parseInt(draft.replace(/[^0-9]/g, ""), 10);
+    if (!isNaN(n) && n !== value) onSave(n);
+  };
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={draft}
+        placeholder="e.g. 85000"
+        onChange={e => { dirty.current = true; setDraft(e.target.value); }}
+        onBlur={save}
+        onKeyDown={e => { if (e.key === "Enter") save(); }}
+        style={{
+          width: 140, padding: "7px 11px", border: `1.5px solid ${pageColor}66`,
+          borderRadius: 8, fontSize: 13, fontWeight: 700,
+          outline: "none", background: "#09090b", color: pageColor,
+          boxSizing: "border-box",
+        }}
+      />
+      {value > 0 && <span style={{ fontSize: 12, color: pageColor, fontWeight: 600 }}>{fmt(value)}</span>}
+    </div>
+  );
+}
+
 // Stage action buttons — same progression as Content Tracker
 const STAGE_ACTIONS: Record<string, { label: string; stage: string; bg: string; color: string }[]> = {
   new:          [{ label: "Approve", stage: "approved", bg: "#7c3aed", color: "#fff" }, { label: "Reject", stage: "kill", bg: "transparent", color: "#C93B3B" }],
@@ -509,18 +541,55 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose }: {
           {idea.comp_link && <a href={idea.comp_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block", marginTop: 4 }}>{idea.comp_link}</a>}
         </div>
 
-        {/* Views — always-visible input when posted, click-to-edit otherwise */}
-        <div>
-          <label style={ls}>Views</label>
-          {stage === "posted" ? (
-            <PostedViewsInput value={idea.views || 0} onSave={v => onUpdate(idea.id, { views: v })} />
-          ) : (
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <ViewsEdit value={idea.views || 0} onSave={v => onUpdate(idea.id, { views: v })} />
-              <span style={{ fontSize: 11, color: "#52525b" }}>(click to edit)</span>
+        {/* Per-page views — shown when 2+ pages are selected */}
+        {selectedPages.length > 1 ? (
+          <div>
+            <label style={ls}>Views per page</label>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {selectedPages.map((pg: string) => {
+                const pgc = PAGE_COLORS[pg] || "#a1a1aa";
+                const pgViews = ((idea.page_views || {}) as Record<string, number>)[pg] || 0;
+                return (
+                  <div key={pg} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, color: pgc,
+                      background: pgc + "22", borderRadius: 5, padding: "3px 10px",
+                      minWidth: 140, textAlign: "center",
+                    }}>{pg}</span>
+                    <PerPageViewInput
+                      value={pgViews}
+                      pageColor={pgc}
+                      onSave={v => {
+                        const updated: Record<string, number> = { ...(idea.page_views || {}), [pg]: v };
+                        const total = Object.values(updated).reduce((acc, val) => acc + (Number(val) || 0), 0);
+                        onUpdate(idea.id, { page_views: updated, views: total });
+                      }}
+                    />
+                  </div>
+                );
+              })}
+              {(idea.views || 0) > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 4, borderTop: "1px solid #27272a" }}>
+                  <span style={{ fontSize: 11, color: "#71717a", fontWeight: 600 }}>Total</span>
+                  <span style={{ fontSize: 13, color: "#50E0B0", fontWeight: 700 }}>{fmt(idea.views)}</span>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          /* Single page or no pages — always-visible input when posted, click-to-edit otherwise */
+          <div>
+            <label style={ls}>Views</label>
+            {stage === "posted" ? (
+              <PostedViewsInput value={idea.views || 0} onSave={v => onUpdate(idea.id, { views: v })} />
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <ViewsEdit value={idea.views || 0} onSave={v => onUpdate(idea.id, { views: v })} />
+                <span style={{ fontSize: 11, color: "#52525b" }}>(click to edit)</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Test result — only in Testing stage */}
         {stage === "testing" && (
@@ -743,29 +812,58 @@ function WorkingIdeaDetailModal({ item, onClose }: { item: any; onClose: () => v
   );
 }
 
+// Rank badge config — only within Proven Ideas
+const RANK_CONFIG: Record<number, { text: string; bg: string; border: string; label: string }> = {
+  1: { text: "#F0C060", bg: "rgba(240,192,96,0.12)", border: "rgba(240,192,96,0.4)", label: "#1" },
+  2: { text: "#C0C8D8", bg: "rgba(192,200,216,0.08)", border: "rgba(192,200,216,0.25)", label: "#2" },
+  3: { text: "#CD9060", bg: "rgba(205,144,96,0.08)", border: "rgba(205,144,96,0.25)", label: "#3" },
+};
+
 // ---------------------------------------------------------------------------
 // Working idea card
 // ---------------------------------------------------------------------------
-function WorkingRow({ item, onDistribute }: { item: any; onDistribute: (id: string) => void }) {
+function WorkingRow({ item, rank, onDistribute }: { item: any; rank: number; onDistribute: (id: string) => void }) {
   const [detailOpen, setDetailOpen] = useState(false);
   const pages = (item.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+  const rankCfg = RANK_CONFIG[rank];
+
+  const borderColor = rankCfg
+    ? rankCfg.border
+    : item.distributed ? "#27272a" : "#4c1d95";
+  const hoverBorder = rankCfg
+    ? rankCfg.text + "99"
+    : item.distributed ? "#3f3f46" : "#7c3aed";
 
   return (
     <>
       <div
         onClick={() => setDetailOpen(true)}
         style={{
-          background: "#111113",
-          border: `1px solid ${item.distributed ? "#27272a" : "#4c1d95"}`,
+          background: rankCfg ? rankCfg.bg : "#111113",
+          border: `1px solid ${borderColor}`,
+          borderLeft: rankCfg ? `3px solid ${rankCfg.text}` : undefined,
           borderRadius: 8, overflow: "hidden",
           opacity: item.distributed ? 0.6 : 1,
           cursor: "pointer",
           transition: "border-color 0.12s",
         }}
-        onMouseEnter={e => (e.currentTarget.style.borderColor = item.distributed ? "#3f3f46" : "#7c3aed")}
-        onMouseLeave={e => (e.currentTarget.style.borderColor = item.distributed ? "#27272a" : "#4c1d95")}
+        onMouseEnter={e => (e.currentTarget.style.borderColor = hoverBorder)}
+        onMouseLeave={e => (e.currentTarget.style.borderColor = borderColor)}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", flexWrap: "wrap" }}>
+          {/* Rank badge */}
+          {rankCfg ? (
+            <span style={{
+              fontSize: 10, fontWeight: 800, color: rankCfg.text,
+              background: rankCfg.bg, border: `1px solid ${rankCfg.border}`,
+              borderRadius: 4, padding: "1px 7px", flexShrink: 0,
+            }}>{rankCfg.label}</span>
+          ) : (
+            <span style={{ fontSize: 10, color: "#3f3f46", minWidth: 22, textAlign: "right", flexShrink: 0 }}>
+              #{rank}
+            </span>
+          )}
+
           {pages.map((pg: string) => {
             const pgc = PAGE_COLORS[pg] || "#a1a1aa";
             return <span key={pg} style={{ fontSize: 10, fontWeight: 700, color: pgc, background: pgc + "22", borderRadius: 4, padding: "2px 7px" }}>{pg}</span>;
@@ -781,7 +879,7 @@ function WorkingRow({ item, onDistribute }: { item: any; onDistribute: (id: stri
               <span style={{ color: "#52525b", fontSize: 10 }}>by </span>{item.created_by}
             </span>
           )}
-          <span style={{ fontSize: 13, fontWeight: 700, color: "#50E0B0", whiteSpace: "nowrap" }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: rankCfg ? rankCfg.text : "#50E0B0", whiteSpace: "nowrap" }}>
             {fmt(item.views_achieved)}
           </span>
           {item.distributed ? (
@@ -1411,6 +1509,7 @@ function WorkingIdeasTab({ pageFilter, search }: { pageFilter: string; search: s
   const qc = useQueryClient();
   const [editingGoal, setEditingGoal] = useState(false);
   const [goalDraft, setGoalDraft] = useState("");
+  const [sortBy, setSortBy] = useState<"views" | "date">("views");
 
   const { data: settings } = useQuery({ queryKey: ["exp-settings"], queryFn: getExpSettings });
   const viewGoal: number = settings?.view_goal ?? 100000;
@@ -1434,14 +1533,19 @@ function WorkingIdeasTab({ pageFilter, search }: { pageFilter: string; search: s
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    // Exclude entries whose source idea was deleted from the idea bank (source_id becomes null)
     const valid = ideas.filter((i: any) => i.source_id != null);
-    if (!q) return valid;
-    return valid.filter((i: any) =>
+    const searched = !q ? valid : valid.filter((i: any) =>
       (i.topic || "").toLowerCase().includes(q) ||
       (i.script || "").toLowerCase().includes(q)
     );
-  }, [ideas, search]);
+    return [...searched].sort((a: any, b: any) =>
+      sortBy === "views"
+        ? (b.views_achieved || 0) - (a.views_achieved || 0)
+        : new Date(b.flagged_at).getTime() - new Date(a.flagged_at).getTime()
+    );
+  }, [ideas, search, sortBy]);
+
+  const topIdea = filtered[0] ?? null;
 
   const saveGoal = () => {
     const n = parseInt(goalDraft.replace(/[^0-9]/g, ""), 10);
@@ -1450,6 +1554,7 @@ function WorkingIdeasTab({ pageFilter, search }: { pageFilter: string; search: s
 
   return (
     <div>
+      {/* Toolbar */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
         <span style={{ fontSize: 12, color: "#71717a" }}>View goal:</span>
         {editingGoal ? (
@@ -1472,6 +1577,18 @@ function WorkingIdeasTab({ pageFilter, search }: { pageFilter: string; search: s
           </>
         )}
         <span style={{ color: "#52525b", fontSize: 12 }}>· {ideas.length} proven idea{ideas.length !== 1 ? "s" : ""}</span>
+
+        {/* Sort toggle */}
+        <div style={{ marginLeft: "auto", display: "flex", background: "#27272a", borderRadius: 7, overflow: "hidden", border: "1px solid #3f3f46" }}>
+          <button
+            onClick={() => setSortBy("views")}
+            style={{ padding: "4px 12px", border: "none", fontSize: 11, fontWeight: 500, cursor: "pointer", background: sortBy === "views" ? "#534AB7" : "transparent", color: sortBy === "views" ? "#fff" : "#71717a" }}
+          >Top views</button>
+          <button
+            onClick={() => setSortBy("date")}
+            style={{ padding: "4px 12px", border: "none", fontSize: 11, fontWeight: 500, cursor: "pointer", background: sortBy === "date" ? "#3f3f46" : "transparent", color: sortBy === "date" ? "#fff" : "#71717a" }}
+          >Recent</button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -1481,11 +1598,55 @@ function WorkingIdeasTab({ pageFilter, search }: { pageFilter: string; search: s
           {search ? "No ideas match your search." : `No ideas have crossed ${fmt(viewGoal)} views yet. Keep going!`}
         </p>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {filtered.map(item => (
-            <WorkingRow key={item.id} item={item} onDistribute={id => distributeMut.mutate(id)} />
-          ))}
-        </div>
+        <>
+          {/* Top performer spotlight — only shown when sorted by views */}
+          {sortBy === "views" && topIdea && (
+            <div style={{
+              marginBottom: 20, padding: "16px 20px",
+              background: "linear-gradient(135deg, rgba(240,192,96,0.08) 0%, rgba(240,192,96,0.03) 100%)",
+              border: "1.5px solid rgba(240,192,96,0.35)",
+              borderLeft: "4px solid #F0C060",
+              borderRadius: 12,
+            }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontSize: 10, fontWeight: 800, color: "#F0C060", background: "rgba(240,192,96,0.15)", border: "1px solid rgba(240,192,96,0.4)", borderRadius: 4, padding: "2px 8px", letterSpacing: "0.04em" }}>
+                      TOP IDEA
+                    </span>
+                    <span style={{ fontSize: 10, color: "#71717a" }}>Week {topIdea.week_number}</span>
+                    {(() => {
+                      const pages = (topIdea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+                      return pages.map((pg: string) => {
+                        const pgc = PAGE_COLORS[pg] || "#a1a1aa";
+                        return <span key={pg} style={{ fontSize: 10, fontWeight: 700, color: pgc, background: pgc + "22", borderRadius: 4, padding: "1px 6px" }}>{pg}</span>;
+                      });
+                    })()}
+                  </div>
+                  <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "#fff", lineHeight: 1.4 }}>
+                    {topIdea.topic || <em style={{ color: "#52525b" }}>No topic</em>}
+                  </p>
+                  {topIdea.created_by && (
+                    <p style={{ margin: "4px 0 0", fontSize: 11, color: "#71717a" }}>by {topIdea.created_by}</p>
+                  )}
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: "#F0C060", letterSpacing: "-0.02em" }}>
+                    {fmt(topIdea.views_achieved)}
+                  </div>
+                  <div style={{ fontSize: 10, color: "#71717a", fontWeight: 500 }}>views achieved</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Ranked list */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {filtered.map((item, idx) => (
+              <WorkingRow key={item.id} item={item} rank={idx + 1} onDistribute={id => distributeMut.mutate(id)} />
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
@@ -1855,7 +2016,7 @@ function FrontseatTab() {
             poolIdeas.map((idea: any) => {
               const assignedPages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
               return (
-                <div key={idea.id} style={{ opacity: draggingId === idea.id ? 0.4 : 1, transition: "opacity 0.12s" }}>
+                <div key={idea.id} onDragEnd={() => { setDraggingId(null); setDropTarget(null); }} style={{ opacity: draggingId === idea.id ? 0.4 : 1, transition: "opacity 0.12s" }}>
                   <FrontseatPoolCard
                     idea={idea}
                     letter={ideaLetterMap[idea.id] || "?"}
@@ -1930,13 +2091,11 @@ function FrontseatTab() {
                     idea={idea}
                     letter={ideaLetterMap[idea.id] || "?"}
                     onClick={() => setDetailIdea(idea)}
-                    onRemoveFromPage={idea.status === "new" ? () => {
-                      // Only remove this page from page_handle — NEVER change status
-                      // so the idea stays constant in the pool for the whole day
+                    onRemoveFromPage={() => {
                       const remaining = (idea.page_handle || "")
                         .split(",").map((s: string) => s.trim()).filter((p: string) => p && p !== page);
                       updateMut.mutate({ id: idea.id, data: { page_handle: remaining.join(",") } });
-                    } : undefined}
+                    }}
                   />
                 ))}
               </div>

@@ -5495,6 +5495,7 @@ async def exp_archive_week(request: Request):
             "yt_timestamps": i.get("yt_timestamps", ""),
             "comp_link": i.get("comp_link", ""),
             "created_by": i.get("created_by", ""),
+            "page_views": i.get("page_views", {}),
         } for i in to_insert]
         client.table("exp_content_bank").insert(rows).execute()
         for i in to_insert:

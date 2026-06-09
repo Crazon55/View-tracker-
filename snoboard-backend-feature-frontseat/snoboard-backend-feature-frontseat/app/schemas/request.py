@@ -191,6 +191,7 @@ class ExpIdeaUpdate(BaseModel):
     script: str | None = None
     status: str | None = None
     views: int | None = None
+    page_views: dict | None = None
     day_date: str | None = None
     source: str | None = None
     hook_variations: str | None = None
