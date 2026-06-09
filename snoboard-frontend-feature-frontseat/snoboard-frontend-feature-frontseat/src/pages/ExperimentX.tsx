@@ -1835,8 +1835,8 @@ function QuickAddModal({ open, onAdd, onClose }: {
 // ---------------------------------------------------------------------------
 // Frontseat — pool card (left panel, draggable)
 // ---------------------------------------------------------------------------
-function FrontseatPoolCard({ idea, letter, onDragStart, onClick }: {
-  idea: any; letter: string; onDragStart: () => void; onClick: () => void;
+function FrontseatPoolCard({ idea, letter, onDragStart, onClick, onDelete }: {
+  idea: any; letter: string; onDragStart: () => void; onClick: () => void; onDelete: () => void;
 }) {
   return (
     <div
@@ -1844,12 +1844,22 @@ function FrontseatPoolCard({ idea, letter, onDragStart, onClick }: {
       onDragStart={e => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", idea.id); onDragStart(); }}
       onClick={onClick}
       style={{
-        background: "#18181b", border: "1.5px solid #27272a", borderRadius: 8,
+        position: "relative", background: "#18181b", border: "1.5px solid #27272a", borderRadius: 8,
         padding: "8px 10px", cursor: "grab", marginBottom: 6, transition: "border-color 0.12s",
       }}
       onMouseEnter={e => (e.currentTarget.style.borderColor = "#3f3f46")}
       onMouseLeave={e => (e.currentTarget.style.borderColor = "#27272a")}
     >
+      <button
+        onClick={e => { e.stopPropagation(); e.preventDefault(); onDelete(); }}
+        title="Delete idea"
+        style={{
+          position: "absolute", top: 5, right: 5,
+          padding: "2px 6px", fontSize: 9, fontWeight: 700,
+          background: "#3f3f46", color: "#a1a1aa", border: "none", borderRadius: 3, cursor: "pointer",
+          zIndex: 2,
+        }}
+      >✕</button>
       <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
         <span style={{ fontSize: 10, fontWeight: 800, color: "#a78bfa", background: "#7c3aed22", borderRadius: 4, padding: "1px 6px" }}>{letter}</span>
         <span style={{ fontSize: 10, color: "#52525b", background: "#27272a", borderRadius: 4, padding: "1px 5px" }}>{idea.content_type}</span>
@@ -2090,6 +2100,12 @@ function FrontseatTab() {
                     letter={ideaLetterMap[idea.id] || "?"}
                     onDragStart={() => setDraggingId(idea.id)}
                     onClick={() => setDetailIdea(idea)}
+                    onDelete={() => {
+                      // Delete pool idea + all its page copies
+                      const copies = (ideas as any[]).filter((i: any) => i.source_pool_id === idea.id);
+                      copies.forEach((c: any) => deleteMut.mutate(c.id));
+                      deleteMut.mutate(idea.id);
+                    }}
                   />
                   {/* Show assigned page chips below the card */}
                   {assignedPages.length > 0 && (
