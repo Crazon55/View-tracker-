@@ -1373,25 +1373,26 @@ function ContentBankTab({ pageFilter, search }: { pageFilter: string; search: st
   const [monthFilter, setMonthFilter] = useState<{ year: number; month: number } | null>(null);
 
   const updateMut = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => updateExpContentBankItem(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["exp-content-bank-all"] }); },
+    mutationFn: ({ id, data }: { id: string; data: any }) => updateExpIdea(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["exp-content-bank-all"] }); qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }); },
     onError: (e: any) => toast.error(e?.message || "Failed to update"),
   });
   const deleteMut = useMutation({
-    mutationFn: (_id: string) => { toast.error("Archive records cannot be deleted"); return Promise.resolve(); },
-    onSuccess: () => {},
+    mutationFn: deleteExpIdea,
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["exp-content-bank-all"] }); qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }); },
+    onError: () => toast.error("Failed to delete"),
   });
   const [weekFilter, setWeekFilter] = useState<number | "all">("all");
   const [dayFilter, setDayFilter]   = useState<string | "all">("all");
 
   const { data: rawItems = [], isLoading } = useQuery({
     queryKey: ["exp-content-bank-all", pageFilter],
-    queryFn: () => getExpContentBank({ page: pageFilter !== "all" ? pageFilter : undefined }),
+    queryFn: () => getExpIdeaBank({ page: pageFilter !== "all" ? pageFilter : undefined }),
   });
 
-  // ALL approved + proven ideas regardless of date — Content Bank is the full store
+  // Show all ideas across all weeks — team decides topline/baseline from views + status
   const allValidItems = useMemo(() =>
-    rawItems.filter((i: any) => i.status === "proven_ideas" || i.status === "approved"),
+    rawItems.filter((i: any) => i.status !== "new"),
     [rawItems]);
 
   // Apply optional month filter on top
