@@ -673,6 +673,9 @@ export const deleteExpIdea = (id: string) =>
 export const archiveExpWeek = (week_number: number) =>
   fetchApi<any>("/api/v1/experiment/idea-bank/archive", { method: "POST", body: JSON.stringify({ week_number }) });
 
+export const migratePostedToProven = () =>
+  fetchApi<any>("/api/v1/experiment/idea-bank/migrate-posted-to-proven", { method: "POST" });
+
 export const getExpContentBank = (params?: { week?: number; page?: string }) => {
   const q = new URLSearchParams();
   if (params?.week != null) q.set("week", String(params.week));

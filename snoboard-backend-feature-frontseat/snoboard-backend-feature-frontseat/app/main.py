@@ -5460,6 +5460,13 @@ async def exp_delete_idea(idea_id: str):
     return {"success": True}
 
 
+@app.post("/api/v1/experiment/idea-bank/migrate-posted-to-proven")
+async def exp_migrate_posted_to_proven():
+    client = get_supabase_client()
+    result = client.table("exp_idea_bank").update({"status": "proven_ideas"}).eq("status", "posted").execute()
+    return {"success": True, "updated": len(result.data or [])}
+
+
 @app.post("/api/v1/experiment/idea-bank/archive")
 async def exp_archive_week(request: Request):
     body = await request.json()

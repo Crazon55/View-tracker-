@@ -6,7 +6,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import IdeaThread from "@/components/IdeaThread";
 import {
   getExpSettings, updateExpSettings,
-  getExpIdeaBank, getExpIdeaById, createExpIdea, updateExpIdea, deleteExpIdea, archiveExpWeek,
+  getExpIdeaBank, getExpIdeaById, createExpIdea, updateExpIdea, deleteExpIdea, archiveExpWeek, migratePostedToProven,
   getExpContentBank, getExpContentBankWeeks, updateExpContentBankItem,
   getExpWorkingIdeas, distributeExpWorkingIdea,
 } from "@/services/api";
@@ -1203,6 +1203,7 @@ function IdeaBankTab({ pageFilter, search }: { pageFilter: string; search: strin
   const [dropStage, setDropStage] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const autoArchiveDone = useRef(false);
+  const migrationDone = useRef(false);
 
   const { data: settings } = useQuery({ queryKey: ["exp-settings"], queryFn: getExpSettings });
   const currentWeek = useMemo(() => {
@@ -1227,6 +1228,18 @@ function IdeaBankTab({ pageFilter, search }: { pageFilter: string; search: strin
     autoArchiveDone.current = true;
     pastWeeks.forEach(w => archiveMut.mutate(w, { onSuccess: () => qc.invalidateQueries({ queryKey: ["exp-content-bank"] }) }));
   }, [settings, allIdeas, currentWeek]);
+
+  // One-time migration: posted → proven_ideas
+  useEffect(() => {
+    if (migrationDone.current || allIdeas.length === 0) return;
+    const hasPosted = allIdeas.some((i: any) => i.status === "posted");
+    if (!hasPosted) return;
+    migrationDone.current = true;
+    migratePostedToProven().then(() => {
+      qc.invalidateQueries({ queryKey: ["exp-idea-bank"] });
+      qc.invalidateQueries({ queryKey: ["exp-content-bank-all"] });
+    });
+  }, [allIdeas]);
 
   const { data: ideas = [], isLoading } = useQuery({
     queryKey: ["exp-idea-bank", currentWeek, pageFilter],
@@ -1257,12 +1270,20 @@ function IdeaBankTab({ pageFilter, search }: { pageFilter: string; search: strin
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    const base = (ideas as any[]).filter((i: any) => !i.frontseat_pool);
-    if (!q) return base;
-    return base.filter((i: any) =>
+    const currentWeekIdeas = (ideas as any[]).filter((i: any) => !i.frontseat_pool);
+    const currentIds = new Set(currentWeekIdeas.map((i: any) => i.id));
+    // Keep testing ideas from past weeks visible in the Testing column
+    const crossWeekTesting = (allIdeas as any[]).filter((i: any) =>
+      i.status === "testing" && i.week_number < currentWeek && !i.frontseat_pool &&
+      !currentIds.has(i.id) &&
+      (pageFilter === "all" || (i.page_handle || "").split(",").some((p: string) => p.trim() === pageFilter))
+    );
+    const merged = [...currentWeekIdeas, ...crossWeekTesting];
+    if (!q) return merged;
+    return merged.filter((i: any) =>
       (i.topic || "").toLowerCase().includes(q) || (i.script || "").toLowerCase().includes(q)
     );
-  }, [ideas, search]);
+  }, [ideas, allIdeas, currentWeek, pageFilter, search]);
 
   const stageCounts = useMemo(() => {
     const c: Record<string, number> = {};
