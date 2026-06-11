@@ -2286,6 +2286,16 @@ export default function ExperimentX() {
   const [tab, setTab] = useState<TabMode>("idea-bank");
   const [pageFilter, setPageFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const qc = useQueryClient();
+  const topMigrationDone = useRef(false);
+  useEffect(() => {
+    if (topMigrationDone.current) return;
+    topMigrationDone.current = true;
+    migratePostedToProven().then(() => {
+      qc.invalidateQueries({ queryKey: ["exp-idea-bank"] });
+      qc.invalidateQueries({ queryKey: ["exp-content-bank-all"] });
+    });
+  }, []);
 
   const tabColors: Record<TabMode, string> = {
     "frontseat":     "#7c3aed",
