@@ -7,7 +7,7 @@ import IdeaThread from "@/components/IdeaThread";
 import {
   getExpSettings, updateExpSettings,
   getExpIdeaBank, getExpIdeaById, createExpIdea, updateExpIdea, deleteExpIdea, archiveExpWeek,
-  getExpContentBank, getExpContentBankWeeks,
+  getExpContentBank, getExpContentBankWeeks, updateExpContentBankItem,
   getExpWorkingIdeas, distributeExpWorkingIdea,
 } from "@/services/api";
 
@@ -1373,21 +1373,20 @@ function ContentBankTab({ pageFilter, search }: { pageFilter: string; search: st
   const [monthFilter, setMonthFilter] = useState<{ year: number; month: number } | null>(null);
 
   const updateMut = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => updateExpIdea(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["exp-idea-bank-all-for-cb"] }); qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }); },
+    mutationFn: ({ id, data }: { id: string; data: any }) => updateExpContentBankItem(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["exp-content-bank-all"] }); },
     onError: (e: any) => toast.error(e?.message || "Failed to update"),
   });
   const deleteMut = useMutation({
-    mutationFn: deleteExpIdea,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["exp-idea-bank-all-for-cb"] }); qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }); },
-    onError: () => toast.error("Failed to delete"),
+    mutationFn: (_id: string) => { toast.error("Archive records cannot be deleted"); return Promise.resolve(); },
+    onSuccess: () => {},
   });
   const [weekFilter, setWeekFilter] = useState<number | "all">("all");
   const [dayFilter, setDayFilter]   = useState<string | "all">("all");
 
   const { data: rawItems = [], isLoading } = useQuery({
-    queryKey: ["exp-idea-bank-all-for-cb", pageFilter],
-    queryFn: () => getExpIdeaBank({ page: pageFilter !== "all" ? pageFilter : undefined }),
+    queryKey: ["exp-content-bank-all", pageFilter],
+    queryFn: () => getExpContentBank({ page: pageFilter !== "all" ? pageFilter : undefined }),
   });
 
   // ALL approved + proven ideas regardless of date — Content Bank is the full store

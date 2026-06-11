@@ -5508,6 +5508,22 @@ async def exp_archive_week(request: Request):
     return {"success": True, "archived": len(to_insert), "week_label": label}
 
 
+@app.patch("/api/v1/experiment/content-bank/{item_id}")
+async def exp_update_content_bank_item(item_id: str, request: Request):
+    body = await request.json()
+    allowed = {"topic", "script", "views", "status", "content_type", "source", "hook_variations",
+                "music_ref", "frame_link", "yt_url", "yt_timestamps", "comp_link", "page_views",
+                "created_by", "edited_by", "test_result", "video_format", "page_handle"}
+    update_data = {k: v for k, v in body.items() if k in allowed}
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+    client = get_supabase_client()
+    result = client.table("exp_content_bank").update(update_data).eq("id", item_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return {"success": True, "data": result.data[0]}
+
+
 @app.get("/api/v1/experiment/content-bank")
 async def exp_list_content_bank(week: int | None = None, page: str | None = None):
     client = get_supabase_client()

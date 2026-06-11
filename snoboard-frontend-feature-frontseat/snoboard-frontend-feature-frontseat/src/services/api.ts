@@ -681,6 +681,9 @@ export const getExpContentBank = (params?: { week?: number; page?: string }) => 
   return fetchApi<any[]>(`/api/v1/experiment/content-bank${qs ? `?${qs}` : ""}`);
 };
 
+export const updateExpContentBankItem = (id: string, data: Record<string, any>) =>
+  fetchApi<any>(`/api/v1/experiment/content-bank/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+
 export const getExpContentBankWeeks = () =>
   fetchApi<any[]>("/api/v1/experiment/content-bank/weeks");
 
