@@ -1413,7 +1413,7 @@ function ContentBankTab({ pageFilter, search }: { pageFilter: string; search: st
 
   // Show all ideas across all weeks — team decides topline/baseline from views + status
   const allValidItems = useMemo(() =>
-    rawItems.filter((i: any) => i.status !== "new"),
+    rawItems.filter((i: any) => i.status !== "new" && i.status !== "testing"),
     [rawItems]);
 
   // Apply optional month filter on top
