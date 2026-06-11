@@ -1405,6 +1405,7 @@ function ContentBankTab({ pageFilter, search }: { pageFilter: string; search: st
   });
   const [weekFilter, setWeekFilter] = useState<number | "all">("all");
   const [dayFilter, setDayFilter]   = useState<string | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "approved" | "proven_ideas">("all");
 
   const { data: rawItems = [], isLoading } = useQuery({
     queryKey: ["exp-content-bank-all", pageFilter],
@@ -1475,15 +1476,17 @@ function ContentBankTab({ pageFilter, search }: { pageFilter: string; search: st
     dayFilter === "all" ? weekFiltered : weekFiltered.filter((i: any) => (i.day_date || "").slice(0, 10) === dayFilter),
     [weekFiltered, dayFilter]);
 
-  // Apply search
+  // Apply search + status filter
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    if (!q) return dayFiltered;
-    return dayFiltered.filter((i: any) =>
+    let result = dayFiltered;
+    if (statusFilter !== "all") result = result.filter((i: any) => i.status === statusFilter);
+    if (!q) return result;
+    return result.filter((i: any) =>
       (i.topic || "").toLowerCase().includes(q) ||
       (i.script || "").toLowerCase().includes(q)
     );
-  }, [dayFiltered, search]);
+  }, [dayFiltered, search, statusFilter]);
 
   const grouped = useMemo(() => groupByDay(filtered), [filtered]);
 
@@ -1541,6 +1544,21 @@ function ContentBankTab({ pageFilter, search }: { pageFilter: string; search: st
             ))}
           </div>
         )}
+
+        {/* Status filter */}
+        <div style={{ display: "flex", background: "#27272a", borderRadius: 7, overflow: "hidden", border: "1px solid #3f3f46" }}>
+          {([["all", "All"], ["approved", "Approved"], ["proven_ideas", "Proven"]] as const).map(([val, label]) => (
+            <button
+              key={val}
+              onClick={() => setStatusFilter(val)}
+              style={{
+                padding: "5px 12px", border: "none", fontSize: 11, fontWeight: 500, cursor: "pointer",
+                background: statusFilter === val ? (val === "approved" ? "#1a3a2a" : val === "proven_ideas" ? "#1a1a3a" : "#3f3f46") : "transparent",
+                color: statusFilter === val ? (val === "approved" ? "#4ade80" : val === "proven_ideas" ? "#a78bfa" : "#fff") : "#71717a",
+              }}
+            >{label}</button>
+          ))}
+        </div>
 
         <span style={{ fontSize: 12, color: "#52525b" }}>{filtered.length} idea{filtered.length !== 1 ? "s" : ""}</span>
       </div>
