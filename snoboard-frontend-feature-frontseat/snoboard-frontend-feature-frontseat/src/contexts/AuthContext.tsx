@@ -5,6 +5,20 @@ import { setAccessToken, getUserRole, setUserRole } from "@/services/api";
 
 const ALLOWED_DOMAIN = "owledmedia.com";
 
+/** Retired roles mapped to their replacement (content_creators → cs). */
+function normalizeRole(role: string): string {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of role.split(",").map((r) => r.trim()).filter(Boolean)) {
+    const r = raw === "content_creators" ? "cs" : raw;
+    if (!seen.has(r)) {
+      seen.add(r);
+      out.push(r);
+    }
+  }
+  return out.join(",");
+}
+
 const ROLES = [
   { value: "senior_cs",         label: "Senior CS" },
   { value: "boss_man",          label: "Boss Man" },
@@ -87,21 +101,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setNeedsRole(false);
   };
 
+  const applyRole = (email: string, rawRole: string, name?: string) => {
+    const role = normalizeRole(rawRole);
+    localStorage.setItem(`role_${email}`, role);
+    setRoleState(role);
+    const primary = role.split(",")[0]?.trim();
+    setRoleName(ROLES.find((r) => r.value === primary)?.label || primary || role);
+    setNeedsRole(false);
+    if (role !== rawRole && name !== undefined) {
+      setUserRole({ email, role, name }).catch(() => {});
+    }
+  };
+
   const fetchRole = async (email: string) => {
-    // Show cached role instantly, then always sync from backend
     const localRole = localStorage.getItem(`role_${email}`);
     if (localRole) {
-      setRoleState(localRole);
-      setRoleName(ROLES.find((r) => r.value === localRole)?.label || localRole);
-      setNeedsRole(false);
+      applyRole(email, localRole);
     }
     try {
       const data = await getUserRole(email);
       if (data?.role) {
-        localStorage.setItem(`role_${email}`, data.role);
-        setRoleState(data.role);
-        setRoleName(ROLES.find((r) => r.value === data.role)?.label || data.role);
-        setNeedsRole(false);
+        applyRole(email, data.role, data.name || "");
       } else if (!localRole) {
         setNeedsRole(true);
       }
