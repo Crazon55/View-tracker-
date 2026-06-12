@@ -1,4 +1,9 @@
-import { createExpApi, type ExpApi } from "@/services/api";
+/**
+ * Each playbook uses its own Supabase table set (separate databases):
+ *   BPB  → exp_*        (legacy Experiment X data)
+ *   XF   → xf_*        (entrepreneurial.india, startupcoded)
+ *   TECH → tech_*      (101xtechnology, indiantechdaily)
+ */
 
 export type PlaybookId = "bpb" | "xf" | "tech";
 

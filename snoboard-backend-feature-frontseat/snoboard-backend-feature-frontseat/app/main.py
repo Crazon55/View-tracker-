@@ -36,7 +36,7 @@ from app.team_roles import (
     role_contains_deprecated,
     DEPRECATED_ROLES,
 )
-from app.experiment_playbooks import validate_playbook, DEFAULT_PLAYBOOK
+from app.experiment_playbooks import validate_playbook, DEFAULT_PLAYBOOK, get_playbook_tables
 
 logger = logging.getLogger(__name__)
 
@@ -5414,20 +5414,20 @@ async def news_feed_saved_list():
 # Playbook Experiments (BPB / XF / TECH) — Idea Tracking System
 # =============================================================================
 def _exp_settings_row(client, playbook: str) -> dict:
-    data = client.table("exp_settings").select("*").eq("playbook_id", playbook).limit(1).execute().data
+    tables = get_playbook_tables(playbook)
+    data = client.table(tables.settings).select("*").limit(1).execute().data
     if data:
         return data[0]
     from datetime import date
-    inserted = client.table("exp_settings").insert({
+    inserted = client.table(tables.settings).insert({
         "view_goal": 100000,
         "experiment_start_date": str(date.today()),
-        "playbook_id": playbook,
     }).execute().data
     return inserted[0] if inserted else {}
 
 
 def _exp_compute_week_number(client, playbook: str, day_date_str: str) -> int:
-    """Compute 1-based week number relative to experiment_start_date in exp_settings."""
+    """Compute 1-based week number relative to experiment_start_date in playbook settings."""
     from datetime import date
     row = _exp_settings_row(client, playbook)
     start_raw = row.get("experiment_start_date") or str(date.today())
@@ -5453,20 +5453,19 @@ def _exp_week_label(client, playbook: str, week_number: int) -> str:
 
 
 def _exp_flag_working_idea(client, playbook: str, idea: dict, view_goal: int):
-    """Insert into exp_working_ideas if not already flagged for this source_id."""
+    """Insert into playbook working_ideas if not already flagged for this source_id."""
+    tables = get_playbook_tables(playbook)
     source_id = idea.get("id")
     existing = (
-        client.table("exp_working_ideas")
+        client.table(tables.working_ideas)
         .select("id")
-        .eq("playbook_id", playbook)
         .eq("source_id", source_id)
         .execute()
         .data
     )
     if existing:
         return
-    client.table("exp_working_ideas").insert({
-        "playbook_id": playbook,
+    client.table(tables.working_ideas).insert({
         "source_id": source_id,
         "page_handle": idea.get("page_handle", ""),
         "content_type": idea.get("content_type", "reel"),
@@ -5480,15 +5479,18 @@ def _exp_flag_working_idea(client, playbook: str, idea: dict, view_goal: int):
 
 
 def _exp_idea_query(client, playbook: str):
-    return client.table("exp_idea_bank").select("*").eq("playbook_id", playbook)
+    tables = get_playbook_tables(playbook)
+    return client.table(tables.idea_bank).select("*")
 
 
 def _exp_content_query(client, playbook: str):
-    return client.table("exp_content_bank").select("*").eq("playbook_id", playbook)
+    tables = get_playbook_tables(playbook)
+    return client.table(tables.content_bank).select("*")
 
 
 def _exp_working_query(client, playbook: str):
-    return client.table("exp_working_ideas").select("*").eq("playbook_id", playbook)
+    tables = get_playbook_tables(playbook)
+    return client.table(tables.working_ideas).select("*")
 
 
 @app.get("/api/v1/experiment/{playbook}/settings")
@@ -5508,16 +5510,16 @@ async def exp_update_settings(playbook: str, req: ExpSettingsUpdate):
     from datetime import date
     pb = validate_playbook(playbook)
     client = get_supabase_client()
+    tables = get_playbook_tables(pb)
     update_data = {k: v for k, v in req.model_dump().items() if v is not None}
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    existing = client.table("exp_settings").select("id").eq("playbook_id", pb).limit(1).execute().data or []
+    existing = client.table(tables.settings).select("id").limit(1).execute().data or []
     if existing:
-        client.table("exp_settings").update(update_data).eq("id", existing[0]["id"]).execute()
+        client.table(tables.settings).update(update_data).eq("id", existing[0]["id"]).execute()
     else:
         update_data.setdefault("view_goal", 100000)
         update_data.setdefault("experiment_start_date", str(date.today()))
-        update_data["playbook_id"] = pb
-        client.table("exp_settings").insert(update_data).execute()
+        client.table(tables.settings).insert(update_data).execute()
     return {"success": True, "data": _exp_settings_row(client, pb)}
 
 
@@ -5551,10 +5553,10 @@ async def exp_create_idea(playbook: str, req: ExpIdeaCreate):
     from datetime import date
     pb = validate_playbook(playbook)
     client = get_supabase_client()
+    tables = get_playbook_tables(pb)
     day_str = req.day_date or str(date.today())
     week_num = _exp_compute_week_number(client, pb, day_str)
     row = {
-        "playbook_id": pb,
         "page_handle": req.page_handle,
         "content_type": req.content_type,
         "topic": req.topic,
@@ -5577,7 +5579,7 @@ async def exp_create_idea(playbook: str, req: ExpIdeaCreate):
         "frontseat_pool": req.frontseat_pool,
         "source_pool_id": req.source_pool_id,
     }
-    client.table("exp_idea_bank").insert(row).execute()
+    client.table(tables.idea_bank).insert(row).execute()
     verify = _exp_idea_query(client, pb).eq("day_date", day_str).order("created_at", desc=True).limit(1).execute().data
     created = verify[0] if verify else row
     if req.views > 0:
@@ -5612,10 +5614,11 @@ async def exp_get_idea_legacy(idea_id: str):
 async def exp_update_idea(playbook: str, idea_id: str, req: ExpIdeaUpdate):
     pb = validate_playbook(playbook)
     client = get_supabase_client()
+    tables = get_playbook_tables(pb)
     update_data = {k: v for k, v in req.model_dump().items() if v is not None}
     if "day_date" in update_data:
         update_data["week_number"] = _exp_compute_week_number(client, pb, update_data["day_date"])
-    client.table("exp_idea_bank").update(update_data).eq("id", idea_id).eq("playbook_id", pb).execute()
+    client.table(tables.idea_bank).update(update_data).eq("id", idea_id).execute()
     verify = _exp_idea_query(client, pb).eq("id", idea_id).limit(1).execute().data
     updated = verify[0] if verify else {}
     if "views" in update_data and updated:
@@ -5635,7 +5638,8 @@ async def exp_update_idea_legacy(idea_id: str, req: ExpIdeaUpdate):
 async def exp_delete_idea(playbook: str, idea_id: str):
     pb = validate_playbook(playbook)
     client = get_supabase_client()
-    client.table("exp_idea_bank").delete().eq("id", idea_id).eq("playbook_id", pb).execute()
+    tables = get_playbook_tables(pb)
+    client.table(tables.idea_bank).delete().eq("id", idea_id).execute()
     return {"success": True}
 
 
@@ -5648,9 +5652,10 @@ async def exp_delete_idea_legacy(idea_id: str):
 async def exp_migrate_posted_to_proven(playbook: str):
     pb = validate_playbook(playbook)
     client = get_supabase_client()
+    tables = get_playbook_tables(pb)
     existing = _exp_idea_query(client, pb).eq("status", "posted").execute().data or []
     if existing:
-        client.table("exp_idea_bank").update({"status": "proven_ideas"}).eq("playbook_id", pb).eq("status", "posted").execute()
+        client.table(tables.idea_bank).update({"status": "proven_ideas"}).eq("status", "posted").execute()
     return {"success": True, "updated": len(existing)}
 
 
@@ -5687,7 +5692,6 @@ async def exp_archive_week(playbook: str, request: Request):
     to_insert = [i for i in ideas if i.get("id") not in existing_sources]
     if to_insert:
         rows = [{
-            "playbook_id": pb,
             "source_id": i["id"],
             "page_handle": i.get("page_handle", ""),
             "content_type": i.get("content_type", "reel"),
@@ -5708,7 +5712,7 @@ async def exp_archive_week(playbook: str, request: Request):
             "created_by": i.get("created_by", ""),
             "page_views": i.get("page_views", {}),
         } for i in to_insert]
-        client.table("exp_content_bank").insert(rows).execute()
+        client.table(get_playbook_tables(pb).content_bank).insert(rows).execute()
         for i in to_insert:
             if (i.get("views") or 0) >= goal:
                 _exp_flag_working_idea(client, pb, i, goal)
@@ -5731,7 +5735,8 @@ async def exp_update_content_bank_item(playbook: str, item_id: str, request: Req
     if not update_data:
         raise HTTPException(status_code=400, detail="No valid fields to update")
     client = get_supabase_client()
-    client.table("exp_content_bank").update(update_data).eq("id", item_id).eq("playbook_id", pb).execute()
+    tables = get_playbook_tables(pb)
+    client.table(tables.content_bank).update(update_data).eq("id", item_id).execute()
     verify = _exp_content_query(client, pb).eq("id", item_id).limit(1).execute().data
     if not verify:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -5801,7 +5806,8 @@ async def exp_list_working_ideas_legacy(week: int | None = None, page: str | Non
 async def exp_distribute_working_idea(playbook: str, idea_id: str):
     pb = validate_playbook(playbook)
     client = get_supabase_client()
-    client.table("exp_working_ideas").update({"distributed": True}).eq("id", idea_id).eq("playbook_id", pb).execute()
+    tables = get_playbook_tables(pb)
+    client.table(tables.working_ideas).update({"distributed": True}).eq("id", idea_id).execute()
     verify = _exp_working_query(client, pb).eq("id", idea_id).limit(1).execute().data
     return {"success": True, "data": verify[0] if verify else {}}
 
