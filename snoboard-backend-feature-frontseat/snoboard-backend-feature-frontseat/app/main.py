@@ -1,5 +1,6 @@
 """FastAPI app for Instagram View Tracker."""
 import json
+import logging
 import os
 import re
 import hashlib
@@ -27,7 +28,16 @@ from app.schemas.request import (
     ChatRequest, ContentEntryCreate, ContentEntryUpdate,
     ExpIdeaCreate, ExpIdeaUpdate, ExpSettingsUpdate,
 )
-from app.schemas.response import ScrapeStatusResponse
+from app.auth import require_auth, require_admin, is_admin_role, ALLOWED_DOMAIN
+from app.team_roles import (
+    cleanup_team_roles,
+    cleanup_content_strategists,
+    sanitize_role_string,
+    role_contains_deprecated,
+    DEPRECATED_ROLES,
+)
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="View Tracker", version="1.0.0")
 
@@ -44,6 +54,19 @@ app.add_middleware(
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.on_event("startup")
+async def startup_team_cleanup():
+    """Remove departed members and deprecated roles from Supabase on deploy."""
+    try:
+        client = get_supabase_client()
+        ur = cleanup_team_roles(client)
+        cs = cleanup_content_strategists(client)
+        if ur["removed"] or ur["updated"] or cs["removed"]:
+            logger.info("Team cleanup on startup: user_roles=%s content_strategists=%s", ur, cs)
+    except Exception as exc:
+        logger.warning("Team cleanup on startup skipped: %s", exc)
 
 
 _WORKBOARD_MENTION_SKIP: frozenset[str] = frozenset({"", "tracker", "comp research"})
@@ -1309,18 +1332,51 @@ async def get_all_user_roles():
     from app.database.client import get_supabase_client
     client = get_supabase_client()
     data = client.table("user_roles").select("email,name,role").order("name").execute().data or []
-    return {"success": True, "data": data}
+    cleaned = []
+    for row in data:
+        role = sanitize_role_string(row.get("role") or "")
+        if role:
+            cleaned.append({**row, "role": role})
+    return {"success": True, "data": cleaned}
+
+
+@app.post("/api/v1/user-roles/cleanup")
+async def admin_cleanup_team_roles(request: Request):
+    """Admin-only: purge departed members and deprecated roles immediately."""
+    await require_admin(request)
+    client = get_supabase_client()
+    ur = cleanup_team_roles(client)
+    cs = cleanup_content_strategists(client)
+    return {"success": True, "data": {"user_roles": ur, "content_strategists": cs}}
 
 
 @app.post("/api/v1/user-role")
-async def set_user_role(req: dict):
+async def set_user_role(req: dict, request: Request):
     from app.database.client import get_supabase_client
+    claims = await require_auth(request)
     client = get_supabase_client()
-    email = req.get("email")
+    email = (req.get("email") or "").strip().lower()
     role = req.get("role")
     name = req.get("name", "")
     if not email or not role:
         raise HTTPException(status_code=400, detail="email and role required")
+    if role_contains_deprecated(role):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Deprecated role(s) not allowed: {', '.join(sorted(DEPRECATED_ROLES))}",
+        )
+    role = sanitize_role_string(role)
+    if not role:
+        raise HTTPException(status_code=400, detail="At least one valid role is required")
+    if not email.endswith(f"@{ALLOWED_DOMAIN}"):
+        raise HTTPException(status_code=400, detail=f"Only @{ALLOWED_DOMAIN} emails are allowed")
+
+    caller_email = (claims.get("email") or "").strip().lower()
+    if email != caller_email:
+        caller_rows = client.table("user_roles").select("role").eq("email", caller_email).execute().data
+        if not caller_rows or not is_admin_role(caller_rows[0].get("role", "")):
+            raise HTTPException(status_code=403, detail="Admin access required to change other users")
+
     # Upsert
     existing = client.table("user_roles").select("id").eq("email", email).execute().data
     if existing:
@@ -1328,6 +1384,19 @@ async def set_user_role(req: dict):
     else:
         entry = client.table("user_roles").insert({"email": email, "role": role, "name": name}).execute().data[0]
     return {"success": True, "data": entry}
+
+
+@app.delete("/api/v1/user-role/{email}")
+async def delete_user_role(email: str, request: Request):
+    from app.database.client import get_supabase_client
+    await require_admin(request)
+    client = get_supabase_client()
+    normalized = email.strip().lower()
+    existing = client.table("user_roles").select("id").eq("email", normalized).execute().data
+    if not existing:
+        raise HTTPException(status_code=404, detail="User not found")
+    client.table("user_roles").delete().eq("email", normalized).execute()
+    return {"success": True, "data": {"email": normalized}}
 
 
 # --- Idea Thread: Assignments + Comments ---

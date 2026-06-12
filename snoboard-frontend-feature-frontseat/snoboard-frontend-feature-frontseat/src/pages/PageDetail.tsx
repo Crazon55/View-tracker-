@@ -373,7 +373,6 @@ export default function PageDetail() {
                           <SelectItem value="cdi">CDI</SelectItem>
                           <SelectItem value="design">Design</SelectItem>
                           <SelectItem value="ai_automations">AI / Automations</SelectItem>
-                          <SelectItem value="ops_manager">Ops Manager</SelectItem>
                           <SelectItem value="cw">Content Writers</SelectItem>
                           <SelectItem value="editors">Editors</SelectItem>
                           <SelectItem value="content_creators">Content Creators</SelectItem>

@@ -22,7 +22,7 @@ const TEAM_META: Record<
   goofies: {
     label: "Goofies",
     emoji: "🐶",
-    members: ["Arohi", "Harish", "Pulkit", "Samiksha"],
+    members: ["Arohi", "Harish", "Pulkit"],
     nicheMatch: ["goofies"],
   },
   sheruses: {

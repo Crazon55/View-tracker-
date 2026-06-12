@@ -345,13 +345,13 @@ function HamburgerMenu() {
           </nav>
           <div className="px-3 py-4 border-t border-zinc-800">
             <p className="px-3 text-xs text-zinc-600 truncate mb-2">{user?.email}</p>
-            {can('filter_by_person') && (
+            {can('manage_team') && (
               <button
                 onClick={() => { navigate("/team-roles"); setOpen(false); }}
                 className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors w-full text-left text-violet-400 hover:text-violet-300 hover:bg-zinc-900"
               >
                 <ShieldCheck className="w-4 h-4" />
-                Manage Team Roles
+                Manage Team
               </button>
             )}
             <button

@@ -11,6 +11,28 @@ logger = logging.getLogger(__name__)
 from app.config import get_settings
 
 ALLOWED_DOMAIN = "owledmedia.com"
+ADMIN_ROLE_IDS = frozenset({"senior_cs", "boss_man", "ai_dev", "admin", "ai_automations"})
+
+
+def parse_roles(role_str: str) -> set[str]:
+    return {r.strip() for r in (role_str or "").split(",") if r.strip()}
+
+
+def is_admin_role(role_str: str) -> bool:
+    return bool(parse_roles(role_str) & ADMIN_ROLE_IDS)
+
+
+async def require_admin(request: Request):
+    """FastAPI dependency — admin roles only (Senior CS, Boss Man, AI Dev)."""
+    claims = await require_auth(request)
+    from app.database.client import get_supabase_client
+
+    email = claims.get("email", "")
+    client = get_supabase_client()
+    data = client.table("user_roles").select("role").eq("email", email).execute().data
+    if not data or not is_admin_role(data[0].get("role", "")):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return claims
 
 
 @lru_cache

@@ -192,7 +192,6 @@ const WORKBOARD_SELF_PICK: { id: WorkboardRoleId; label: string }[] = [
   { id: "graphic_designer", label: "Graphic Designer" },
   { id: "video_editor", label: "TCO / Video Editor" },
   { id: "content_creator", label: "TCO Content Writer / Creator" },
-  { id: "ops_manager", label: "Ops Manager" },
   { id: "boss_man", label: "Manager / Boss Man" },
 ];
 

@@ -393,6 +393,13 @@ export const getDeadlines = (role?: string) =>
 export const getUserRole = (email: string) => fetchApi<any>(`/api/v1/user-role/${encodeURIComponent(email)}`);
 export const setUserRole = (data: { email: string; role: string; name?: string }) =>
   fetchApi<any>("/api/v1/user-role", { method: "POST", body: JSON.stringify(data) });
+export const deleteUserRole = (email: string) =>
+  fetchApi<any>(`/api/v1/user-role/${encodeURIComponent(email)}`, { method: "DELETE" });
+export const cleanupTeamRoles = () =>
+  fetchApi<{ user_roles: { removed: string[]; updated: string[] }; content_strategists: { removed: string[] } }>(
+    "/api/v1/user-roles/cleanup",
+    { method: "POST" },
+  );
 export const getAllUserRoles = () => fetchApi<{ email: string; name: string; role: string }[]>("/api/v1/user-roles");
 
 // Idea Thread — assignments + comments

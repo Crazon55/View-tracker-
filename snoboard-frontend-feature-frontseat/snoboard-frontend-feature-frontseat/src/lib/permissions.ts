@@ -27,6 +27,7 @@ export type Permission =
   | 'view_scheduled'        // access scheduled content views
   | 'view_top_posts'        // access top posts analytics
   | 'filter_by_person'            // filter board by any team member (admin-level)
+  | 'manage_team'                 // add/remove team members and change roles (admin-only)
   | 'post_tracker_assigned_only'  // in Post Tracker only: see ideas where tagged (designer override)
   | 'add_experiment_idea'         // create ideas in Experiment X (Pulkit, Varun only)
 
@@ -40,6 +41,7 @@ const ADMIN_PERMISSIONS: Permission[] = [
   'tag_collaborator',
   'comment_on_idea',
   'filter_by_person',
+  'manage_team',
   'view_scheduled',
   'view_scheduled_any',
   'add_view_count',
@@ -96,7 +98,6 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
   ],
 
   // Other roles
-  ops_manager:      ['view_all_ideas', 'comment_on_idea', 'view_scheduled', 'view_scheduled_any'],
   content_creators: ['view_all_ideas', 'create_idea', 'edit_own_idea', 'delete_own_idea', 'comment_on_idea'],
 
   // ── Backwards compatibility aliases ───────────────────────────────────────
@@ -124,7 +125,6 @@ export const ROLE_NAV: Record<string, '*' | string[]> = {
   carousel_designer: ['/', '/post-tracker', '/growth'],
 
   smm:              ['/', '/content-tracker', '/post-tracker', '/growth', '/stage1-tracker'],
-  ops_manager:      '*',
   content_creators: ['/', '/six-day-tracker', '/team-performance', '/workboard', '/tickets', '/news', '/blue-ocean', '/growth'],
   experiment_x:     ['/', '/experiment-x', '/team-performance', '/tickets', '/news', '/growth'],
 }
