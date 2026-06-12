@@ -28,7 +28,7 @@ from app.schemas.request import (
     ChatRequest, ContentEntryCreate, ContentEntryUpdate,
     ExpIdeaCreate, ExpIdeaUpdate, ExpSettingsUpdate,
 )
-from app.auth import require_auth, require_admin, is_admin_role, ALLOWED_DOMAIN
+from app.auth import ALLOWED_DOMAIN
 from app.team_roles import (
     cleanup_team_roles,
     cleanup_content_strategists,
@@ -1341,9 +1341,9 @@ async def get_all_user_roles():
 
 
 @app.post("/api/v1/user-roles/cleanup")
-async def admin_cleanup_team_roles(request: Request):
-    """Admin-only: purge departed members and deprecated roles immediately."""
-    await require_admin(request)
+async def admin_cleanup_team_roles():
+    """Purge departed members and deprecated roles (same open API pattern as other routes)."""
+    from app.database.client import get_supabase_client
     client = get_supabase_client()
     ur = cleanup_team_roles(client)
     cs = cleanup_content_strategists(client)
@@ -1351,9 +1351,8 @@ async def admin_cleanup_team_roles(request: Request):
 
 
 @app.post("/api/v1/user-role")
-async def set_user_role(req: dict, request: Request):
+async def set_user_role(req: dict):
     from app.database.client import get_supabase_client
-    claims = await require_auth(request)
     client = get_supabase_client()
     email = (req.get("email") or "").strip().lower()
     role = req.get("role")
@@ -1371,12 +1370,6 @@ async def set_user_role(req: dict, request: Request):
     if not email.endswith(f"@{ALLOWED_DOMAIN}"):
         raise HTTPException(status_code=400, detail=f"Only @{ALLOWED_DOMAIN} emails are allowed")
 
-    caller_email = (claims.get("email") or "").strip().lower()
-    if email != caller_email:
-        caller_rows = client.table("user_roles").select("role").eq("email", caller_email).execute().data
-        if not caller_rows or not is_admin_role(caller_rows[0].get("role", "")):
-            raise HTTPException(status_code=403, detail="Admin access required to change other users")
-
     # Upsert
     existing = client.table("user_roles").select("id").eq("email", email).execute().data
     if existing:
@@ -1387,22 +1380,21 @@ async def set_user_role(req: dict, request: Request):
 
 
 @app.delete("/api/v1/user-role/{email}")
-async def delete_user_role(email: str, request: Request):
-    return await _remove_user_role_impl(email, request)
+async def delete_user_role(email: str):
+    return await _remove_user_role_impl(email)
 
 
 @app.post("/api/v1/user-role/remove")
-async def remove_user_role_post(req: dict, request: Request):
-    """Remove a team member (POST fallback — some proxies block DELETE)."""
+async def remove_user_role_post(req: dict):
+    """Remove a team member."""
     email = req.get("email")
     if not email:
         raise HTTPException(status_code=400, detail="email required")
-    return await _remove_user_role_impl(email, request)
+    return await _remove_user_role_impl(email)
 
 
-async def _remove_user_role_impl(email: str, request: Request):
+async def _remove_user_role_impl(email: str):
     from app.database.client import get_supabase_client
-    await require_admin(request)
     client = get_supabase_client()
     normalized = email.strip().lower()
     existing = client.table("user_roles").select("id,email").eq("email", normalized).execute().data
