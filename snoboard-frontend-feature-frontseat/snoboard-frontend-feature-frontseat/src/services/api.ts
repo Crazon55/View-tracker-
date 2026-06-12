@@ -394,7 +394,7 @@ export const getUserRole = (email: string) => fetchApi<any>(`/api/v1/user-role/$
 export const setUserRole = (data: { email: string; role: string; name?: string }) =>
   fetchApi<any>("/api/v1/user-role", { method: "POST", body: JSON.stringify(data) });
 export const deleteUserRole = (email: string) =>
-  fetchApi<any>(`/api/v1/user-role/${encodeURIComponent(email)}`, { method: "DELETE" });
+  fetchApi<any>("/api/v1/user-role/remove", { method: "POST", body: JSON.stringify({ email }) });
 export const cleanupTeamRoles = () =>
   fetchApi<{ user_roles: { removed: string[]; updated: string[] }; content_strategists: { removed: string[] } }>(
     "/api/v1/user-roles/cleanup",

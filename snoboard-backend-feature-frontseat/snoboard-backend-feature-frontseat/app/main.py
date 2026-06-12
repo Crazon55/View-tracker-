@@ -1388,14 +1388,29 @@ async def set_user_role(req: dict, request: Request):
 
 @app.delete("/api/v1/user-role/{email}")
 async def delete_user_role(email: str, request: Request):
+    return await _remove_user_role_impl(email, request)
+
+
+@app.post("/api/v1/user-role/remove")
+async def remove_user_role_post(req: dict, request: Request):
+    """Remove a team member (POST fallback — some proxies block DELETE)."""
+    email = req.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="email required")
+    return await _remove_user_role_impl(email, request)
+
+
+async def _remove_user_role_impl(email: str, request: Request):
     from app.database.client import get_supabase_client
     await require_admin(request)
     client = get_supabase_client()
     normalized = email.strip().lower()
-    existing = client.table("user_roles").select("id").eq("email", normalized).execute().data
+    existing = client.table("user_roles").select("id,email").eq("email", normalized).execute().data
     if not existing:
         raise HTTPException(status_code=404, detail="User not found")
-    client.table("user_roles").delete().eq("email", normalized).execute()
+    result = client.table("user_roles").delete().eq("email", normalized).execute()
+    if getattr(result, "error", None):
+        raise HTTPException(status_code=500, detail=str(result.error))
     return {"success": True, "data": {"email": normalized}}
 
 

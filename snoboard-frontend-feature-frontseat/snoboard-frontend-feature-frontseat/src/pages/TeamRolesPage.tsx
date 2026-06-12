@@ -114,7 +114,7 @@ export default function TeamRolesPage() {
       const removed = users.find((u) => u.email === email);
       toast.success(`${removed?.name || email} removed from the team`);
     },
-    onError: () => toast.error("Failed to remove team member"),
+    onError: (err: Error) => toast.error(err.message || "Failed to remove team member"),
   });
 
   if (!can("manage_team")) {
