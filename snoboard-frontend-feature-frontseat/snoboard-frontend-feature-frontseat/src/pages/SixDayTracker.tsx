@@ -7,6 +7,8 @@ import {
   getTrackerNiches,
 } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePermissions } from "@/hooks/usePermissions";
+import { canEditSixDayTracker } from "@/lib/permissions";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -92,6 +94,8 @@ type TabMode = "cycles" | "reconcile";
 export default function SixDayTracker() {
   const qc = useQueryClient();
   const { user } = useAuth();
+  const { role } = usePermissions();
+  const canEdit = canEditSixDayTracker(role);
   const [tab, setTab] = useState<TabMode>("cycles");
   const [expandedCycle, setExpandedCycle] = useState<number | null>(null);
 
@@ -472,6 +476,7 @@ export default function SixDayTracker() {
                 userEmail={user?.email || ""}
                 selectedMonth={selectedMonth}
                 onDataChange={invalidateSixDayAndGrowth}
+                canEdit={canEdit}
               />
               );
             })}
@@ -483,6 +488,7 @@ export default function SixDayTracker() {
             qc={qc}
             userEmail={user?.email || ""}
             onSaved={invalidateSixDayAndGrowth}
+            canEdit={canEdit}
           />
         )}
       </div>
@@ -522,7 +528,7 @@ function patchSixDayEntryInCache(
 
 /* ──────── Cycle Card ──────── */
 function CycleCard({
-  cycle, pages, allowedPageIds, monthDate, expanded, onToggle, qc, userEmail, selectedMonth, onDataChange,
+  cycle, pages, allowedPageIds, monthDate, expanded, onToggle, qc, userEmail, selectedMonth, onDataChange, canEdit,
 }: {
   cycle: any;
   pages: any[];
@@ -534,6 +540,7 @@ function CycleCard({
   userEmail: string;
   selectedMonth: string;
   onDataChange: () => void;
+  canEdit: boolean;
 }) {
   const allEntries: any[] = cycle.entries || [];
   const allTopContent: any[] = cycle.top_content || [];
@@ -641,6 +648,7 @@ function CycleCard({
                   qc={qc}
                   userEmail={userEmail}
                   onDataChange={onDataChange}
+                  canEdit={canEdit}
                 />
               ))}
             </div>
@@ -654,7 +662,7 @@ function CycleCard({
 
 /* ──────── IP row: collapsible accordion per page ──────── */
 function IPDropdown({
-  page, cycle, monthDate, selectedMonth, qc, userEmail, onDataChange,
+  page, cycle, monthDate, selectedMonth, qc, userEmail, onDataChange, canEdit,
 }: {
   page: any;
   cycle: any;
@@ -663,6 +671,7 @@ function IPDropdown({
   qc: any;
   userEmail: string;
   onDataChange: () => void;
+  canEdit: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [addMode, setAddMode] = useState(false);
@@ -876,7 +885,7 @@ function IPDropdown({
                   <Input type="number" min={0} value={weekViews}
                     onChange={(e) => setWeekViews(e.target.value)}
                     onBlur={() => saveEntry()}
-                    disabled={upsertEntryMut.isPending}
+                    disabled={!canEdit || upsertEntryMut.isPending}
                     className="h-8 text-xs bg-zinc-800 border-zinc-600 text-white tabular-nums px-2 focus:border-violet-500"
                   />
                 </div>
@@ -885,7 +894,7 @@ function IPDropdown({
                   <Input type="number" min={0} max={100} value={reelPctStr}
                     onChange={(e) => setReelPctStr(e.target.value)}
                     onBlur={() => saveEntry()}
-                    disabled={upsertEntryMut.isPending}
+                    disabled={!canEdit || upsertEntryMut.isPending}
                     className="h-8 text-xs bg-zinc-800 border-zinc-600 text-purple-300 tabular-nums px-2 focus:border-purple-500"
                   />
                 </div>
@@ -894,7 +903,7 @@ function IPDropdown({
                   <Input type="number" min={0} max={100} value={postPctStr}
                     onChange={(e) => setPostPctStr(e.target.value)}
                     onBlur={() => saveEntry()}
-                    disabled={upsertEntryMut.isPending}
+                    disabled={!canEdit || upsertEntryMut.isPending}
                     className="h-8 text-xs bg-zinc-800 border-zinc-600 text-emerald-300 tabular-nums px-2 focus:border-emerald-500"
                   />
                 </div>
@@ -903,7 +912,7 @@ function IPDropdown({
                   <Input type="number" step="0.01" value={reelPerfStr}
                     onChange={(e) => setReelPerfStr(e.target.value)}
                     onBlur={() => saveEntry()}
-                    disabled={upsertEntryMut.isPending}
+                    disabled={!canEdit || upsertEntryMut.isPending}
                     className="h-8 text-xs bg-zinc-800 border-zinc-600 text-white tabular-nums px-2 focus:border-violet-500"
                   />
                 </div>
@@ -912,7 +921,7 @@ function IPDropdown({
                   <Input type="number" step="0.01" value={postPerfStr}
                     onChange={(e) => setPostPerfStr(e.target.value)}
                     onBlur={() => saveEntry()}
-                    disabled={upsertEntryMut.isPending}
+                    disabled={!canEdit || upsertEntryMut.isPending}
                     className="h-8 text-xs bg-zinc-800 border-zinc-600 text-white tabular-nums px-2 focus:border-violet-500"
                   />
                 </div>
@@ -935,7 +944,7 @@ function IPDropdown({
                 {toplineItems.length > 0 && (
                   <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/40 p-2 space-y-1.5">
                     {toplineItems.slice().sort((a: any, b: any) => (b.views || 0) - (a.views || 0)).map((item: any) => (
-                      <ContentItemRow key={item.id} item={item}
+                      <ContentItemRow key={item.id} item={item} canEdit={canEdit}
                         onUpdate={(data) => updateMut.mutate({ id: item.id, data })}
                         onDelete={() => deleteMut.mutate(item.id)}
                       />
@@ -943,7 +952,7 @@ function IPDropdown({
                   </div>
                 )}
 
-                {addMode ? (
+                {canEdit && (addMode ? (
                   <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 space-y-2">
                     <div className="flex flex-wrap gap-2">
                       <Input value={newLink} onChange={(e) => setNewLink(e.target.value)}
@@ -983,7 +992,7 @@ function IPDropdown({
                   >
                     <Plus className="w-3.5 h-3.5" /> Add topline link
                   </button>
-                )}
+                ))}
               </div>
             </div>
           </motion.div>
@@ -995,10 +1004,11 @@ function IPDropdown({
 
 
 /* ──────── Content Item Row ──────── */
-function ContentItemRow({ item, onUpdate, onDelete }: {
+function ContentItemRow({ item, onUpdate, onDelete, canEdit }: {
   item: any;
   onUpdate: (data: Record<string, any>) => void;
   onDelete: () => void;
+  canEdit?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [link, setLink] = useState(item.link || "");
@@ -1069,10 +1079,14 @@ function ContentItemRow({ item, onUpdate, onDelete }: {
       </a>
       <span className="text-white font-bold text-xs tabular-nums shrink-0">{fmt(item.views || 0)}</span>
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+        {canEdit && (
+          <>
         <button onClick={() => setEditing(true)} className="text-zinc-500 hover:text-white text-xs px-1">Edit</button>
         <button onClick={onDelete} className="text-red-400/60 hover:text-red-400">
           <Trash2 className="w-3 h-3" />
         </button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -1081,13 +1095,14 @@ function ContentItemRow({ item, onUpdate, onDelete }: {
 
 /* ──────── Reconcile View (month-end actuals) ──────── */
 function ReconcileView({
-  reconcileRows, monthDate, qc, userEmail, onSaved,
+  reconcileRows, monthDate, qc, userEmail, onSaved, canEdit,
 }: {
   reconcileRows: any[];
   monthDate: string;
   qc: any;
   userEmail: string;
   onSaved: () => void;
+  canEdit: boolean;
 }) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
 
@@ -1180,6 +1195,7 @@ function ReconcileView({
             <h3 className="text-sm font-bold text-white tracking-wide">Monthly Reconciliation</h3>
             <p className="text-xs text-zinc-500 mt-0.5">Enter actual IG dashboard totals — drift feeds the Growth chart</p>
           </div>
+          {canEdit && (
           <Button
             size="sm"
             onClick={saveAll}
@@ -1188,6 +1204,7 @@ function ReconcileView({
           >
             <Save className="w-3 h-3" /> Save All
           </Button>
+          )}
         </div>
 
         {/* Column headers */}
@@ -1223,8 +1240,9 @@ function ReconcileView({
                     type="number"
                     value={drafts[p.page_id] ?? ""}
                     onChange={(e) => setDrafts((prev) => ({ ...prev, [p.page_id]: e.target.value }))}
-                    onKeyDown={(e) => { if (e.key === "Enter") saveSingle(p.page_id); }}
-                    onBlur={() => { if (hasDraft) saveSingle(p.page_id); }}
+                    onKeyDown={(e) => { if (canEdit && e.key === "Enter") saveSingle(p.page_id); }}
+                    onBlur={() => { if (canEdit && hasDraft) saveSingle(p.page_id); }}
+                    disabled={!canEdit}
                     placeholder="Enter views…"
                     className="h-8 w-full text-xs bg-zinc-800 border-zinc-600 text-white tabular-nums placeholder-zinc-600 focus:border-violet-500"
                   />

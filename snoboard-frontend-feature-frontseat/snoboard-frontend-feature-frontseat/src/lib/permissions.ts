@@ -30,6 +30,9 @@ export type Permission =
   | 'manage_team'                 // add/remove team members and change roles (admin-only)
   | 'post_tracker_assigned_only'  // in Post Tracker only: see ideas where tagged (designer override)
   | 'add_experiment_idea'         // create ideas in Experiment X (Pulkit, Varun only)
+  | 'view_experiment_x'           // read-only access to Experiment X
+  | 'edit_experiment_x'           // edit ideas / kanban in Experiment X
+  | 'edit_six_day_tracker'        // update views and entries in 6-Day Tracker
 
 // ── Reusable permission sets ──────────────────────────────────────────────────
 
@@ -48,6 +51,9 @@ const ADMIN_PERMISSIONS: Permission[] = [
   'view_top_posts',
   'attach_file_to_idea',
   'add_experiment_idea',
+  'view_experiment_x',
+  'edit_experiment_x',
+  'edit_six_day_tracker',
 ]
 
 const CS_CW_PERMISSIONS: Permission[] = [
@@ -89,12 +95,28 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
 
   // Experiment X creators — Pulkit & Varun only
   experiment_x: [
+    'view_experiment_x',
+    'edit_experiment_x',
     'view_all_ideas',
     'create_idea',
     'edit_own_idea',
     'delete_own_idea',
     'comment_on_idea',
     'add_experiment_idea',
+  ],
+
+  // Content Ops — Experiment X + 6-Day Tracker
+  content_ops_intern: [
+    'view_experiment_x',
+    'edit_six_day_tracker',
+  ],
+  content_ops_manager: [
+    'view_experiment_x',
+    'edit_experiment_x',
+    'add_experiment_idea',
+    'edit_six_day_tracker',
+    'view_all_ideas',
+    'comment_on_idea',
   ],
 
   // Other roles
@@ -127,6 +149,8 @@ export const ROLE_NAV: Record<string, '*' | string[]> = {
   smm:              ['/', '/content-tracker', '/post-tracker', '/growth', '/stage1-tracker'],
   content_creators: ['/', '/six-day-tracker', '/team-performance', '/workboard', '/tickets', '/news', '/blue-ocean', '/growth'],
   experiment_x:     ['/', '/experiment-x', '/team-performance', '/tickets', '/news', '/growth'],
+  content_ops_intern:  ['/', '/experiment-x', '/six-day-tracker', '/growth'],
+  content_ops_manager: ['/', '/experiment-x', '/six-day-tracker', '/team-performance', '/growth'],
 }
 
 export function isRouteAllowed(role: string | null, path: string): boolean {
@@ -180,4 +204,19 @@ export function canDeleteIdea(
   if (hasPermission(role, 'delete_any_idea')) return true
   if (hasPermission(role, 'delete_own_idea')) return ideaCreatedBy === currentUserName
   return false
+}
+
+export function canViewExperimentX(role: string | null): boolean {
+  if (!role) return false
+  return hasPermission(role, 'view_experiment_x') || hasFullNav(role) || hasPermission(role, 'add_experiment_idea')
+}
+
+export function canEditExperimentX(role: string | null): boolean {
+  if (!role) return false
+  return hasPermission(role, 'edit_experiment_x') || hasFullNav(role)
+}
+
+export function canEditSixDayTracker(role: string | null): boolean {
+  if (!role) return false
+  return hasPermission(role, 'edit_six_day_tracker') || hasFullNav(role)
 }

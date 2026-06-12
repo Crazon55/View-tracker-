@@ -15,6 +15,8 @@ const ROLES = [
   { value: "carousel_designer", label: "Carousel Designer" },
   { value: "design",            label: "Designer" },
   { value: "smm",               label: "Social Media Manager (SMM)" },
+  { value: "content_ops_intern",  label: "Content Ops Intern" },
+  { value: "content_ops_manager", label: "Content Ops Manager" },
   { value: "content_creators",  label: "Content Creator" },
 ];
 

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { canViewExperimentX, canEditExperimentX } from "@/lib/permissions";
 import IdeaThread from "@/components/IdeaThread";
 import {
   getExpSettings, updateExpSettings,
@@ -179,11 +180,12 @@ function DayGroup({ dateStr, count, children }: { dateStr: string; count: number
 // ---------------------------------------------------------------------------
 // Kanban card (used in Idea Bank board)
 // ---------------------------------------------------------------------------
-function KanbanCard({ idea, onUpdate, onDelete, onClick }: {
+function KanbanCard({ idea, onUpdate, onDelete, onClick, readOnly }: {
   idea: any;
   onUpdate: (id: string, data: any) => void;
   onDelete: (id: string) => void;
   onClick: () => void;
+  readOnly?: boolean;
 }) {
   const pages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
   const pc = PAGE_COLORS[pages[0]] || "#a1a1aa";
@@ -193,8 +195,8 @@ function KanbanCard({ idea, onUpdate, onDelete, onClick }: {
   const hoverBorder = testCfg ? testCfg.color : "#3f3f46";
   return (
     <div
-      draggable
-      onDragStart={e => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", idea.id); }}
+      draggable={!readOnly}
+      onDragStart={readOnly ? undefined : e => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", idea.id); }}
       onClick={onClick}
       style={{
         background: testCfg ? testCfg.bg : "#18181b",
@@ -337,10 +339,13 @@ const STAGE_ACTIONS: Record<string, { label: string; stage: string; bg: string; 
 };
 
 // Inline save text input — same as SafeTextInput in ContentTracker
-function SafeField({ value, onSave, placeholder, style }: { value: string | null; onSave: (v: string) => void; placeholder?: string; style?: React.CSSProperties }) {
+function SafeField({ value, onSave, placeholder, style, readOnly }: { value: string | null; onSave: (v: string) => void; placeholder?: string; style?: React.CSSProperties; readOnly?: boolean }) {
   const [local, setLocal] = useState(value || "");
   const dirty = useRef(false);
   useEffect(() => { if (!dirty.current) setLocal(value || ""); }, [value]);
+  if (readOnly) {
+    return <span style={{ fontSize: 13, color: value ? "#e4e4e7" : "#52525b", ...style }}>{value || placeholder || "—"}</span>;
+  }
   return (
     <input
       value={local}
@@ -352,10 +357,13 @@ function SafeField({ value, onSave, placeholder, style }: { value: string | null
   );
 }
 
-function SafeArea({ value, onSave, placeholder, rows }: { value: string; onSave: (v: string) => void; placeholder?: string; rows?: number }) {
+function SafeArea({ value, onSave, placeholder, rows, readOnly }: { value: string; onSave: (v: string) => void; placeholder?: string; rows?: number; readOnly?: boolean }) {
   const [local, setLocal] = useState(value || "");
   const dirty = useRef(false);
   useEffect(() => { if (!dirty.current) setLocal(value || ""); }, [value]);
+  if (readOnly) {
+    return <p style={{ margin: 0, fontSize: 13, color: value ? "#e4e4e7" : "#52525b", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{value || placeholder || "—"}</p>;
+  }
   return (
     <textarea
       value={local} rows={rows || 3}
@@ -370,12 +378,13 @@ function SafeArea({ value, onSave, placeholder, rows }: { value: string; onSave:
 // ---------------------------------------------------------------------------
 // Idea detail modal — full Content Tracker parity
 // ---------------------------------------------------------------------------
-function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions }: {
+function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, readOnly }: {
   idea: any;
   onUpdate: (id: string, data: any) => void;
   onDelete?: (id: string) => void;
   onClose: () => void;
   hideStageActions?: boolean;
+  readOnly?: boolean;
 }) {
   const stage = idea.status || "new";
   const ss = STATUS_STYLE[stage] || STATUS_STYLE.new;
@@ -383,6 +392,7 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions }
   const pc = PAGE_COLORS[primaryPage] || "#a1a1aa";
   const actions = STAGE_ACTIONS[stage] || [];
   const selectedPages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+  const noEdit = readOnly || hideStageActions;
 
   const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "#71717a", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
 
@@ -404,12 +414,18 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions }
       >
         {/* Title + close */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
-          <SafeField
-            value={idea.topic}
-            onSave={v => onUpdate(idea.id, { topic: v })}
-            placeholder="Topic / hook"
-            style={{ fontSize: 16, fontWeight: 600, color: "#fff", border: "none", background: "transparent", padding: "0" }}
-          />
+          {readOnly ? (
+            <p style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "#fff" }}>
+              {idea.topic || <em style={{ color: "#52525b", fontWeight: 400 }}>Untitled</em>}
+            </p>
+          ) : (
+            <SafeField
+              value={idea.topic}
+              onSave={v => onUpdate(idea.id, { topic: v })}
+              placeholder="Topic / hook"
+              style={{ fontSize: 16, fontWeight: 600, color: "#fff", border: "none", background: "transparent", padding: "0" }}
+            />
+          )}
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#71717a", padding: "0 4px", flexShrink: 0 }}>✕</button>
         </div>
 
@@ -431,7 +447,7 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions }
         </div>
 
         {/* Stage action buttons */}
-        {!hideStageActions && actions.length > 0 && (
+        {!noEdit && actions.length > 0 && (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {actions.map(a => (
               <button
@@ -452,6 +468,14 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions }
         {(stage === "testing" || stage === "proven_ideas") && (
           <div>
             <label style={ls}>Pages (select all that apply)</label>
+            {readOnly ? (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {selectedPages.map((pg: string) => {
+                  const c = PAGE_COLORS[pg] || "#a1a1aa";
+                  return <span key={pg} style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, background: c + "22", color: c, fontWeight: 600 }}>{pg}</span>;
+                })}
+              </div>
+            ) : (
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               {EXP_PAGES.map(p => {
                 const c = PAGE_COLORS[p] || "#a1a1aa";
@@ -471,12 +495,16 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions }
                 );
               })}
             </div>
+            )}
           </div>
         )}
 
         {/* Video format */}
         <div>
           <label style={ls}>Video format</label>
+          {readOnly ? (
+            <span style={{ fontSize: 13, color: idea.video_format ? "#50E0B0" : "#52525b" }}>{idea.video_format || "—"}</span>
+          ) : (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {VIDEO_FORMATS.map(fmt => {
               const active = idea.video_format === fmt;
@@ -496,12 +524,14 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions }
               );
             })}
           </div>
+          )}
         </div>
 
         {/* Hook variations */}
         <div>
           <label style={ls}>Hook variations</label>
           <SafeArea
+            readOnly={readOnly}
             value={idea.hook_variations || ""}
             onSave={v => onUpdate(idea.id, { hook_variations: v })}
             placeholder="One hook per line"
@@ -512,13 +542,13 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions }
         {/* Music ref */}
         <div>
           <label style={ls}>Music reference / suggestions</label>
-          <SafeField value={idea.music_ref} onSave={v => onUpdate(idea.id, { music_ref: v })} placeholder="e.g. Dark cinematic, trending audio" />
+          <SafeField readOnly={readOnly} value={idea.music_ref} onSave={v => onUpdate(idea.id, { music_ref: v })} placeholder="e.g. Dark cinematic, trending audio" />
         </div>
 
         {/* Frame link */}
         <div>
           <label style={ls}>Frame link</label>
-          <SafeField value={idea.frame_link} onSave={v => onUpdate(idea.id, { frame_link: v })} placeholder="Google Drive / reference frames link" />
+          <SafeField readOnly={readOnly} value={idea.frame_link} onSave={v => onUpdate(idea.id, { frame_link: v })} placeholder="Google Drive / reference frames link" />
           {idea.frame_link && <a href={idea.frame_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block", marginTop: 4 }}>{idea.frame_link}</a>}
         </div>
 
@@ -526,11 +556,11 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions }
         <div style={{ display: "flex", gap: 10 }}>
           <div style={{ flex: 1 }}>
             <label style={ls}>YT link (original source)</label>
-            <SafeField value={idea.yt_url} onSave={v => onUpdate(idea.id, { yt_url: v })} placeholder="https://youtube.com/watch?v=..." />
+            <SafeField readOnly={readOnly} value={idea.yt_url} onSave={v => onUpdate(idea.id, { yt_url: v })} placeholder="https://youtube.com/watch?v=..." />
           </div>
           <div style={{ flex: "0 0 140px" }}>
             <label style={ls}>YT timestamps</label>
-            <SafeField value={idea.yt_timestamps} onSave={v => onUpdate(idea.id, { yt_timestamps: v })} placeholder="0:30–1:45" />
+            <SafeField readOnly={readOnly} value={idea.yt_timestamps} onSave={v => onUpdate(idea.id, { yt_timestamps: v })} placeholder="0:30–1:45" />
           </div>
         </div>
         {idea.yt_url && <a href={idea.yt_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all" }}>{idea.yt_url}</a>}
@@ -538,7 +568,7 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions }
         {/* Comp link */}
         <div>
           <label style={ls}>Comp link</label>
-          <SafeField value={idea.comp_link} onSave={v => onUpdate(idea.id, { comp_link: v })} placeholder="Competitor reel / post URL" />
+          <SafeField readOnly={readOnly} value={idea.comp_link} onSave={v => onUpdate(idea.id, { comp_link: v })} placeholder="Competitor reel / post URL" />
           {idea.comp_link && <a href={idea.comp_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block", marginTop: 4 }}>{idea.comp_link}</a>}
         </div>
 
@@ -693,7 +723,7 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions }
         </div>
 
         {/* Delete — only shown when explicitly allowed (not in Frontseat) */}
-        {onDelete && (
+        {onDelete && !readOnly && (
           <button
             onClick={() => { if (confirm("Delete this idea?")) { onDelete(idea.id); onClose(); } }}
             style={{ padding: "9px 20px", background: "transparent", color: "#FF7070", border: "1.5px solid #3f3f46", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: "pointer", marginTop: 4 }}
@@ -709,7 +739,7 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions }
 // ---------------------------------------------------------------------------
 // Archive card (Content Bank) — clickable, opens full IdeaDetailModal
 // ---------------------------------------------------------------------------
-function ArchiveRow({ item, onUpdate, onDelete }: { item: any; onUpdate: (id: string, data: any) => void; onDelete: (id: string) => void }) {
+function ArchiveRow({ item, onUpdate, onDelete, readOnly }: { item: any; onUpdate: (id: string, data: any) => void; onDelete: (id: string) => void; readOnly?: boolean }) {
   const [detailOpen, setDetailOpen] = useState(false);
   const pages = (item.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
   const ss = STATUS_STYLE[item.status || "new"] || STATUS_STYLE.new;
@@ -755,8 +785,9 @@ function ArchiveRow({ item, onUpdate, onDelete }: { item: any; onUpdate: (id: st
       {detailOpen && (
         <IdeaDetailModal
           idea={item}
+          readOnly={readOnly}
           onUpdate={onUpdate}
-          onDelete={onDelete}
+          onDelete={readOnly ? undefined : onDelete}
           onClose={() => setDetailOpen(false)}
         />
       )}
@@ -867,7 +898,7 @@ const RANK_CONFIG: Record<number, { text: string; bg: string; border: string; la
 // ---------------------------------------------------------------------------
 // Working idea card
 // ---------------------------------------------------------------------------
-function WorkingRow({ item, rank, onDistribute }: { item: any; rank: number; onDistribute: (id: string) => void }) {
+function WorkingRow({ item, rank, onDistribute, readOnly }: { item: any; rank: number; onDistribute: (id: string) => void; readOnly?: boolean }) {
   const [detailOpen, setDetailOpen] = useState(false);
   const pages = (item.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
   const rankCfg = RANK_CONFIG[rank];
@@ -929,14 +960,14 @@ function WorkingRow({ item, rank, onDistribute }: { item: any; rank: number; onD
           </span>
           {item.distributed ? (
             <span style={{ fontSize: 10, color: "#52525b", fontStyle: "italic" }}>Distributed</span>
-          ) : (
+          ) : !readOnly ? (
             <button
               onClick={e => { e.stopPropagation(); onDistribute(item.id); }}
               style={{ ...btnPrimary, padding: "4px 12px", fontSize: 11 }}
             >
               Distribute to all pages
             </button>
-          )}
+          ) : null}
           <span style={{ fontSize: 10, color: "#52525b" }}>Open →</span>
         </div>
       </div>
@@ -1195,7 +1226,7 @@ const STAGE_DOT: Record<string, string> = {
 // ---------------------------------------------------------------------------
 // Idea Bank tab — kanban board (same layout as Content Tracker)
 // ---------------------------------------------------------------------------
-function IdeaBankTab({ pageFilter, search }: { pageFilter: string; search: string }) {
+function IdeaBankTab({ pageFilter, search, readOnly }: { pageFilter: string; search: string; readOnly?: boolean }) {
   const qc = useQueryClient();
   const { can } = usePermissions();
   const [addOpen, setAddOpen] = useState(false);
@@ -1299,7 +1330,7 @@ function IdeaBankTab({ pageFilter, search }: { pageFilter: string; search: strin
       {/* Toolbar */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
         <span style={{ fontSize: 12, color: "#71717a" }}>Week {currentWeek} · {filtered.length} idea{filtered.length !== 1 ? "s" : ""}</span>
-        {can('add_experiment_idea') && (
+        {can('add_experiment_idea') && !readOnly && (
           <button onClick={() => setAddOpen(true)} style={{ ...btnPrimary, padding: "5px 14px" }}>
             + New idea
           </button>
@@ -1318,9 +1349,9 @@ function IdeaBankTab({ pageFilter, search }: { pageFilter: string; search: strin
           <div
             key={stage}
             style={{ minWidth: 200, maxWidth: 240, flex: "1 0 200px" }}
-            onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropStage(stage); }}
-            onDragLeave={() => setDropStage(null)}
-            onDrop={e => {
+            onDragOver={readOnly ? undefined : e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropStage(stage); }}
+            onDragLeave={readOnly ? undefined : () => setDropStage(null)}
+            onDrop={readOnly ? undefined : e => {
               e.preventDefault();
               const id = e.dataTransfer.getData("text/plain");
               if (id) updateMut.mutate({ id, data: { status: stage } });
@@ -1347,13 +1378,14 @@ function IdeaBankTab({ pageFilter, search }: { pageFilter: string; search: strin
                 .map((idea: any) => (
                   <div
                     key={idea.id}
-                    draggable
-                    onDragStart={e => { setDraggingId(idea.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", idea.id); }}
-                    onDragEnd={() => { setDraggingId(null); setDropStage(null); }}
+                    draggable={!readOnly}
+                    onDragStart={readOnly ? undefined : e => { setDraggingId(idea.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", idea.id); }}
+                    onDragEnd={readOnly ? undefined : () => { setDraggingId(null); setDropStage(null); }}
                     style={{ opacity: draggingId === idea.id ? 0.4 : 1, transition: "opacity 0.12s" }}
                   >
                     <KanbanCard
                       idea={idea}
+                      readOnly={readOnly}
                       onUpdate={(id, data) => updateMut.mutate({ id, data })}
                       onDelete={id => deleteMut.mutate(id)}
                       onClick={() => setDetailIdea(idea)}
@@ -1375,8 +1407,9 @@ function IdeaBankTab({ pageFilter, search }: { pageFilter: string; search: strin
       {detailIdea && (
         <IdeaDetailModal
           idea={detailIdea}
+          readOnly={readOnly}
           onUpdate={(id, data) => updateMut.mutate({ id, data })}
-          onDelete={id => deleteMut.mutate(id)}
+          onDelete={readOnly ? undefined : id => deleteMut.mutate(id)}
           onClose={() => setDetailIdea(null)}
         />
       )}
@@ -1387,7 +1420,7 @@ function IdeaBankTab({ pageFilter, search }: { pageFilter: string; search: strin
 // ---------------------------------------------------------------------------
 // Content Bank tab (full archive — month / week / day / search)
 // ---------------------------------------------------------------------------
-function ContentBankTab({ pageFilter, search }: { pageFilter: string; search: string }) {
+function ContentBankTab({ pageFilter, search, readOnly }: { pageFilter: string; search: string; readOnly?: boolean }) {
   const qc = useQueryClient();
   const now = new Date();
   // null = all time; set to a specific month to filter
@@ -1576,6 +1609,7 @@ function ContentBankTab({ pageFilter, search }: { pageFilter: string; search: st
               <ArchiveRow
                 key={item.id}
                 item={item}
+                readOnly={readOnly}
                 onUpdate={(id, data) => updateMut.mutate({ id, data })}
                 onDelete={id => deleteMut.mutate(id)}
               />
@@ -1590,7 +1624,7 @@ function ContentBankTab({ pageFilter, search }: { pageFilter: string; search: st
 // ---------------------------------------------------------------------------
 // Working Ideas tab
 // ---------------------------------------------------------------------------
-function WorkingIdeasTab({ pageFilter, search }: { pageFilter: string; search: string }) {
+function WorkingIdeasTab({ pageFilter, search, readOnly }: { pageFilter: string; search: string; readOnly?: boolean }) {
   const qc = useQueryClient();
   const [editingGoal, setEditingGoal] = useState(false);
   const [goalDraft, setGoalDraft] = useState("");
@@ -1728,7 +1762,7 @@ function WorkingIdeasTab({ pageFilter, search }: { pageFilter: string; search: s
           {/* Ranked list */}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {filtered.map((item, idx) => (
-              <WorkingRow key={item.id} item={item} rank={idx + 1} onDistribute={id => distributeMut.mutate(id)} />
+              <WorkingRow key={item.id} item={item} rank={idx + 1} readOnly={readOnly} onDistribute={id => distributeMut.mutate(id)} />
             ))}
           </div>
         </>
@@ -1874,13 +1908,13 @@ function QuickAddModal({ open, onAdd, onClose }: {
 // ---------------------------------------------------------------------------
 // Frontseat — pool card (left panel, draggable)
 // ---------------------------------------------------------------------------
-function FrontseatPoolCard({ idea, letter, onDragStart, onClick, onDelete }: {
-  idea: any; letter: string; onDragStart: () => void; onClick: () => void; onDelete: () => void;
+function FrontseatPoolCard({ idea, letter, onDragStart, onClick, onDelete, readOnly }: {
+  idea: any; letter: string; onDragStart: () => void; onClick: () => void; onDelete: () => void; readOnly?: boolean;
 }) {
   return (
     <div
-      draggable
-      onDragStart={e => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", idea.id); onDragStart(); }}
+      draggable={!readOnly}
+      onDragStart={readOnly ? undefined : e => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", idea.id); onDragStart(); }}
       onClick={onClick}
       style={{
         position: "relative", background: "#18181b", border: "1.5px solid #27272a", borderRadius: 8,
@@ -1889,6 +1923,7 @@ function FrontseatPoolCard({ idea, letter, onDragStart, onClick, onDelete }: {
       onMouseEnter={e => (e.currentTarget.style.borderColor = "#3f3f46")}
       onMouseLeave={e => (e.currentTarget.style.borderColor = "#27272a")}
     >
+      {!readOnly && (
       <button
         onClick={e => { e.stopPropagation(); e.preventDefault(); onDelete(); }}
         title="Delete idea"
@@ -1899,6 +1934,7 @@ function FrontseatPoolCard({ idea, letter, onDragStart, onClick, onDelete }: {
           zIndex: 2,
         }}
       >✕</button>
+      )}
       <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
         <span style={{ fontSize: 10, fontWeight: 800, color: "#a78bfa", background: "#7c3aed22", borderRadius: 4, padding: "1px 6px" }}>{letter}</span>
         <span style={{ fontSize: 10, color: "#52525b", background: "#27272a", borderRadius: 4, padding: "1px 5px" }}>{idea.content_type}</span>
@@ -1971,7 +2007,7 @@ function FrontseatPageCard({ idea, letter, onClick, onRemoveFromPage }: {
 // ---------------------------------------------------------------------------
 // Frontseat tab — current-week ideas organised by page (view layer over Idea Bank)
 // ---------------------------------------------------------------------------
-function FrontseatTab() {
+function FrontseatTab({ readOnly }: { readOnly?: boolean }) {
   const qc = useQueryClient();
   const { can } = usePermissions();
   const [addOpen, setAddOpen]       = useState(false);
@@ -2112,6 +2148,7 @@ function FrontseatTab() {
   }, [todayIdeas]);
 
   const handleDrop = (page: string, e: React.DragEvent) => {
+    if (readOnly) return;
     e.preventDefault();
     const ideaId = e.dataTransfer.getData("text/plain");
     setDropTarget(null); setDraggingId(null);
@@ -2153,7 +2190,7 @@ function FrontseatTab() {
               {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · drag to assign
             </p>
           </div>
-          {can("add_experiment_idea") && (
+          {can("add_experiment_idea") && !readOnly && (
             <button onClick={() => setAddOpen(true)} style={{
               padding: "4px 10px", background: "#7c3aed", color: "#fff", border: "none",
               borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer",
@@ -2188,6 +2225,7 @@ function FrontseatTab() {
                   <FrontseatPoolCard
                     idea={idea}
                     letter={ideaLetterMap[idea.id] || "?"}
+                    readOnly={readOnly}
                     onDragStart={() => setDraggingId(idea.id)}
                     onClick={() => setDetailIdea(idea)}
                     onDelete={() => {
@@ -2230,9 +2268,9 @@ function FrontseatTab() {
             <div
               key={page}
               style={{ minWidth: 195, flex: "1 0 195px", maxWidth: 250 }}
-              onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropTarget(page); }}
-              onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTarget(null); }}
-              onDrop={e => handleDrop(page, e)}
+              onDragOver={readOnly ? undefined : e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropTarget(page); }}
+              onDragLeave={readOnly ? undefined : e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTarget(null); }}
+              onDrop={readOnly ? undefined : e => handleDrop(page, e)}
             >
               {/* Column header */}
               <div style={{
@@ -2265,7 +2303,7 @@ function FrontseatTab() {
                     idea={idea}
                     letter={ideaLetterMap[idea.source_pool_id] || "?"}
                     onClick={() => setDetailIdea(idea)}
-                    onRemoveFromPage={() => {
+                    onRemoveFromPage={readOnly ? undefined : () => {
                       // Delete the copy
                       deleteMut.mutate(idea.id);
                       // Remove page from pool idea's chip tracking
@@ -2288,6 +2326,7 @@ function FrontseatTab() {
       {detailIdea && (
         <IdeaDetailModal
           idea={detailIdea}
+          readOnly={readOnly}
           onUpdate={(id, data) => updateMut.mutate({ id, data })}
           onClose={() => setDetailIdea(null)}
           hideStageActions={detailIdea.frontseat_pool === true}
@@ -2305,6 +2344,8 @@ export default function ExperimentX() {
   const [pageFilter, setPageFilter] = useState("all");
   const [search, setSearch] = useState("");
   const qc = useQueryClient();
+  const { role } = usePermissions();
+  const readOnly = !canEditExperimentX(role);
   const topMigrationDone = useRef(false);
   useEffect(() => {
     if (topMigrationDone.current) return;
@@ -2314,6 +2355,14 @@ export default function ExperimentX() {
       qc.invalidateQueries({ queryKey: ["exp-content-bank-all"] });
     });
   }, []);
+
+  if (!canViewExperimentX(role)) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#09090b", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <p style={{ color: "#71717a", fontSize: 14 }}>You don&apos;t have permission to view Experiment X.</p>
+      </div>
+    );
+  }
 
   const tabColors: Record<TabMode, string> = {
     "frontseat":     "#7c3aed",
@@ -2382,10 +2431,10 @@ export default function ExperimentX() {
 
       {/* Tab content */}
       <div style={{ maxWidth: (tab === "idea-bank" || tab === "frontseat") ? "none" : 860 }}>
-        {tab === "frontseat"     && <FrontseatTab />}
-        {tab === "idea-bank"     && <IdeaBankTab    pageFilter={pageFilter} search={search} />}
-        {tab === "content-bank"  && <ContentBankTab pageFilter={pageFilter} search={search} />}
-        {tab === "working-ideas" && <WorkingIdeasTab pageFilter={pageFilter} search={search} />}
+        {tab === "frontseat"     && <FrontseatTab readOnly={readOnly} />}
+        {tab === "idea-bank"     && <IdeaBankTab    pageFilter={pageFilter} search={search} readOnly={readOnly} />}
+        {tab === "content-bank"  && <ContentBankTab pageFilter={pageFilter} search={search} readOnly={readOnly} />}
+        {tab === "working-ideas" && <WorkingIdeasTab pageFilter={pageFilter} search={search} readOnly={readOnly} />}
       </div>
     </div>
   );
