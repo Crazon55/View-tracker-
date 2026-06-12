@@ -18,7 +18,18 @@ async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const errBody = await res.json().catch(() => null);
-    throw new Error(errBody?.detail || `API error: ${res.status}`);
+    const detail = errBody?.detail;
+    const msg =
+      typeof detail === "string"
+        ? detail
+        : Array.isArray(detail)
+          ? detail.map((d: { msg?: string }) => d.msg).filter(Boolean).join("; ")
+          : errBody?.message
+            ? String(errBody.message)
+            : res.status === 502 || res.status === 504
+              ? "Backend unavailable — redeploy the API on EC2"
+              : `Request failed (${res.status})`;
+    throw new Error(msg);
   }
   const json = await res.json();
   return json.data ?? json;

@@ -36,6 +36,10 @@ const ALLOWED_DOMAIN = "owledmedia.com";
 const DEPRECATED_ROLES = new Set(["ops_manager", "content_creators"]);
 const ROLE_MIGRATIONS: Record<string, string> = { content_creators: "cs" };
 
+function roleKey(roles: string[]): string {
+  return [...roles].sort().join(",");
+}
+
 function activeRoles(roleStr: string): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -54,6 +58,16 @@ function activeRoles(roleStr: string): string[] {
     }
   }
   return out;
+}
+
+function toastError(err: unknown, fallback: string) {
+  const msg =
+    err instanceof Error && err.message
+      ? err.message
+      : typeof err === "string" && err
+        ? err
+        : fallback;
+  toast.error(msg);
 }
 
 export default function TeamRolesPage() {
@@ -90,7 +104,7 @@ export default function TeamRolesPage() {
       setOpenPicker(null);
       toast.success(`Role updated for ${vars.name}`);
     },
-    onError: (_err, vars) => toast.error(`Failed to update role for ${vars.name}`),
+    onError: (err, vars) => toastError(err, `Failed to update role for ${vars.name}`),
   });
 
   const addMemberMut = useMutation({
@@ -104,7 +118,7 @@ export default function TeamRolesPage() {
       setNewRoles([]);
       toast.success(`${vars.name} added to the team`);
     },
-    onError: () => toast.error("Failed to add team member"),
+    onError: (err) => toastError(err, "Failed to add team member"),
   });
 
   const removeMemberMut = useMutation({
@@ -114,7 +128,7 @@ export default function TeamRolesPage() {
       const removed = users.find((u) => u.email === email);
       toast.success(`${removed?.name || email} removed from the team`);
     },
-    onError: (err: Error) => toast.error(err.message || "Failed to remove team member"),
+    onError: (err) => toastError(err, "Failed to remove team member"),
   });
 
   if (!can("manage_team")) {
@@ -259,7 +273,7 @@ export default function TeamRolesPage() {
             {users.map((u) => {
               const currentRoles = activeRoles(u.role || "");
               const selectedRoles = pendingChanges[u.email] ?? currentRoles;
-              const isDirty = selectedRoles.join(",") !== currentRoles.join(",");
+              const isDirty = roleKey(selectedRoles) !== roleKey(currentRoles);
               const isOpen = openPicker === u.email;
               const isSelf = user?.email?.toLowerCase() === u.email.toLowerCase();
 
@@ -299,7 +313,17 @@ export default function TeamRolesPage() {
 
                       <button
                         disabled={!isDirty || updateRoleMut.isPending}
-                        onClick={() => updateRoleMut.mutate({ email: u.email, role: selectedRoles.join(","), name: u.name })}
+                        onClick={() => {
+                          if (!selectedRoles.length) {
+                            toast.error("Select at least one role");
+                            return;
+                          }
+                          updateRoleMut.mutate({
+                            email: u.email,
+                            role: selectedRoles.join(","),
+                            name: u.name || u.email.split("@")[0],
+                          });
+                        }}
                         className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all ${isDirty ? "bg-violet-600 hover:bg-violet-700 text-white" : "bg-zinc-800 text-zinc-600 cursor-not-allowed"}`}
                       >
                         {updateRoleMut.isPending ? "Saving..." : "Save"}

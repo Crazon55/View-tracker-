@@ -1355,28 +1355,50 @@ async def set_user_role(req: dict):
     from app.database.client import get_supabase_client
     client = get_supabase_client()
     email = (req.get("email") or "").strip().lower()
-    role = req.get("role")
+    raw_role = req.get("role")
     name = req.get("name", "")
-    if not email or not role:
+    if not email or raw_role is None or raw_role == "":
         raise HTTPException(status_code=400, detail="email and role required")
-    if role_contains_deprecated(role):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Deprecated role(s) not allowed: {', '.join(sorted(DEPRECATED_ROLES))}",
-        )
-    role = sanitize_role_string(role)
+    role = sanitize_role_string(str(raw_role))
     if not role:
         raise HTTPException(status_code=400, detail="At least one valid role is required")
     if not email.endswith(f"@{ALLOWED_DOMAIN}"):
         raise HTTPException(status_code=400, detail=f"Only @{ALLOWED_DOMAIN} emails are allowed")
 
-    # Upsert
-    existing = client.table("user_roles").select("id").eq("email", email).execute().data
-    if existing:
-        entry = client.table("user_roles").update({"role": role, "name": name}).eq("email", email).execute().data[0]
-    else:
-        entry = client.table("user_roles").insert({"email": email, "role": role, "name": name}).execute().data[0]
-    return {"success": True, "data": entry}
+    payload: dict = {"role": role}
+    if name:
+        payload["name"] = name
+    existing = client.table("user_roles").select("id,name,role").eq("email", email).execute().data
+    try:
+        if existing:
+            result = (
+                client.table("user_roles")
+                .update(payload)
+                .eq("email", email)
+                .select("*")
+                .execute()
+            )
+        else:
+            if "name" not in payload:
+                payload["name"] = email.split("@")[0]
+            result = (
+                client.table("user_roles")
+                .insert({"email": email, **payload})
+                .select("*")
+                .execute()
+            )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+
+    if not result.data:
+        verify = client.table("user_roles").select("*").eq("email", email).execute().data
+        if verify and verify[0].get("role") == role:
+            return {"success": True, "data": verify[0]}
+        raise HTTPException(
+            status_code=500,
+            detail="Could not save role — run in Supabase: ALTER TABLE user_roles DISABLE ROW LEVEL SECURITY;",
+        )
+    return {"success": True, "data": result.data[0]}
 
 
 @app.delete("/api/v1/user-role/{email}")
