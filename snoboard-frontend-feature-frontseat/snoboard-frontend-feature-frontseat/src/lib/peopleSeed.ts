@@ -12,7 +12,7 @@
  * `aliases` (common nicknames / email local parts) are matched.
  */
 
-export type PersonRole = "senior_cs" | "cs" | "cw" | "design" | "ai_dev" | "editors" | "content_creators" | "carousel_designer" | "smm";
+export type PersonRole = "senior_cs" | "cs" | "cw" | "design" | "ai_dev" | "editors" | "carousel_designer" | "smm";
 export type PersonNiche = "garfields" | "goofies" | "sheruses";
 
 export type SeedPerson = {
@@ -48,7 +48,6 @@ export const ROLE_LABEL: Record<PersonRole, string> = {
   design:            "Designer",
   ai_dev:            "AI Dev",
   editors:           "Editor",
-  content_creators:  "Creator",
   carousel_designer: "Carousel Designer",
   smm:               "SMM",
 };
@@ -60,7 +59,6 @@ export const ROLE_COLOR: Record<PersonRole, { text: string; bg: string; border: 
   design:            { text: "#B49EFF", bg: "rgba(123,97,196,0.15)",  border: "rgba(123,97,196,0.40)" },
   ai_dev:            { text: "#9B8FFF", bg: "rgba(83,74,183,0.15)",   border: "rgba(83,74,183,0.40)" },
   editors:           { text: "#FF7070", bg: "rgba(201,59,59,0.15)",   border: "rgba(201,59,59,0.40)" },
-  content_creators:  { text: "#5AE0A0", bg: "rgba(45,158,95,0.15)",   border: "rgba(45,158,95,0.40)" },
   carousel_designer: { text: "#FFA07A", bg: "rgba(255,160,122,0.15)", border: "rgba(255,160,122,0.40)" },
   smm:               { text: "#F472B6", bg: "rgba(244,114,182,0.15)", border: "rgba(244,114,182,0.40)" },
 } as any;

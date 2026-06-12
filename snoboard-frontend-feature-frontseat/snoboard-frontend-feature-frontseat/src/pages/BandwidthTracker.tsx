@@ -242,7 +242,7 @@ export default function BandwidthTracker() {
     }
     const roleOrder: string[] = [
       "cs", "cdi", "cw", "design", "ai_automations",
-      "editors", "content_creators", "unassigned",
+      "editors", "unassigned",
     ];
     return roleOrder
       .filter((r) => groups[r]?.length)

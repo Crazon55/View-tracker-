@@ -17,8 +17,6 @@ const ROLE_LABELS: Record<string, string> = {
   design:            "Designer",
   smm:               "Social Media Manager",
   content_ops_intern:  "Content Ops Intern",
-  content_ops_manager: "Content Ops Manager",
-  content_creators:  "Content Creator",
 };
 
 const ROLE_COLOR: Record<string, string> = {
@@ -32,15 +30,30 @@ const ROLE_COLOR: Record<string, string> = {
   design:            "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
   smm:               "bg-pink-500/20 text-pink-300 border-pink-500/30",
   content_ops_intern:  "bg-cyan-500/20 text-cyan-300 border-cyan-500/30",
-  content_ops_manager: "bg-teal-500/20 text-teal-300 border-teal-500/30",
-  content_creators:  "bg-teal-500/20 text-teal-300 border-teal-500/30",
 };
 
 const ALLOWED_DOMAIN = "owledmedia.com";
-const DEPRECATED_ROLES = new Set(["ops_manager"]);
+const DEPRECATED_ROLES = new Set(["ops_manager", "content_creators"]);
+const ROLE_MIGRATIONS: Record<string, string> = { content_creators: "cs" };
 
 function activeRoles(roleStr: string): string[] {
-  return (roleStr || "").split(",").map((r) => r.trim()).filter((r) => r && !DEPRECATED_ROLES.has(r));
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of (roleStr || "").split(",").map((r) => r.trim()).filter(Boolean)) {
+    if (DEPRECATED_ROLES.has(raw)) {
+      const migrated = ROLE_MIGRATIONS[raw];
+      if (migrated && !seen.has(migrated)) {
+        seen.add(migrated);
+        out.push(migrated);
+      }
+      continue;
+    }
+    if (!seen.has(raw)) {
+      seen.add(raw);
+      out.push(raw);
+    }
+  }
+  return out;
 }
 
 export default function TeamRolesPage() {

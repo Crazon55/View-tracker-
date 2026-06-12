@@ -110,23 +110,15 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     'view_experiment_x',
     'edit_six_day_tracker',
   ],
-  content_ops_manager: [
-    'view_experiment_x',
-    'edit_experiment_x',
-    'add_experiment_idea',
-    'edit_six_day_tracker',
-    'view_all_ideas',
-    'comment_on_idea',
-  ],
 
-  // Other roles
-  content_creators: ['view_all_ideas', 'create_idea', 'edit_own_idea', 'delete_own_idea', 'comment_on_idea'],
+  // Other roles — (none)
 
   // ── Backwards compatibility aliases ───────────────────────────────────────
   // Users who had these old role values in localStorage still get correct access.
   admin:          ADMIN_PERMISSIONS,
   ai_automations: ADMIN_PERMISSIONS,
   post_designer:  COLLABORATOR_PERMISSIONS,
+  content_creators: CS_CW_PERMISSIONS,
 }
 
 // ── Role → allowed nav routes ─────────────────────────────────────────────────
@@ -147,10 +139,10 @@ export const ROLE_NAV: Record<string, '*' | string[]> = {
   carousel_designer: ['/', '/post-tracker', '/growth'],
 
   smm:              ['/', '/content-tracker', '/post-tracker', '/growth', '/stage1-tracker'],
-  content_creators: ['/', '/six-day-tracker', '/team-performance', '/workboard', '/tickets', '/news', '/blue-ocean', '/growth'],
   experiment_x:     ['/', '/experiment-x', '/team-performance', '/tickets', '/news', '/growth'],
   content_ops_intern:  ['/', '/experiment-x', '/six-day-tracker', '/growth'],
-  content_ops_manager: ['/', '/experiment-x', '/six-day-tracker', '/team-performance', '/growth'],
+  // legacy — migrated to cs in backend
+  content_creators: '*',
 }
 
 export function isRouteAllowed(role: string | null, path: string): boolean {

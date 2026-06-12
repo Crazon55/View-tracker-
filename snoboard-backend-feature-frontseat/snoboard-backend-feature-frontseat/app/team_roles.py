@@ -1,6 +1,10 @@
 """Team role helpers — deprecated roles, departed members, DB cleanup."""
 
-DEPRECATED_ROLES = frozenset({"ops_manager"})
+DEPRECATED_ROLES = frozenset({"ops_manager", "content_creators"})
+# Deprecated roles that should become another role (not be dropped).
+ROLE_MIGRATIONS: dict[str, str] = {
+    "content_creators": "cs",
+}
 REMOVED_PEOPLE = frozenset({"pranesh", "samiksha"})
 
 
@@ -8,8 +12,25 @@ def parse_role_list(role: str) -> list[str]:
     return [r.strip() for r in (role or "").split(",") if r.strip()]
 
 
+def migrate_role_list(role: str) -> list[str]:
+    """Strip removed roles and migrate retired roles (e.g. content_creators → cs)."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for r in parse_role_list(role):
+        if r in DEPRECATED_ROLES:
+            replacement = ROLE_MIGRATIONS.get(r)
+            if replacement and replacement not in seen:
+                seen.add(replacement)
+                out.append(replacement)
+            continue
+        if r not in seen:
+            seen.add(r)
+            out.append(r)
+    return out
+
+
 def sanitize_role_string(role: str) -> str:
-    return ",".join(r for r in parse_role_list(role) if r not in DEPRECATED_ROLES)
+    return ",".join(migrate_role_list(role))
 
 
 def is_removed_person(email: str, name: str) -> bool:
@@ -22,7 +43,7 @@ def role_contains_deprecated(role: str) -> bool:
 
 
 def cleanup_team_roles(client) -> dict:
-    """Remove departed members and strip/delete deprecated roles from user_roles."""
+    """Remove departed members and migrate/strip deprecated roles in user_roles."""
     rows = client.table("user_roles").select("email,name,role").execute().data or []
     removed: list[str] = []
     updated: list[str] = []

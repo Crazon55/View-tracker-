@@ -29,3 +29,18 @@ DELETE FROM user_roles WHERE trim(role) = '' OR role IS NULL;
 UPDATE content_entries
 SET assigned_role = NULL
 WHERE assigned_role = 'ops_manager';
+
+-- 6. Migrate Content Creator role → CS
+UPDATE user_roles SET role = 'cs' WHERE trim(role) = 'content_creators';
+
+UPDATE user_roles
+SET role = trim(both ',' from regexp_replace(',' || role || ',', ',content_creators,', ',cs,', 'gi'))
+WHERE role ILIKE '%content_creators%'
+  AND trim(role) <> 'content_creators';
+
+-- Dedupe cs,cs → cs in simple single-role leftovers
+UPDATE user_roles SET role = 'cs' WHERE role = 'cs,cs';
+
+UPDATE content_entries
+SET assigned_role = 'cs'
+WHERE assigned_role = 'content_creators';
