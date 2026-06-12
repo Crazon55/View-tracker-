@@ -8,7 +8,7 @@ import { ShieldCheck, RefreshCw, ChevronDown, UserPlus, Trash2 } from "lucide-re
 
 const ROLE_LABELS: Record<string, string> = {
   senior_cs:         "Senior CS",
-  boss_man:          "Boss Man",
+  boss_man:          "Content growth & operations",
   ai_dev:            "AI Dev",
   cs:                "CS (Content Strategist)",
   cw:                "Content Writer (CW)",

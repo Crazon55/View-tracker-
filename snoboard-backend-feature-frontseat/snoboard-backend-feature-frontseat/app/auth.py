@@ -23,7 +23,7 @@ def is_admin_role(role_str: str) -> bool:
 
 
 async def require_admin(request: Request):
-    """FastAPI dependency — admin roles only (Senior CS, Boss Man, AI Dev)."""
+    """FastAPI dependency — admin roles only (Senior CS, Content growth & operations, AI Dev)."""
     claims = await require_auth(request)
     from app.database.client import get_supabase_client
 

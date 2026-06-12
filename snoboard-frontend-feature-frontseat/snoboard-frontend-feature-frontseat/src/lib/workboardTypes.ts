@@ -10,7 +10,7 @@ export type WorkboardRoleId =
 export const WORKBOARD_ROLES: { id: WorkboardRoleId; label: string; short: string }[] = [
   { id: "ai_dev", label: "AI Developer", short: "AI Dev" },
   { id: "graphic_designer", label: "Graphic Designer", short: "Design" },
-  { id: "boss_man", label: "Boss Man", short: "Lead" },
+  { id: "boss_man", label: "Content growth & operations", short: "Growth Ops" },
   { id: "video_editor", label: "Video Editor", short: "Video" },
   { id: "content_creator", label: "Content Creator", short: "Content" },
 ];

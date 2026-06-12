@@ -192,7 +192,7 @@ const WORKBOARD_SELF_PICK: { id: WorkboardRoleId; label: string }[] = [
   { id: "graphic_designer", label: "Graphic Designer" },
   { id: "video_editor", label: "TCO / Video Editor" },
   { id: "content_creator", label: "TCO Content Writer / Creator" },
-  { id: "boss_man", label: "Manager / Boss Man" },
+  { id: "boss_man", label: "Content growth & operations" },
 ];
 
 function normalizeWorkboardEmail(email: string) {

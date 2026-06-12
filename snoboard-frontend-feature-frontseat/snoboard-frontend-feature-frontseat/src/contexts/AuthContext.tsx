@@ -21,7 +21,7 @@ function normalizeRole(role: string): string {
 
 const ROLES = [
   { value: "senior_cs",         label: "Senior CS" },
-  { value: "boss_man",          label: "Boss Man" },
+  { value: "boss_man",          label: "Content growth & operations" },
   { value: "ai_dev",            label: "AI Dev" },
   { value: "cs",                label: "CS (Content Strategist)" },
   { value: "cw",                label: "Content Writer (CW)" },
