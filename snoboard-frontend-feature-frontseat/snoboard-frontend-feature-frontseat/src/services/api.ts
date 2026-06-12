@@ -650,71 +650,77 @@ export async function deleteBlueOceanScrapedPost(id: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
-// --- Experiment X ---
-export const getExpSettings = () =>
-  fetchApi<any>("/api/v1/experiment/settings");
+// --- Playbook Experiments (BPB / XF / TECH) ---
+export type ExpApi = ReturnType<typeof createExpApi>;
 
+export function createExpApi(playbook: string) {
+  const base = `/api/v1/experiment/${playbook}`;
+  return {
+    getSettings: () => fetchApi<any>(`${base}/settings`),
+    updateSettings: (data: { view_goal?: number; experiment_start_date?: string }) =>
+      fetchApi<any>(`${base}/settings`, { method: "PATCH", body: JSON.stringify(data) }),
+    getIdeaBank: (params?: { week?: number; page?: string; day_date?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.day_date) q.set("day_date", params.day_date);
+      else if (params?.week != null) q.set("week", String(params.week));
+      if (params?.page) q.set("page", params.page);
+      const qs = q.toString();
+      return fetchApi<any[]>(`${base}/idea-bank${qs ? `?${qs}` : ""}`);
+    },
+    getIdeaById: (id: string) => fetchApi<any>(`${base}/idea-bank/${id}`),
+    createIdea: (data: {
+      page_handle: string; content_type?: string; topic?: string;
+      script?: string; status?: string; views?: number; day_date?: string;
+      frontseat_pool?: boolean; source_pool_id?: string;
+      source?: string; video_format?: string; comp_link?: string;
+      yt_url?: string; yt_timestamps?: string; created_by?: string;
+    }) => fetchApi<any>(`${base}/idea-bank`, { method: "POST", body: JSON.stringify(data) }),
+    updateIdea: (id: string, data: Record<string, unknown>) =>
+      fetchApi<any>(`${base}/idea-bank/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    deleteIdea: (id: string) => fetchApi<any>(`${base}/idea-bank/${id}`, { method: "DELETE" }),
+    archiveWeek: (week_number: number) =>
+      fetchApi<any>(`${base}/idea-bank/archive`, { method: "POST", body: JSON.stringify({ week_number }) }),
+    migratePostedToProven: () =>
+      fetchApi<any>(`${base}/idea-bank/migrate-posted-to-proven`, { method: "POST" }),
+    getContentBank: (params?: { week?: number; page?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.week != null) q.set("week", String(params.week));
+      if (params?.page) q.set("page", params.page);
+      const qs = q.toString();
+      return fetchApi<any[]>(`${base}/content-bank${qs ? `?${qs}` : ""}`);
+    },
+    updateContentBankItem: (id: string, data: Record<string, unknown>) =>
+      fetchApi<any>(`${base}/content-bank/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    getContentBankWeeks: () => fetchApi<any[]>(`${base}/content-bank/weeks`),
+    getWorkingIdeas: (params?: { week?: number; page?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.week != null) q.set("week", String(params.week));
+      if (params?.page) q.set("page", params.page);
+      const qs = q.toString();
+      return fetchApi<any[]>(`${base}/working-ideas${qs ? `?${qs}` : ""}`);
+    },
+    distributeWorkingIdea: (id: string) =>
+      fetchApi<any>(`${base}/working-ideas/${id}/distribute`, { method: "POST" }),
+  };
+}
+
+/** @deprecated Use createExpApi("bpb") via playbook context */
+export const getExpSettings = () => createExpApi("bpb").getSettings();
 export const updateExpSettings = (data: { view_goal?: number; experiment_start_date?: string }) =>
-  fetchApi<any>("/api/v1/experiment/settings", { method: "PATCH", body: JSON.stringify(data) });
-
-export const getExpIdeaBank = (params?: { week?: number; page?: string; day_date?: string }) => {
-  const q = new URLSearchParams();
-  if (params?.day_date) q.set("day_date", params.day_date);
-  else if (params?.week != null) q.set("week", String(params.week));
-  if (params?.page) q.set("page", params.page);
-  const qs = q.toString();
-  return fetchApi<any[]>(`/api/v1/experiment/idea-bank${qs ? `?${qs}` : ""}`);
-};
-
-export const getExpIdeaById = (id: string) =>
-  fetchApi<any>(`/api/v1/experiment/idea-bank/${id}`);
-
-export const createExpIdea = (data: {
-  page_handle: string; content_type?: string; topic?: string;
-  script?: string; status?: string; views?: number; day_date?: string;
-  frontseat_pool?: boolean; source_pool_id?: string;
-  source?: string; video_format?: string; comp_link?: string;
-  yt_url?: string; yt_timestamps?: string; created_by?: string;
-}) => fetchApi<any>("/api/v1/experiment/idea-bank", { method: "POST", body: JSON.stringify(data) });
-
-export const updateExpIdea = (id: string, data: {
-  page_handle?: string; content_type?: string; topic?: string;
-  script?: string; status?: string; views?: number; page_views?: Record<string, number>; page_test_results?: Record<string, string>; day_date?: string;
-  hook_variations?: string; music_ref?: string; frame_link?: string;
-  yt_url?: string; yt_timestamps?: string; comp_link?: string;
-  currently_editing_by?: string; edited_by?: string; test_result?: string; video_format?: string;
-}) => fetchApi<any>(`/api/v1/experiment/idea-bank/${id}`, { method: "PATCH", body: JSON.stringify(data) });
-
-export const deleteExpIdea = (id: string) =>
-  fetchApi<any>(`/api/v1/experiment/idea-bank/${id}`, { method: "DELETE" });
-
-export const archiveExpWeek = (week_number: number) =>
-  fetchApi<any>("/api/v1/experiment/idea-bank/archive", { method: "POST", body: JSON.stringify({ week_number }) });
-
-export const migratePostedToProven = () =>
-  fetchApi<any>("/api/v1/experiment/idea-bank/migrate-posted-to-proven", { method: "POST" });
-
-export const getExpContentBank = (params?: { week?: number; page?: string }) => {
-  const q = new URLSearchParams();
-  if (params?.week != null) q.set("week", String(params.week));
-  if (params?.page) q.set("page", params.page);
-  const qs = q.toString();
-  return fetchApi<any[]>(`/api/v1/experiment/content-bank${qs ? `?${qs}` : ""}`);
-};
-
-export const updateExpContentBankItem = (id: string, data: Record<string, any>) =>
-  fetchApi<any>(`/api/v1/experiment/content-bank/${id}`, { method: "PATCH", body: JSON.stringify(data) });
-
-export const getExpContentBankWeeks = () =>
-  fetchApi<any[]>("/api/v1/experiment/content-bank/weeks");
-
-export const getExpWorkingIdeas = (params?: { week?: number; page?: string }) => {
-  const q = new URLSearchParams();
-  if (params?.week != null) q.set("week", String(params.week));
-  if (params?.page) q.set("page", params.page);
-  const qs = q.toString();
-  return fetchApi<any[]>(`/api/v1/experiment/working-ideas${qs ? `?${qs}` : ""}`);
-};
-
-export const distributeExpWorkingIdea = (id: string) =>
-  fetchApi<any>(`/api/v1/experiment/working-ideas/${id}/distribute`, { method: "POST" });
+  createExpApi("bpb").updateSettings(data);
+export const getExpIdeaBank = (params?: { week?: number; page?: string; day_date?: string }) =>
+  createExpApi("bpb").getIdeaBank(params);
+export const getExpIdeaById = (id: string) => createExpApi("bpb").getIdeaById(id);
+export const createExpIdea = (data: Parameters<ExpApi["createIdea"]>[0]) => createExpApi("bpb").createIdea(data);
+export const updateExpIdea = (id: string, data: Record<string, unknown>) => createExpApi("bpb").updateIdea(id, data);
+export const deleteExpIdea = (id: string) => createExpApi("bpb").deleteIdea(id);
+export const archiveExpWeek = (week_number: number) => createExpApi("bpb").archiveWeek(week_number);
+export const migratePostedToProven = () => createExpApi("bpb").migratePostedToProven();
+export const getExpContentBank = (params?: { week?: number; page?: string }) =>
+  createExpApi("bpb").getContentBank(params);
+export const updateExpContentBankItem = (id: string, data: Record<string, unknown>) =>
+  createExpApi("bpb").updateContentBankItem(id, data);
+export const getExpContentBankWeeks = () => createExpApi("bpb").getContentBankWeeks();
+export const getExpWorkingIdeas = (params?: { week?: number; page?: string }) =>
+  createExpApi("bpb").getWorkingIdeas(params);
+export const distributeExpWorkingIdea = (id: string) => createExpApi("bpb").distributeWorkingIdea(id);

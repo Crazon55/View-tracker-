@@ -4,10 +4,11 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { getDeadlines, getSixDayConfig, getSixDayDeadlines, getTickets } from "@/services/api";
-import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate, Navigate } from "react-router-dom";
 import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, BarChart3, Scissors, ClipboardList, Trophy, LayoutGrid, Ticket, Newspaper, Waves, Bell, Sparkles, ShieldCheck, FlaskConical } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { isRouteAllowed, hasFullNav } from "@/lib/permissions";
+import { PLAYBOOK_CONFIGS } from "@/lib/playbookExperimentConfig";
 import { useNotifications } from "@/hooks/useNotifications";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -265,10 +266,16 @@ type NavItem = {
   external?: boolean;
 };
 
+const playbookNavItems: NavItem[] = (["bpb", "xf", "tech"] as const).map((id) => ({
+  to: PLAYBOOK_CONFIGS[id].route,
+  label: PLAYBOOK_CONFIGS[id].label,
+  icon: FlaskConical,
+}));
+
 const navItems: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/content-tracker", label: "Reel Tracker", icon: ClipboardList },
-  { to: "/experiment-x", label: "Experiment X", icon: FlaskConical },
+  ...playbookNavItems,
   { to: "/post-tracker", label: "Post Tracker", icon: Image },
   { to: "/post-ips", label: "Post IPs", icon: Image },
   { to: "/stage1-tracker", label: "Stage 1 Tracker", icon: BarChart3 },
@@ -403,7 +410,7 @@ function AppLayout() {
     location.pathname.startsWith("/post-ips/") ||
     location.pathname.startsWith("/page/") ||
     location.pathname === "/team-roles" ||
-    location.pathname === "/experiment-x";
+    location.pathname.startsWith("/experiment-");
 
   return (
     <>
@@ -451,7 +458,10 @@ function AppLayout() {
             <Route path="/ideas" element={<IdeaEngine />} />
             <Route path="/competitor-ideas" element={<CompetitorIdeas />} />
             <Route path="/team-roles" element={<TeamRolesPage />} />
-            <Route path="/experiment-x" element={<ExperimentX />} />
+            <Route path="/experiment-bpb" element={<ExperimentX playbookId="bpb" />} />
+            <Route path="/experiment-xf" element={<ExperimentX playbookId="xf" />} />
+            <Route path="/experiment-tech" element={<ExperimentX playbookId="tech" />} />
+            <Route path="/experiment-x" element={<Navigate to="/experiment-bpb" replace />} />
           </Routes>
         </div>
       ) : (

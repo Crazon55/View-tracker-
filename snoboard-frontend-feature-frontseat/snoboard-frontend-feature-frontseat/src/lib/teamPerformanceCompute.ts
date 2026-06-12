@@ -26,7 +26,7 @@ const TEAM_META: Record<
     nicheMatch: ["sheruses", "sherus"],
   },
   experimentx: {
-    label: "Experiment X",
+    label: "Experiment BPB",
     emoji: "🧪",
     members: ["Pulkit"],
     nicheMatch: ["experiment"],

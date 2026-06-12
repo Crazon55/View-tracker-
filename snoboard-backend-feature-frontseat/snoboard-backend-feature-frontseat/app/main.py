@@ -36,6 +36,7 @@ from app.team_roles import (
     role_contains_deprecated,
     DEPRECATED_ROLES,
 )
+from app.experiment_playbooks import validate_playbook, DEFAULT_PLAYBOOK
 
 logger = logging.getLogger(__name__)
 
@@ -1979,13 +1980,26 @@ SHERUS_HANDLES: list[str] = [
     "startupswtf",
 ]
 
-EXPERIMENT_X_HANDLES: list[str] = [
+EXPERIMENT_BPB_HANDLES: list[str] = [
     "indianfoundersco",
     "indiastartupstory",
     "indiabusinesscom",
     "indiafounderscore",
     "indiafounderbrief",
 ]
+
+EXPERIMENT_XF_HANDLES: list[str] = [
+    "entrepreneurial.india",
+    "startupcoded",
+]
+
+EXPERIMENT_TECH_HANDLES: list[str] = [
+    "101xtechnology",
+    "indiantechdaily",
+]
+
+# Backwards compatibility alias
+EXPERIMENT_X_HANDLES = EXPERIMENT_BPB_HANDLES
 
 
 TEAM_PERFORMANCE_CONFIG: dict[str, dict] = {
@@ -2012,10 +2026,10 @@ TEAM_PERFORMANCE_CONFIG: dict[str, dict] = {
     },
     "experimentx": {
         "key": "experimentx",
-        "label": "Experiment X",
+        "label": "Experiment BPB",
         "emoji": "\U0001F9EA",  # test tube
         "members": ["Pulkit"],
-        "niche_match": ("experiment",),
+        "niche_match": ("experiment", "bpb"),
     },
 }
 
@@ -3553,13 +3567,17 @@ async def tracker_sync_team_niches():
         "indiabusinesscom": "India Business Com",
         "indiafounderscore": "India Founders Core",
         "indiafounderbrief": "India Founder Brief",
+        "entrepreneurial.india": "Entrepreneurial.India",
+        "indiantechdaily": "India Tech Daily",
     }
 
     all_handles = sorted({
         *[h.lstrip("@").strip().lower() for h in GARFIELDS_HANDLES],
         *[h.lstrip("@").strip().lower() for h in GOOFIES_HANDLES],
         *[h.lstrip("@").strip().lower() for h in SHERUS_HANDLES],
-        *[h.lstrip("@").strip().lower() for h in EXPERIMENT_X_HANDLES],
+        *[h.lstrip("@").strip().lower() for h in EXPERIMENT_BPB_HANDLES],
+        *[h.lstrip("@").strip().lower() for h in EXPERIMENT_XF_HANDLES],
+        *[h.lstrip("@").strip().lower() for h in EXPERIMENT_TECH_HANDLES],
     })
 
     # 1) Ensure each handle has a row in `pages`
@@ -3587,7 +3605,11 @@ async def tracker_sync_team_niches():
         "FBS - Garfields": GARFIELDS_HANDLES,
         "FBS - Goofies": GOOFIES_HANDLES,
         "FBS - Sherus": SHERUS_HANDLES,
-        "FBS - Experiment X": EXPERIMENT_X_HANDLES,
+        "FBS - Experiment BPB": EXPERIMENT_BPB_HANDLES,
+        "FBS - XF Playbook": EXPERIMENT_XF_HANDLES,
+        "FBS - TECH Playbook": EXPERIMENT_TECH_HANDLES,
+        # Legacy niche name (same pages as BPB)
+        "FBS - Experiment X": EXPERIMENT_BPB_HANDLES,
     }
 
     synced = {}
@@ -5389,13 +5411,25 @@ async def news_feed_saved_list():
 
 
 # =============================================================================
-# Experiment X — Idea Tracking System
+# Playbook Experiments (BPB / XF / TECH) — Idea Tracking System
 # =============================================================================
+def _exp_settings_row(client, playbook: str) -> dict:
+    data = client.table("exp_settings").select("*").eq("playbook_id", playbook).limit(1).execute().data
+    if data:
+        return data[0]
+    from datetime import date
+    inserted = client.table("exp_settings").insert({
+        "view_goal": 100000,
+        "experiment_start_date": str(date.today()),
+        "playbook_id": playbook,
+    }).execute().data
+    return inserted[0] if inserted else {}
 
-def _exp_compute_week_number(client, day_date_str: str) -> int:
+
+def _exp_compute_week_number(client, playbook: str, day_date_str: str) -> int:
     """Compute 1-based week number relative to experiment_start_date in exp_settings."""
     from datetime import date
-    row = (client.table("exp_settings").select("experiment_start_date").limit(1).execute().data or [{}])[0]
+    row = _exp_settings_row(client, playbook)
     start_raw = row.get("experiment_start_date") or str(date.today())
     start = date.fromisoformat(str(start_raw)[:10])
     target = date.fromisoformat(str(day_date_str)[:10])
@@ -5403,10 +5437,10 @@ def _exp_compute_week_number(client, day_date_str: str) -> int:
     return max(1, (delta // 7) + 1)
 
 
-def _exp_week_label(client, week_number: int) -> str:
+def _exp_week_label(client, playbook: str, week_number: int) -> str:
     """Generate 'Week N · Mon DD – Mon DD' label."""
     from datetime import date, timedelta
-    row = (client.table("exp_settings").select("experiment_start_date").limit(1).execute().data or [{}])[0]
+    row = _exp_settings_row(client, playbook)
     start_raw = row.get("experiment_start_date") or str(date.today())
     start = date.fromisoformat(str(start_raw)[:10])
     week_start = start + timedelta(weeks=week_number - 1)
@@ -5418,13 +5452,21 @@ def _exp_week_label(client, week_number: int) -> str:
         return f"Week {week_number}"
 
 
-def _exp_flag_working_idea(client, idea: dict, view_goal: int):
+def _exp_flag_working_idea(client, playbook: str, idea: dict, view_goal: int):
     """Insert into exp_working_ideas if not already flagged for this source_id."""
     source_id = idea.get("id")
-    existing = client.table("exp_working_ideas").select("id").eq("source_id", source_id).execute().data
+    existing = (
+        client.table("exp_working_ideas")
+        .select("id")
+        .eq("playbook_id", playbook)
+        .eq("source_id", source_id)
+        .execute()
+        .data
+    )
     if existing:
         return
     client.table("exp_working_ideas").insert({
+        "playbook_id": playbook,
         "source_id": source_id,
         "page_handle": idea.get("page_handle", ""),
         "content_type": idea.get("content_type", "reel"),
@@ -5437,33 +5479,58 @@ def _exp_flag_working_idea(client, idea: dict, view_goal: int):
     }).execute()
 
 
-@app.get("/api/v1/experiment/settings")
-async def exp_get_settings():
+def _exp_idea_query(client, playbook: str):
+    return client.table("exp_idea_bank").select("*").eq("playbook_id", playbook)
+
+
+def _exp_content_query(client, playbook: str):
+    return client.table("exp_content_bank").select("*").eq("playbook_id", playbook)
+
+
+def _exp_working_query(client, playbook: str):
+    return client.table("exp_working_ideas").select("*").eq("playbook_id", playbook)
+
+
+@app.get("/api/v1/experiment/{playbook}/settings")
+async def exp_get_settings(playbook: str):
+    pb = validate_playbook(playbook)
     client = get_supabase_client()
-    data = client.table("exp_settings").select("*").limit(1).execute().data
-    return {"success": True, "data": data[0] if data else {}}
+    return {"success": True, "data": _exp_settings_row(client, pb)}
 
 
-@app.patch("/api/v1/experiment/settings")
-async def exp_update_settings(req: ExpSettingsUpdate):
+@app.get("/api/v1/experiment/settings")
+async def exp_get_settings_legacy():
+    return await exp_get_settings(DEFAULT_PLAYBOOK)
+
+
+@app.patch("/api/v1/experiment/{playbook}/settings")
+async def exp_update_settings(playbook: str, req: ExpSettingsUpdate):
     from datetime import date
+    pb = validate_playbook(playbook)
     client = get_supabase_client()
     update_data = {k: v for k, v in req.model_dump().items() if v is not None}
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    existing = (client.table("exp_settings").select("id").limit(1).execute().data or [])
+    existing = client.table("exp_settings").select("id").eq("playbook_id", pb).limit(1).execute().data or []
     if existing:
-        result = client.table("exp_settings").update(update_data).eq("id", existing[0]["id"]).execute()
+        client.table("exp_settings").update(update_data).eq("id", existing[0]["id"]).execute()
     else:
         update_data.setdefault("view_goal", 100000)
         update_data.setdefault("experiment_start_date", str(date.today()))
-        result = client.table("exp_settings").insert(update_data).execute()
-    return {"success": True, "data": result.data[0] if result.data else {}}
+        update_data["playbook_id"] = pb
+        client.table("exp_settings").insert(update_data).execute()
+    return {"success": True, "data": _exp_settings_row(client, pb)}
 
 
-@app.get("/api/v1/experiment/idea-bank")
-async def exp_list_idea_bank(week: int | None = None, page: str | None = None, day_date: str | None = None):
+@app.patch("/api/v1/experiment/settings")
+async def exp_update_settings_legacy(req: ExpSettingsUpdate):
+    return await exp_update_settings(DEFAULT_PLAYBOOK, req)
+
+
+@app.get("/api/v1/experiment/{playbook}/idea-bank")
+async def exp_list_idea_bank(playbook: str, week: int | None = None, page: str | None = None, day_date: str | None = None):
+    pb = validate_playbook(playbook)
     client = get_supabase_client()
-    q = client.table("exp_idea_bank").select("*").order("day_date", desc=False).order("created_at", desc=False)
+    q = _exp_idea_query(client, pb).order("day_date", desc=False).order("created_at", desc=False)
     if day_date:
         q = q.eq("day_date", day_date)
     elif week is not None:
@@ -5474,13 +5541,20 @@ async def exp_list_idea_bank(week: int | None = None, page: str | None = None, d
     return {"success": True, "data": data}
 
 
-@app.post("/api/v1/experiment/idea-bank")
-async def exp_create_idea(req: ExpIdeaCreate):
+@app.get("/api/v1/experiment/idea-bank")
+async def exp_list_idea_bank_legacy(week: int | None = None, page: str | None = None, day_date: str | None = None):
+    return await exp_list_idea_bank(DEFAULT_PLAYBOOK, week, page, day_date)
+
+
+@app.post("/api/v1/experiment/{playbook}/idea-bank")
+async def exp_create_idea(playbook: str, req: ExpIdeaCreate):
     from datetime import date
+    pb = validate_playbook(playbook)
     client = get_supabase_client()
     day_str = req.day_date or str(date.today())
-    week_num = _exp_compute_week_number(client, day_str)
+    week_num = _exp_compute_week_number(client, pb, day_str)
     row = {
+        "playbook_id": pb,
         "page_handle": req.page_handle,
         "content_type": req.content_type,
         "topic": req.topic,
@@ -5503,76 +5577,117 @@ async def exp_create_idea(req: ExpIdeaCreate):
         "frontseat_pool": req.frontseat_pool,
         "source_pool_id": req.source_pool_id,
     }
-    result = client.table("exp_idea_bank").insert(row).execute()
-    created = result.data[0] if result.data else row
+    client.table("exp_idea_bank").insert(row).execute()
+    verify = _exp_idea_query(client, pb).eq("day_date", day_str).order("created_at", desc=True).limit(1).execute().data
+    created = verify[0] if verify else row
     if req.views > 0:
-        settings = (client.table("exp_settings").select("view_goal").limit(1).execute().data or [{}])[0]
+        settings = _exp_settings_row(client, pb)
         goal = settings.get("view_goal", 100000)
         if req.views >= goal:
-            _exp_flag_working_idea(client, created, goal)
+            _exp_flag_working_idea(client, pb, created, goal)
     return {"success": True, "data": created}
 
 
-@app.get("/api/v1/experiment/idea-bank/{idea_id}")
-async def exp_get_idea(idea_id: str):
+@app.post("/api/v1/experiment/idea-bank")
+async def exp_create_idea_legacy(req: ExpIdeaCreate):
+    return await exp_create_idea(DEFAULT_PLAYBOOK, req)
+
+
+@app.get("/api/v1/experiment/{playbook}/idea-bank/{idea_id}")
+async def exp_get_idea(playbook: str, idea_id: str):
+    pb = validate_playbook(playbook)
     client = get_supabase_client()
-    data = client.table("exp_idea_bank").select("*").eq("id", idea_id).limit(1).execute().data
+    data = _exp_idea_query(client, pb).eq("id", idea_id).limit(1).execute().data
     if not data:
         raise HTTPException(status_code=404, detail="Idea not found")
     return {"success": True, "data": data[0]}
 
 
-@app.patch("/api/v1/experiment/idea-bank/{idea_id}")
-async def exp_update_idea(idea_id: str, req: ExpIdeaUpdate):
+@app.get("/api/v1/experiment/idea-bank/{idea_id}")
+async def exp_get_idea_legacy(idea_id: str):
+    return await exp_get_idea(DEFAULT_PLAYBOOK, idea_id)
+
+
+@app.patch("/api/v1/experiment/{playbook}/idea-bank/{idea_id}")
+async def exp_update_idea(playbook: str, idea_id: str, req: ExpIdeaUpdate):
+    pb = validate_playbook(playbook)
     client = get_supabase_client()
     update_data = {k: v for k, v in req.model_dump().items() if v is not None}
     if "day_date" in update_data:
-        update_data["week_number"] = _exp_compute_week_number(client, update_data["day_date"])
-    result = client.table("exp_idea_bank").update(update_data).eq("id", idea_id).execute()
-    updated = result.data[0] if result.data else {}
+        update_data["week_number"] = _exp_compute_week_number(client, pb, update_data["day_date"])
+    client.table("exp_idea_bank").update(update_data).eq("id", idea_id).eq("playbook_id", pb).execute()
+    verify = _exp_idea_query(client, pb).eq("id", idea_id).limit(1).execute().data
+    updated = verify[0] if verify else {}
     if "views" in update_data and updated:
-        settings = (client.table("exp_settings").select("view_goal").limit(1).execute().data or [{}])[0]
+        settings = _exp_settings_row(client, pb)
         goal = settings.get("view_goal", 100000)
         if update_data["views"] >= goal:
-            _exp_flag_working_idea(client, updated, goal)
+            _exp_flag_working_idea(client, pb, updated, goal)
     return {"success": True, "data": updated}
 
 
-@app.delete("/api/v1/experiment/idea-bank/{idea_id}")
-async def exp_delete_idea(idea_id: str):
+@app.patch("/api/v1/experiment/idea-bank/{idea_id}")
+async def exp_update_idea_legacy(idea_id: str, req: ExpIdeaUpdate):
+    return await exp_update_idea(DEFAULT_PLAYBOOK, idea_id, req)
+
+
+@app.delete("/api/v1/experiment/{playbook}/idea-bank/{idea_id}")
+async def exp_delete_idea(playbook: str, idea_id: str):
+    pb = validate_playbook(playbook)
     client = get_supabase_client()
-    client.table("exp_idea_bank").delete().eq("id", idea_id).execute()
+    client.table("exp_idea_bank").delete().eq("id", idea_id).eq("playbook_id", pb).execute()
     return {"success": True}
 
 
-@app.post("/api/v1/experiment/idea-bank/migrate-posted-to-proven")
-async def exp_migrate_posted_to_proven():
+@app.delete("/api/v1/experiment/idea-bank/{idea_id}")
+async def exp_delete_idea_legacy(idea_id: str):
+    return await exp_delete_idea(DEFAULT_PLAYBOOK, idea_id)
+
+
+@app.post("/api/v1/experiment/{playbook}/idea-bank/migrate-posted-to-proven")
+async def exp_migrate_posted_to_proven(playbook: str):
+    pb = validate_playbook(playbook)
     client = get_supabase_client()
-    result = client.table("exp_idea_bank").update({"status": "proven_ideas"}).eq("status", "posted").execute()
-    return {"success": True, "updated": len(result.data or [])}
+    existing = _exp_idea_query(client, pb).eq("status", "posted").execute().data or []
+    if existing:
+        client.table("exp_idea_bank").update({"status": "proven_ideas"}).eq("playbook_id", pb).eq("status", "posted").execute()
+    return {"success": True, "updated": len(existing)}
 
 
-@app.post("/api/v1/experiment/idea-bank/archive")
-async def exp_archive_week(request: Request):
+@app.post("/api/v1/experiment/idea-bank/migrate-posted-to-proven")
+async def exp_migrate_posted_to_proven_legacy():
+    return await exp_migrate_posted_to_proven(DEFAULT_PLAYBOOK)
+
+
+@app.post("/api/v1/experiment/{playbook}/idea-bank/archive")
+async def exp_archive_week(playbook: str, request: Request):
+    pb = validate_playbook(playbook)
     body = await request.json()
     week_number = body.get("week_number")
     if not week_number:
         raise HTTPException(status_code=400, detail="week_number required")
     client = get_supabase_client()
-    ideas = client.table("exp_idea_bank").select("*").eq("week_number", week_number).execute().data or []
+    ideas = _exp_idea_query(client, pb).eq("week_number", week_number).execute().data or []
     if not ideas:
         return {"success": True, "archived": 0}
-    settings = (client.table("exp_settings").select("view_goal").limit(1).execute().data or [{}])[0]
+    settings = _exp_settings_row(client, pb)
     goal = settings.get("view_goal", 100000)
-    label = _exp_week_label(client, week_number)
+    label = _exp_week_label(client, pb, week_number)
     existing_sources = {
         r["source_id"]
-        for r in (client.table("exp_content_bank").select("source_id").eq("week_number", week_number).execute().data or [])
+        for r in (
+            _exp_content_query(client, pb)
+            .select("source_id")
+            .eq("week_number", week_number)
+            .execute()
+            .data or []
+        )
         if r.get("source_id")
     }
     to_insert = [i for i in ideas if i.get("id") not in existing_sources]
     if to_insert:
         rows = [{
+            "playbook_id": pb,
             "source_id": i["id"],
             "page_handle": i.get("page_handle", ""),
             "content_type": i.get("content_type", "reel"),
@@ -5596,12 +5711,18 @@ async def exp_archive_week(request: Request):
         client.table("exp_content_bank").insert(rows).execute()
         for i in to_insert:
             if (i.get("views") or 0) >= goal:
-                _exp_flag_working_idea(client, i, goal)
+                _exp_flag_working_idea(client, pb, i, goal)
     return {"success": True, "archived": len(to_insert), "week_label": label}
 
 
-@app.patch("/api/v1/experiment/content-bank/{item_id}")
-async def exp_update_content_bank_item(item_id: str, request: Request):
+@app.post("/api/v1/experiment/idea-bank/archive")
+async def exp_archive_week_legacy(request: Request):
+    return await exp_archive_week(DEFAULT_PLAYBOOK, request)
+
+
+@app.patch("/api/v1/experiment/{playbook}/content-bank/{item_id}")
+async def exp_update_content_bank_item(playbook: str, item_id: str, request: Request):
+    pb = validate_playbook(playbook)
     body = await request.json()
     allowed = {"topic", "script", "views", "status", "content_type", "source", "hook_variations",
                 "music_ref", "frame_link", "yt_url", "yt_timestamps", "comp_link", "page_views",
@@ -5610,16 +5731,23 @@ async def exp_update_content_bank_item(item_id: str, request: Request):
     if not update_data:
         raise HTTPException(status_code=400, detail="No valid fields to update")
     client = get_supabase_client()
-    result = client.table("exp_content_bank").update(update_data).eq("id", item_id).execute()
-    if not result.data:
+    client.table("exp_content_bank").update(update_data).eq("id", item_id).eq("playbook_id", pb).execute()
+    verify = _exp_content_query(client, pb).eq("id", item_id).limit(1).execute().data
+    if not verify:
         raise HTTPException(status_code=404, detail="Item not found")
-    return {"success": True, "data": result.data[0]}
+    return {"success": True, "data": verify[0]}
 
 
-@app.get("/api/v1/experiment/content-bank")
-async def exp_list_content_bank(week: int | None = None, page: str | None = None):
+@app.patch("/api/v1/experiment/content-bank/{item_id}")
+async def exp_update_content_bank_item_legacy(item_id: str, request: Request):
+    return await exp_update_content_bank_item(DEFAULT_PLAYBOOK, item_id, request)
+
+
+@app.get("/api/v1/experiment/{playbook}/content-bank")
+async def exp_list_content_bank(playbook: str, week: int | None = None, page: str | None = None):
+    pb = validate_playbook(playbook)
     client = get_supabase_client()
-    q = client.table("exp_content_bank").select("*").order("day_date", desc=False).order("archived_at", desc=False)
+    q = _exp_content_query(client, pb).order("day_date", desc=False).order("archived_at", desc=False)
     if week is not None:
         q = q.eq("week_number", week)
     if page:
@@ -5628,10 +5756,16 @@ async def exp_list_content_bank(week: int | None = None, page: str | None = None
     return {"success": True, "data": data}
 
 
-@app.get("/api/v1/experiment/content-bank/weeks")
-async def exp_list_content_bank_weeks():
+@app.get("/api/v1/experiment/content-bank")
+async def exp_list_content_bank_legacy(week: int | None = None, page: str | None = None):
+    return await exp_list_content_bank(DEFAULT_PLAYBOOK, week, page)
+
+
+@app.get("/api/v1/experiment/{playbook}/content-bank/weeks")
+async def exp_list_content_bank_weeks(playbook: str):
+    pb = validate_playbook(playbook)
     client = get_supabase_client()
-    data = client.table("exp_content_bank").select("week_number,week_label").order("week_number", desc=False).execute().data or []
+    data = _exp_content_query(client, pb).select("week_number,week_label").order("week_number", desc=False).execute().data or []
     seen: dict[int, str] = {}
     for row in data:
         w = row.get("week_number")
@@ -5640,10 +5774,16 @@ async def exp_list_content_bank_weeks():
     return {"success": True, "data": [{"week_number": k, "week_label": v} for k, v in seen.items()]}
 
 
-@app.get("/api/v1/experiment/working-ideas")
-async def exp_list_working_ideas(week: int | None = None, page: str | None = None):
+@app.get("/api/v1/experiment/content-bank/weeks")
+async def exp_list_content_bank_weeks_legacy():
+    return await exp_list_content_bank_weeks(DEFAULT_PLAYBOOK)
+
+
+@app.get("/api/v1/experiment/{playbook}/working-ideas")
+async def exp_list_working_ideas(playbook: str, week: int | None = None, page: str | None = None):
+    pb = validate_playbook(playbook)
     client = get_supabase_client()
-    q = client.table("exp_working_ideas").select("*").order("flagged_at", desc=True)
+    q = _exp_working_query(client, pb).order("flagged_at", desc=True)
     if week is not None:
         q = q.eq("week_number", week)
     if page:
@@ -5652,8 +5792,20 @@ async def exp_list_working_ideas(week: int | None = None, page: str | None = Non
     return {"success": True, "data": data}
 
 
-@app.post("/api/v1/experiment/working-ideas/{idea_id}/distribute")
-async def exp_distribute_working_idea(idea_id: str):
+@app.get("/api/v1/experiment/working-ideas")
+async def exp_list_working_ideas_legacy(week: int | None = None, page: str | None = None):
+    return await exp_list_working_ideas(DEFAULT_PLAYBOOK, week, page)
+
+
+@app.post("/api/v1/experiment/{playbook}/working-ideas/{idea_id}/distribute")
+async def exp_distribute_working_idea(playbook: str, idea_id: str):
+    pb = validate_playbook(playbook)
     client = get_supabase_client()
-    result = client.table("exp_working_ideas").update({"distributed": True}).eq("id", idea_id).execute()
-    return {"success": True, "data": result.data[0] if result.data else {}}
+    client.table("exp_working_ideas").update({"distributed": True}).eq("id", idea_id).eq("playbook_id", pb).execute()
+    verify = _exp_working_query(client, pb).eq("id", idea_id).limit(1).execute().data
+    return {"success": True, "data": verify[0] if verify else {}}
+
+
+@app.post("/api/v1/experiment/working-ideas/{idea_id}/distribute")
+async def exp_distribute_working_idea_legacy(idea_id: str):
+    return await exp_distribute_working_idea(DEFAULT_PLAYBOOK, idea_id)

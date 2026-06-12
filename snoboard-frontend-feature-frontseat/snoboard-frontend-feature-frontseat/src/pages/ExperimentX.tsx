@@ -4,33 +4,12 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { canViewExperimentX, canEditExperimentX } from "@/lib/permissions";
-import IdeaThread from "@/components/IdeaThread";
-import {
-  getExpSettings, updateExpSettings,
-  getExpIdeaBank, getExpIdeaById, createExpIdea, updateExpIdea, deleteExpIdea, archiveExpWeek, migratePostedToProven,
-  getExpContentBank, getExpContentBankWeeks, updateExpContentBankItem,
-  getExpWorkingIdeas, distributeExpWorkingIdea,
-} from "@/services/api";
+import { buildPlaybookContext, type PlaybookId } from "@/lib/playbookExperimentConfig";
+import { PlaybookExperimentContext, usePlaybook } from "@/lib/playbookExperimentContext";
 
 // ---------------------------------------------------------------------------
-// Constants
+// Constants (shared across playbooks)
 // ---------------------------------------------------------------------------
-const EXP_PAGES = [
-  "indianfoundersco",
-  "indianbusinesscom",
-  "indiastartupstory",
-  "indiafounderscore",
-  "indiafounderbrief",
-] as const;
-
-const PAGE_COLORS: Record<string, string> = {
-  indianfoundersco:    "#7BB0FF",
-  indianbusinesscom:   "#50E0B0",
-  indiastartupstory:   "#F0C060",
-  indiafounderscore:   "#B49EFF",
-  indiafounderbrief: "#FF9580",
-};
-
 const STAGES = ["new","approved","base_edit","testing","proven_ideas","scheduled","posted","kill"] as const;
 type IdeaStage = (typeof STAGES)[number];
 
@@ -187,8 +166,9 @@ function KanbanCard({ idea, onUpdate, onDelete, onClick, readOnly }: {
   onClick: () => void;
   readOnly?: boolean;
 }) {
+  const { pages: playbookPages, pageColors, pageShort, api, id: playbookId } = usePlaybook();
   const pages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
-  const pc = PAGE_COLORS[pages[0]] || "#a1a1aa";
+  const pc = pageColors[pages[0]] || "#a1a1aa";
   const isTesting = idea.status === "testing";
   const testCfg = isTesting ? TEST_RESULTS.find(r => r.value === idea.test_result) : null;
   const borderColor = testCfg ? testCfg.color : "#27272a";
@@ -214,7 +194,7 @@ function KanbanCard({ idea, onUpdate, onDelete, onClick, readOnly }: {
       </p>
       <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
         {pages.map((pg: string) => {
-          const pgc = PAGE_COLORS[pg] || "#a1a1aa";
+          const pgc = pageColors[pg] || "#a1a1aa";
           return <span key={pg} style={{ fontSize: 10, fontWeight: 700, color: pgc, background: pgc + "22", borderRadius: 4, padding: "1px 6px" }}>{pg}</span>;
         })}
         <span style={{ fontSize: 10, color: "#52525b", background: "#27272a", borderRadius: 4, padding: "1px 6px" }}>
@@ -386,10 +366,11 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
   hideStageActions?: boolean;
   readOnly?: boolean;
 }) {
+  const { pages: playbookPages, pageColors, pageShort } = usePlaybook();
   const stage = idea.status || "new";
   const ss = STATUS_STYLE[stage] || STATUS_STYLE.new;
   const primaryPage = (idea.page_handle || "").split(",")[0].trim();
-  const pc = PAGE_COLORS[primaryPage] || "#a1a1aa";
+  const pc = pageColors[primaryPage] || "#a1a1aa";
   const actions = STAGE_ACTIONS[stage] || [];
   const selectedPages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
   const noEdit = readOnly || hideStageActions;
@@ -438,7 +419,7 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
             {idea.source === "competitor" ? "Competitor" : "Original"}
           </span>
           {selectedPages.map((pg: string) => {
-            const pgc = PAGE_COLORS[pg] || "#a1a1aa";
+            const pgc = pageColors[pg] || "#a1a1aa";
             return <span key={pg} style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, background: pgc + "22", color: pgc, fontWeight: 600 }}>{pg}</span>;
           })}
           <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, background: "#27272a", color: "#71717a" }}>
@@ -471,14 +452,14 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
             {readOnly ? (
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {selectedPages.map((pg: string) => {
-                  const c = PAGE_COLORS[pg] || "#a1a1aa";
+                  const c = pageColors[pg] || "#a1a1aa";
                   return <span key={pg} style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, background: c + "22", color: c, fontWeight: 600 }}>{pg}</span>;
                 })}
               </div>
             ) : (
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {EXP_PAGES.map(p => {
-                const c = PAGE_COLORS[p] || "#a1a1aa";
+              {playbookPages.map(p => {
+                const c = pageColors[p] || "#a1a1aa";
                 const active = selectedPages.includes(p);
                 return (
                   <button key={p} type="button" onClick={() => {
@@ -578,7 +559,7 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
             <label style={ls}>Views per page</label>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {selectedPages.map((pg: string) => {
-                const pgc = PAGE_COLORS[pg] || "#a1a1aa";
+                const pgc = pageColors[pg] || "#a1a1aa";
                 const pgViews = ((idea.page_views || {}) as Record<string, number>)[pg] || 0;
                 return (
                   <div key={pg} style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -630,7 +611,7 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
               /* Per-page test results */
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 {selectedPages.map((pg: string) => {
-                  const pgc = PAGE_COLORS[pg] || "#a1a1aa";
+                  const pgc = pageColors[pg] || "#a1a1aa";
                   const pgResult = ((idea.page_test_results || {}) as Record<string, string>)[pg] || "";
                   return (
                     <div key={pg}>
@@ -740,6 +721,7 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
 // Archive card (Content Bank) — clickable, opens full IdeaDetailModal
 // ---------------------------------------------------------------------------
 function ArchiveRow({ item, onUpdate, onDelete, readOnly }: { item: any; onUpdate: (id: string, data: any) => void; onDelete: (id: string) => void; readOnly?: boolean }) {
+  const { pageColors } = usePlaybook();
   const [detailOpen, setDetailOpen] = useState(false);
   const pages = (item.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
   const ss = STATUS_STYLE[item.status || "new"] || STATUS_STYLE.new;
@@ -757,7 +739,7 @@ function ArchiveRow({ item, onUpdate, onDelete, readOnly }: { item: any; onUpdat
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", flexWrap: "wrap" }}>
           {pages.map((pg: string) => {
-            const pgc = PAGE_COLORS[pg] || "#a1a1aa";
+            const pgc = pageColors[pg] || "#a1a1aa";
             return <span key={pg} style={{ fontSize: 10, fontWeight: 700, color: pgc, background: pgc + "22", borderRadius: 4, padding: "2px 7px" }}>{pg}</span>;
           })}
           <span style={{ fontSize: 10, color: "#71717a", background: "#27272a", borderRadius: 4, padding: "2px 7px" }}>{item.content_type}</span>
@@ -799,15 +781,16 @@ function ArchiveRow({ item, onUpdate, onDelete, readOnly }: { item: any; onUpdat
 // Working idea detail modal — fetches full idea from exp_idea_bank by source_id
 // ---------------------------------------------------------------------------
 function WorkingIdeaDetailModal({ item, onClose }: { item: any; onClose: () => void }) {
+  const { pageColors, api, id: playbookId } = usePlaybook();
   const { data: fullIdea, isLoading } = useQuery({
-    queryKey: ["exp-idea-by-id", item.source_id],
-    queryFn: () => getExpIdeaById(item.source_id),
+    queryKey: ["exp-idea-by-id", playbookId, item.source_id],
+    queryFn: () => api.getIdeaById(item.source_id),
     enabled: !!item.source_id,
   });
 
   const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "#71717a", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
   const fieldStyle: React.CSSProperties = { width: "100%", padding: "9px 13px", border: "1.5px solid #27272a", borderRadius: 9, fontSize: 13, background: "#09090b", color: "#e4e4e7", boxSizing: "border-box" };
-  const pc = PAGE_COLORS[item.page_handle] || "#a1a1aa";
+  const pc = pageColors[item.page_handle] || "#a1a1aa";
   const idea = fullIdea || item;
 
   return (
@@ -899,6 +882,7 @@ const RANK_CONFIG: Record<number, { text: string; bg: string; border: string; la
 // Working idea card
 // ---------------------------------------------------------------------------
 function WorkingRow({ item, rank, onDistribute, readOnly }: { item: any; rank: number; onDistribute: (id: string) => void; readOnly?: boolean }) {
+  const { pageColors } = usePlaybook();
   const [detailOpen, setDetailOpen] = useState(false);
   const pages = (item.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
   const rankCfg = RANK_CONFIG[rank];
@@ -941,7 +925,7 @@ function WorkingRow({ item, rank, onDistribute, readOnly }: { item: any; rank: n
           )}
 
           {pages.map((pg: string) => {
-            const pgc = PAGE_COLORS[pg] || "#a1a1aa";
+            const pgc = pageColors[pg] || "#a1a1aa";
             return <span key={pg} style={{ fontSize: 10, fontWeight: 700, color: pgc, background: pgc + "22", borderRadius: 4, padding: "2px 7px" }}>{pg}</span>;
           })}
           <span style={{ fontSize: 10, color: "#71717a", background: "#27272a", borderRadius: 4, padding: "2px 7px" }}>
@@ -987,6 +971,7 @@ function AddIdeaModal({ open, onAdd, onClose }: {
   onAdd: (d: any) => void;
   onClose: () => void;
 }) {
+  const { pages: playbookPages, pageColors } = usePlaybook();
   const { user } = useAuth();
   const createdBy = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "";
 
@@ -1004,7 +989,7 @@ function AddIdeaModal({ open, onAdd, onClose }: {
   const [date, setDate]               = useState(toLocalISO(new Date()));
 
   const reset = () => {
-    setPage(EXP_PAGES[0]); setType("reel"); setSource("original"); setVideoFormat("");
+    setPage(playbookPages[0]); setType("reel"); setSource("original"); setVideoFormat("");
     setTopic(""); setHookVars(""); setMusicRef(""); setFrameLink("");
     setYtUrl(""); setYtTs(""); setCompLink(""); setDate(toLocalISO(new Date()));
   };
@@ -1227,6 +1212,7 @@ const STAGE_DOT: Record<string, string> = {
 // Idea Bank tab — kanban board (same layout as Content Tracker)
 // ---------------------------------------------------------------------------
 function IdeaBankTab({ pageFilter, search, readOnly }: { pageFilter: string; search: string; readOnly?: boolean }) {
+  const { api, id: playbookId } = usePlaybook();
   const qc = useQueryClient();
   const { can } = usePermissions();
   const [addOpen, setAddOpen] = useState(false);
@@ -1236,7 +1222,7 @@ function IdeaBankTab({ pageFilter, search, readOnly }: { pageFilter: string; sea
   const autoArchiveDone = useRef(false);
   const migrationDone = useRef(false);
 
-  const { data: settings } = useQuery({ queryKey: ["exp-settings"], queryFn: getExpSettings });
+  const { data: settings } = useQuery({ queryKey: ["exp-settings", playbookId], queryFn: api.getSettings });
   const currentWeek = useMemo(() => {
     const start = settings?.experiment_start_date;
     if (!start) return 1;
@@ -1244,10 +1230,10 @@ function IdeaBankTab({ pageFilter, search, readOnly }: { pageFilter: string; sea
   }, [settings]);
 
   // Auto-archive past weeks silently
-  const archiveMut = useMutation({ mutationFn: archiveExpWeek });
+  const archiveMut = useMutation({ mutationFn: api.archiveWeek });
   const { data: allIdeas = [] } = useQuery({
     queryKey: ["exp-idea-bank-all"],
-    queryFn: () => getExpIdeaBank(),
+    queryFn: () => api.getIdeaBank(),
     enabled: !!settings,
   });
   useEffect(() => {
@@ -1266,7 +1252,7 @@ function IdeaBankTab({ pageFilter, search, readOnly }: { pageFilter: string; sea
     const hasPosted = allIdeas.some((i: any) => i.status === "posted");
     if (!hasPosted) return;
     migrationDone.current = true;
-    migratePostedToProven().then(() => {
+    api.migratePostedToProven().then(() => {
       qc.invalidateQueries({ queryKey: ["exp-idea-bank"] });
       qc.invalidateQueries({ queryKey: ["exp-content-bank-all"] });
     });
@@ -1274,17 +1260,17 @@ function IdeaBankTab({ pageFilter, search, readOnly }: { pageFilter: string; sea
 
   const { data: ideas = [], isLoading } = useQuery({
     queryKey: ["exp-idea-bank", currentWeek, pageFilter],
-    queryFn: () => getExpIdeaBank({ week: currentWeek, page: pageFilter !== "all" ? pageFilter : undefined }),
+    queryFn: () => api.getIdeaBank({ week: currentWeek, page: pageFilter !== "all" ? pageFilter : undefined }),
     enabled: !!settings,
   });
 
   const createMut = useMutation({
-    mutationFn: createExpIdea,
+    mutationFn: api.createIdea,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }); setAddOpen(false); toast.success("Idea added"); },
     onError: (e: any) => toast.error(e?.message || "Failed to add idea"),
   });
   const updateMut = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => updateExpIdea(id, data),
+    mutationFn: ({ id, data }: { id: string; data: any }) => api.updateIdea(id, data),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["exp-idea-bank"] });
       qc.invalidateQueries({ queryKey: ["exp-working-ideas"] });
@@ -1294,7 +1280,7 @@ function IdeaBankTab({ pageFilter, search, readOnly }: { pageFilter: string; sea
     onError: (e: any) => toast.error(e?.message || "Failed to update"),
   });
   const deleteMut = useMutation({
-    mutationFn: deleteExpIdea,
+    mutationFn: api.deleteIdea,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }),
     onError: () => toast.error("Failed to delete"),
   });
@@ -1421,18 +1407,19 @@ function IdeaBankTab({ pageFilter, search, readOnly }: { pageFilter: string; sea
 // Content Bank tab (full archive — month / week / day / search)
 // ---------------------------------------------------------------------------
 function ContentBankTab({ pageFilter, search, readOnly }: { pageFilter: string; search: string; readOnly?: boolean }) {
+  const { api, id: playbookId } = usePlaybook();
   const qc = useQueryClient();
   const now = new Date();
   // null = all time; set to a specific month to filter
   const [monthFilter, setMonthFilter] = useState<{ year: number; month: number } | null>(null);
 
   const updateMut = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => updateExpIdea(id, data),
+    mutationFn: ({ id, data }: { id: string; data: any }) => api.updateIdea(id, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["exp-content-bank-all"] }); qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }); },
     onError: (e: any) => toast.error(e?.message || "Failed to update"),
   });
   const deleteMut = useMutation({
-    mutationFn: deleteExpIdea,
+    mutationFn: api.deleteIdea,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["exp-content-bank-all"] }); qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }); },
     onError: () => toast.error("Failed to delete"),
   });
@@ -1442,7 +1429,7 @@ function ContentBankTab({ pageFilter, search, readOnly }: { pageFilter: string; 
 
   const { data: rawItems = [], isLoading } = useQuery({
     queryKey: ["exp-content-bank-all", pageFilter],
-    queryFn: () => getExpIdeaBank({ page: pageFilter !== "all" ? pageFilter : undefined }),
+    queryFn: () => api.getIdeaBank({ page: pageFilter !== "all" ? pageFilter : undefined }),
   });
 
   // Show all ideas across all weeks — team decides topline/baseline from views + status
@@ -1625,27 +1612,28 @@ function ContentBankTab({ pageFilter, search, readOnly }: { pageFilter: string; 
 // Working Ideas tab
 // ---------------------------------------------------------------------------
 function WorkingIdeasTab({ pageFilter, search, readOnly }: { pageFilter: string; search: string; readOnly?: boolean }) {
+  const { pageColors, api, id: playbookId } = usePlaybook();
   const qc = useQueryClient();
   const [editingGoal, setEditingGoal] = useState(false);
   const [goalDraft, setGoalDraft] = useState("");
   const [sortBy, setSortBy] = useState<"views" | "date">("views");
 
-  const { data: settings } = useQuery({ queryKey: ["exp-settings"], queryFn: getExpSettings });
+  const { data: settings } = useQuery({ queryKey: ["exp-settings", playbookId], queryFn: api.getSettings });
   const viewGoal: number = settings?.view_goal ?? 100000;
 
   const updateSettingsMut = useMutation({
-    mutationFn: updateExpSettings,
+    mutationFn: api.updateSettings,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["exp-settings"] }); setEditingGoal(false); toast.success("Goal updated"); },
     onError: (e: any) => toast.error(`Failed: ${e?.message || "unknown error"}`),
   });
 
   const { data: ideas = [], isLoading } = useQuery({
     queryKey: ["exp-working-ideas", pageFilter],
-    queryFn: () => getExpWorkingIdeas({ page: pageFilter !== "all" ? pageFilter : undefined }),
+    queryFn: () => api.getWorkingIdeas({ page: pageFilter !== "all" ? pageFilter : undefined }),
   });
 
   const distributeMut = useMutation({
-    mutationFn: distributeExpWorkingIdea,
+    mutationFn: api.distributeWorkingIdea,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["exp-working-ideas"] }); toast.success("Marked as distributed"); },
     onError: () => toast.error("Failed to distribute"),
   });
@@ -1737,7 +1725,7 @@ function WorkingIdeasTab({ pageFilter, search, readOnly }: { pageFilter: string;
                     {(() => {
                       const pages = (topIdea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
                       return pages.map((pg: string) => {
-                        const pgc = PAGE_COLORS[pg] || "#a1a1aa";
+                        const pgc = pageColors[pg] || "#a1a1aa";
                         return <span key={pg} style={{ fontSize: 10, fontWeight: 700, color: pgc, background: pgc + "22", borderRadius: 4, padding: "1px 6px" }}>{pg}</span>;
                       });
                     })()}
@@ -1770,15 +1758,6 @@ function WorkingIdeasTab({ pageFilter, search, readOnly }: { pageFilter: string;
     </div>
   );
 }
-
-// Short column labels for Frontseat view
-const PAGE_SHORT: Record<string, string> = {
-  indianbusinesscom:   "IBC",
-  indianfoundersco:    "IFC",
-  indiafounderscore:   "IFC2",
-  indiafounderbrief: "IFB",
-  indiastartupstory:   "ISS",
-};
 
 // ---------------------------------------------------------------------------
 // Quick Add — simplified form (title + source link + format)
@@ -2008,6 +1987,7 @@ function FrontseatPageCard({ idea, letter, onClick, onRemoveFromPage }: {
 // Frontseat tab — current-week ideas organised by page (view layer over Idea Bank)
 // ---------------------------------------------------------------------------
 function FrontseatTab({ readOnly }: { readOnly?: boolean }) {
+  const { pages: playbookPages, pageColors, pageShort, api, id: playbookId } = usePlaybook();
   const qc = useQueryClient();
   const { can } = usePermissions();
   const [addOpen, setAddOpen]       = useState(false);
@@ -2015,7 +1995,7 @@ function FrontseatTab({ readOnly }: { readOnly?: boolean }) {
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
-  const { data: settings } = useQuery({ queryKey: ["exp-settings"], queryFn: getExpSettings });
+  const { data: settings } = useQuery({ queryKey: ["exp-settings", playbookId], queryFn: api.getSettings });
   const currentWeek = useMemo(() => {
     const start = settings?.experiment_start_date;
     if (!start) return 1;
@@ -2026,14 +2006,14 @@ function FrontseatTab({ readOnly }: { readOnly?: boolean }) {
   const todayStr = toLocalISO(new Date());
   const { data: ideas = [], isLoading } = useQuery({
     queryKey: ["exp-idea-bank", "today", todayStr],
-    queryFn: () => getExpIdeaBank({ day_date: todayStr }),
+    queryFn: () => api.getIdeaBank({ day_date: todayStr }),
     staleTime: 30 * 1000,
   });
 
   const QK = ["exp-idea-bank", "today", todayStr] as const;
 
   const createMut = useMutation({
-    mutationFn: createExpIdea,
+    mutationFn: api.createIdea,
     onMutate: async (newData) => {
       await qc.cancelQueries({ queryKey: QK });
       const prev = qc.getQueryData(QK);
@@ -2054,7 +2034,7 @@ function FrontseatTab({ readOnly }: { readOnly?: boolean }) {
     onSettled: () => qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }),
   });
   const updateMut = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => updateExpIdea(id, data),
+    mutationFn: ({ id, data }: { id: string; data: any }) => api.updateIdea(id, data),
     onMutate: async ({ id, data }) => {
       await qc.cancelQueries({ queryKey: QK });
       const prev = qc.getQueryData(QK);
@@ -2072,7 +2052,7 @@ function FrontseatTab({ readOnly }: { readOnly?: boolean }) {
     },
   });
   const deleteMut = useMutation({
-    mutationFn: deleteExpIdea,
+    mutationFn: api.deleteIdea,
     onMutate: async (id) => {
       await qc.cancelQueries({ queryKey: QK });
       const prev = qc.getQueryData(QK);
@@ -2083,7 +2063,7 @@ function FrontseatTab({ readOnly }: { readOnly?: boolean }) {
     onSettled: () => qc.invalidateQueries({ queryKey: ["exp-idea-bank"] }),
   });
   const createCopyMut = useMutation({
-    mutationFn: createExpIdea,
+    mutationFn: api.createIdea,
     onMutate: async (newData) => {
       await qc.cancelQueries({ queryKey: QK });
       const prev = qc.getQueryData(QK);
@@ -2134,12 +2114,12 @@ function FrontseatTab({ readOnly }: { readOnly?: boolean }) {
   // !i.frontseat_pool covers both false and null, so old pre-migration ideas still appear.
   const ideasByPage = useMemo(() => {
     const result: Record<string, any[]> = {};
-    EXP_PAGES.forEach(p => { result[p] = []; });
+    playbookPages.forEach(p => { result[p] = []; });
     todayIdeas.filter((i: any) => !i.frontseat_pool).forEach((idea: any) => {
       const pages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
       pages.forEach((p: string) => { if (result[p]) result[p].push(idea); });
     });
-    EXP_PAGES.forEach(p => {
+    playbookPages.forEach(p => {
       result[p].sort((a: any, b: any) =>
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       );
@@ -2239,8 +2219,8 @@ function FrontseatTab({ readOnly }: { readOnly?: boolean }) {
                   {assignedPages.length > 0 && (
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: -3, marginBottom: 6, paddingLeft: 2 }}>
                       {assignedPages.map((p: string) => {
-                        const c = PAGE_COLORS[p] || "#a1a1aa";
-                        const short = PAGE_SHORT[p] || p;
+                        const c = pageColors[p] || "#a1a1aa";
+                        const short = pageShort[p] || p;
                         return (
                           <span key={p} style={{ fontSize: 9, fontWeight: 700, color: c, background: c + "22", borderRadius: 3, padding: "1px 5px" }}>
                             {short}
@@ -2258,9 +2238,9 @@ function FrontseatTab({ readOnly }: { readOnly?: boolean }) {
 
       {/* ── Right panel: page columns ── */}
       <div style={{ flex: 1, overflowX: "auto", display: "flex", gap: 10, paddingBottom: 20, alignItems: "flex-start" }}>
-        {EXP_PAGES.map(page => {
-          const short    = PAGE_SHORT[page] || page;
-          const color    = PAGE_COLORS[page] || "#a1a1aa";
+        {playbookPages.map(page => {
+          const short    = pageShort[page] || page;
+          const color    = pageColors[page] || "#a1a1aa";
           const colIdeas = ideasByPage[page] || [];
           const isDrop   = dropTarget === page;
 
@@ -2339,7 +2319,17 @@ function FrontseatTab({ readOnly }: { readOnly?: boolean }) {
 // ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
-export default function ExperimentX() {
+export default function PlaybookExperimentPage({ playbookId }: { playbookId: PlaybookId }) {
+  const ctx = useMemo(() => buildPlaybookContext(playbookId), [playbookId]);
+  return (
+    <PlaybookExperimentContext.Provider value={ctx}>
+      <ExperimentXShell />
+    </PlaybookExperimentContext.Provider>
+  );
+}
+
+function ExperimentXShell() {
+  const { pages: playbookPages, api, id: playbookId, label, emoji } = usePlaybook();
   const [tab, setTab] = useState<TabMode>("idea-bank");
   const [pageFilter, setPageFilter] = useState("all");
   const [search, setSearch] = useState("");
@@ -2350,7 +2340,7 @@ export default function ExperimentX() {
   useEffect(() => {
     if (topMigrationDone.current) return;
     topMigrationDone.current = true;
-    migratePostedToProven().then(() => {
+    api.migratePostedToProven().then(() => {
       qc.invalidateQueries({ queryKey: ["exp-idea-bank"] });
       qc.invalidateQueries({ queryKey: ["exp-content-bank-all"] });
     });
@@ -2359,7 +2349,7 @@ export default function ExperimentX() {
   if (!canViewExperimentX(role)) {
     return (
       <div style={{ minHeight: "100vh", background: "#09090b", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-        <p style={{ color: "#71717a", fontSize: 14 }}>You don&apos;t have permission to view Experiment X.</p>
+        <p style={{ color: "#71717a", fontSize: 14 }}>You don&apos;t have permission to view {label}.</p>
       </div>
     );
   }
@@ -2388,10 +2378,10 @@ export default function ExperimentX() {
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 20, fontWeight: 700, color: "#fff", margin: 0, letterSpacing: "-0.02em" }}>
-          Experiment X <span style={{ fontSize: 15 }}>🧪</span>
+          {label} <span style={{ fontSize: 15 }}>{emoji}</span>
         </h1>
         <p style={{ fontSize: 12, color: "#52525b", margin: "4px 0 0" }}>
-          5 pages · {EXP_PAGES.join(", ")}
+          {playbookPages.length} pages · {playbookPages.join(", ")}
         </p>
       </div>
 
@@ -2417,7 +2407,7 @@ export default function ExperimentX() {
         {/* Page filter */}
         <select value={pageFilter} onChange={e => setPageFilter(e.target.value)} style={sel}>
           <option value="all">All pages</option>
-          {EXP_PAGES.map(p => <option key={p} value={p}>{p}</option>)}
+          {playbookPages.map(p => <option key={p} value={p}>{p}</option>)}
         </select>
 
         {/* Search */}

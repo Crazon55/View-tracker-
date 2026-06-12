@@ -29,9 +29,9 @@ export type Permission =
   | 'filter_by_person'            // filter board by any team member (admin-level)
   | 'manage_team'                 // add/remove team members and change roles (admin-only)
   | 'post_tracker_assigned_only'  // in Post Tracker only: see ideas where tagged (designer override)
-  | 'add_experiment_idea'         // create ideas in Experiment X (Pulkit, Varun only)
-  | 'view_experiment_x'           // read-only access to Experiment X
-  | 'edit_experiment_x'           // edit ideas / kanban in Experiment X
+  | 'add_experiment_idea'         // create ideas in playbook experiments
+  | 'view_experiment_x'           // read-only access to playbook experiments
+  | 'edit_experiment_x'           // edit ideas / kanban in playbook experiments
   | 'edit_six_day_tracker'        // update views and entries in 6-Day Tracker
 
 // ── Reusable permission sets ──────────────────────────────────────────────────
@@ -139,8 +139,8 @@ export const ROLE_NAV: Record<string, '*' | string[]> = {
   carousel_designer: ['/', '/post-tracker', '/growth'],
 
   smm:              ['/', '/content-tracker', '/post-tracker', '/growth', '/stage1-tracker'],
-  experiment_x:     ['/', '/experiment-x', '/team-performance', '/tickets', '/news', '/growth'],
-  content_ops_intern:  ['/', '/experiment-x', '/six-day-tracker', '/growth'],
+  experiment_x:     ['/', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x', '/team-performance', '/tickets', '/news', '/growth'],
+  content_ops_intern:  ['/', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x', '/six-day-tracker', '/growth'],
   // legacy — migrated to cs in backend
   content_creators: '*',
 }
