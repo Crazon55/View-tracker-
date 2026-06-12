@@ -1371,34 +1371,21 @@ async def set_user_role(req: dict):
     existing = client.table("user_roles").select("id,name,role").eq("email", email).execute().data
     try:
         if existing:
-            result = (
-                client.table("user_roles")
-                .update(payload)
-                .eq("email", email)
-                .select("*")
-                .execute()
-            )
+            client.table("user_roles").update(payload).eq("email", email).execute()
         else:
             if "name" not in payload:
                 payload["name"] = email.split("@")[0]
-            result = (
-                client.table("user_roles")
-                .insert({"email": email, **payload})
-                .select("*")
-                .execute()
-            )
+            client.table("user_roles").insert({"email": email, **payload}).execute()
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
 
-    if not result.data:
-        verify = client.table("user_roles").select("*").eq("email", email).execute().data
-        if verify and verify[0].get("role") == role:
-            return {"success": True, "data": verify[0]}
+    verify = client.table("user_roles").select("*").eq("email", email).execute().data
+    if not verify or verify[0].get("role") != role:
         raise HTTPException(
             status_code=500,
-            detail="Could not save role — run in Supabase: ALTER TABLE user_roles DISABLE ROW LEVEL SECURITY;",
+            detail="Could not save role — check Supabase connection and user_roles table permissions",
         )
-    return {"success": True, "data": result.data[0]}
+    return {"success": True, "data": verify[0]}
 
 
 @app.delete("/api/v1/user-role/{email}")
