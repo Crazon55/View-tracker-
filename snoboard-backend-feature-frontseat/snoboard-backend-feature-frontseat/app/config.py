@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     # Supabase Configuration
     supabase_url: str
     supabase_key: str
+    # Project JWT secret (Supabase → Project Settings → API → JWT Secret)
+    supabase_jwt_secret: str = ""
 
     # Apify Actor IDs
     instagram_actor_id: str = "apify/instagram-post-scraper"

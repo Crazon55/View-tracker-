@@ -2,7 +2,7 @@
 
 import logging
 import jwt
-import requests
+from jwt import PyJWKClient
 from functools import lru_cache
 from fastapi import Request, HTTPException
 
@@ -37,54 +37,60 @@ async def require_admin(request: Request):
 
 @lru_cache
 def _get_jwks_url() -> str:
-    url = get_settings().supabase_url
+    url = get_settings().supabase_url.rstrip("/")
     return f"{url}/auth/v1/.well-known/jwks.json"
 
 
 @lru_cache
-def _get_jwks() -> dict:
-    resp = requests.get(_get_jwks_url())
-    resp.raise_for_status()
-    return resp.json()
-
-
-def _get_signing_key(token: str):
-    jwks = _get_jwks()
-    header = jwt.get_unverified_header(token)
-    for key in jwks["keys"]:
-        if key["kid"] == header["kid"]:
-            return jwt.algorithms.RSAAlgorithm.from_jwk(key)
-    raise HTTPException(status_code=401, detail="Invalid token signing key")
+def _get_jwk_client() -> PyJWKClient:
+    return PyJWKClient(_get_jwks_url(), cache_keys=True, lifespan=300)
 
 
 def verify_token(token: str) -> dict:
     """Verify a Supabase JWT and return its claims."""
+    settings = get_settings()
+    decode_opts = {"audience": "authenticated", "leeway": 120}
+    last_err: Exception | None = None
+
+    # Supabase access tokens are usually HS256 signed with the project JWT secret.
+    jwt_secret = (getattr(settings, "supabase_jwt_secret", None) or "").strip()
+    if jwt_secret:
+        try:
+            return jwt.decode(token, jwt_secret, algorithms=["HS256"], **decode_opts)
+        except jwt.InvalidTokenError as e:
+            last_err = e
+            logger.debug("HS256 verify failed: %s", e)
+
+    # Asymmetric keys (RS256 / ES256) via Supabase JWKS.
     try:
-        key = _get_signing_key(token)
-        claims = jwt.decode(
-            token,
-            key,
-            algorithms=["RS256"],
-            audience="authenticated",
-            leeway=120,
-        )
-        return claims
+        signing_key = _get_jwk_client().get_signing_key_from_jwt(token)
+        alg = jwt.get_unverified_header(token).get("alg", "RS256")
+        allowed = ["RS256", "ES256", "ES384", "ES512"]
+        if alg not in allowed:
+            allowed.append(alg)
+        return jwt.decode(token, signing_key.key, algorithms=allowed, **decode_opts)
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.InvalidTokenError as e:
-        raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
+        last_err = e
+        logger.warning("JWKS verify failed: %s", e)
+    except Exception as e:
+        last_err = e
+        logger.warning("JWKS client error: %s", e)
+
+    if last_err:
+        raise HTTPException(status_code=401, detail=f"Invalid token: {last_err}")
+    raise HTTPException(status_code=401, detail="Invalid token signing key")
 
 
 async def require_auth(request: Request):
     """FastAPI dependency — extracts and validates the Bearer token."""
     auth_header = request.headers.get("Authorization", "")
-    logger.info(f"Auth header present: {bool(auth_header)}, starts with Bearer: {auth_header.startswith('Bearer ')}")
     if not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing authorization token")
 
     token = auth_header.removeprefix("Bearer ")
     claims = verify_token(token)
-    logger.info(f"Auth success for: {claims.get('email', 'unknown')}")
 
     email = claims.get("email", "")
     if not email.endswith(f"@{ALLOWED_DOMAIN}"):
