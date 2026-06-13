@@ -5578,6 +5578,10 @@ async def exp_create_idea(playbook: str, req: ExpIdeaCreate):
         "video_format": req.video_format,
         "frontseat_pool": req.frontseat_pool,
         "source_pool_id": req.source_pool_id,
+        "drive_link": req.drive_link,
+        "posting_date": req.posting_date,
+        "posting_time": req.posting_time,
+        "caption": req.caption,
     }
     client.table(tables.idea_bank).insert(row).execute()
     verify = _exp_idea_query(client, pb).eq("day_date", day_str).order("created_at", desc=True).limit(1).execute().data
@@ -5711,6 +5715,10 @@ async def exp_archive_week(playbook: str, request: Request):
             "comp_link": i.get("comp_link", ""),
             "created_by": i.get("created_by", ""),
             "page_views": i.get("page_views", {}),
+            "drive_link": i.get("drive_link", ""),
+            "posting_date": i.get("posting_date"),
+            "posting_time": i.get("posting_time", ""),
+            "caption": i.get("caption", ""),
         } for i in to_insert]
         client.table(get_playbook_tables(pb).content_bank).insert(rows).execute()
         for i in to_insert:
@@ -5730,7 +5738,8 @@ async def exp_update_content_bank_item(playbook: str, item_id: str, request: Req
     body = await request.json()
     allowed = {"topic", "script", "views", "status", "content_type", "source", "hook_variations",
                 "music_ref", "frame_link", "yt_url", "yt_timestamps", "comp_link", "page_views",
-                "created_by", "edited_by", "test_result", "video_format", "page_handle"}
+                "created_by", "edited_by", "test_result", "video_format", "page_handle",
+                "drive_link", "posting_date", "posting_time", "caption"}
     update_data = {k: v for k, v in body.items() if k in allowed}
     if not update_data:
         raise HTTPException(status_code=400, detail="No valid fields to update")

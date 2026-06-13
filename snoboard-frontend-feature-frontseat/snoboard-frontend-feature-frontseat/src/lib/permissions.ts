@@ -32,6 +32,7 @@ export type Permission =
   | 'add_experiment_idea'         // create ideas in playbook experiments
   | 'view_experiment_x'           // read-only access to playbook experiments
   | 'edit_experiment_x'           // edit ideas / kanban in playbook experiments
+  | 'edit_experiment_ops'         // content ops: schedule fields, views, baseline/topline tags
   | 'edit_six_day_tracker'        // update views and entries in 6-Day Tracker
 
 // ── Reusable permission sets ──────────────────────────────────────────────────
@@ -53,6 +54,7 @@ const ADMIN_PERMISSIONS: Permission[] = [
   'add_experiment_idea',
   'view_experiment_x',
   'edit_experiment_x',
+  'edit_experiment_ops',
   'edit_six_day_tracker',
 ]
 
@@ -105,9 +107,10 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     'add_experiment_idea',
   ],
 
-  // Content Ops — Experiment X + 6-Day Tracker
+  // Content Ops — playbooks (ops fields + calendar) + 6-Day Tracker
   content_ops_intern: [
     'view_experiment_x',
+    'edit_experiment_ops',
     'edit_six_day_tracker',
   ],
 
@@ -206,6 +209,17 @@ export function canViewExperimentX(role: string | null): boolean {
 export function canEditExperimentX(role: string | null): boolean {
   if (!role) return false
   return hasPermission(role, 'edit_experiment_x') || hasFullNav(role)
+}
+
+export function canEditExperimentOps(role: string | null): boolean {
+  if (!role) return false
+  return hasPermission(role, 'edit_experiment_ops') || hasPermission(role, 'edit_experiment_x') || hasFullNav(role)
+}
+
+/** True when user only has ops-level playbook access (not full experiment editor). */
+export function isExperimentOpsOnly(role: string | null): boolean {
+  if (!role) return false
+  return canEditExperimentOps(role) && !canEditExperimentX(role)
 }
 
 export function canEditSixDayTracker(role: string | null): boolean {

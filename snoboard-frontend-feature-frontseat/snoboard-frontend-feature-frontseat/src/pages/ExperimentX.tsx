@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
-import { canViewExperimentX, canEditExperimentX } from "@/lib/permissions";
+import { canViewExperimentX, canEditExperimentX, canEditExperimentOps, isExperimentOpsOnly } from "@/lib/permissions";
 import { buildPlaybookContext, type PlaybookId } from "@/lib/playbookExperimentConfig";
 import { PlaybookExperimentContext, usePlaybook } from "@/lib/playbookExperimentContext";
 
@@ -45,7 +45,7 @@ const STATUS_STYLE: Record<string, { bg: string; text: string }> = {
   killed:       { bg: "rgba(201,59,59,0.15)",    text: "#FF7070" },
 };
 
-type TabMode = "idea-bank" | "content-bank" | "working-ideas" | "frontseat";
+type TabMode = "idea-bank" | "content-bank" | "working-ideas" | "frontseat" | "calendar";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -85,6 +85,41 @@ function computeCurrentWeek(startDate: string): number {
   const today = new Date();
   const delta = Math.floor((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
   return Math.max(1, Math.floor(delta / 7) + 1);
+}
+
+function getMonday(d: Date): string {
+  const x = new Date(d);
+  const day = x.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  x.setDate(x.getDate() + diff);
+  return toLocalISO(x);
+}
+
+function addDays(iso: string, n: number): string {
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() + n);
+  return toLocalISO(d);
+}
+
+function weekDays(mondayIso: string): string[] {
+  return Array.from({ length: 7 }, (_, i) => addDays(mondayIso, i));
+}
+
+function fmtShortDate(iso: string) {
+  if (!iso) return "—";
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
+
+function fmtTimeLabel(t: string) {
+  if (!t) return "";
+  const [h, m] = t.split(":");
+  if (h == null || m == null) return t;
+  const hr = parseInt(h, 10);
+  if (isNaN(hr)) return t;
+  const ampm = hr >= 12 ? "PM" : "AM";
+  const h12 = hr % 12 || 12;
+  return `${h12}:${m.padStart(2, "0")} ${ampm}`;
 }
 
 // Shared input/button styles
@@ -680,6 +715,11 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
           </div>
         )}
 
+        {/* Scheduling — ops handoff fields */}
+        {!readOnly && (
+          <OpsSchedulingFields idea={idea} onUpdate={onUpdate} editable />
+        )}
+
         {/* Edited by */}
         <div>
           <label style={ls}>Edited by</label>
@@ -1208,6 +1248,371 @@ const TEST_RESULTS = [
   { value: "top_line",       label: "Top line",       color: "#2D9E5F", bg: "rgba(45,158,95,0.12)"  },
 ] as const;
 
+// ---------------------------------------------------------------------------
+// Ops scheduling fields — drive link, posting date/time, caption, views, baseline
+// ---------------------------------------------------------------------------
+function OpsSchedulingFields({ idea, onUpdate, editable }: {
+  idea: any;
+  onUpdate: (id: string, data: any) => void;
+  editable?: boolean;
+}) {
+  const { pageColors } = usePlaybook();
+  const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "#71717a", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
+  const selectedPages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+  const stage = idea.status || "new";
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "14px 0 4px", borderTop: "1px solid #27272a" }}>
+      <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "#a78bfa", textTransform: "uppercase", letterSpacing: "0.06em" }}>Scheduling & performance</p>
+
+      <div>
+        <label style={ls}>Drive link</label>
+        {editable ? (
+          <SafeField value={idea.drive_link || ""} onSave={v => onUpdate(idea.id, { drive_link: v })} placeholder="Google Drive link to final asset" />
+        ) : (
+          <span style={{ fontSize: 13, color: idea.drive_link ? "#e4e4e7" : "#52525b" }}>{idea.drive_link || "—"}</span>
+        )}
+        {idea.drive_link && (
+          <a href={idea.drive_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block", marginTop: 4 }}>{idea.drive_link}</a>
+        )}
+      </div>
+
+      <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ flex: 1 }}>
+          <label style={ls}>Posting date</label>
+          {editable ? (
+            <input
+              type="date"
+              value={(idea.posting_date || "").slice(0, 10)}
+              onChange={e => onUpdate(idea.id, { posting_date: e.target.value || null })}
+              style={inp}
+            />
+          ) : (
+            <span style={{ fontSize: 13, color: "#e4e4e7" }}>{idea.posting_date ? fmtShortDate(idea.posting_date.slice(0, 10)) : "—"}</span>
+          )}
+        </div>
+        <div style={{ flex: "0 0 140px" }}>
+          <label style={ls}>Posting time</label>
+          {editable ? (
+            <input
+              type="time"
+              value={idea.posting_time || ""}
+              onChange={e => onUpdate(idea.id, { posting_time: e.target.value })}
+              style={inp}
+            />
+          ) : (
+            <span style={{ fontSize: 13, color: "#e4e4e7" }}>{idea.posting_time ? fmtTimeLabel(idea.posting_time) : "—"}</span>
+          )}
+        </div>
+      </div>
+
+      <div>
+        <label style={ls}>Caption</label>
+        <SafeArea
+          readOnly={!editable}
+          value={idea.caption || ""}
+          onSave={v => onUpdate(idea.id, { caption: v })}
+          placeholder="Instagram caption"
+          rows={4}
+        />
+      </div>
+
+      {selectedPages.length > 1 ? (
+        <div>
+          <label style={ls}>Views per page</label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {selectedPages.map((pg: string) => {
+              const pgc = pageColors[pg] || "#a1a1aa";
+              const pgViews = ((idea.page_views || {}) as Record<string, number>)[pg] || 0;
+              return (
+                <div key={pg} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: pgc, background: pgc + "22", borderRadius: 5, padding: "3px 10px", minWidth: 140, textAlign: "center" }}>{pg}</span>
+                  {editable ? (
+                    <PerPageViewInput value={pgViews} pageColor={pgc} onSave={v => {
+                      const updated: Record<string, number> = { ...(idea.page_views || {}), [pg]: v };
+                      const total = Object.values(updated).reduce((acc, val) => acc + (Number(val) || 0), 0);
+                      onUpdate(idea.id, { page_views: updated, views: total });
+                    }} />
+                  ) : (
+                    <span style={{ fontSize: 13, color: "#50E0B0", fontWeight: 600 }}>{pgViews > 0 ? fmt(pgViews) : "—"}</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div>
+          <label style={ls}>Views</label>
+          {editable ? (
+            stage === "posted" ? (
+              <PostedViewsInput value={idea.views || 0} onSave={v => onUpdate(idea.id, { views: v })} />
+            ) : (
+              <ViewsEdit value={idea.views || 0} onSave={v => onUpdate(idea.id, { views: v })} />
+            )
+          ) : (
+            <span style={{ fontSize: 13, color: "#50E0B0", fontWeight: 600 }}>{idea.views > 0 ? fmt(idea.views) : "—"}</span>
+          )}
+        </div>
+      )}
+
+      <div>
+        <label style={ls}>Baseline / top line</label>
+        {selectedPages.length > 1 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {selectedPages.map((pg: string) => {
+              const pgc = pageColors[pg] || "#a1a1aa";
+              const pgResult = ((idea.page_test_results || {}) as Record<string, string>)[pg] || "";
+              return (
+                <div key={pg}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: pgc, flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: pgc }}>{pg}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {TEST_RESULTS.map(({ value, label, color, bg }) => {
+                      const active = pgResult === value;
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          disabled={!editable}
+                          onClick={() => {
+                            if (!editable) return;
+                            const updated: Record<string, string> = { ...(idea.page_test_results || {}), [pg]: active ? "" : value };
+                            if (!updated[pg]) delete updated[pg];
+                            const RANK: Record<string, number> = { top_line: 4, above_baseline: 3, baseline: 2, below_baseline: 1 };
+                            const best = Object.values(updated).reduce<string>((b, c) => (RANK[c] || 0) > (RANK[b] || 0) ? c : b, "");
+                            onUpdate(idea.id, { page_test_results: updated, test_result: best });
+                          }}
+                          style={{
+                            padding: "6px 13px", borderRadius: 7, fontSize: 11, fontWeight: 600,
+                            cursor: editable ? "pointer" : "default",
+                            border: active ? `2px solid ${color}` : "1.5px solid #3f3f46",
+                            background: active ? bg : "#18181b",
+                            color: active ? color : "#71717a",
+                            opacity: editable ? 1 : 0.85,
+                          }}
+                        >{label}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {TEST_RESULTS.map(({ value, label, color, bg }) => {
+              const active = idea.test_result === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  disabled={!editable}
+                  onClick={() => editable && onUpdate(idea.id, { test_result: active ? "" : value })}
+                  style={{
+                    padding: "7px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+                    cursor: editable ? "pointer" : "default",
+                    border: active ? `2px solid ${color}` : "1.5px solid #3f3f46",
+                    background: active ? bg : "#18181b",
+                    color: active ? color : "#71717a",
+                    opacity: editable ? 1 : 0.85,
+                  }}
+                >{label}</button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ContentOpsIdeaModal({ idea, onUpdate, onClose }: {
+  idea: any;
+  onUpdate: (id: string, data: any) => void;
+  onClose: () => void;
+}) {
+  const { pageColors } = usePlaybook();
+  const stage = idea.status || "new";
+  const ss = STATUS_STYLE[stage] || STATUS_STYLE.new;
+  const selectedPages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center" }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} />
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          position: "relative", background: "#18181b", borderRadius: 16,
+          padding: "24px 28px", maxWidth: 560, width: "94%",
+          maxHeight: "88vh", overflowY: "auto",
+          boxShadow: "0 24px 80px rgba(0,0,0,0.5)", border: "1px solid #27272a",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 14 }}>
+          <div>
+            <p style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "#fff" }}>
+              {idea.topic || <em style={{ color: "#52525b", fontWeight: 400 }}>Untitled</em>}
+            </p>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 99, background: ss.bg, color: ss.text }}>
+                {STAGE_LABEL[stage] || stage}
+              </span>
+              <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, background: "#27272a", color: "#71717a" }}>{idea.content_type}</span>
+              {selectedPages.map((pg: string) => {
+                const c = pageColors[pg] || "#a1a1aa";
+                return <span key={pg} style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, background: c + "22", color: c, fontWeight: 600 }}>{pg}</span>;
+              })}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#71717a", padding: "0 4px" }}>✕</button>
+        </div>
+        <OpsSchedulingFields idea={idea} onUpdate={onUpdate} editable />
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Calendar tab — week view of scheduled ideas by posting date/time
+// ---------------------------------------------------------------------------
+function CalendarTab({ pageFilter, search, opsOnly, onOpenIdea }: {
+  pageFilter: string;
+  search: string;
+  opsOnly?: boolean;
+  onOpenIdea?: (idea: any) => void;
+}) {
+  const { pageColors, api, id: playbookId } = usePlaybook();
+  const { role } = usePermissions();
+  const qc = useQueryClient();
+  const [weekStart, setWeekStart] = useState(() => getMonday(new Date()));
+  const [detailIdea, setDetailIdea] = useState<any>(null);
+  const days = weekDays(weekStart);
+  const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const todayStr = toLocalISO(new Date());
+
+  const { data: ideas = [], isLoading } = useQuery({
+    queryKey: expQk(playbookId, "calendar-ideas"),
+    queryFn: () => api.getIdeaBank(),
+    staleTime: EXP_STALE_MS,
+  });
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => api.updateIdea(id, data),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: expQk(playbookId, "idea-bank") });
+      qc.invalidateQueries({ queryKey: expQk(playbookId, "calendar-ideas") });
+      setDetailIdea((prev: any) => prev?.id === vars.id ? { ...prev, ...vars.data } : prev);
+    },
+    onError: (e: any) => toast.error(e?.message || "Failed to update"),
+  });
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    return (ideas as any[]).filter((i: any) => {
+      const pd = (i.posting_date || "").slice(0, 10);
+      if (!pd) return false;
+      if (pd < weekStart || pd > addDays(weekStart, 6)) return false;
+      if (pageFilter !== "all") {
+        const pages = (i.page_handle || "").split(",").map((s: string) => s.trim());
+        if (!pages.includes(pageFilter)) return false;
+      }
+      if (q && !(i.topic || "").toLowerCase().includes(q) && !(i.caption || "").toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [ideas, weekStart, pageFilter, search]);
+
+  const openIdea = (idea: any) => {
+    if (onOpenIdea) onOpenIdea(idea);
+    else setDetailIdea(idea);
+  };
+
+  if (isLoading) return <p style={{ color: "#52525b", fontSize: 12, padding: "20px 0" }}>Loading…</p>;
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+        <button onClick={() => setWeekStart(addDays(weekStart, -7))} style={btnSecondary}>← Prev</button>
+        <button onClick={() => setWeekStart(getMonday(new Date()))} style={btnSecondary}>Today</button>
+        <button onClick={() => setWeekStart(addDays(weekStart, 7))} style={btnSecondary}>Next →</button>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>
+          {fmtShortDate(weekStart)} – {fmtShortDate(addDays(weekStart, 6))}
+        </span>
+        <span style={{ fontSize: 12, color: "#52525b" }}>{filtered.length} scheduled</span>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 1, background: "#27272a", borderRadius: 10, overflow: "hidden", border: "1px solid #27272a" }}>
+        {days.map((day, i) => {
+          const isToday = day === todayStr;
+          const dayItems = filtered
+            .filter((idea: any) => (idea.posting_date || "").slice(0, 10) === day)
+            .sort((a: any, b: any) => (a.posting_time || "").localeCompare(b.posting_time || ""));
+          return (
+            <div key={day} style={{ background: isToday ? "#1a1a14" : "#111113", minHeight: 140, display: "flex", flexDirection: "column" }}>
+              <div style={{ padding: "8px 8px 6px", borderBottom: "1px solid #27272a" }}>
+                <span style={{ fontSize: 10, fontWeight: 600, color: isToday ? "#D4952A" : "#71717a" }}>{dayLabels[i]}</span>
+                <span style={{ fontSize: 13, fontWeight: isToday ? 700 : 500, color: isToday ? "#fff" : "#a1a1aa", marginLeft: 6 }}>
+                  {new Date(day + "T00:00:00").getDate()}
+                </span>
+              </div>
+              <div style={{ padding: 4, flex: 1, overflow: "auto" }}>
+                {dayItems.length === 0 ? (
+                  <p style={{ fontSize: 10, color: "#3f3f46", textAlign: "center", padding: "12px 4px" }}>—</p>
+                ) : dayItems.map((idea: any) => {
+                  const pg = (idea.page_handle || "").split(",")[0].trim();
+                  const c = pageColors[pg] || "#7c3aed";
+                  const tr = TEST_RESULTS.find(t => t.value === idea.test_result);
+                  return (
+                    <div
+                      key={idea.id}
+                      onClick={() => openIdea(idea)}
+                      style={{
+                        padding: "6px 8px", marginBottom: 4, borderRadius: 6, cursor: "pointer",
+                        background: c + "18", borderLeft: `3px solid ${c}`,
+                      }}
+                    >
+                      {idea.posting_time && (
+                        <p style={{ margin: "0 0 2px", fontSize: 10, fontWeight: 700, color: "#D4952A" }}>{fmtTimeLabel(idea.posting_time)}</p>
+                      )}
+                      <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: "#fff", lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {idea.topic || "Untitled"}
+                      </p>
+                      <p style={{ margin: "2px 0 0", fontSize: 10, color: "#71717a" }}>{pg}{idea.views > 0 ? ` · ${fmt(idea.views)} views` : ""}</p>
+                      {tr && <span style={{ fontSize: 9, fontWeight: 600, color: tr.color }}>{tr.label}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {detailIdea && (
+        opsOnly ? (
+          <ContentOpsIdeaModal
+            idea={detailIdea}
+            onUpdate={(id, data) => updateMut.mutate({ id, data })}
+            onClose={() => setDetailIdea(null)}
+          />
+        ) : (
+          <IdeaDetailModal
+            idea={detailIdea}
+            readOnly={!canEditExperimentX(role)}
+            onUpdate={(id, data) => updateMut.mutate({ id, data })}
+            onClose={() => setDetailIdea(null)}
+          />
+        )
+      )}
+    </div>
+  );
+}
+
 // Stage column dot colors
 const STAGE_DOT: Record<string, string> = {
   new: "#4A7FD4", approved: "#2D9E5F", base_edit: "#7B61C4",
@@ -1218,7 +1623,7 @@ const STAGE_DOT: Record<string, string> = {
 // ---------------------------------------------------------------------------
 // Idea Bank tab — kanban board (same layout as Content Tracker)
 // ---------------------------------------------------------------------------
-function IdeaBankTab({ pageFilter, search, readOnly }: { pageFilter: string; search: string; readOnly?: boolean }) {
+function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: string; search: string; readOnly?: boolean; opsOnly?: boolean }) {
   const { api, id: playbookId } = usePlaybook();
   const qc = useQueryClient();
   const { can } = usePermissions();
@@ -1323,6 +1728,64 @@ function IdeaBankTab({ pageFilter, search, readOnly }: { pageFilter: string; sea
   }, [filtered]);
 
   if (isLoading) return <p style={{ color: "#52525b", fontSize: 12, padding: "20px 0" }}>Loading…</p>;
+
+  if (opsOnly) {
+    const opsList = filtered
+      .filter((i: any) => !i.frontseat_pool)
+      .sort((a: any, b: any) => {
+        const da = (a.posting_date || "9999").slice(0, 10);
+        const db = (b.posting_date || "9999").slice(0, 10);
+        if (da !== db) return da.localeCompare(db);
+        return (a.posting_time || "").localeCompare(b.posting_time || "");
+      });
+    return (
+      <div>
+        <p style={{ fontSize: 12, color: "#71717a", marginBottom: 14 }}>
+          Week {currentWeek} · {opsList.length} idea{opsList.length !== 1 ? "s" : ""} · tap to edit scheduling & performance
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {opsList.length === 0 ? (
+            <p style={{ color: "#52525b", fontSize: 12, padding: 24, textAlign: "center", border: "1.5px dashed #27272a", borderRadius: 10 }}>No ideas this week</p>
+          ) : opsList.map((idea: any) => {
+            const stage = idea.status || "new";
+            const ss = STATUS_STYLE[stage] || STATUS_STYLE.new;
+            const pg = (idea.page_handle || "").split(",")[0].trim();
+            const tr = TEST_RESULTS.find(t => t.value === idea.test_result);
+            return (
+              <button
+                key={idea.id}
+                type="button"
+                onClick={() => setDetailIdea(idea)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+                  padding: "12px 16px", borderRadius: 10, border: "1px solid #27272a",
+                  background: "#111113", cursor: "pointer", textAlign: "left", width: "100%",
+                }}
+              >
+                <span style={{ flex: "1 1 180px", fontSize: 13, fontWeight: 600, color: "#fff" }}>{idea.topic || "Untitled"}</span>
+                <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 99, background: ss.bg, color: ss.text }}>{STAGE_LABEL[stage]}</span>
+                <span style={{ fontSize: 11, color: "#71717a" }}>{pg || "—"}</span>
+                <span style={{ fontSize: 11, color: idea.posting_date ? "#a78bfa" : "#52525b", minWidth: 90 }}>
+                  {idea.posting_date ? fmtShortDate(idea.posting_date.slice(0, 10)) : "No date"}
+                  {idea.posting_time ? ` · ${fmtTimeLabel(idea.posting_time)}` : ""}
+                </span>
+                <span style={{ fontSize: 11, color: idea.views > 0 ? "#50E0B0" : "#52525b", minWidth: 60 }}>{idea.views > 0 ? fmt(idea.views) : "—"}</span>
+                {tr && <span style={{ fontSize: 10, fontWeight: 600, color: tr.color }}>{tr.label}</span>}
+                {idea.drive_link && <span style={{ fontSize: 10, color: "#4A7FD4" }}>Drive ✓</span>}
+              </button>
+            );
+          })}
+        </div>
+        {detailIdea && (
+          <ContentOpsIdeaModal
+            idea={detailIdea}
+            onUpdate={(id, data) => updateMut.mutate({ id, data })}
+            onClose={() => setDetailIdea(null)}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -1907,7 +2370,7 @@ function QuickAddModal({ open, onAdd, onClose }: {
 // Frontseat — pool card (left panel, draggable)
 // ---------------------------------------------------------------------------
 function FrontseatPoolCard({ idea, letter, onDragStart, onClick, onDelete, readOnly }: {
-  idea: any; letter: string; onDragStart: () => void; onClick: () => void; onDelete: () => void; readOnly?: boolean;
+  idea: any; letter: string; onDragStart: () => void; onClick: () => void; onDelete?: () => void; readOnly?: boolean;
 }) {
   return (
     <div
@@ -1921,7 +2384,7 @@ function FrontseatPoolCard({ idea, letter, onDragStart, onClick, onDelete, readO
       onMouseEnter={e => (e.currentTarget.style.borderColor = "#3f3f46")}
       onMouseLeave={e => (e.currentTarget.style.borderColor = "#27272a")}
     >
-      {!readOnly && (
+      {!readOnly && onDelete && (
       <button
         onClick={e => { e.stopPropagation(); e.preventDefault(); onDelete(); }}
         title="Delete idea"
@@ -2005,7 +2468,7 @@ function FrontseatPageCard({ idea, letter, onClick, onRemoveFromPage }: {
 // ---------------------------------------------------------------------------
 // Frontseat tab — current-week ideas organised by page (view layer over Idea Bank)
 // ---------------------------------------------------------------------------
-function FrontseatTab({ readOnly }: { readOnly?: boolean }) {
+function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boolean }) {
   const { pages: playbookPages, pageColors, pageShort, api, id: playbookId } = usePlaybook();
   const qc = useQueryClient();
   const { can } = usePermissions();
@@ -2176,6 +2639,7 @@ function FrontseatTab({ readOnly }: { readOnly?: boolean }) {
   };
 
   const legendStages: IdeaStage[] = ["approved", "base_edit", "testing", "proven_ideas", "kill"];
+  const dragDisabled = readOnly || opsOnly;
 
   return (
     <div style={{ display: "flex", gap: 0, minHeight: "calc(100vh - 220px)" }}>
@@ -2189,10 +2653,11 @@ function FrontseatTab({ readOnly }: { readOnly?: boolean }) {
           <div>
             <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "#a1a1aa", textTransform: "uppercase", letterSpacing: "0.06em" }}>Ideas Pool</p>
             <p style={{ margin: "2px 0 0", fontSize: 10, color: "#52525b" }}>
-              {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · drag to assign
+              {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+              {opsOnly ? " · view & update scheduling" : " · drag to assign"}
             </p>
           </div>
-          {can("add_experiment_idea") && !readOnly && (
+          {can("add_experiment_idea") && !dragDisabled && (
             <button onClick={() => setAddOpen(true)} style={{
               padding: "4px 10px", background: "#7c3aed", color: "#fff", border: "none",
               borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer",
@@ -2227,10 +2692,10 @@ function FrontseatTab({ readOnly }: { readOnly?: boolean }) {
                   <FrontseatPoolCard
                     idea={idea}
                     letter={ideaLetterMap[idea.id] || "?"}
-                    readOnly={readOnly}
+                    readOnly={dragDisabled}
                     onDragStart={() => setDraggingId(idea.id)}
                     onClick={() => setDetailIdea(idea)}
-                    onDelete={() => {
+                    onDelete={opsOnly ? undefined : () => {
                       // Delete pool idea + all its page copies
                       const copies = (ideas as any[]).filter((i: any) => i.source_pool_id === idea.id);
                       copies.forEach((c: any) => deleteMut.mutate(c.id));
@@ -2270,9 +2735,9 @@ function FrontseatTab({ readOnly }: { readOnly?: boolean }) {
             <div
               key={page}
               style={{ minWidth: 195, flex: "1 0 195px", maxWidth: 250 }}
-              onDragOver={readOnly ? undefined : e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropTarget(page); }}
-              onDragLeave={readOnly ? undefined : e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTarget(null); }}
-              onDrop={readOnly ? undefined : e => handleDrop(page, e)}
+              onDragOver={dragDisabled ? undefined : e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropTarget(page); }}
+              onDragLeave={dragDisabled ? undefined : e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTarget(null); }}
+              onDrop={dragDisabled ? undefined : e => handleDrop(page, e)}
             >
               {/* Column header */}
               <div style={{
@@ -2305,7 +2770,7 @@ function FrontseatTab({ readOnly }: { readOnly?: boolean }) {
                     idea={idea}
                     letter={ideaLetterMap[idea.source_pool_id] || "?"}
                     onClick={() => setDetailIdea(idea)}
-                    onRemoveFromPage={readOnly ? undefined : () => {
+                    onRemoveFromPage={dragDisabled ? undefined : () => {
                       // Delete the copy
                       deleteMut.mutate(idea.id);
                       // Remove page from pool idea's chip tracking
@@ -2325,7 +2790,14 @@ function FrontseatTab({ readOnly }: { readOnly?: boolean }) {
       </div>
 
       <QuickAddModal open={addOpen} onAdd={data => createMut.mutate(data)} onClose={() => setAddOpen(false)} />
-      {detailIdea && (
+      {detailIdea && opsOnly && (
+        <ContentOpsIdeaModal
+          idea={detailIdea}
+          onUpdate={(id, data) => updateMut.mutate({ id, data })}
+          onClose={() => setDetailIdea(null)}
+        />
+      )}
+      {detailIdea && !opsOnly && (
         <IdeaDetailModal
           idea={detailIdea}
           readOnly={readOnly}
@@ -2351,12 +2823,17 @@ export default function PlaybookExperimentPage({ playbookId }: { playbookId: Pla
 }
 
 function ExperimentXShell() {
-  const { pages: playbookPages, api, id: playbookId, label, emoji } = usePlaybook();
-  const [tab, setTab] = useState<TabMode>("idea-bank");
+  const { pages: playbookPages, id: playbookId, label, emoji } = usePlaybook();
+  const { role } = usePermissions();
+  const opsOnly = isExperimentOpsOnly(role);
+  const [tab, setTab] = useState<TabMode>(() => (opsOnly ? "calendar" : "idea-bank"));
   const [pageFilter, setPageFilter] = useState("all");
   const [search, setSearch] = useState("");
-  const { role } = usePermissions();
   const readOnly = !canEditExperimentX(role);
+
+  const visibleTabs: TabMode[] = opsOnly
+    ? ["calendar", "idea-bank", "frontseat"]
+    : ["frontseat", "idea-bank", "calendar", "content-bank", "working-ideas"];
 
   if (!canViewExperimentX(role)) {
     return (
@@ -2369,12 +2846,14 @@ function ExperimentXShell() {
   const tabColors: Record<TabMode, string> = {
     "frontseat":     "#7c3aed",
     "idea-bank":     "#3f3f46",
+    "calendar":      "#2563eb",
     "content-bank":  "#1A5E3A",
     "working-ideas": "#534AB7",
   };
   const tabLabels: Record<TabMode, string> = {
     "frontseat":     "Frontseat",
     "idea-bank":     "Idea Bank",
+    "calendar":      "Calendar",
     "content-bank":  "Content Bank",
     "working-ideas": "Proven Ideas",
   };
@@ -2401,7 +2880,7 @@ function ExperimentXShell() {
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22, flexWrap: "wrap" }}>
         {/* Tab switcher */}
         <div style={{ display: "flex", background: "#27272a", borderRadius: 7, overflow: "hidden", border: "1px solid #3f3f46" }}>
-          {(["frontseat", "idea-bank", "content-bank", "working-ideas"] as TabMode[]).map(t => (
+          {visibleTabs.map(t => (
             <button
               key={t}
               onClick={() => { setTab(t); setSearch(""); }}
@@ -2432,9 +2911,10 @@ function ExperimentXShell() {
       </div>
 
       {/* Tab content */}
-      <div style={{ maxWidth: (tab === "idea-bank" || tab === "frontseat") ? "none" : 860 }}>
-        {tab === "frontseat"     && <FrontseatTab readOnly={readOnly} />}
-        {tab === "idea-bank"     && <IdeaBankTab    pageFilter={pageFilter} search={search} readOnly={readOnly} />}
+      <div style={{ maxWidth: (tab === "idea-bank" || tab === "frontseat" || tab === "calendar") ? "none" : 860 }}>
+        {tab === "frontseat"     && <FrontseatTab readOnly={readOnly} opsOnly={opsOnly} />}
+        {tab === "idea-bank"     && <IdeaBankTab pageFilter={pageFilter} search={search} readOnly={readOnly} opsOnly={opsOnly} />}
+        {tab === "calendar"      && <CalendarTab pageFilter={pageFilter} search={search} opsOnly={opsOnly} />}
         {tab === "content-bank"  && <ContentBankTab pageFilter={pageFilter} search={search} readOnly={readOnly} />}
         {tab === "working-ideas" && <WorkingIdeasTab pageFilter={pageFilter} search={search} readOnly={readOnly} />}
       </div>

@@ -184,6 +184,10 @@ class ExpIdeaCreate(BaseModel):
     video_format: str = ""
     frontseat_pool: bool = False
     source_pool_id: str | None = None
+    drive_link: str = ""
+    posting_date: str | None = None
+    posting_time: str = ""
+    caption: str = ""
 
 
 class ExpIdeaUpdate(BaseModel):
@@ -210,6 +214,10 @@ class ExpIdeaUpdate(BaseModel):
     video_format: str | None = None
     frontseat_pool: bool | None = None
     source_pool_id: str | None = None
+    drive_link: str | None = None
+    posting_date: str | None = None
+    posting_time: str | None = None
+    caption: str | None = None
 
 
 class ExpSettingsUpdate(BaseModel):
