@@ -2026,7 +2026,7 @@ TEAM_PERFORMANCE_CONFIG: dict[str, dict] = {
     },
     "experimentx": {
         "key": "experimentx",
-        "label": "Experiment BPB",
+        "label": "The Bizz playbook",
         "emoji": "\U0001F9EA",  # test tube
         "members": ["Pulkit"],
         "niche_match": ("experiment", "bpb"),
@@ -3605,6 +3605,7 @@ async def tracker_sync_team_niches():
         "FBS - Garfields": GARFIELDS_HANDLES,
         "FBS - Goofies": GOOFIES_HANDLES,
         "FBS - Sherus": SHERUS_HANDLES,
+        "FBS - The Bizz playbook": EXPERIMENT_BPB_HANDLES,
         "FBS - Experiment BPB": EXPERIMENT_BPB_HANDLES,
         "FBS - XF Playbook": EXPERIMENT_XF_HANDLES,
         "FBS - TECH Playbook": EXPERIMENT_TECH_HANDLES,

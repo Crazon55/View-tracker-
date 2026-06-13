@@ -26,7 +26,7 @@ PLAYBOOK_PAGES: dict[str, list[str]] = {
 }
 
 PLAYBOOK_NICHE_NAMES: dict[str, str] = {
-    "bpb": "FBS - Experiment BPB",
+    "bpb": "FBS - The Bizz playbook",
     "xf": "FBS - XF Playbook",
     "tech": "FBS - TECH Playbook",
 }

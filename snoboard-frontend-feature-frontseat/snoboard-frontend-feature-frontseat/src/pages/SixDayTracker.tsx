@@ -418,7 +418,7 @@ export default function SixDayTracker() {
             { key: "garfields", label: "Garfields", emoji: "🐱", count: nicheCounts.garfields, active: "bg-gradient-to-r from-orange-500 to-amber-500 text-zinc-900 shadow-md shadow-orange-500/30" },
             { key: "goofies", label: "Goofies", emoji: "🐶", count: nicheCounts.goofies, active: "bg-gradient-to-r from-sky-500 to-indigo-500 text-white shadow-md shadow-indigo-500/30" },
             { key: "sheruses", label: "The Sherus", emoji: "🦁", count: nicheCounts.sheruses, active: "bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-md shadow-rose-500/30" },
-            { key: "experimentx", label: "Experiment BPB", emoji: "🧪", count: nicheCounts.experimentx, active: "bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-md shadow-violet-500/30" },
+            { key: "experimentx", label: "The Bizz playbook", emoji: "🧪", count: nicheCounts.experimentx, active: "bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-md shadow-violet-500/30" },
           ] as const).map((opt) => {
             const isActive = nicheFilterSet.has(opt.key);
             return (

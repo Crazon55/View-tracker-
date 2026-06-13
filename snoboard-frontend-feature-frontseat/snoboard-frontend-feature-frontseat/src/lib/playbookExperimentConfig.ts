@@ -21,7 +21,7 @@ export type PlaybookExperimentConfig = {
 export const PLAYBOOK_CONFIGS: Record<PlaybookId, PlaybookExperimentConfig> = {
   bpb: {
     id: "bpb",
-    label: "Experiment BPB",
+    label: "The Bizz playbook",
     emoji: "🧪",
     route: "/experiment-bpb",
     pages: [
