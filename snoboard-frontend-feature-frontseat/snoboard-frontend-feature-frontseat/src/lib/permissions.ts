@@ -1,14 +1,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // RBAC — single source of truth for roles, permissions, and nav access.
-//
-// Adding a new role:
-//   1. Add an entry to ROLE_PERMISSIONS below.
-//   2. Add an entry to ROLE_NAV below.
-//   3. Add a matching entry to the ROLES array in AuthContext.tsx.
-//
-// Changing a role's access:
-//   Edit only this file — no component code needs to change.
 // ─────────────────────────────────────────────────────────────────────────────
+
+import type { PlaybookId } from "@/lib/playbookExperimentConfig";
 
 export type Permission =
   | 'view_own_ideas'        // see only ideas you created
@@ -34,8 +28,73 @@ export type Permission =
   | 'edit_experiment_x'           // edit ideas / kanban in playbook experiments
   | 'edit_experiment_ops'         // content ops: edit views + baseline/topline tags only (schedule is read-only)
   | 'edit_six_day_tracker'        // update views and entries in 6-Day Tracker
+  // Per-playbook — each playbook is separate (BPB, XF, TECH)
+  | 'view_playbook_bpb'
+  | 'edit_playbook_bpb'
+  | 'ops_playbook_bpb'
+  | 'view_playbook_xf'
+  | 'edit_playbook_xf'
+  | 'ops_playbook_xf'
+  | 'view_playbook_tech'
+  | 'edit_playbook_tech'
+  | 'ops_playbook_tech'
 
 // ── Reusable permission sets ──────────────────────────────────────────────────
+
+const PLAYBOOK_PERMISSIONS: Permission[] = [
+  'view_playbook_bpb', 'edit_playbook_bpb', 'ops_playbook_bpb',
+  'view_playbook_xf', 'edit_playbook_xf', 'ops_playbook_xf',
+  'view_playbook_tech', 'edit_playbook_tech', 'ops_playbook_tech',
+]
+
+export type PlaybookAccess = "none" | "view" | "ops" | "edit";
+
+const PLAYBOOK_IDS: PlaybookId[] = ["bpb", "xf", "tech"];
+
+const VIEW_PLAYBOOK: Record<PlaybookId, Permission> = {
+  bpb: "view_playbook_bpb", xf: "view_playbook_xf", tech: "view_playbook_tech",
+};
+const EDIT_PLAYBOOK: Record<PlaybookId, Permission> = {
+  bpb: "edit_playbook_bpb", xf: "edit_playbook_xf", tech: "edit_playbook_tech",
+};
+const OPS_PLAYBOOK: Record<PlaybookId, Permission> = {
+  bpb: "ops_playbook_bpb", xf: "ops_playbook_xf", tech: "ops_playbook_tech",
+};
+
+export function playbookIdFromPath(path: string): PlaybookId | null {
+  if (path.startsWith("/experiment-bpb") || path === "/experiment-x") return "bpb";
+  if (path.startsWith("/experiment-xf")) return "xf";
+  if (path.startsWith("/experiment-tech")) return "tech";
+  return null;
+}
+
+export function getPlaybookAccess(role: string | null, playbookId: PlaybookId): PlaybookAccess {
+  if (!role) return "none";
+  if (hasPermission(role, EDIT_PLAYBOOK[playbookId])) return "edit";
+  if (hasPermission(role, OPS_PLAYBOOK[playbookId])) return "ops";
+  if (hasPermission(role, VIEW_PLAYBOOK[playbookId])) return "view";
+  return "none";
+}
+
+export function canAccessPlaybook(role: string | null, playbookId: PlaybookId): boolean {
+  return getPlaybookAccess(role, playbookId) !== "none";
+}
+
+export function canEditPlaybook(role: string | null, playbookId: PlaybookId): boolean {
+  return getPlaybookAccess(role, playbookId) === "edit";
+}
+
+export function isPlaybookOpsMode(role: string | null, playbookId: PlaybookId): boolean {
+  return getPlaybookAccess(role, playbookId) === "ops";
+}
+
+export function isPlaybookViewOnly(role: string | null, playbookId: PlaybookId): boolean {
+  return getPlaybookAccess(role, playbookId) === "view";
+}
+
+export function accessiblePlaybookIds(role: string | null): PlaybookId[] {
+  return PLAYBOOK_IDS.filter((id) => canAccessPlaybook(role, id));
+}
 
 const ADMIN_PERMISSIONS: Permission[] = [
   'view_all_ideas',
@@ -56,6 +115,7 @@ const ADMIN_PERMISSIONS: Permission[] = [
   'edit_experiment_x',
   'edit_experiment_ops',
   'edit_six_day_tracker',
+  ...PLAYBOOK_PERMISSIONS,
 ]
 
 const CS_CW_PERMISSIONS: Permission[] = [
@@ -99,6 +159,7 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
   experiment_x: [
     'view_experiment_x',
     'edit_experiment_x',
+    ...PLAYBOOK_PERMISSIONS,
     'view_all_ideas',
     'create_idea',
     'edit_own_idea',
@@ -107,10 +168,13 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     'add_experiment_idea',
   ],
 
-  // Content Ops — playbooks (ops fields + calendar) + 6-Day Tracker
+  // Content Ops — per-playbook ops (views + baseline) + 6-Day Tracker
   content_ops_intern: [
     'view_experiment_x',
     'edit_experiment_ops',
+    'view_playbook_bpb', 'ops_playbook_bpb',
+    'view_playbook_xf', 'ops_playbook_xf',
+    'view_playbook_tech', 'ops_playbook_tech',
     'edit_six_day_tracker',
   ],
 
@@ -150,8 +214,8 @@ export const ROLE_NAV: Record<string, '*' | string[]> = {
 
 export function isRouteAllowed(role: string | null, path: string): boolean {
   if (!role) return false
-  // Playbook routes — any role with playbook access (admins, experiment_x, ops intern, full-nav CS, etc.)
-  if (path.startsWith("/experiment-") && canViewExperimentX(role)) return true
+  const playbookId = playbookIdFromPath(path)
+  if (playbookId) return canAccessPlaybook(role, playbookId)
   // Multi-role: allowed if ANY role permits the route
   return parseRoles(role).some((r) => {
     const allowed = ROLE_NAV[r]
@@ -205,32 +269,27 @@ export function canDeleteIdea(
 
 export function canViewExperimentX(role: string | null): boolean {
   if (!role) return false
-  return parseRoles(role).some((r) => {
-    if (!(r in ROLE_PERMISSIONS)) return true
-    const perms = ROLE_PERMISSIONS[r] ?? []
-    return (
-      perms.includes('view_experiment_x')
-      || perms.includes('edit_experiment_x')
-      || perms.includes('edit_experiment_ops')
-      || perms.includes('add_experiment_idea')
-    )
-  }) || hasFullNav(role)
+  return accessiblePlaybookIds(role).length > 0
 }
 
-export function canEditExperimentX(role: string | null): boolean {
+export function canEditExperimentX(role: string | null, playbookId?: PlaybookId): boolean {
   if (!role) return false
+  if (playbookId) return canEditPlaybook(role, playbookId)
   return hasPermission(role, 'edit_experiment_x') || hasFullNav(role)
 }
 
-export function canEditExperimentOps(role: string | null): boolean {
+export function canEditExperimentOps(role: string | null, playbookId?: PlaybookId): boolean {
   if (!role) return false
+  if (playbookId) {
+    const access = getPlaybookAccess(role, playbookId)
+    return access === "edit" || access === "ops"
+  }
   return hasPermission(role, 'edit_experiment_ops') || hasPermission(role, 'edit_experiment_x') || hasFullNav(role)
 }
 
-/** True when user only has ops-level playbook access (not full experiment editor). */
-export function isExperimentOpsOnly(role: string | null): boolean {
-  if (!role) return false
-  return canEditExperimentOps(role) && !canEditExperimentX(role)
+/** True when user has ops-level access on this playbook (not full editor). */
+export function isExperimentOpsOnly(role: string | null, playbookId: PlaybookId): boolean {
+  return isPlaybookOpsMode(role, playbookId)
 }
 
 export function canEditSixDayTracker(role: string | null): boolean {

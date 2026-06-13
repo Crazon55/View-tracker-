@@ -3,7 +3,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
-import { canViewExperimentX, canEditExperimentX, canEditExperimentOps, isExperimentOpsOnly } from "@/lib/permissions";
+import {
+  canEditExperimentX,
+  getPlaybookAccess,
+} from "@/lib/permissions";
 import { buildPlaybookContext, type PlaybookId } from "@/lib/playbookExperimentConfig";
 import { PlaybookExperimentContext, usePlaybook } from "@/lib/playbookExperimentContext";
 
@@ -1482,10 +1485,11 @@ function ContentOpsIdeaModal({ idea, onUpdate, onClose, viewOnly }: {
 // ---------------------------------------------------------------------------
 // Calendar tab — week view of scheduled ideas by posting date/time
 // ---------------------------------------------------------------------------
-function CalendarTab({ pageFilter, search, opsOnly }: {
+function CalendarTab({ pageFilter, search, opsOnly, calendarViewOnly }: {
   pageFilter: string;
   search: string;
   opsOnly?: boolean;
+  calendarViewOnly?: boolean;
 }) {
   const { pageColors, api, id: playbookId } = usePlaybook();
   const { role } = usePermissions();
@@ -1518,8 +1522,10 @@ function CalendarTab({ pageFilter, search, opsOnly }: {
     [ideas, weekStart, weekEnd, pageFilter, search],
   );
 
+  const calReadOnly = calendarViewOnly ?? opsOnly;
+
   const openIdea = (entry: CalEntry) => {
-    if (opsOnly) return; // calendar is view-only for ops intern
+    if (calReadOnly) return;
     setDetailIdea(entry.idea);
   };
 
@@ -1535,7 +1541,7 @@ function CalendarTab({ pageFilter, search, opsOnly }: {
           {fmtShortDate(weekStart)} – {fmtShortDate(weekEnd)}
         </span>
         <span style={{ fontSize: 12, color: "#52525b" }}>{calEntries.length} scheduled</span>
-        {opsOnly && <span style={{ fontSize: 11, color: "#71717a" }}>View only</span>}
+        {calReadOnly && <span style={{ fontSize: 11, color: "#71717a" }}>View only</span>}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 1, background: "#27272a", borderRadius: 10, overflow: "hidden", border: "1px solid #27272a" }}>
@@ -1566,7 +1572,7 @@ function CalendarTab({ pageFilter, search, opsOnly }: {
                       onClick={() => openIdea(entry)}
                       style={{
                         padding: "6px 8px", marginBottom: 4, borderRadius: 6,
-                        cursor: opsOnly ? "default" : "pointer",
+                        cursor: calReadOnly ? "default" : "pointer",
                         background: c + "18", borderLeft: `3px solid ${c}`,
                       }}
                     >
@@ -1589,10 +1595,10 @@ function CalendarTab({ pageFilter, search, opsOnly }: {
         })}
       </div>
 
-      {detailIdea && !opsOnly && (
+      {detailIdea && !calReadOnly && (
         <IdeaDetailModal
           idea={detailIdea}
-          readOnly={!canEditExperimentX(role)}
+          readOnly={!canEditExperimentX(role, playbookId)}
           onUpdate={(id, data) => updateMut.mutate({ id, data })}
           onClose={() => setDetailIdea(null)}
         />
@@ -2816,17 +2822,25 @@ export default function PlaybookExperimentPage({ playbookId }: { playbookId: Pla
 function ExperimentXShell() {
   const { pages: playbookPages, id: playbookId, label, emoji } = usePlaybook();
   const { role } = usePermissions();
-  const opsOnly = isExperimentOpsOnly(role);
-  const [tab, setTab] = useState<TabMode>(() => (opsOnly ? "calendar" : "idea-bank"));
+  const access = getPlaybookAccess(role, playbookId);
+  const opsOnly = access === "ops";
+  const viewOnly = access === "view";
+  const readOnly = access !== "edit";
+  const [tab, setTab] = useState<TabMode>(() => (opsOnly || viewOnly ? "calendar" : "idea-bank"));
   const [pageFilter, setPageFilter] = useState("all");
   const [search, setSearch] = useState("");
-  const readOnly = !canEditExperimentX(role);
 
-  const visibleTabs: TabMode[] = opsOnly
+  const visibleTabs: TabMode[] = opsOnly || viewOnly
     ? ["calendar", "idea-bank", "frontseat"]
     : ["frontseat", "idea-bank", "calendar", "content-bank", "working-ideas"];
 
-  if (!canViewExperimentX(role)) {
+  const accessLabel =
+    access === "edit" ? null
+    : access === "ops" ? "Ops — edit views & baseline only"
+    : access === "view" ? "View only"
+    : null;
+
+  if (access === "none") {
     return (
       <div style={{ minHeight: "100vh", background: "#09090b", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <p style={{ color: "#71717a", fontSize: 14 }}>You don&apos;t have permission to view {label}.</p>
@@ -2864,6 +2878,11 @@ function ExperimentXShell() {
         </h1>
         <p style={{ fontSize: 12, color: "#52525b", margin: "4px 0 0" }}>
           {playbookPages.length} pages · {playbookPages.join(", ")}
+          {accessLabel && (
+            <span style={{ marginLeft: 10, color: access === "ops" ? "#a78bfa" : "#71717a", fontWeight: 600 }}>
+              · {accessLabel}
+            </span>
+          )}
         </p>
       </div>
 
@@ -2905,7 +2924,7 @@ function ExperimentXShell() {
       <div style={{ maxWidth: (tab === "idea-bank" || tab === "frontseat" || tab === "calendar") ? "none" : 860 }}>
         {tab === "frontseat"     && <FrontseatTab readOnly={readOnly} opsOnly={opsOnly} />}
         {tab === "idea-bank"     && <IdeaBankTab pageFilter={pageFilter} search={search} readOnly={readOnly} opsOnly={opsOnly} />}
-        {tab === "calendar"      && <CalendarTab pageFilter={pageFilter} search={search} opsOnly={opsOnly} />}
+        {tab === "calendar"      && <CalendarTab pageFilter={pageFilter} search={search} opsOnly={opsOnly} calendarViewOnly={opsOnly || viewOnly} />}
         {tab === "content-bank"  && <ContentBankTab pageFilter={pageFilter} search={search} readOnly={readOnly} />}
         {tab === "working-ideas" && <WorkingIdeasTab pageFilter={pageFilter} search={search} readOnly={readOnly} />}
       </div>
