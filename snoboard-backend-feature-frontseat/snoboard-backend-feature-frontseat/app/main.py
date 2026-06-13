@@ -5540,7 +5540,13 @@ async def exp_update_settings_legacy(req: ExpSettingsUpdate):
 
 
 @app.get("/api/v1/experiment/{playbook}/idea-bank")
-async def exp_list_idea_bank(playbook: str, week: int | None = None, page: str | None = None, day_date: str | None = None):
+async def exp_list_idea_bank(
+    playbook: str,
+    week: int | None = None,
+    page: str | None = None,
+    day_date: str | None = None,
+    enrich_cross: str | None = None,
+):
     pb = validate_playbook(playbook)
     client = get_supabase_client()
     q = _exp_idea_query(client, pb).order("day_date", desc=False).order("created_at", desc=False)
@@ -5551,7 +5557,9 @@ async def exp_list_idea_bank(playbook: str, week: int | None = None, page: str |
     if page:
         q = q.eq("page_handle", page)
     data = q.execute().data or []
-    data = exp_enrich_ideas_cross_playbook(client, pb, data)
+    do_enrich = enrich_cross not in ("0", "false", "False")
+    if do_enrich:
+        data = exp_enrich_ideas_cross_playbook(client, pb, data)
     return {"success": True, "data": data}
 
 

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -17,6 +17,44 @@ function expQk(playbookId: string, ...parts: unknown[]) {
 }
 
 const EXP_STALE_MS = 30_000;
+
+/** Patch one idea in all cached exp queries for this playbook — avoids refetching the full bank on every save. */
+function mergeExpIdeaInCaches(qc: QueryClient, playbookId: string, ideaId: string, patch: Record<string, unknown>) {
+  qc.setQueriesData<any[]>({ queryKey: ["exp", playbookId] }, (old) => {
+    if (!Array.isArray(old)) return old;
+    return old.map((i) => (i.id === ideaId ? { ...i, ...patch } : i));
+  });
+}
+
+function expIdeaUpdateMutationOpts(
+  qc: QueryClient,
+  playbookId: string,
+  api: { updateIdea: (id: string, data: Record<string, unknown>) => Promise<any> },
+  hooks?: { onDetail?: (id: string, patch: Record<string, unknown>) => void },
+) {
+  return {
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) => api.updateIdea(id, data),
+    onMutate: async ({ id, data }: { id: string; data: Record<string, unknown> }) => {
+      await qc.cancelQueries({ queryKey: ["exp", playbookId] });
+      const snapshots = qc.getQueriesData<any[]>({ queryKey: ["exp", playbookId] });
+      mergeExpIdeaInCaches(qc, playbookId, id, data);
+      hooks?.onDetail?.(id, data);
+      return { snapshots };
+    },
+    onError: (e: unknown, _v: unknown, ctx: { snapshots?: [unknown, unknown][] } | undefined) => {
+      ctx?.snapshots?.forEach(([key, data]) => qc.setQueryData(key as any, data));
+      toast.error(e instanceof Error ? e.message : "Failed to update");
+    },
+    onSuccess: (updated: any, { id, data }: { id: string; data: Record<string, unknown> }) => {
+      const patch = updated?.id ? updated : data;
+      mergeExpIdeaInCaches(qc, playbookId, id, patch);
+      hooks?.onDetail?.(id, patch);
+      if ("views" in data || "page_views" in data || "page_test_results" in data || "status" in data) {
+        qc.invalidateQueries({ queryKey: expQk(playbookId, "working-ideas") });
+      }
+    },
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Constants (shared across playbooks)
@@ -303,7 +341,8 @@ function DeployPlaybookModal({ idea, open, onClose }: { idea: any; open: boolean
     mutationFn: (target: PlaybookId) =>
       deployExpIdeaToPlaybook(target, sourcePlaybookId, idea.id),
     onSuccess: (_, target) => {
-      qc.invalidateQueries({ queryKey: ["exp"] });
+      qc.invalidateQueries({ queryKey: expQk(target, "idea-bank") });
+      qc.invalidateQueries({ queryKey: expQk(sourcePlaybookId, "idea-bank") });
       toast.success(`Added to ${PLAYBOOK_CONFIGS[target].label}`);
       onClose();
     },
@@ -1680,19 +1719,14 @@ function CalendarTab({ pageFilter, search, opsOnly, calendarViewOnly }: {
 
   const { data: ideas = [], isLoading } = useQuery({
     queryKey: expQk(playbookId, "calendar-ideas"),
-    queryFn: () => api.getIdeaBank(),
+    queryFn: () => api.getIdeaBank({ enrich_cross: false }),
     staleTime: EXP_STALE_MS,
+    refetchOnWindowFocus: false,
   });
 
-  const updateMut = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => api.updateIdea(id, data),
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: expQk(playbookId, "idea-bank") });
-      qc.invalidateQueries({ queryKey: expQk(playbookId, "calendar-ideas") });
-      setDetailIdea((prev: any) => prev?.id === vars.id ? { ...prev, ...vars.data } : prev);
-    },
-    onError: (e: any) => toast.error(e?.message || "Failed to update"),
-  });
+  const updateMut = useMutation(expIdeaUpdateMutationOpts(qc, playbookId, api, {
+    onDetail: (id, patch) => setDetailIdea((prev: any) => prev?.id === id ? { ...prev, ...patch } : prev),
+  }));
 
   const weekEnd = addDays(weekStart, 6);
   const calEntries = useMemo(
@@ -1900,9 +1934,10 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
   const archiveMut = useMutation({ mutationFn: api.archiveWeek });
   const { data: allIdeas = [] } = useQuery({
     queryKey: expQk(playbookId, "idea-bank-all"),
-    queryFn: () => api.getIdeaBank(),
+    queryFn: () => api.getIdeaBank({ enrich_cross: false }),
     enabled: !!settings,
     staleTime: EXP_STALE_MS,
+    refetchOnWindowFocus: false,
   });
   useEffect(() => {
     if (!settings || autoArchiveDone.current || allIdeas.length === 0) return;
@@ -1928,9 +1963,14 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
 
   const { data: ideas = [], isLoading } = useQuery({
     queryKey: expQk(playbookId, "idea-bank", currentWeek, pageFilter),
-    queryFn: () => api.getIdeaBank({ week: currentWeek, page: pageFilter !== "all" ? pageFilter : undefined }),
+    queryFn: () => api.getIdeaBank({
+      week: currentWeek,
+      page: pageFilter !== "all" ? pageFilter : undefined,
+      enrich_cross: true,
+    }),
     enabled: !!settings,
     staleTime: EXP_STALE_MS,
+    refetchOnWindowFocus: false,
   });
 
   const createMut = useMutation({
@@ -1938,16 +1978,9 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
     onSuccess: () => { qc.invalidateQueries({ queryKey: expQk(playbookId, "idea-bank") }); setAddOpen(false); toast.success("Idea added"); },
     onError: (e: any) => toast.error(e?.message || "Failed to add idea"),
   });
-  const updateMut = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => api.updateIdea(id, data),
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: expQk(playbookId, "idea-bank") });
-      qc.invalidateQueries({ queryKey: expQk(playbookId, "working-ideas") });
-      // keep detail modal in sync
-      setDetailIdea((prev: any) => prev?.id === vars.id ? { ...prev, ...vars.data } : prev);
-    },
-    onError: (e: any) => toast.error(e?.message || "Failed to update"),
-  });
+  const updateMut = useMutation(expIdeaUpdateMutationOpts(qc, playbookId, api, {
+    onDetail: (id, patch) => setDetailIdea((prev: any) => prev?.id === id ? { ...prev, ...patch } : prev),
+  }));
   const deleteMut = useMutation({
     mutationFn: api.deleteIdea,
     onSuccess: () => qc.invalidateQueries({ queryKey: expQk(playbookId, "idea-bank") }),
@@ -2143,11 +2176,7 @@ function ContentBankTab({ pageFilter, search, readOnly }: { pageFilter: string; 
   // null = all time; set to a specific month to filter
   const [monthFilter, setMonthFilter] = useState<{ year: number; month: number } | null>(null);
 
-  const updateMut = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => api.updateIdea(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: expQk(playbookId, "content-bank-all") }); qc.invalidateQueries({ queryKey: expQk(playbookId, "idea-bank") }); },
-    onError: (e: any) => toast.error(e?.message || "Failed to update"),
-  });
+  const updateMut = useMutation(expIdeaUpdateMutationOpts(qc, playbookId, api));
   const deleteMut = useMutation({
     mutationFn: api.deleteIdea,
     onSuccess: () => { qc.invalidateQueries({ queryKey: expQk(playbookId, "content-bank-all") }); qc.invalidateQueries({ queryKey: expQk(playbookId, "idea-bank") }); },
@@ -2159,8 +2188,12 @@ function ContentBankTab({ pageFilter, search, readOnly }: { pageFilter: string; 
 
   const { data: rawItems = [], isLoading } = useQuery({
     queryKey: expQk(playbookId, "content-bank-all", pageFilter),
-    queryFn: () => api.getIdeaBank({ page: pageFilter !== "all" ? pageFilter : undefined }),
+    queryFn: () => api.getIdeaBank({
+      page: pageFilter !== "all" ? pageFilter : undefined,
+      enrich_cross: false,
+    }),
     staleTime: EXP_STALE_MS,
+    refetchOnWindowFocus: false,
   });
 
   // Show all ideas across all weeks — team decides topline/baseline from views + status
@@ -2782,24 +2815,9 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
     },
     onSettled: () => qc.invalidateQueries({ queryKey: expQk(playbookId, "idea-bank") }),
   });
-  const updateMut = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => api.updateIdea(id, data),
-    onMutate: async ({ id, data }) => {
-      await qc.cancelQueries({ queryKey: QK });
-      const prev = qc.getQueryData(QK);
-      qc.setQueryData(QK, (old: any[] = []) => old.map((i: any) => i.id === id ? { ...i, ...data } : i));
-      setDetailIdea((p: any) => p?.id === id ? { ...p, ...data } : p);
-      return { prev };
-    },
-    onError: (e: any, _v, ctx: any) => {
-      if (ctx?.prev) qc.setQueryData(QK, ctx.prev);
-      toast.error(e?.message || "Failed to update");
-    },
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: expQk(playbookId, "idea-bank") });
-      qc.invalidateQueries({ queryKey: expQk(playbookId, "working-ideas") });
-    },
-  });
+  const updateMut = useMutation(expIdeaUpdateMutationOpts(qc, playbookId, api, {
+    onDetail: (id, patch) => setDetailIdea((p: any) => p?.id === id ? { ...p, ...patch } : p),
+  }));
   const deleteMut = useMutation({
     mutationFn: api.deleteIdea,
     onMutate: async (id) => {

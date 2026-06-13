@@ -659,11 +659,12 @@ export function createExpApi(playbook: string) {
     getSettings: () => fetchApi<any>(`${base}/settings`),
     updateSettings: (data: { view_goal?: number; experiment_start_date?: string }) =>
       fetchApi<any>(`${base}/settings`, { method: "PATCH", body: JSON.stringify(data) }),
-    getIdeaBank: (params?: { week?: number; page?: string; day_date?: string }) => {
+    getIdeaBank: (params?: { week?: number; page?: string; day_date?: string; enrich_cross?: boolean }) => {
       const q = new URLSearchParams();
       if (params?.day_date) q.set("day_date", params.day_date);
       else if (params?.week != null) q.set("week", String(params.week));
       if (params?.page) q.set("page", params.page);
+      if (params?.enrich_cross === false) q.set("enrich_cross", "0");
       const qs = q.toString();
       return fetchApi<any[]>(`${base}/idea-bank${qs ? `?${qs}` : ""}`);
     },
