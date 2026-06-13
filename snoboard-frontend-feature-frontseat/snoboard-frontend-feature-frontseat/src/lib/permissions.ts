@@ -150,6 +150,8 @@ export const ROLE_NAV: Record<string, '*' | string[]> = {
 
 export function isRouteAllowed(role: string | null, path: string): boolean {
   if (!role) return false
+  // Playbook routes — any role with playbook access (admins, experiment_x, ops intern, full-nav CS, etc.)
+  if (path.startsWith("/experiment-") && canViewExperimentX(role)) return true
   // Multi-role: allowed if ANY role permits the route
   return parseRoles(role).some((r) => {
     const allowed = ROLE_NAV[r]
@@ -203,7 +205,16 @@ export function canDeleteIdea(
 
 export function canViewExperimentX(role: string | null): boolean {
   if (!role) return false
-  return hasPermission(role, 'view_experiment_x') || hasFullNav(role) || hasPermission(role, 'add_experiment_idea')
+  return parseRoles(role).some((r) => {
+    if (!(r in ROLE_PERMISSIONS)) return true
+    const perms = ROLE_PERMISSIONS[r] ?? []
+    return (
+      perms.includes('view_experiment_x')
+      || perms.includes('edit_experiment_x')
+      || perms.includes('edit_experiment_ops')
+      || perms.includes('add_experiment_idea')
+    )
+  }) || hasFullNav(role)
 }
 
 export function canEditExperimentX(role: string | null): boolean {

@@ -16,6 +16,7 @@ const ROLE_LABELS: Record<string, string> = {
   carousel_designer: "Carousel Designer",
   design:            "Designer",
   smm:               "Social Media Manager",
+  experiment_x:      "Experiment Creator",
   content_ops_intern:  "Content Ops Intern",
 };
 
@@ -29,12 +30,17 @@ const ROLE_COLOR: Record<string, string> = {
   carousel_designer: "bg-orange-500/20 text-orange-300 border-orange-500/30",
   design:            "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
   smm:               "bg-pink-500/20 text-pink-300 border-pink-500/30",
+  experiment_x:      "bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30",
   content_ops_intern:  "bg-cyan-500/20 text-cyan-300 border-cyan-500/30",
 };
 
 const ALLOWED_DOMAIN = "owledmedia.com";
 const DEPRECATED_ROLES = new Set(["ops_manager", "content_creators"]);
-const ROLE_MIGRATIONS: Record<string, string> = { content_creators: "cs" };
+const ROLE_MIGRATIONS: Record<string, string> = {
+  content_creators: "cs",
+  "experiment-x": "experiment_x",
+  experimentx: "experiment_x",
+};
 
 function roleKey(roles: string[]): string {
   return [...roles].sort().join(",");

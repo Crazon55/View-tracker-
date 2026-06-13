@@ -10,7 +10,9 @@ function normalizeRole(role: string): string {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const raw of role.split(",").map((r) => r.trim()).filter(Boolean)) {
-    const r = raw === "content_creators" ? "cs" : raw;
+    const r = raw === "content_creators" ? "cs"
+      : raw === "experiment-x" || raw === "experimentx" ? "experiment_x"
+      : raw;
     if (!seen.has(r)) {
       seen.add(r);
       out.push(r);
@@ -29,6 +31,7 @@ const ROLES = [
   { value: "carousel_designer", label: "Carousel Designer" },
   { value: "design",            label: "Designer" },
   { value: "smm",               label: "Social Media Manager (SMM)" },
+  { value: "experiment_x",      label: "Experiment Creator (BPB / XF / TECH)" },
   { value: "content_ops_intern",  label: "Content Ops Intern" },
 ];
 

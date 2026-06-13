@@ -4,6 +4,8 @@ DEPRECATED_ROLES = frozenset({"ops_manager", "content_creators"})
 # Deprecated roles that should become another role (not be dropped).
 ROLE_MIGRATIONS: dict[str, str] = {
     "content_creators": "cs",
+    "experiment-x": "experiment_x",
+    "experimentx": "experiment_x",
 }
 REMOVED_PEOPLE = frozenset({"pranesh", "samiksha"})
 
