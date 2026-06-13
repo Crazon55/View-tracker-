@@ -187,6 +187,8 @@ class ExpIdeaCreate(BaseModel):
     page_posting_dates: dict = {}
     page_posting_times: dict = {}
     page_captions: dict = {}
+    origin_playbook: str | None = None
+    origin_idea_id: str | None = None
 
 
 class ExpIdeaUpdate(BaseModel):

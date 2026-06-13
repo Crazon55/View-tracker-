@@ -7,8 +7,9 @@ import {
   canEditExperimentX,
   getPlaybookAccess,
 } from "@/lib/permissions";
-import { buildPlaybookContext, type PlaybookId } from "@/lib/playbookExperimentConfig";
+import { buildPlaybookContext, PLAYBOOK_CONFIGS, type PlaybookId } from "@/lib/playbookExperimentConfig";
 import { PlaybookExperimentContext, usePlaybook } from "@/lib/playbookExperimentContext";
+import { deployExpIdeaToPlaybook } from "@/services/api";
 
 /** React Query keys scoped per playbook — prevents stale data when switching playbooks. */
 function expQk(playbookId: string, ...parts: unknown[]) {
@@ -231,6 +232,165 @@ function DayGroup({ dateStr, count, children }: { dateStr: string; count: number
 }
 
 // ---------------------------------------------------------------------------
+// Cross-playbook deploy + view breakdown
+// ---------------------------------------------------------------------------
+const ALL_PLAYBOOK_IDS: PlaybookId[] = ["bpb", "xf", "tech"];
+
+function DeployedFromBadge({ idea }: { idea: any }) {
+  const from = idea.deployed_from?.playbook as PlaybookId | undefined;
+  if (!from || !PLAYBOOK_CONFIGS[from]) return null;
+  return (
+    <span style={{
+      fontSize: 9, fontWeight: 700, color: "#a78bfa", background: "rgba(124,58,237,0.12)",
+      borderRadius: 4, padding: "1px 6px",
+    }}>
+      From {PLAYBOOK_CONFIGS[from].label}
+    </span>
+  );
+}
+
+function CrossPlaybookViewsBlock({ idea }: { idea: any }) {
+  const { id: playbookId, label: playbookLabel } = usePlaybook();
+  const cv = idea.cross_playbook_views as Record<string, number> | undefined;
+  if (!cv || !cv.total) return null;
+  const otherPlaybooks = ALL_PLAYBOOK_IDS.filter(
+    pb => pb !== playbookId && (cv[pb] || 0) > 0,
+  );
+  return (
+    <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid #1f1f22" }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: "#50E0B0", marginBottom: 3 }}>
+        {fmt(cv.total)} cross-playbook
+      </div>
+      {(cv.own || 0) > 0 && (
+        <div style={{ fontSize: 9, color: "#71717a" }}>{playbookLabel}: {fmt(cv.own)}</div>
+      )}
+      {otherPlaybooks.map(pb => (
+        <div key={pb} style={{ fontSize: 9, color: "#71717a" }}>
+          {PLAYBOOK_CONFIGS[pb].label}: {fmt(cv[pb] || 0)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DeployPlaybookModal({ idea, open, onClose }: { idea: any; open: boolean; onClose: () => void }) {
+  const { id: sourcePlaybookId } = usePlaybook();
+  const { role } = usePermissions();
+  const qc = useQueryClient();
+
+  const targets = useMemo(() => {
+    const deployed = new Set<string>(idea.deployed_to_playbooks || []);
+    return ALL_PLAYBOOK_IDS.filter(pb =>
+      pb !== sourcePlaybookId
+      && canEditExperimentX(role, pb)
+      && !deployed.has(pb),
+    );
+  }, [idea.deployed_to_playbooks, role, sourcePlaybookId]);
+
+  const deployMut = useMutation({
+    mutationFn: (target: PlaybookId) =>
+      deployExpIdeaToPlaybook(target, sourcePlaybookId, idea.id),
+    onSuccess: (_, target) => {
+      qc.invalidateQueries({ queryKey: ["exp"] });
+      toast.success(`Added to ${PLAYBOOK_CONFIGS[target].label}`);
+      onClose();
+    },
+    onError: (e: any) => toast.error(e?.message || "Failed to deploy idea"),
+  });
+
+  if (!open) return null;
+
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, zIndex: 10000,
+        background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 24,
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: "#18181b", border: "1px solid #3f3f46", borderRadius: 12,
+          padding: "22px 24px", width: "100%", maxWidth: 380,
+        }}
+      >
+        <h3 style={{ margin: "0 0 6px", fontSize: 15, fontWeight: 700, color: "#fff" }}>
+          Use in another playbook
+        </h3>
+        <p style={{ margin: "0 0 16px", fontSize: 12, color: "#71717a", lineHeight: 1.45 }}>
+          Copies <strong style={{ color: "#e4e4e7" }}>{idea.topic || "Untitled"}</strong> plus frame / drive links only.
+          Views, baselines, and scheduling stay separate per playbook.
+        </p>
+        {targets.length === 0 ? (
+          <p style={{ fontSize: 12, color: "#52525b", margin: 0 }}>
+            No other playbooks available (already deployed or no edit access).
+          </p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {targets.map(pb => (
+              <button
+                key={pb}
+                type="button"
+                disabled={deployMut.isPending}
+                onClick={() => deployMut.mutate(pb)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "12px 14px", borderRadius: 8, border: "1px solid #3f3f46",
+                  background: "#111113", color: "#e4e4e7", cursor: "pointer",
+                  fontSize: 13, fontWeight: 600, textAlign: "left",
+                }}
+              >
+                <span style={{ fontSize: 16 }}>{PLAYBOOK_CONFIGS[pb].emoji}</span>
+                {PLAYBOOK_CONFIGS[pb].label}
+              </button>
+            ))}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            marginTop: 16, width: "100%", padding: "8px 0", border: "none",
+            background: "transparent", color: "#71717a", fontSize: 12, cursor: "pointer",
+          }}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DeployToPlaybookButton({ idea, readOnly }: { idea: any; readOnly?: boolean }) {
+  const { role } = usePermissions();
+  const { id: playbookId } = usePlaybook();
+  const [open, setOpen] = useState(false);
+  const canDeploy = canEditExperimentX(role, playbookId);
+
+  if (readOnly || !canDeploy) return null;
+
+  return (
+    <>
+      <button
+        type="button"
+        title="Use in another playbook"
+        onClick={e => { e.stopPropagation(); setOpen(true); }}
+        style={{
+          fontSize: 9, fontWeight: 700, color: "#a78bfa", background: "rgba(124,58,237,0.15)",
+          border: "1px solid rgba(124,58,237,0.35)", borderRadius: 4, padding: "2px 7px",
+          cursor: "pointer", flexShrink: 0,
+        }}
+      >
+        → Playbook
+      </button>
+      <DeployPlaybookModal idea={idea} open={open} onClose={() => setOpen(false)} />
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Kanban card (used in Idea Bank board)
 // ---------------------------------------------------------------------------
 function KanbanCard({ idea, onUpdate, onDelete, onClick, readOnly }: {
@@ -279,12 +439,15 @@ function KanbanCard({ idea, onUpdate, onDelete, onClick, readOnly }: {
             {idea.video_format}
           </span>
         )}
-        {(idea.views || 0) > 0 && (
+        {(idea.views || 0) > 0 && !idea.cross_playbook_views && (
           <span style={{ fontSize: 10, fontWeight: 700, color: "#50E0B0", marginLeft: "auto" }}>
             {fmt(idea.views)}
           </span>
         )}
+        <DeployedFromBadge idea={idea} />
+        <DeployToPlaybookButton idea={idea} readOnly={readOnly} />
       </div>
+      <CrossPlaybookViewsBlock idea={idea} />
       {idea.script && (
         <p style={{ margin: "6px 0 0", fontSize: 10, color: "#52525b", lineHeight: 1.4, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
           {idea.script}
@@ -499,7 +662,10 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
           <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, background: "#27272a", color: "#71717a" }}>
             {idea.content_type}
           </span>
+          <DeployedFromBadge idea={idea} />
+          <DeployToPlaybookButton idea={idea} readOnly={readOnly} />
         </div>
+        <CrossPlaybookViewsBlock idea={idea} />
 
         {/* Stage action buttons */}
         {!noEdit && actions.length > 0 && (
@@ -2405,6 +2571,11 @@ function FrontseatPoolCard({ idea, letter, onDragStart, onClick, onDelete, readO
         overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
         {idea.topic || <em style={{ color: "#52525b" }}>Untitled</em>}
       </p>
+      <div style={{ display: "flex", gap: 5, marginTop: 6, flexWrap: "wrap", alignItems: "center" }}>
+        <DeployedFromBadge idea={idea} />
+        <DeployToPlaybookButton idea={idea} readOnly={readOnly} />
+      </div>
+      <CrossPlaybookViewsBlock idea={idea} />
     </div>
   );
 }
@@ -2458,6 +2629,11 @@ function FrontseatPageCard({ idea, letter, onClick, onRemoveFromPage }: {
       {idea.video_format && (
         <p style={{ margin: "4px 0 0", fontSize: 10, color: "#50E0B0", fontWeight: 600 }}>{idea.video_format}</p>
       )}
+      <div style={{ display: "flex", gap: 5, marginTop: 6, flexWrap: "wrap", alignItems: "center" }}>
+        <DeployedFromBadge idea={idea} />
+        <DeployToPlaybookButton idea={idea} />
+      </div>
+      <CrossPlaybookViewsBlock idea={idea} />
     </div>
   );
 }

@@ -704,6 +704,18 @@ export function createExpApi(playbook: string) {
   };
 }
 
+/** Deploy an idea into another playbook (name + links only; views/baselines stay separate). */
+export function deployExpIdeaToPlaybook(
+  targetPlaybook: string,
+  sourcePlaybook: string,
+  sourceIdeaId: string,
+) {
+  return fetchApi<any>(
+    `/api/v1/experiment/${targetPlaybook}/idea-bank/deploy-from/${sourcePlaybook}/${sourceIdeaId}`,
+    { method: "POST" },
+  );
+}
+
 /** @deprecated Use createExpApi("bpb") via playbook context */
 export const getExpSettings = () => createExpApi("bpb").getSettings();
 export const updateExpSettings = (data: { view_goal?: number; experiment_start_date?: string }) =>

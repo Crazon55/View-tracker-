@@ -36,7 +36,17 @@ from app.team_roles import (
     role_contains_deprecated,
     DEPRECATED_ROLES,
 )
-from app.experiment_playbooks import validate_playbook, DEFAULT_PLAYBOOK, get_playbook_tables
+from app.experiment_playbooks import (
+    validate_playbook,
+    DEFAULT_PLAYBOOK,
+    get_playbook_tables,
+    VALID_PLAYBOOKS,
+    PLAYBOOK_PAGES,
+    exp_root_origin,
+    exp_find_deployments,
+    exp_enrich_ideas_cross_playbook,
+    exp_sum_views,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -5541,6 +5551,7 @@ async def exp_list_idea_bank(playbook: str, week: int | None = None, page: str |
     if page:
         q = q.eq("page_handle", page)
     data = q.execute().data or []
+    data = exp_enrich_ideas_cross_playbook(client, pb, data)
     return {"success": True, "data": data}
 
 
@@ -5583,6 +5594,9 @@ async def exp_create_idea(playbook: str, req: ExpIdeaCreate):
         "page_posting_times": req.page_posting_times or {},
         "page_captions": req.page_captions or {},
     }
+    if req.origin_playbook and req.origin_idea_id:
+        row["origin_playbook"] = validate_playbook(req.origin_playbook)
+        row["origin_idea_id"] = req.origin_idea_id
     client.table(tables.idea_bank).insert(row).execute()
     verify = _exp_idea_query(client, pb).eq("day_date", day_str).order("created_at", desc=True).limit(1).execute().data
     created = verify[0] if verify else row
@@ -5599,6 +5613,94 @@ async def exp_create_idea_legacy(req: ExpIdeaCreate):
     return await exp_create_idea(DEFAULT_PLAYBOOK, req)
 
 
+@app.post("/api/v1/experiment/{target_playbook}/idea-bank/deploy-from/{source_playbook}/{source_idea_id}")
+async def exp_deploy_idea_to_playbook(target_playbook: str, source_playbook: str, source_idea_id: str):
+    """Copy idea name + links into another playbook; views/baselines stay per-playbook."""
+    from datetime import date
+
+    target_pb = validate_playbook(target_playbook)
+    source_pb = validate_playbook(source_playbook)
+    if target_pb == source_pb:
+        raise HTTPException(status_code=400, detail="Cannot deploy to the same playbook")
+
+    client = get_supabase_client()
+    source_tables = get_playbook_tables(source_pb)
+    source_rows = (
+        client.table(source_tables.idea_bank)
+        .select("*")
+        .eq("id", source_idea_id)
+        .limit(1)
+        .execute()
+        .data
+    )
+    if not source_rows:
+        raise HTTPException(status_code=404, detail="Source idea not found")
+    source = source_rows[0]
+
+    root_pb, root_id = exp_root_origin(source_pb, source)
+
+    target_tables = get_playbook_tables(target_pb)
+    existing = (
+        client.table(target_tables.idea_bank)
+        .select("id")
+        .eq("origin_playbook", root_pb)
+        .eq("origin_idea_id", root_id)
+        .limit(1)
+        .execute()
+        .data
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Idea already deployed to {target_pb}")
+
+    day_str = str(date.today())
+    week_num = _exp_compute_week_number(client, target_pb, day_str)
+
+    row = {
+        "page_handle": "",
+        "content_type": source.get("content_type") or "reel",
+        "topic": source.get("topic") or "",
+        "script": "",
+        "status": "new",
+        "views": 0,
+        "week_number": week_num,
+        "day_date": day_str,
+        "source": "cross_playbook",
+        "hook_variations": "",
+        "music_ref": "",
+        "frame_link": source.get("frame_link") or "",
+        "yt_url": "",
+        "yt_timestamps": "",
+        "comp_link": source.get("comp_link") or "",
+        "created_by": source.get("created_by") or "",
+        "edited_by": "",
+        "test_result": "",
+        "video_format": "",
+        "frontseat_pool": False,
+        "source_pool_id": None,
+        "page_posting_dates": {},
+        "page_posting_times": {},
+        "page_captions": {},
+        "page_views": {},
+        "page_test_results": {},
+        "origin_playbook": root_pb,
+        "origin_idea_id": root_id,
+    }
+    client.table(target_tables.idea_bank).insert(row).execute()
+    verify = (
+        client.table(target_tables.idea_bank)
+        .select("*")
+        .eq("origin_playbook", root_pb)
+        .eq("origin_idea_id", root_id)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+        .data
+    )
+    created = verify[0] if verify else row
+    enriched = exp_enrich_ideas_cross_playbook(client, target_pb, [created])
+    return {"success": True, "data": enriched[0]}
+
+
 @app.get("/api/v1/experiment/{playbook}/idea-bank/{idea_id}")
 async def exp_get_idea(playbook: str, idea_id: str):
     pb = validate_playbook(playbook)
@@ -5606,7 +5708,8 @@ async def exp_get_idea(playbook: str, idea_id: str):
     data = _exp_idea_query(client, pb).eq("id", idea_id).limit(1).execute().data
     if not data:
         raise HTTPException(status_code=404, detail="Idea not found")
-    return {"success": True, "data": data[0]}
+    enriched = exp_enrich_ideas_cross_playbook(client, pb, data)
+    return {"success": True, "data": enriched[0]}
 
 
 @app.get("/api/v1/experiment/idea-bank/{idea_id}")
@@ -5625,11 +5728,11 @@ async def exp_update_idea(playbook: str, idea_id: str, req: ExpIdeaUpdate):
     client.table(tables.idea_bank).update(update_data).eq("id", idea_id).execute()
     verify = _exp_idea_query(client, pb).eq("id", idea_id).limit(1).execute().data
     updated = verify[0] if verify else {}
-    if "views" in update_data and updated:
+    if updated and ("views" in update_data or "page_views" in update_data):
         settings = _exp_settings_row(client, pb)
         goal = settings.get("view_goal", 100000)
-        if update_data["views"] >= goal:
-            _exp_flag_working_idea(client, pb, updated, goal)
+        if exp_sum_views(updated) >= goal:
+            _exp_flag_working_idea(client, pb, {**updated, "views": exp_sum_views(updated)}, goal)
     return {"success": True, "data": updated}
 
 
