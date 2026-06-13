@@ -122,6 +122,35 @@ function fmtTimeLabel(t: string) {
   return `${h12}:${m.padStart(2, "0")} ${ampm}`;
 }
 
+function ideaPages(idea: any): string[] {
+  return (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+}
+
+type CalEntry = { idea: any; page: string; date: string; time: string; caption: string };
+
+function buildCalendarEntries(
+  ideas: any[], weekStart: string, weekEnd: string, pageFilter: string, search: string,
+): CalEntry[] {
+  const q = search.toLowerCase().trim();
+  const out: CalEntry[] = [];
+  for (const idea of ideas) {
+    const pages = ideaPages(idea);
+    if (!pages.length) continue;
+    const dates = (idea.page_posting_dates || {}) as Record<string, string>;
+    const times = (idea.page_posting_times || {}) as Record<string, string>;
+    const captions = (idea.page_captions || {}) as Record<string, string>;
+    for (const page of pages) {
+      const date = (dates[page] || "").slice(0, 10);
+      if (!date || date < weekStart || date > weekEnd) continue;
+      if (pageFilter !== "all" && page !== pageFilter) continue;
+      const caption = captions[page] || "";
+      if (q && !(idea.topic || "").toLowerCase().includes(q) && !caption.toLowerCase().includes(q)) continue;
+      out.push({ idea, page, date, time: times[page] || "", caption });
+    }
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+}
+
 // Shared input/button styles
 const inp: React.CSSProperties = {
   padding: "7px 10px", borderRadius: 7, border: "1.5px solid #3f3f46",
@@ -715,9 +744,9 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
           </div>
         )}
 
-        {/* Scheduling — ops handoff fields */}
+        {/* Per-page scheduling — CS sets date/time/caption */}
         {!readOnly && (
-          <OpsSchedulingFields idea={idea} onUpdate={onUpdate} editable />
+          <PerPageIdeaPanel idea={idea} onUpdate={onUpdate} canEditSchedule canEditPerformance={false} showFrameLink={false} />
         )}
 
         {/* Edited by */}
@@ -1249,190 +1278,157 @@ const TEST_RESULTS = [
 ] as const;
 
 // ---------------------------------------------------------------------------
-// Ops scheduling fields — drive link, posting date/time, caption, views, baseline
+// Per-page panel — schedule (CS) + performance (ops intern)
 // ---------------------------------------------------------------------------
-function OpsSchedulingFields({ idea, onUpdate, editable }: {
+function PerPageIdeaPanel({ idea, onUpdate, canEditSchedule, canEditPerformance, showSchedule = true, showFrameLink = true }: {
   idea: any;
   onUpdate: (id: string, data: any) => void;
-  editable?: boolean;
+  canEditSchedule?: boolean;
+  canEditPerformance?: boolean;
+  showSchedule?: boolean;
+  showFrameLink?: boolean;
 }) {
   const { pageColors } = usePlaybook();
   const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "#71717a", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
-  const selectedPages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+  const pages = ideaPages(idea);
   const stage = idea.status || "new";
 
+  const patchPageField = (field: "page_posting_dates" | "page_posting_times" | "page_captions", page: string, value: string) => {
+    const cur = { ...(idea[field] || {}) } as Record<string, string>;
+    if (value) cur[page] = value;
+    else delete cur[page];
+    onUpdate(idea.id, { [field]: cur });
+  };
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "14px 0 4px", borderTop: "1px solid #27272a" }}>
-      <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "#a78bfa", textTransform: "uppercase", letterSpacing: "0.06em" }}>Scheduling & performance</p>
-
-      <div>
-        <label style={ls}>Drive link</label>
-        {editable ? (
-          <SafeField value={idea.drive_link || ""} onSave={v => onUpdate(idea.id, { drive_link: v })} placeholder="Google Drive link to final asset" />
-        ) : (
-          <span style={{ fontSize: 13, color: idea.drive_link ? "#e4e4e7" : "#52525b" }}>{idea.drive_link || "—"}</span>
-        )}
-        {idea.drive_link && (
-          <a href={idea.drive_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block", marginTop: 4 }}>{idea.drive_link}</a>
-        )}
-      </div>
-
-      <div style={{ display: "flex", gap: 10 }}>
-        <div style={{ flex: 1 }}>
-          <label style={ls}>Posting date</label>
-          {editable ? (
-            <input
-              type="date"
-              value={(idea.posting_date || "").slice(0, 10)}
-              onChange={e => onUpdate(idea.id, { posting_date: e.target.value || null })}
-              style={inp}
-            />
-          ) : (
-            <span style={{ fontSize: 13, color: "#e4e4e7" }}>{idea.posting_date ? fmtShortDate(idea.posting_date.slice(0, 10)) : "—"}</span>
-          )}
-        </div>
-        <div style={{ flex: "0 0 140px" }}>
-          <label style={ls}>Posting time</label>
-          {editable ? (
-            <input
-              type="time"
-              value={idea.posting_time || ""}
-              onChange={e => onUpdate(idea.id, { posting_time: e.target.value })}
-              style={inp}
-            />
-          ) : (
-            <span style={{ fontSize: 13, color: "#e4e4e7" }}>{idea.posting_time ? fmtTimeLabel(idea.posting_time) : "—"}</span>
-          )}
-        </div>
-      </div>
-
-      <div>
-        <label style={ls}>Caption</label>
-        <SafeArea
-          readOnly={!editable}
-          value={idea.caption || ""}
-          onSave={v => onUpdate(idea.id, { caption: v })}
-          placeholder="Instagram caption"
-          rows={4}
-        />
-      </div>
-
-      {selectedPages.length > 1 ? (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "14px 0 4px", borderTop: "1px solid #27272a" }}>
+      {showSchedule && showFrameLink && (
         <div>
-          <label style={ls}>Views per page</label>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {selectedPages.map((pg: string) => {
-              const pgc = pageColors[pg] || "#a1a1aa";
-              const pgViews = ((idea.page_views || {}) as Record<string, number>)[pg] || 0;
-              return (
-                <div key={pg} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: pgc, background: pgc + "22", borderRadius: 5, padding: "3px 10px", minWidth: 140, textAlign: "center" }}>{pg}</span>
-                  {editable ? (
-                    <PerPageViewInput value={pgViews} pageColor={pgc} onSave={v => {
-                      const updated: Record<string, number> = { ...(idea.page_views || {}), [pg]: v };
-                      const total = Object.values(updated).reduce((acc, val) => acc + (Number(val) || 0), 0);
-                      onUpdate(idea.id, { page_views: updated, views: total });
-                    }} />
-                  ) : (
-                    <span style={{ fontSize: 13, color: "#50E0B0", fontWeight: 600 }}>{pgViews > 0 ? fmt(pgViews) : "—"}</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : (
-        <div>
-          <label style={ls}>Views</label>
-          {editable ? (
-            stage === "posted" ? (
-              <PostedViewsInput value={idea.views || 0} onSave={v => onUpdate(idea.id, { views: v })} />
-            ) : (
-              <ViewsEdit value={idea.views || 0} onSave={v => onUpdate(idea.id, { views: v })} />
-            )
+          <label style={ls}>Frame link</label>
+          {idea.frame_link ? (
+            <a href={idea.frame_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#4A7FD4", wordBreak: "break-all" }}>{idea.frame_link}</a>
           ) : (
-            <span style={{ fontSize: 13, color: "#50E0B0", fontWeight: 600 }}>{idea.views > 0 ? fmt(idea.views) : "—"}</span>
+            <span style={{ fontSize: 13, color: "#52525b" }}>—</span>
           )}
         </div>
       )}
 
-      <div>
-        <label style={ls}>Baseline / top line</label>
-        {selectedPages.length > 1 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {selectedPages.map((pg: string) => {
-              const pgc = pageColors[pg] || "#a1a1aa";
-              const pgResult = ((idea.page_test_results || {}) as Record<string, string>)[pg] || "";
-              return (
-                <div key={pg}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: pgc, flexShrink: 0 }} />
-                    <span style={{ fontSize: 11, fontWeight: 700, color: pgc }}>{pg}</span>
+      {!pages.length ? (
+        <p style={{ fontSize: 12, color: "#52525b", margin: 0 }}>No pages assigned yet.</p>
+      ) : pages.map(pg => {
+        const pgc = pageColors[pg] || "#a1a1aa";
+        const pgDate = ((idea.page_posting_dates || {}) as Record<string, string>)[pg] || "";
+        const pgTime = ((idea.page_posting_times || {}) as Record<string, string>)[pg] || "";
+        const pgCaption = ((idea.page_captions || {}) as Record<string, string>)[pg] || "";
+        const pgViews = ((idea.page_views || {}) as Record<string, number>)[pg] || 0;
+        const pgResult = ((idea.page_test_results || {}) as Record<string, string>)[pg] || "";
+
+        return (
+          <div key={pg} style={{ padding: "12px 14px", background: "#111113", borderRadius: 10, border: "1px solid #27272a" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: pgc, flexShrink: 0 }} />
+              <span style={{ fontSize: 12, fontWeight: 700, color: pgc }}>{pg}</span>
+            </div>
+
+            {showSchedule && (
+              <>
+                <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={ls}>Posting date</label>
+                    {canEditSchedule ? (
+                      <input type="date" value={pgDate.slice(0, 10)} onChange={e => patchPageField("page_posting_dates", pg, e.target.value)} style={inp} />
+                    ) : (
+                      <span style={{ fontSize: 13, color: "#e4e4e7" }}>{pgDate ? fmtShortDate(pgDate.slice(0, 10)) : "—"}</span>
+                    )}
                   </div>
+                  <div style={{ flex: "0 0 130px" }}>
+                    <label style={ls}>Posting time</label>
+                    {canEditSchedule ? (
+                      <input type="time" value={pgTime} onChange={e => patchPageField("page_posting_times", pg, e.target.value)} style={inp} />
+                    ) : (
+                      <span style={{ fontSize: 13, color: "#e4e4e7" }}>{pgTime ? fmtTimeLabel(pgTime) : "—"}</span>
+                    )}
+                  </div>
+                </div>
+                <div style={{ marginBottom: canEditPerformance ? 10 : 0 }}>
+                  <label style={ls}>Caption</label>
+                  {canEditSchedule ? (
+                    <SafeArea value={pgCaption} onSave={v => patchPageField("page_captions", pg, v)} placeholder="Instagram caption" rows={3} />
+                  ) : (
+                    <p style={{ margin: 0, fontSize: 13, color: pgCaption ? "#e4e4e7" : "#52525b", whiteSpace: "pre-wrap" }}>{pgCaption || "—"}</p>
+                  )}
+                </div>
+              </>
+            )}
+
+            {canEditPerformance && (
+              <>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={ls}>Views</label>
+                  {canEditPerformance ? (
+                    pages.length > 1 ? (
+                      <PerPageViewInput value={pgViews} pageColor={pgc} onSave={v => {
+                        const updated: Record<string, number> = { ...(idea.page_views || {}), [pg]: v };
+                        const total = Object.values(updated).reduce((acc, val) => acc + (Number(val) || 0), 0);
+                        onUpdate(idea.id, { page_views: updated, views: total });
+                      }} />
+                    ) : (
+                      stage === "posted"
+                        ? <PostedViewsInput value={idea.views || 0} onSave={v => onUpdate(idea.id, { views: v })} />
+                        : <ViewsEdit value={idea.views || 0} onSave={v => onUpdate(idea.id, { views: v })} />
+                    )
+                  ) : (
+                    <span style={{ fontSize: 13, color: "#50E0B0", fontWeight: 600 }}>{(pages.length > 1 ? pgViews : idea.views) > 0 ? fmt(pages.length > 1 ? pgViews : idea.views) : "—"}</span>
+                  )}
+                </div>
+                <div>
+                  <label style={ls}>Baseline / top line</label>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     {TEST_RESULTS.map(({ value, label, color, bg }) => {
-                      const active = pgResult === value;
+                      const active = (pages.length > 1 ? pgResult : idea.test_result) === value;
                       return (
                         <button
                           key={value}
                           type="button"
-                          disabled={!editable}
+                          disabled={!canEditPerformance}
                           onClick={() => {
-                            if (!editable) return;
-                            const updated: Record<string, string> = { ...(idea.page_test_results || {}), [pg]: active ? "" : value };
-                            if (!updated[pg]) delete updated[pg];
-                            const RANK: Record<string, number> = { top_line: 4, above_baseline: 3, baseline: 2, below_baseline: 1 };
-                            const best = Object.values(updated).reduce<string>((b, c) => (RANK[c] || 0) > (RANK[b] || 0) ? c : b, "");
-                            onUpdate(idea.id, { page_test_results: updated, test_result: best });
+                            if (!canEditPerformance) return;
+                            if (pages.length > 1) {
+                              const updated: Record<string, string> = { ...(idea.page_test_results || {}), [pg]: active ? "" : value };
+                              if (!updated[pg]) delete updated[pg];
+                              const RANK: Record<string, number> = { top_line: 4, above_baseline: 3, baseline: 2, below_baseline: 1 };
+                              const best = Object.values(updated).reduce<string>((b, c) => (RANK[c] || 0) > (RANK[b] || 0) ? c : b, "");
+                              onUpdate(idea.id, { page_test_results: updated, test_result: best });
+                            } else {
+                              onUpdate(idea.id, { test_result: active ? "" : value });
+                            }
                           }}
                           style={{
                             padding: "6px 13px", borderRadius: 7, fontSize: 11, fontWeight: 600,
-                            cursor: editable ? "pointer" : "default",
+                            cursor: canEditPerformance ? "pointer" : "default",
                             border: active ? `2px solid ${color}` : "1.5px solid #3f3f46",
                             background: active ? bg : "#18181b",
                             color: active ? color : "#71717a",
-                            opacity: editable ? 1 : 0.85,
                           }}
                         >{label}</button>
                       );
                     })}
                   </div>
                 </div>
-              );
-            })}
+              </>
+            )}
           </div>
-        ) : (
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {TEST_RESULTS.map(({ value, label, color, bg }) => {
-              const active = idea.test_result === value;
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  disabled={!editable}
-                  onClick={() => editable && onUpdate(idea.id, { test_result: active ? "" : value })}
-                  style={{
-                    padding: "7px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600,
-                    cursor: editable ? "pointer" : "default",
-                    border: active ? `2px solid ${color}` : "1.5px solid #3f3f46",
-                    background: active ? bg : "#18181b",
-                    color: active ? color : "#71717a",
-                    opacity: editable ? 1 : 0.85,
-                  }}
-                >{label}</button>
-              );
-            })}
-          </div>
-        )}
-      </div>
+        );
+      })}
     </div>
   );
 }
 
-function ContentOpsIdeaModal({ idea, onUpdate, onClose }: {
+function ContentOpsIdeaModal({ idea, onUpdate, onClose, viewOnly }: {
   idea: any;
   onUpdate: (id: string, data: any) => void;
   onClose: () => void;
+  viewOnly?: boolean;
 }) {
   const { pageColors } = usePlaybook();
   const stage = idea.status || "new";
@@ -1472,7 +1468,12 @@ function ContentOpsIdeaModal({ idea, onUpdate, onClose }: {
           </div>
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#71717a", padding: "0 4px" }}>✕</button>
         </div>
-        <OpsSchedulingFields idea={idea} onUpdate={onUpdate} editable />
+        <PerPageIdeaPanel
+          idea={idea}
+          onUpdate={onUpdate}
+          canEditSchedule={false}
+          canEditPerformance={!viewOnly}
+        />
       </div>
     </div>
   );
@@ -1481,11 +1482,10 @@ function ContentOpsIdeaModal({ idea, onUpdate, onClose }: {
 // ---------------------------------------------------------------------------
 // Calendar tab — week view of scheduled ideas by posting date/time
 // ---------------------------------------------------------------------------
-function CalendarTab({ pageFilter, search, opsOnly, onOpenIdea }: {
+function CalendarTab({ pageFilter, search, opsOnly }: {
   pageFilter: string;
   search: string;
   opsOnly?: boolean;
-  onOpenIdea?: (idea: any) => void;
 }) {
   const { pageColors, api, id: playbookId } = usePlaybook();
   const { role } = usePermissions();
@@ -1512,24 +1512,15 @@ function CalendarTab({ pageFilter, search, opsOnly, onOpenIdea }: {
     onError: (e: any) => toast.error(e?.message || "Failed to update"),
   });
 
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase().trim();
-    return (ideas as any[]).filter((i: any) => {
-      const pd = (i.posting_date || "").slice(0, 10);
-      if (!pd) return false;
-      if (pd < weekStart || pd > addDays(weekStart, 6)) return false;
-      if (pageFilter !== "all") {
-        const pages = (i.page_handle || "").split(",").map((s: string) => s.trim());
-        if (!pages.includes(pageFilter)) return false;
-      }
-      if (q && !(i.topic || "").toLowerCase().includes(q) && !(i.caption || "").toLowerCase().includes(q)) return false;
-      return true;
-    });
-  }, [ideas, weekStart, pageFilter, search]);
+  const weekEnd = addDays(weekStart, 6);
+  const calEntries = useMemo(
+    () => buildCalendarEntries(ideas as any[], weekStart, weekEnd, pageFilter, search),
+    [ideas, weekStart, weekEnd, pageFilter, search],
+  );
 
-  const openIdea = (idea: any) => {
-    if (onOpenIdea) onOpenIdea(idea);
-    else setDetailIdea(idea);
+  const openIdea = (entry: CalEntry) => {
+    if (opsOnly) return; // calendar is view-only for ops intern
+    setDetailIdea(entry.idea);
   };
 
   if (isLoading) return <p style={{ color: "#52525b", fontSize: 12, padding: "20px 0" }}>Loading…</p>;
@@ -1541,17 +1532,18 @@ function CalendarTab({ pageFilter, search, opsOnly, onOpenIdea }: {
         <button onClick={() => setWeekStart(getMonday(new Date()))} style={btnSecondary}>Today</button>
         <button onClick={() => setWeekStart(addDays(weekStart, 7))} style={btnSecondary}>Next →</button>
         <span style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>
-          {fmtShortDate(weekStart)} – {fmtShortDate(addDays(weekStart, 6))}
+          {fmtShortDate(weekStart)} – {fmtShortDate(weekEnd)}
         </span>
-        <span style={{ fontSize: 12, color: "#52525b" }}>{filtered.length} scheduled</span>
+        <span style={{ fontSize: 12, color: "#52525b" }}>{calEntries.length} scheduled</span>
+        {opsOnly && <span style={{ fontSize: 11, color: "#71717a" }}>View only</span>}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 1, background: "#27272a", borderRadius: 10, overflow: "hidden", border: "1px solid #27272a" }}>
         {days.map((day, i) => {
           const isToday = day === todayStr;
-          const dayItems = filtered
-            .filter((idea: any) => (idea.posting_date || "").slice(0, 10) === day)
-            .sort((a: any, b: any) => (a.posting_time || "").localeCompare(b.posting_time || ""));
+          const dayItems = calEntries
+            .filter(e => e.date === day)
+            .sort((a, b) => a.time.localeCompare(b.time));
           return (
             <div key={day} style={{ background: isToday ? "#1a1a14" : "#111113", minHeight: 140, display: "flex", flexDirection: "column" }}>
               <div style={{ padding: "8px 8px 6px", borderBottom: "1px solid #27272a" }}>
@@ -1563,26 +1555,30 @@ function CalendarTab({ pageFilter, search, opsOnly, onOpenIdea }: {
               <div style={{ padding: 4, flex: 1, overflow: "auto" }}>
                 {dayItems.length === 0 ? (
                   <p style={{ fontSize: 10, color: "#3f3f46", textAlign: "center", padding: "12px 4px" }}>—</p>
-                ) : dayItems.map((idea: any) => {
-                  const pg = (idea.page_handle || "").split(",")[0].trim();
-                  const c = pageColors[pg] || "#7c3aed";
-                  const tr = TEST_RESULTS.find(t => t.value === idea.test_result);
+                ) : dayItems.map(entry => {
+                  const c = pageColors[entry.page] || "#7c3aed";
+                  const pgResult = ((entry.idea.page_test_results || {}) as Record<string, string>)[entry.page] || entry.idea.test_result;
+                  const tr = TEST_RESULTS.find(t => t.value === pgResult);
+                  const pgViews = ((entry.idea.page_views || {}) as Record<string, number>)[entry.page];
                   return (
                     <div
-                      key={idea.id}
-                      onClick={() => openIdea(idea)}
+                      key={`${entry.idea.id}-${entry.page}`}
+                      onClick={() => openIdea(entry)}
                       style={{
-                        padding: "6px 8px", marginBottom: 4, borderRadius: 6, cursor: "pointer",
+                        padding: "6px 8px", marginBottom: 4, borderRadius: 6,
+                        cursor: opsOnly ? "default" : "pointer",
                         background: c + "18", borderLeft: `3px solid ${c}`,
                       }}
                     >
-                      {idea.posting_time && (
-                        <p style={{ margin: "0 0 2px", fontSize: 10, fontWeight: 700, color: "#D4952A" }}>{fmtTimeLabel(idea.posting_time)}</p>
+                      {entry.time && (
+                        <p style={{ margin: "0 0 2px", fontSize: 10, fontWeight: 700, color: "#D4952A" }}>{fmtTimeLabel(entry.time)}</p>
                       )}
                       <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: "#fff", lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {idea.topic || "Untitled"}
+                        {entry.idea.topic || "Untitled"}
                       </p>
-                      <p style={{ margin: "2px 0 0", fontSize: 10, color: "#71717a" }}>{pg}{idea.views > 0 ? ` · ${fmt(idea.views)} views` : ""}</p>
+                      <p style={{ margin: "2px 0 0", fontSize: 10, color: "#71717a" }}>
+                        {entry.page}{(pgViews || 0) > 0 ? ` · ${fmt(pgViews)} views` : ""}
+                      </p>
                       {tr && <span style={{ fontSize: 9, fontWeight: 600, color: tr.color }}>{tr.label}</span>}
                     </div>
                   );
@@ -1593,21 +1589,13 @@ function CalendarTab({ pageFilter, search, opsOnly, onOpenIdea }: {
         })}
       </div>
 
-      {detailIdea && (
-        opsOnly ? (
-          <ContentOpsIdeaModal
-            idea={detailIdea}
-            onUpdate={(id, data) => updateMut.mutate({ id, data })}
-            onClose={() => setDetailIdea(null)}
-          />
-        ) : (
-          <IdeaDetailModal
-            idea={detailIdea}
-            readOnly={!canEditExperimentX(role)}
-            onUpdate={(id, data) => updateMut.mutate({ id, data })}
-            onClose={() => setDetailIdea(null)}
-          />
-        )
+      {detailIdea && !opsOnly && (
+        <IdeaDetailModal
+          idea={detailIdea}
+          readOnly={!canEditExperimentX(role)}
+          onUpdate={(id, data) => updateMut.mutate({ id, data })}
+          onClose={() => setDetailIdea(null)}
+        />
       )}
     </div>
   );
@@ -1730,18 +1718,18 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
   if (isLoading) return <p style={{ color: "#52525b", fontSize: 12, padding: "20px 0" }}>Loading…</p>;
 
   if (opsOnly) {
+    const earliestDate = (idea: any) => {
+      const dates = Object.values((idea.page_posting_dates || {}) as Record<string, string>)
+        .map(d => (d || "").slice(0, 10)).filter(Boolean).sort();
+      return dates[0] || "9999";
+    };
     const opsList = filtered
       .filter((i: any) => !i.frontseat_pool)
-      .sort((a: any, b: any) => {
-        const da = (a.posting_date || "9999").slice(0, 10);
-        const db = (b.posting_date || "9999").slice(0, 10);
-        if (da !== db) return da.localeCompare(db);
-        return (a.posting_time || "").localeCompare(b.posting_time || "");
-      });
+      .sort((a: any, b: any) => earliestDate(a).localeCompare(earliestDate(b)));
     return (
       <div>
         <p style={{ fontSize: 12, color: "#71717a", marginBottom: 14 }}>
-          Week {currentWeek} · {opsList.length} idea{opsList.length !== 1 ? "s" : ""} · tap to edit scheduling & performance
+          Week {currentWeek} · {opsList.length} idea{opsList.length !== 1 ? "s" : ""} · tap to update views & baseline
         </p>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {opsList.length === 0 ? (
@@ -1749,7 +1737,10 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
           ) : opsList.map((idea: any) => {
             const stage = idea.status || "new";
             const ss = STATUS_STYLE[stage] || STATUS_STYLE.new;
-            const pg = (idea.page_handle || "").split(",")[0].trim();
+            const pages = ideaPages(idea);
+            const pg = pages[0] || "";
+            const pgDate = pg ? ((idea.page_posting_dates || {}) as Record<string, string>)[pg] : "";
+            const pgTime = pg ? ((idea.page_posting_times || {}) as Record<string, string>)[pg] : "";
             const tr = TEST_RESULTS.find(t => t.value === idea.test_result);
             return (
               <button
@@ -1764,14 +1755,14 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
               >
                 <span style={{ flex: "1 1 180px", fontSize: 13, fontWeight: 600, color: "#fff" }}>{idea.topic || "Untitled"}</span>
                 <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 99, background: ss.bg, color: ss.text }}>{STAGE_LABEL[stage]}</span>
-                <span style={{ fontSize: 11, color: "#71717a" }}>{pg || "—"}</span>
-                <span style={{ fontSize: 11, color: idea.posting_date ? "#a78bfa" : "#52525b", minWidth: 90 }}>
-                  {idea.posting_date ? fmtShortDate(idea.posting_date.slice(0, 10)) : "No date"}
-                  {idea.posting_time ? ` · ${fmtTimeLabel(idea.posting_time)}` : ""}
+                <span style={{ fontSize: 11, color: "#71717a" }}>{pages.length > 1 ? `${pages.length} pages` : pg || "—"}</span>
+                <span style={{ fontSize: 11, color: pgDate ? "#a78bfa" : "#52525b", minWidth: 90 }}>
+                  {pgDate ? fmtShortDate(pgDate.slice(0, 10)) : "No date"}
+                  {pgTime ? ` · ${fmtTimeLabel(pgTime)}` : ""}
                 </span>
                 <span style={{ fontSize: 11, color: idea.views > 0 ? "#50E0B0" : "#52525b", minWidth: 60 }}>{idea.views > 0 ? fmt(idea.views) : "—"}</span>
                 {tr && <span style={{ fontSize: 10, fontWeight: 600, color: tr.color }}>{tr.label}</span>}
-                {idea.drive_link && <span style={{ fontSize: 10, color: "#4A7FD4" }}>Drive ✓</span>}
+                {idea.frame_link && <span style={{ fontSize: 10, color: "#4A7FD4" }}>Frame ✓</span>}
               </button>
             );
           })}

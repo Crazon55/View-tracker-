@@ -1,6 +1,7 @@
 -- =====================================================================
--- Playbook experiments — ops scheduling fields (all playbook table sets)
--- drive_link, posting_date, posting_time, caption
+-- Playbook experiments — per-page scheduling (all playbook table sets)
+-- page_posting_dates, page_posting_times, page_captions (JSONB per page)
+-- Drops mistaken single-column fields if a prior migration ran.
 -- Safe to re-run.
 -- =====================================================================
 
@@ -14,13 +15,16 @@ BEGIN
     'tech_idea_bank', 'tech_content_bank'
   ]
   LOOP
-    EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS drive_link TEXT NOT NULL DEFAULT %L', tbl, '');
-    EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS posting_date DATE', tbl);
-    EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS posting_time TEXT NOT NULL DEFAULT %L', tbl, '');
-    EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS caption TEXT NOT NULL DEFAULT %L', tbl, '');
+    EXECUTE format('ALTER TABLE %I DROP COLUMN IF EXISTS drive_link', tbl);
+    EXECUTE format('ALTER TABLE %I DROP COLUMN IF EXISTS posting_date', tbl);
+    EXECUTE format('ALTER TABLE %I DROP COLUMN IF EXISTS posting_time', tbl);
+    EXECUTE format('ALTER TABLE %I DROP COLUMN IF EXISTS caption', tbl);
+    EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS page_posting_dates JSONB NOT NULL DEFAULT %L', tbl, '{}');
+    EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS page_posting_times JSONB NOT NULL DEFAULT %L', tbl, '{}');
+    EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS page_captions JSONB NOT NULL DEFAULT %L', tbl, '{}');
   END LOOP;
 END $$;
 
-CREATE INDEX IF NOT EXISTS idx_exp_idea_bank_posting_date ON exp_idea_bank (posting_date);
-CREATE INDEX IF NOT EXISTS idx_xf_idea_bank_posting_date ON xf_idea_bank (posting_date);
-CREATE INDEX IF NOT EXISTS idx_tech_idea_bank_posting_date ON tech_idea_bank (posting_date);
+DROP INDEX IF EXISTS idx_exp_idea_bank_posting_date;
+DROP INDEX IF EXISTS idx_xf_idea_bank_posting_date;
+DROP INDEX IF EXISTS idx_tech_idea_bank_posting_date;

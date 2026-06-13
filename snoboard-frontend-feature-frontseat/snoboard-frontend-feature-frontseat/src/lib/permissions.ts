@@ -32,7 +32,7 @@ export type Permission =
   | 'add_experiment_idea'         // create ideas in playbook experiments
   | 'view_experiment_x'           // read-only access to playbook experiments
   | 'edit_experiment_x'           // edit ideas / kanban in playbook experiments
-  | 'edit_experiment_ops'         // content ops: schedule fields, views, baseline/topline tags
+  | 'edit_experiment_ops'         // content ops: edit views + baseline/topline tags only (schedule is read-only)
   | 'edit_six_day_tracker'        // update views and entries in 6-Day Tracker
 
 // ── Reusable permission sets ──────────────────────────────────────────────────
