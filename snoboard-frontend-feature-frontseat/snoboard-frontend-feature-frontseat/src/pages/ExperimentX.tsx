@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, Fragment } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -130,7 +130,17 @@ function ideaPages(idea: any): string[] {
   return (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
 }
 
-type CalEntry = { idea: any; page: string; date: string; time: string; caption: string };
+type CalEntry = { idea: any; page: string; date: string; time: string; caption: string; status: string };
+
+const CALENDAR_STATUSES = new Set(["testing", "proven_ideas"]);
+
+/** Pages that have a posting date set (from page_handle + page_posting_dates keys). */
+function calendarPagesForIdea(idea: any): string[] {
+  const dates = (idea.page_posting_dates || {}) as Record<string, string>;
+  const fromHandle = ideaPages(idea);
+  const keys = new Set([...fromHandle, ...Object.keys(dates)]);
+  return [...keys].filter(pg => (dates[pg] || "").slice(0, 10));
+}
 
 function buildCalendarEntries(
   ideas: any[], weekStart: string, weekEnd: string, pageFilter: string, search: string,
@@ -138,21 +148,23 @@ function buildCalendarEntries(
   const q = search.toLowerCase().trim();
   const out: CalEntry[] = [];
   for (const idea of ideas) {
-    const pages = ideaPages(idea);
-    if (!pages.length) continue;
+    if (idea.frontseat_pool) continue;
+    const status = idea.status || "";
+    if (!CALENDAR_STATUSES.has(status)) continue;
+
     const dates = (idea.page_posting_dates || {}) as Record<string, string>;
     const times = (idea.page_posting_times || {}) as Record<string, string>;
     const captions = (idea.page_captions || {}) as Record<string, string>;
-    for (const page of pages) {
+    for (const page of calendarPagesForIdea(idea)) {
       const date = (dates[page] || "").slice(0, 10);
       if (!date || date < weekStart || date > weekEnd) continue;
       if (pageFilter !== "all" && page !== pageFilter) continue;
       const caption = captions[page] || "";
       if (q && !(idea.topic || "").toLowerCase().includes(q) && !caption.toLowerCase().includes(q)) continue;
-      out.push({ idea, page, date, time: times[page] || "", caption });
+      out.push({ idea, page, date, time: times[page] || "", caption, status });
     }
   }
-  return out.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+  return out.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time) || a.page.localeCompare(b.page));
 }
 
 // Shared input/button styles
@@ -1649,7 +1661,7 @@ function ContentOpsIdeaModal({ idea, onUpdate, onClose, viewOnly }: {
 }
 
 // ---------------------------------------------------------------------------
-// Calendar tab — week view of scheduled ideas by posting date/time
+// Calendar tab — page-wise week view of testing + proven ideas by posting date/time
 // ---------------------------------------------------------------------------
 function CalendarTab({ pageFilter, search, opsOnly, calendarViewOnly }: {
   pageFilter: string;
@@ -1657,7 +1669,7 @@ function CalendarTab({ pageFilter, search, opsOnly, calendarViewOnly }: {
   opsOnly?: boolean;
   calendarViewOnly?: boolean;
 }) {
-  const { pageColors, api, id: playbookId } = usePlaybook();
+  const { pageColors, pageShort, pages: playbookPages, api, id: playbookId } = usePlaybook();
   const { role } = usePermissions();
   const qc = useQueryClient();
   const [weekStart, setWeekStart] = useState(() => getMonday(new Date()));
@@ -1688,80 +1700,159 @@ function CalendarTab({ pageFilter, search, opsOnly, calendarViewOnly }: {
     [ideas, weekStart, weekEnd, pageFilter, search],
   );
 
+  const displayPages = useMemo(() => {
+    if (pageFilter !== "all") return [pageFilter];
+    return [...playbookPages];
+  }, [pageFilter, playbookPages]);
+
   const calReadOnly = calendarViewOnly ?? opsOnly;
 
   const openIdea = (entry: CalEntry) => {
+    if (opsOnly) {
+      setDetailIdea(entry.idea);
+      return;
+    }
     if (calReadOnly) return;
     setDetailIdea(entry.idea);
+  };
+
+  const renderCalCard = (entry: CalEntry) => {
+    const pgResult = ((entry.idea.page_test_results || {}) as Record<string, string>)[entry.page] || entry.idea.test_result;
+    const tr = TEST_RESULTS.find(t => t.value === pgResult);
+    const pgViews = ((entry.idea.page_views || {}) as Record<string, number>)[entry.page];
+    const stageSs = STATUS_STYLE[entry.status] || STATUS_STYLE.testing;
+    return (
+      <div
+        key={`${entry.idea.id}-${entry.page}-${entry.date}`}
+        onClick={() => openIdea(entry)}
+        style={{
+          padding: "6px 8px", marginBottom: 4, borderRadius: 6,
+          cursor: calReadOnly && !opsOnly ? "default" : "pointer",
+          background: "#18181b", border: "1px solid #27272a",
+        }}
+      >
+        {entry.time ? (
+          <p style={{ margin: "0 0 3px", fontSize: 10, fontWeight: 700, color: "#D4952A" }}>{fmtTimeLabel(entry.time)}</p>
+        ) : (
+          <p style={{ margin: "0 0 3px", fontSize: 9, color: "#52525b" }}>No time set</p>
+        )}
+        <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: "#fff", lineHeight: 1.3,
+          overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
+          {entry.idea.topic || "Untitled"}
+        </p>
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4, alignItems: "center" }}>
+          <span style={{ fontSize: 9, fontWeight: 600, padding: "1px 5px", borderRadius: 3, background: stageSs.bg, color: stageSs.text }}>
+            {STAGE_LABEL[entry.status as IdeaStage] || entry.status}
+          </span>
+          {(pgViews || 0) > 0 && (
+            <span style={{ fontSize: 9, color: "#50E0B0", fontWeight: 600 }}>{fmt(pgViews)}</span>
+          )}
+          {tr && <span style={{ fontSize: 9, fontWeight: 600, color: tr.color }}>{tr.label}</span>}
+        </div>
+      </div>
+    );
   };
 
   if (isLoading) return <p style={{ color: "#52525b", fontSize: 12, padding: "20px 0" }}>Loading…</p>;
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
         <button onClick={() => setWeekStart(addDays(weekStart, -7))} style={btnSecondary}>← Prev</button>
         <button onClick={() => setWeekStart(getMonday(new Date()))} style={btnSecondary}>Today</button>
         <button onClick={() => setWeekStart(addDays(weekStart, 7))} style={btnSecondary}>Next →</button>
         <span style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>
           {fmtShortDate(weekStart)} – {fmtShortDate(weekEnd)}
         </span>
-        <span style={{ fontSize: 12, color: "#52525b" }}>{calEntries.length} scheduled</span>
-        {calReadOnly && <span style={{ fontSize: 11, color: "#71717a" }}>View only</span>}
+        <span style={{ fontSize: 12, color: "#52525b" }}>{calEntries.length} post{calEntries.length !== 1 ? "s" : ""}</span>
+        <span style={{ fontSize: 11, color: "#71717a" }}>Testing & Proven only</span>
+        {calReadOnly && !opsOnly && <span style={{ fontSize: 11, color: "#71717a" }}>View only</span>}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 1, background: "#27272a", borderRadius: 10, overflow: "hidden", border: "1px solid #27272a" }}>
-        {days.map((day, i) => {
-          const isToday = day === todayStr;
-          const dayItems = calEntries
-            .filter(e => e.date === day)
-            .sort((a, b) => a.time.localeCompare(b.time));
-          return (
-            <div key={day} style={{ background: isToday ? "#1a1a14" : "#111113", minHeight: 140, display: "flex", flexDirection: "column" }}>
-              <div style={{ padding: "8px 8px 6px", borderBottom: "1px solid #27272a" }}>
-                <span style={{ fontSize: 10, fontWeight: 600, color: isToday ? "#D4952A" : "#71717a" }}>{dayLabels[i]}</span>
-                <span style={{ fontSize: 13, fontWeight: isToday ? 700 : 500, color: isToday ? "#fff" : "#a1a1aa", marginLeft: 6 }}>
+      <div style={{ overflowX: "auto", borderRadius: 10, border: "1px solid #27272a" }}>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: `minmax(120px, 150px) repeat(7, minmax(130px, 1fr))`,
+          minWidth: 900,
+          background: "#27272a",
+          gap: 1,
+        }}>
+          {/* Header row */}
+          <div style={{ background: "#111113", padding: "10px 12px" }} />
+          {days.map((day, i) => {
+            const isToday = day === todayStr;
+            return (
+              <div key={day} style={{ background: isToday ? "#1a1a14" : "#111113", padding: "8px 10px", textAlign: "center" }}>
+                <span style={{ fontSize: 10, fontWeight: 600, color: isToday ? "#D4952A" : "#71717a", display: "block" }}>{dayLabels[i]}</span>
+                <span style={{ fontSize: 14, fontWeight: isToday ? 700 : 500, color: isToday ? "#fff" : "#a1a1aa" }}>
                   {new Date(day + "T00:00:00").getDate()}
                 </span>
               </div>
-              <div style={{ padding: 4, flex: 1, overflow: "auto" }}>
-                {dayItems.length === 0 ? (
-                  <p style={{ fontSize: 10, color: "#3f3f46", textAlign: "center", padding: "12px 4px" }}>—</p>
-                ) : dayItems.map(entry => {
-                  const c = pageColors[entry.page] || "#7c3aed";
-                  const pgResult = ((entry.idea.page_test_results || {}) as Record<string, string>)[entry.page] || entry.idea.test_result;
-                  const tr = TEST_RESULTS.find(t => t.value === pgResult);
-                  const pgViews = ((entry.idea.page_views || {}) as Record<string, number>)[entry.page];
+            );
+          })}
+
+          {/* Page rows */}
+          {displayPages.map(page => {
+            const c = pageColors[page] || "#7c3aed";
+            const short = pageShort[page] || page;
+            const rowHasItems = calEntries.some(e => e.page === page);
+            if (pageFilter === "all" && !rowHasItems) return null;
+
+            return (
+              <Fragment key={page}>
+                <div
+                  style={{
+                    background: "#111113", padding: "10px 12px",
+                    display: "flex", alignItems: "flex-start", gap: 8,
+                    borderTop: "1px solid #27272a",
+                  }}
+                >
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: c, flexShrink: 0, marginTop: 4 }} />
+                  <div>
+                    <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: c, lineHeight: 1.2 }}>{short}</p>
+                    <p style={{ margin: "2px 0 0", fontSize: 9, color: "#52525b", lineHeight: 1.2 }}>{page}</p>
+                  </div>
+                </div>
+                {days.map(day => {
+                  const isToday = day === todayStr;
+                  const dayItems = calEntries
+                    .filter(e => e.page === page && e.date === day)
+                    .sort((a, b) => a.time.localeCompare(b.time));
                   return (
                     <div
-                      key={`${entry.idea.id}-${entry.page}`}
-                      onClick={() => openIdea(entry)}
+                      key={`${page}-${day}`}
                       style={{
-                        padding: "6px 8px", marginBottom: 4, borderRadius: 6,
-                        cursor: calReadOnly ? "default" : "pointer",
-                        background: c + "18", borderLeft: `3px solid ${c}`,
+                        background: isToday ? "#1a1a14" : "#111113",
+                        padding: 6, minHeight: 88,
+                        borderTop: "1px solid #27272a",
                       }}
                     >
-                      {entry.time && (
-                        <p style={{ margin: "0 0 2px", fontSize: 10, fontWeight: 700, color: "#D4952A" }}>{fmtTimeLabel(entry.time)}</p>
-                      )}
-                      <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: "#fff", lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {entry.idea.topic || "Untitled"}
-                      </p>
-                      <p style={{ margin: "2px 0 0", fontSize: 10, color: "#71717a" }}>
-                        {entry.page}{(pgViews || 0) > 0 ? ` · ${fmt(pgViews)} views` : ""}
-                      </p>
-                      {tr && <span style={{ fontSize: 9, fontWeight: 600, color: tr.color }}>{tr.label}</span>}
+                      {dayItems.length === 0 ? (
+                        <p style={{ fontSize: 10, color: "#3f3f46", textAlign: "center", padding: "16px 4px", margin: 0 }}>—</p>
+                      ) : dayItems.map(renderCalCard)}
                     </div>
                   );
                 })}
-              </div>
-            </div>
-          );
-        })}
+              </Fragment>
+            );
+          })}
+        </div>
       </div>
 
-      {detailIdea && !calReadOnly && (
+      {calEntries.length === 0 && (
+        <p style={{ fontSize: 12, color: "#52525b", marginTop: 16, textAlign: "center" }}>
+          No Testing or Proven ideas with a posting date this week. Set posting dates on ideas in those stages.
+        </p>
+      )}
+
+      {detailIdea && opsOnly && (
+        <ContentOpsIdeaModal
+          idea={detailIdea}
+          onUpdate={(id, data) => updateMut.mutate({ id, data })}
+          onClose={() => setDetailIdea(null)}
+        />
+      )}
+      {detailIdea && !opsOnly && !calReadOnly && (
         <IdeaDetailModal
           idea={detailIdea}
           readOnly={!canEditExperimentX(role, playbookId)}
