@@ -441,6 +441,107 @@ function DeployToPlaybookButton({ idea, readOnly }: { idea: any; readOnly?: bool
   );
 }
 
+const OPS_KANBAN_STAGES = ["testing", "proven_ideas"] as const;
+
+function opsCardScheduleSummary(idea: any): { date: string; time: string } {
+  const pages = ideaPages(idea);
+  const dates = (idea.page_posting_dates || {}) as Record<string, string>;
+  const times = (idea.page_posting_times || {}) as Record<string, string>;
+  const scanPages = pages.length ? pages : Object.keys(dates);
+  let bestDate = "";
+  let bestTime = "";
+  for (const pg of scanPages) {
+    const d = (dates[pg] || "").slice(0, 10);
+    if (d && (!bestDate || d < bestDate)) {
+      bestDate = d;
+      bestTime = times[pg] || "";
+    }
+  }
+  return { date: bestDate, time: bestTime };
+}
+
+function opsCardBaselineTag(idea: any) {
+  const pages = ideaPages(idea);
+  const results = (idea.page_test_results || {}) as Record<string, string>;
+  const RANK: Record<string, number> = { top_line: 4, above_baseline: 3, baseline: 2, below_baseline: 1 };
+  let best = idea.test_result || "";
+  for (const pg of pages) {
+    const r = results[pg];
+    if (r && (RANK[r] || 0) > (RANK[best] || 0)) best = r;
+  }
+  return TEST_RESULTS.find(t => t.value === best);
+}
+
+/** Content Ops — kanban card with schedule, views, baseline, frame link only. */
+function OpsKanbanCard({ idea, onClick }: { idea: any; onClick: () => void }) {
+  const { pageColors } = usePlaybook();
+  const pages = ideaPages(idea);
+  const isTesting = idea.status === "testing";
+  const testCfg = opsCardBaselineTag(idea);
+  const borderColor = isTesting && testCfg ? testCfg.color : "#27272a";
+  const hoverBorder = isTesting && testCfg ? testCfg.color : "#3f3f46";
+  const { date: pgDate, time: pgTime } = opsCardScheduleSummary(idea);
+  const viewCount = (idea.views || 0) > 0 ? idea.views : 0;
+
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        background: isTesting && testCfg ? testCfg.bg : "#18181b",
+        border: `1.5px solid ${borderColor}`,
+        borderLeft: isTesting && testCfg ? `4px solid ${testCfg.color}` : `1.5px solid ${borderColor}`,
+        borderRadius: 9,
+        padding: "10px 12px", marginBottom: 6, cursor: "pointer",
+        transition: "border-color 0.12s",
+      }}
+      onMouseEnter={e => (e.currentTarget.style.borderColor = hoverBorder)}
+      onMouseLeave={e => (e.currentTarget.style.borderColor = borderColor)}
+    >
+      <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 600, color: "#e4e4e7", lineHeight: 1.35 }}>
+        {idea.topic || <em style={{ color: "#52525b", fontWeight: 400 }}>Untitled</em>}
+      </p>
+      {pages.length > 0 && (
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8 }}>
+          {pages.map((pg: string) => {
+            const pgc = pageColors[pg] || "#a1a1aa";
+            return (
+              <span key={pg} style={{ fontSize: 10, fontWeight: 700, color: pgc, background: pgc + "22", borderRadius: 4, padding: "1px 6px" }}>
+                {pg}
+              </span>
+            );
+          })}
+        </div>
+      )}
+      <p style={{ margin: "0 0 6px", fontSize: 11, color: pgDate ? "#a78bfa" : "#52525b" }}>
+        {pgDate ? `${fmtShortDate(pgDate)}${pgTime ? ` · ${fmtTimeLabel(pgTime)}` : ""}` : "No posting date"}
+      </p>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: viewCount > 0 ? "#50E0B0" : "#52525b" }}>
+          {viewCount > 0 ? `${fmt(viewCount)} views` : "— views"}
+        </span>
+        {idea.frame_link && (
+          <a
+            href={idea.frame_link}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            style={{ fontSize: 10, color: "#4A7FD4", fontWeight: 600 }}
+          >
+            Frame ↗
+          </a>
+        )}
+      </div>
+      {testCfg && (
+        <div style={{ marginTop: 8 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: testCfg.color, background: testCfg.bg, borderRadius: 4, padding: "2px 8px" }}>
+            {testCfg.label}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Kanban card (used in Idea Bank board)
 // ---------------------------------------------------------------------------
@@ -1500,11 +1601,12 @@ const TEST_RESULTS = [
 // ---------------------------------------------------------------------------
 // Per-page panel — schedule (CS) + performance (ops intern)
 // ---------------------------------------------------------------------------
-function PerPageIdeaPanel({ idea, onUpdate, canEditSchedule, canEditPerformance, showSchedule = true, showFrameLink = true }: {
+function PerPageIdeaPanel({ idea, onUpdate, canEditSchedule, canEditPerformance, canEditCaption, showSchedule = true, showFrameLink = true }: {
   idea: any;
   onUpdate: (id: string, data: any) => void;
   canEditSchedule?: boolean;
   canEditPerformance?: boolean;
+  canEditCaption?: boolean;
   showSchedule?: boolean;
   showFrameLink?: boolean;
 }) {
@@ -1512,6 +1614,7 @@ function PerPageIdeaPanel({ idea, onUpdate, canEditSchedule, canEditPerformance,
   const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "#71717a", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
   const pages = ideaPages(idea);
   const stage = idea.status || "new";
+  const editCaption = canEditCaption ?? !!canEditSchedule;
 
   const patchPageField = (field: "page_posting_dates" | "page_posting_times" | "page_captions", page: string, value: string) => {
     const cur = { ...(idea[field] || {}) } as Record<string, string>;
@@ -1572,7 +1675,7 @@ function PerPageIdeaPanel({ idea, onUpdate, canEditSchedule, canEditPerformance,
                 </div>
                 <div style={{ marginBottom: canEditPerformance ? 10 : 0 }}>
                   <label style={ls}>Caption</label>
-                  {canEditSchedule ? (
+                  {editCaption ? (
                     <SafeArea value={pgCaption} onSave={v => patchPageField("page_captions", pg, v)} placeholder="Instagram caption" rows={3} />
                   ) : (
                     <p style={{ margin: 0, fontSize: 13, color: pgCaption ? "#e4e4e7" : "#52525b", whiteSpace: "pre-wrap" }}>{pgCaption || "—"}</p>
@@ -1679,7 +1782,6 @@ function ContentOpsIdeaModal({ idea, onUpdate, onClose, viewOnly }: {
               <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 99, background: ss.bg, color: ss.text }}>
                 {STAGE_LABEL[stage] || stage}
               </span>
-              <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, background: "#27272a", color: "#71717a" }}>{idea.content_type}</span>
               {selectedPages.map((pg: string) => {
                 const c = pageColors[pg] || "#a1a1aa";
                 return <span key={pg} style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, background: c + "22", color: c, fontWeight: 600 }}>{pg}</span>;
@@ -1691,8 +1793,9 @@ function ContentOpsIdeaModal({ idea, onUpdate, onClose, viewOnly }: {
         <PerPageIdeaPanel
           idea={idea}
           onUpdate={onUpdate}
-          canEditSchedule={false}
+          canEditSchedule={!viewOnly}
           canEditPerformance={!viewOnly}
+          canEditCaption={false}
         />
       </div>
     </div>
@@ -1739,7 +1842,7 @@ function CalendarTab({ pageFilter, search, opsOnly, calendarViewOnly }: {
     return [...playbookPages];
   }, [pageFilter, playbookPages]);
 
-  const calReadOnly = calendarViewOnly ?? opsOnly;
+  const calReadOnly = calendarViewOnly ?? false;
 
   const openIdea = (entry: CalEntry) => {
     if (opsOnly) {
@@ -2011,55 +2114,63 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
     return c;
   }, [filtered]);
 
+  const opsFiltered = useMemo(() => {
+    if (!opsOnly) return [];
+    const q = search.toLowerCase().trim();
+    const isOpsStage = (s: string) => s === "testing" || s === "proven_ideas";
+    const currentWeekIdeas = (ideas as any[]).filter((i: any) => !i.frontseat_pool && isOpsStage(i.status || ""));
+    const currentIds = new Set(currentWeekIdeas.map((i: any) => i.id));
+    const crossWeek = (allIdeas as any[]).filter((i: any) =>
+      isOpsStage(i.status || "") && i.week_number < currentWeek && !i.frontseat_pool &&
+      !currentIds.has(i.id) &&
+      (pageFilter === "all" || (i.page_handle || "").split(",").some((p: string) => p.trim() === pageFilter))
+    );
+    let merged = [...currentWeekIdeas, ...crossWeek];
+    if (pageFilter !== "all") {
+      merged = merged.filter((i: any) =>
+        (i.page_handle || "").split(",").some((p: string) => p.trim() === pageFilter)
+      );
+    }
+    if (q) merged = merged.filter((i: any) => (i.topic || "").toLowerCase().includes(q));
+    return merged;
+  }, [opsOnly, ideas, allIdeas, currentWeek, pageFilter, search]);
+
+  const opsStageCounts = useMemo(() => {
+    const c: Record<string, number> = { testing: 0, proven_ideas: 0 };
+    opsFiltered.forEach((i: any) => {
+      const s = i.status || "";
+      if (s in c) c[s]++;
+    });
+    return c;
+  }, [opsFiltered]);
+
   if (isLoading) return <p style={{ color: "#52525b", fontSize: 12, padding: "20px 0" }}>Loading…</p>;
 
   if (opsOnly) {
-    const earliestDate = (idea: any) => {
-      const dates = Object.values((idea.page_posting_dates || {}) as Record<string, string>)
-        .map(d => (d || "").slice(0, 10)).filter(Boolean).sort();
-      return dates[0] || "9999";
-    };
-    const opsList = filtered
-      .filter((i: any) => !i.frontseat_pool)
-      .sort((a: any, b: any) => earliestDate(a).localeCompare(earliestDate(b)));
     return (
       <div>
         <p style={{ fontSize: 12, color: "#71717a", marginBottom: 14 }}>
-          Week {currentWeek} · {opsList.length} idea{opsList.length !== 1 ? "s" : ""} · tap to update views & baseline
+          Week {currentWeek} · {opsFiltered.length} idea{opsFiltered.length !== 1 ? "s" : ""} · tap to edit posting date, views & baseline
         </p>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {opsList.length === 0 ? (
-            <p style={{ color: "#52525b", fontSize: 12, padding: 24, textAlign: "center", border: "1.5px dashed #27272a", borderRadius: 10 }}>No ideas this week</p>
-          ) : opsList.map((idea: any) => {
-            const stage = idea.status || "new";
-            const ss = STATUS_STYLE[stage] || STATUS_STYLE.new;
-            const pages = ideaPages(idea);
-            const pg = pages[0] || "";
-            const pgDate = pg ? ((idea.page_posting_dates || {}) as Record<string, string>)[pg] : "";
-            const pgTime = pg ? ((idea.page_posting_times || {}) as Record<string, string>)[pg] : "";
-            const tr = TEST_RESULTS.find(t => t.value === idea.test_result);
+        <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 20, minHeight: "calc(100vh - 260px)" }}>
+          {OPS_KANBAN_STAGES.map(stage => {
+            const stageIdeas = opsFiltered.filter((i: any) => (i.status || "") === stage);
+            const dot = STAGE_DOT[stage] || "#71717a";
             return (
-              <button
-                key={idea.id}
-                type="button"
-                onClick={() => setDetailIdea(idea)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
-                  padding: "12px 16px", borderRadius: 10, border: "1px solid #27272a",
-                  background: "#111113", cursor: "pointer", textAlign: "left", width: "100%",
-                }}
-              >
-                <span style={{ flex: "1 1 180px", fontSize: 13, fontWeight: 600, color: "#fff" }}>{idea.topic || "Untitled"}</span>
-                <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 99, background: ss.bg, color: ss.text }}>{STAGE_LABEL[stage]}</span>
-                <span style={{ fontSize: 11, color: "#71717a" }}>{pages.length > 1 ? `${pages.length} pages` : pg || "—"}</span>
-                <span style={{ fontSize: 11, color: pgDate ? "#a78bfa" : "#52525b", minWidth: 90 }}>
-                  {pgDate ? fmtShortDate(pgDate.slice(0, 10)) : "No date"}
-                  {pgTime ? ` · ${fmtTimeLabel(pgTime)}` : ""}
-                </span>
-                <span style={{ fontSize: 11, color: idea.views > 0 ? "#50E0B0" : "#52525b", minWidth: 60 }}>{idea.views > 0 ? fmt(idea.views) : "—"}</span>
-                {tr && <span style={{ fontSize: 10, fontWeight: 600, color: tr.color }}>{tr.label}</span>}
-                {idea.frame_link && <span style={{ fontSize: 10, color: "#4A7FD4" }}>Frame ✓</span>}
-              </button>
+              <div key={stage} style={{ minWidth: 220, maxWidth: 280, flex: "1 0 220px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, padding: "0 2px" }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: dot, flexShrink: 0 }} />
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#e4e4e7" }}>{STAGE_LABEL[stage as IdeaStage] || stage}</span>
+                  <span style={{ fontSize: 12, color: "#52525b" }}>{opsStageCounts[stage] ?? stageIdeas.length}</span>
+                </div>
+                <div style={{ minHeight: 120 }}>
+                  {stageIdeas.length === 0 ? (
+                    <p style={{ fontSize: 11, color: "#3f3f46", textAlign: "center", padding: "24px 8px", border: "1.5px dashed #27272a", borderRadius: 8 }}>Empty</p>
+                  ) : stageIdeas.map((idea: any) => (
+                    <OpsKanbanCard key={idea.id} idea={idea} onClick={() => setDetailIdea(idea)} />
+                  ))}
+                </div>
+              </div>
             );
           })}
         </div>
@@ -3121,7 +3232,7 @@ function ExperimentXShell() {
 
   const accessLabel =
     access === "edit" ? null
-    : access === "ops" ? "Ops — edit views & baseline only"
+    : access === "ops" ? "Ops — edit schedule, views & baseline"
     : access === "view" ? "View only"
     : null;
 
@@ -3209,7 +3320,7 @@ function ExperimentXShell() {
       <div style={{ maxWidth: (tab === "idea-bank" || tab === "frontseat" || tab === "calendar") ? "none" : 860 }}>
         {tab === "frontseat"     && <FrontseatTab readOnly={readOnly} opsOnly={opsOnly} />}
         {tab === "idea-bank"     && <IdeaBankTab pageFilter={pageFilter} search={search} readOnly={readOnly} opsOnly={opsOnly} />}
-        {tab === "calendar"      && <CalendarTab pageFilter={pageFilter} search={search} opsOnly={opsOnly} calendarViewOnly={opsOnly || viewOnly} />}
+        {tab === "calendar"      && <CalendarTab pageFilter={pageFilter} search={search} opsOnly={opsOnly} calendarViewOnly={viewOnly} />}
         {tab === "content-bank"  && <ContentBankTab pageFilter={pageFilter} search={search} readOnly={readOnly} />}
         {tab === "working-ideas" && <WorkingIdeasTab pageFilter={pageFilter} search={search} readOnly={readOnly} />}
       </div>
