@@ -1610,6 +1610,34 @@ const TEST_RESULTS = [
 ] as const;
 
 // ---------------------------------------------------------------------------
+// Content Ops — view-only reference links (frame + comp from CS)
+// ---------------------------------------------------------------------------
+function OpsViewOnlyLinks({ idea }: { idea: any }) {
+  const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "#71717a", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingBottom: 12, borderBottom: "1px solid #27272a" }}>
+      <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "#52525b", letterSpacing: "0.06em", textTransform: "uppercase" }}>View only</p>
+      <div>
+        <label style={ls}>Frame link</label>
+        {idea.frame_link ? (
+          <a href={idea.frame_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#4A7FD4", wordBreak: "break-all" }}>{idea.frame_link}</a>
+        ) : (
+          <span style={{ fontSize: 13, color: "#52525b" }}>—</span>
+        )}
+      </div>
+      <div>
+        <label style={ls}>Comp link</label>
+        {idea.comp_link ? (
+          <a href={idea.comp_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#D4952A", wordBreak: "break-all" }}>{idea.comp_link}</a>
+        ) : (
+          <span style={{ fontSize: 13, color: "#52525b" }}>—</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Per-page panel — schedule (CS) + performance (ops intern)
 // ---------------------------------------------------------------------------
 function PerPageIdeaPanel({ idea, onUpdate, canEditSchedule, canEditPerformance, canEditCaption, showSchedule = true, showFrameLink = true, showCompLink = true }: {
@@ -1637,7 +1665,7 @@ function PerPageIdeaPanel({ idea, onUpdate, canEditSchedule, canEditPerformance,
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "14px 0 4px", borderTop: "1px solid #27272a" }}>
-      {showSchedule && showFrameLink && (
+      {showFrameLink && (
         <div>
           <label style={ls}>Frame link</label>
           {idea.frame_link ? (
@@ -1648,7 +1676,7 @@ function PerPageIdeaPanel({ idea, onUpdate, canEditSchedule, canEditPerformance,
         </div>
       )}
 
-      {showSchedule && showCompLink && (
+      {showCompLink && (
         <div>
           <label style={ls}>Comp link</label>
           {idea.comp_link ? (
@@ -1813,12 +1841,15 @@ function ContentOpsIdeaModal({ idea, onUpdate, onClose, viewOnly }: {
           </div>
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#71717a", padding: "0 4px" }}>✕</button>
         </div>
+        <OpsViewOnlyLinks idea={idea} />
         <PerPageIdeaPanel
           idea={idea}
           onUpdate={onUpdate}
           canEditSchedule={!viewOnly}
           canEditPerformance={!viewOnly}
           canEditCaption={false}
+          showFrameLink={false}
+          showCompLink={false}
         />
       </div>
     </div>
@@ -3255,7 +3286,7 @@ function ExperimentXShell() {
 
   const accessLabel =
     access === "edit" ? null
-    : access === "ops" ? "Ops — edit schedule, views & baseline"
+    : access === "ops" ? "Ops — view frame, comp & captions · edit schedule, views & baseline"
     : access === "view" ? "View only"
     : null;
 
