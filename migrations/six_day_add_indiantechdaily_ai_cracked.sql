@@ -1,5 +1,5 @@
 -- Add indiantechdaily + ai.cracked (Tech niche) to pages for 6-day tracker.
--- Tracker shows them on alternating months from Jun 2026 cycle 2 (Jun, Aug, Oct…).
+-- Tracker shows them from Jun 2026 cycle 3 onward, then every month after.
 -- Safe to re-run.
 
 INSERT INTO pages (handle, name, profile_url, auto_scrape, stage)

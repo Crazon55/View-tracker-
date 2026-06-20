@@ -54,33 +54,27 @@ const SHERUS_ACTIVE_HANDLES = [
   "startupswtf",
 ] as const;
 
-/** Tech niche — 6-day tracker on alternating months from Jun 2026 cycle 2. */
+/** Tech niche — from Jun 2026 cycle 3, then every month after. */
 const TECH_ACTIVE_HANDLES = [
   "indiantechdaily",
   "ai.cracked",
 ] as const;
 
-const TECH_ALT_HANDLES = new Set<string>(TECH_ACTIVE_HANDLES.map((h) => normHandle(h)));
+const TECH_ROSTER_HANDLES = new Set<string>(TECH_ACTIVE_HANDLES.map((h) => normHandle(h)));
 
-/** First month on the every-other-month schedule (Jun 2026). */
-const TECH_ALT_ANCHOR_MONTH = "2026-06";
-/** Cycle 2 start — current cycle when this roster went live (Jun 7, 2026). */
-const TECH_ALT_FIRST_CYCLE_START = "2026-06-07";
+/** First month Tech IPs appear (Jun 2026, cycle 3 onward). */
+const TECH_ROSTER_START_MONTH = "2026-06";
+const TECH_ROSTER_FIRST_CYCLE_START = "2026-06-13";
 
-function isTechAltMonth(monthYm: string): boolean {
-  const [y, m] = monthYm.split("-").map(Number);
-  const idx = y * 12 + (m - 1);
-  const [ay, am] = TECH_ALT_ANCHOR_MONTH.split("-").map(Number);
-  const anchorIdx = ay * 12 + (am - 1);
-  if (idx < anchorIdx) return false;
-  return (idx - anchorIdx) % 2 === 0;
+function isOnOrAfterTechRosterStart(monthYm: string): boolean {
+  return monthYm >= TECH_ROSTER_START_MONTH;
 }
 
-/** Tech IPs visible this cycle/month? Anchor month: from current cycle onward; later active months: all cycles. */
-function techAltPagesVisible(monthYm: string, cycleStart: string): boolean {
-  if (!isTechAltMonth(monthYm)) return false;
-  if (monthYm === TECH_ALT_ANCHOR_MONTH) {
-    return cycleStart >= TECH_ALT_FIRST_CYCLE_START;
+/** Jun 2026: cycles 3–5 only. Jul 2026+: all cycles every month. */
+function techPagesVisible(monthYm: string, cycleStart: string): boolean {
+  if (monthYm < TECH_ROSTER_START_MONTH) return false;
+  if (monthYm === TECH_ROSTER_START_MONTH) {
+    return cycleStart >= TECH_ROSTER_FIRST_CYCLE_START;
   }
   return true;
 }
@@ -230,8 +224,8 @@ export default function SixDayTracker() {
         ? allServerPages
         : allServerPages.filter((p: any) => handleToNiche.has(normHandle(p.handle)));
     }
-    if (!isTechAltMonth(selectedMonth)) {
-      rosterPages = rosterPages.filter((p: any) => !TECH_ALT_HANDLES.has(normHandle(p.handle)));
+    if (!isOnOrAfterTechRosterStart(selectedMonth)) {
+      rosterPages = rosterPages.filter((p: any) => !TECH_ROSTER_HANDLES.has(normHandle(p.handle)));
     }
     return rosterPages;
   }, [allServerPages, handleToNiche, selectedMonth]);
@@ -281,8 +275,8 @@ export default function SixDayTracker() {
     }
     let list = applyTeamFilter(allServerPages.filter((p: any) => ACTIVE_ROSTER_WEEK4.has(normHandle(p.handle))));
     list = list.filter((p: any) => {
-      if (!TECH_ALT_HANDLES.has(normHandle(p.handle))) return true;
-      return techAltPagesVisible(selectedMonth, start);
+      if (!TECH_ROSTER_HANDLES.has(normHandle(p.handle))) return true;
+      return techPagesVisible(selectedMonth, start);
     });
     return list;
   }, [allServerPages, handleToNiche, nicheFilterSet, isAllActive, selectedMonth]);
