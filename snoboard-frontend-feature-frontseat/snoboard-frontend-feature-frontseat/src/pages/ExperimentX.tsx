@@ -472,7 +472,7 @@ function opsCardBaselineTag(idea: any) {
   return TEST_RESULTS.find(t => t.value === best);
 }
 
-/** Content Ops — kanban card with schedule, views, baseline, frame link only. */
+/** Content Ops — kanban card with schedule, views, baseline, frame & comp links. */
 function OpsKanbanCard({ idea, onClick }: { idea: any; onClick: () => void }) {
   const { pageColors } = usePlaybook();
   const pages = ideaPages(idea);
@@ -528,6 +528,17 @@ function OpsKanbanCard({ idea, onClick }: { idea: any; onClick: () => void }) {
             style={{ fontSize: 10, color: "#4A7FD4", fontWeight: 600 }}
           >
             Frame ↗
+          </a>
+        )}
+        {idea.comp_link && (
+          <a
+            href={idea.comp_link}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            style={{ fontSize: 10, color: "#D4952A", fontWeight: 600 }}
+          >
+            Comp ↗
           </a>
         )}
       </div>
@@ -1067,7 +1078,7 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
 
         {/* Per-page scheduling — CS sets date/time/caption */}
         {!readOnly && (
-          <PerPageIdeaPanel idea={idea} onUpdate={onUpdate} canEditSchedule canEditPerformance={false} showFrameLink={false} />
+          <PerPageIdeaPanel idea={idea} onUpdate={onUpdate} canEditSchedule canEditPerformance={false} showFrameLink={false} showCompLink={false} />
         )}
 
         {/* Edited by */}
@@ -1601,7 +1612,7 @@ const TEST_RESULTS = [
 // ---------------------------------------------------------------------------
 // Per-page panel — schedule (CS) + performance (ops intern)
 // ---------------------------------------------------------------------------
-function PerPageIdeaPanel({ idea, onUpdate, canEditSchedule, canEditPerformance, canEditCaption, showSchedule = true, showFrameLink = true }: {
+function PerPageIdeaPanel({ idea, onUpdate, canEditSchedule, canEditPerformance, canEditCaption, showSchedule = true, showFrameLink = true, showCompLink = true }: {
   idea: any;
   onUpdate: (id: string, data: any) => void;
   canEditSchedule?: boolean;
@@ -1609,6 +1620,7 @@ function PerPageIdeaPanel({ idea, onUpdate, canEditSchedule, canEditPerformance,
   canEditCaption?: boolean;
   showSchedule?: boolean;
   showFrameLink?: boolean;
+  showCompLink?: boolean;
 }) {
   const { pageColors } = usePlaybook();
   const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "#71717a", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
@@ -1630,6 +1642,17 @@ function PerPageIdeaPanel({ idea, onUpdate, canEditSchedule, canEditPerformance,
           <label style={ls}>Frame link</label>
           {idea.frame_link ? (
             <a href={idea.frame_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#4A7FD4", wordBreak: "break-all" }}>{idea.frame_link}</a>
+          ) : (
+            <span style={{ fontSize: 13, color: "#52525b" }}>—</span>
+          )}
+        </div>
+      )}
+
+      {showSchedule && showCompLink && (
+        <div>
+          <label style={ls}>Comp link</label>
+          {idea.comp_link ? (
+            <a href={idea.comp_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#D4952A", wordBreak: "break-all" }}>{idea.comp_link}</a>
           ) : (
             <span style={{ fontSize: 13, color: "#52525b" }}>—</span>
           )}
