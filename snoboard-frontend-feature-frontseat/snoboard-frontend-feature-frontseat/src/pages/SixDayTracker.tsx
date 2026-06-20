@@ -47,12 +47,29 @@ const GOOFIES_ACTIVE_HANDLES = [
   "startupcoded",
 ] as const;
 
-/** Sherus — Sugam (thechangingorder) + Chaitanya (101xtechnology, startupswtf) */
+/** Sherus — Sugam (thechangingorder) + Chaitanya (101xtechnology, startupswtf, tech IPs) */
 const SHERUS_ACTIVE_HANDLES = [
   "thechangingorder",
   "101xtechnology",
   "startupswtf",
+  "indiantechdaily",
+  "ai.cracked",
 ] as const;
+
+/** Tech IPs — join 6-day tracker from cycle 3 each month (starting Jun 2026 cycle 3). */
+const CYCLE3_TECH_HANDLES = [
+  "indiantechdaily",
+  "ai.cracked",
+] as const;
+
+/** First cycle-3 start date when CYCLE3_TECH_HANDLES go live (Jun 2026). */
+const CYCLE3_ROSTER_START = "2026-06-13";
+
+const CYCLE3_PLUS_HANDLES = new Set<string>(CYCLE3_TECH_HANDLES.map((h) => normHandle(h)));
+
+function cycle3PlusPagesActive(cycleStart: string, cycleNumber: number): boolean {
+  return cycleNumber >= 3 && cycleStart >= CYCLE3_ROSTER_START;
+}
 
 /** Experiment X — Pulkit */
 const EXPERIMENT_X_HANDLES = [
@@ -237,7 +254,12 @@ export default function SixDayTracker() {
     if (start < ROSTER_CUTOFF_CYCLE4) {
       return applyTeamFilter(allServerPages.filter((p: any) => ACTIVE_ROSTER_WEEK3.has(normHandle(p.handle))));
     }
-    return applyTeamFilter(allServerPages.filter((p: any) => ACTIVE_ROSTER_WEEK4.has(normHandle(p.handle))));
+    let list = applyTeamFilter(allServerPages.filter((p: any) => ACTIVE_ROSTER_WEEK4.has(normHandle(p.handle))));
+    const cycleNum = Number(cycle?.cycle) || 0;
+    if (!cycle3PlusPagesActive(start, cycleNum)) {
+      list = list.filter((p: any) => !CYCLE3_PLUS_HANDLES.has(normHandle(p.handle)));
+    }
+    return list;
   }, [allServerPages, handleToNiche, nicheFilterSet, isAllActive]);
 
   /* allowedPageIds is only needed for the reconcile/summary filter — keep as niche-based. */

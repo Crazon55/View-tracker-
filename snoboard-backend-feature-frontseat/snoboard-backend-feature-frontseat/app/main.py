@@ -1988,6 +1988,8 @@ SHERUS_HANDLES: list[str] = [
     "thechangingorder",
     "101xtechnology",
     "startupswtf",
+    "indiantechdaily",
+    "ai.cracked",
 ]
 
 EXPERIMENT_BPB_HANDLES: list[str] = [
@@ -2006,6 +2008,7 @@ EXPERIMENT_XF_HANDLES: list[str] = [
 EXPERIMENT_TECH_HANDLES: list[str] = [
     "101xtechnology",
     "indiantechdaily",
+    "ai.cracked",
 ]
 
 # Backwards compatibility alias
@@ -3579,6 +3582,7 @@ async def tracker_sync_team_niches():
         "indiafounderbrief": "India Founder Brief",
         "entrepreneurial.india": "Entrepreneurial.India",
         "indiantechdaily": "India Tech Daily",
+        "ai.cracked": "AI Cracked",
     }
 
     all_handles = sorted({
