@@ -1988,6 +1988,9 @@ SHERUS_HANDLES: list[str] = [
     "thechangingorder",
     "101xtechnology",
     "startupswtf",
+]
+
+TECH_NICHE_HANDLES: list[str] = [
     "indiantechdaily",
     "ai.cracked",
 ]
@@ -3591,6 +3594,7 @@ async def tracker_sync_team_niches():
         *[h.lstrip("@").strip().lower() for h in SHERUS_HANDLES],
         *[h.lstrip("@").strip().lower() for h in EXPERIMENT_BPB_HANDLES],
         *[h.lstrip("@").strip().lower() for h in EXPERIMENT_XF_HANDLES],
+        *[h.lstrip("@").strip().lower() for h in TECH_NICHE_HANDLES],
         *[h.lstrip("@").strip().lower() for h in EXPERIMENT_TECH_HANDLES],
     })
 
@@ -3623,6 +3627,7 @@ async def tracker_sync_team_niches():
         "FBS - Experiment BPB": EXPERIMENT_BPB_HANDLES,
         "FBS - XF Playbook": EXPERIMENT_XF_HANDLES,
         "FBS - TECH Playbook": EXPERIMENT_TECH_HANDLES,
+        "Tech": TECH_NICHE_HANDLES,
         # Legacy niche name (same pages as BPB)
         "FBS - Experiment X": EXPERIMENT_BPB_HANDLES,
     }

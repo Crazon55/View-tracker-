@@ -47,28 +47,42 @@ const GOOFIES_ACTIVE_HANDLES = [
   "startupcoded",
 ] as const;
 
-/** Sherus — Sugam (thechangingorder) + Chaitanya (101xtechnology, startupswtf, tech IPs) */
+/** Sherus — Sugam (thechangingorder) + Chaitanya (101xtechnology, startupswtf) */
 const SHERUS_ACTIVE_HANDLES = [
   "thechangingorder",
   "101xtechnology",
   "startupswtf",
+] as const;
+
+/** Tech niche — 6-day tracker on alternating months from Jun 2026 cycle 2. */
+const TECH_ACTIVE_HANDLES = [
   "indiantechdaily",
   "ai.cracked",
 ] as const;
 
-/** Tech IPs — join 6-day tracker from cycle 3 each month (starting Jun 2026 cycle 3). */
-const CYCLE3_TECH_HANDLES = [
-  "indiantechdaily",
-  "ai.cracked",
-] as const;
+const TECH_ALT_HANDLES = new Set<string>(TECH_ACTIVE_HANDLES.map((h) => normHandle(h)));
 
-/** First cycle-3 start date when CYCLE3_TECH_HANDLES go live (Jun 2026). */
-const CYCLE3_ROSTER_START = "2026-06-13";
+/** First month on the every-other-month schedule (Jun 2026). */
+const TECH_ALT_ANCHOR_MONTH = "2026-06";
+/** Cycle 2 start — current cycle when this roster went live (Jun 7, 2026). */
+const TECH_ALT_FIRST_CYCLE_START = "2026-06-07";
 
-const CYCLE3_PLUS_HANDLES = new Set<string>(CYCLE3_TECH_HANDLES.map((h) => normHandle(h)));
+function isTechAltMonth(monthYm: string): boolean {
+  const [y, m] = monthYm.split("-").map(Number);
+  const idx = y * 12 + (m - 1);
+  const [ay, am] = TECH_ALT_ANCHOR_MONTH.split("-").map(Number);
+  const anchorIdx = ay * 12 + (am - 1);
+  if (idx < anchorIdx) return false;
+  return (idx - anchorIdx) % 2 === 0;
+}
 
-function cycle3PlusPagesActive(cycleStart: string, cycleNumber: number): boolean {
-  return cycleNumber >= 3 && cycleStart >= CYCLE3_ROSTER_START;
+/** Tech IPs visible this cycle/month? Anchor month: from current cycle onward; later active months: all cycles. */
+function techAltPagesVisible(monthYm: string, cycleStart: string): boolean {
+  if (!isTechAltMonth(monthYm)) return false;
+  if (monthYm === TECH_ALT_ANCHOR_MONTH) {
+    return cycleStart >= TECH_ALT_FIRST_CYCLE_START;
+  }
+  return true;
 }
 
 /** Experiment X — Pulkit */
@@ -101,6 +115,7 @@ const ACTIVE_ROSTER_WEEK4 = new Set([
   ...GOOFIES_ACTIVE_HANDLES,
   ...SHERUS_ACTIVE_HANDLES,
   ...EXPERIMENT_X_HANDLES,
+  ...TECH_ACTIVE_HANDLES,
 ]);
 
 const ROSTER_CUTOFF_CYCLE3 = "2026-05-13";
@@ -165,7 +180,7 @@ export default function SixDayTracker() {
      Niches come from tracker_niches; we match by substring on the niche name.
      Multi-select: empty set == "All" (show everything). Otherwise show only
      pages whose niche is in the selected set. */
-  type NicheKey = "garfields" | "goofies" | "sheruses" | "experimentx";
+  type NicheKey = "garfields" | "goofies" | "sheruses" | "experimentx" | "tech";
   const [nicheFilters, setNicheFilters] = useState<NicheKey[]>([]);
   const nicheFilterSet = useMemo(() => new Set(nicheFilters), [nicheFilters]);
   const isAllActive = nicheFilters.length === 0;
@@ -177,14 +192,15 @@ export default function SixDayTracker() {
   const clearNiche = () => setNicheFilters([]);
 
   const handleToNiche = useMemo(() => {
-    const m = new Map<string, "garfields" | "goofies" | "sheruses" | "experimentx">();
+    const m = new Map<string, "garfields" | "goofies" | "sheruses" | "experimentx" | "tech">();
     for (const n of nichesRaw || []) {
       const nm = String(n?.name || "").toLowerCase();
-      let bucket: "garfields" | "goofies" | "sheruses" | "experimentx" | null = null;
+      let bucket: "garfields" | "goofies" | "sheruses" | "experimentx" | "tech" | null = null;
       if (nm.includes("garfields")) bucket = "garfields";
       else if (nm.includes("goofies")) bucket = "goofies";
       else if (nm.includes("sheerus") || nm.includes("sheru") || nm.includes("changing order")) bucket = "sheruses";
       else if (nm.includes("experiment")) bucket = "experimentx";
+      else if (nm === "tech" || nm.includes("tech playbook")) bucket = "tech";
       if (!bucket) continue;
       for (const h of n?.pages || []) {
         if (h) m.set(normHandle(h), bucket);
@@ -195,6 +211,7 @@ export default function SixDayTracker() {
     for (const h of GOOFIES_ACTIVE_HANDLES) m.set(h, "goofies");
     for (const h of SHERUS_ACTIVE_HANDLES) m.set(h, "sheruses");
     for (const h of EXPERIMENT_X_HANDLES) m.set(h, "experimentx");
+    for (const h of TECH_ACTIVE_HANDLES) m.set(h, "tech");
     return m;
   }, [nichesRaw]);
 
@@ -207,23 +224,31 @@ export default function SixDayTracker() {
 
   /* Active roster pages — Week 4 list (hardcoded), not DB-dependent. */
   const nichePages = useMemo(() => {
-    const rosterPages = allServerPages.filter((p: any) => ACTIVE_ROSTER_WEEK4.has(normHandle(p.handle)));
-    if (rosterPages.length > 0) return rosterPages;
-    if (handleToNiche.size === 0) return allServerPages;
-    return allServerPages.filter((p: any) => handleToNiche.has(normHandle(p.handle)));
-  }, [allServerPages, handleToNiche]);
+    let rosterPages = allServerPages.filter((p: any) => ACTIVE_ROSTER_WEEK4.has(normHandle(p.handle)));
+    if (rosterPages.length === 0) {
+      rosterPages = handleToNiche.size === 0
+        ? allServerPages
+        : allServerPages.filter((p: any) => handleToNiche.has(normHandle(p.handle)));
+    }
+    if (!isTechAltMonth(selectedMonth)) {
+      rosterPages = rosterPages.filter((p: any) => !TECH_ALT_HANDLES.has(normHandle(p.handle)));
+    }
+    return rosterPages;
+  }, [allServerPages, handleToNiche, selectedMonth]);
 
   /* allPages drives the niche filter pill counts — always the niche list. */
   const allPages = nichePages;
 
   const nicheCounts = useMemo(() => {
-    const c = { all: nichePages.length, garfields: 0, goofies: 0, sheruses: 0, experimentx: 0 };
+    const c = { all: nichePages.length, garfields: 0, goofies: 0, sheruses: 0, experimentx: 0, tech: 0, none: 0 };
     for (const p of nichePages) {
       const key = handleToNiche.get(String(p.handle || "").replace(/^@/, "").trim().toLowerCase());
       if (key === "garfields") c.garfields += 1;
       else if (key === "goofies") c.goofies += 1;
       else if (key === "sheruses") c.sheruses += 1;
       else if (key === "experimentx") c.experimentx += 1;
+      else if (key === "tech") c.tech += 1;
+      else c.none += 1;
     }
     return c;
   }, [nichePages, handleToNiche]);
@@ -255,12 +280,12 @@ export default function SixDayTracker() {
       return applyTeamFilter(allServerPages.filter((p: any) => ACTIVE_ROSTER_WEEK3.has(normHandle(p.handle))));
     }
     let list = applyTeamFilter(allServerPages.filter((p: any) => ACTIVE_ROSTER_WEEK4.has(normHandle(p.handle))));
-    const cycleNum = Number(cycle?.cycle) || 0;
-    if (!cycle3PlusPagesActive(start, cycleNum)) {
-      list = list.filter((p: any) => !CYCLE3_PLUS_HANDLES.has(normHandle(p.handle)));
-    }
+    list = list.filter((p: any) => {
+      if (!TECH_ALT_HANDLES.has(normHandle(p.handle))) return true;
+      return techAltPagesVisible(selectedMonth, start);
+    });
     return list;
-  }, [allServerPages, handleToNiche, nicheFilterSet, isAllActive]);
+  }, [allServerPages, handleToNiche, nicheFilterSet, isAllActive, selectedMonth]);
 
   /* allowedPageIds is only needed for the reconcile/summary filter — keep as niche-based. */
   const allowedPageIds = useMemo(
@@ -440,6 +465,7 @@ export default function SixDayTracker() {
             { key: "garfields", label: "Garfields", emoji: "🐱", count: nicheCounts.garfields, active: "bg-gradient-to-r from-orange-500 to-amber-500 text-zinc-900 shadow-md shadow-orange-500/30" },
             { key: "goofies", label: "Goofies", emoji: "🐶", count: nicheCounts.goofies, active: "bg-gradient-to-r from-sky-500 to-indigo-500 text-white shadow-md shadow-indigo-500/30" },
             { key: "sheruses", label: "The Sherus", emoji: "🦁", count: nicheCounts.sheruses, active: "bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-md shadow-rose-500/30" },
+            { key: "tech", label: "Tech", emoji: "⚡", count: nicheCounts.tech, active: "bg-gradient-to-r from-cyan-500 to-teal-500 text-zinc-900 shadow-md shadow-cyan-500/30" },
             { key: "experimentx", label: "The Bizz playbook", emoji: "🧪", count: nicheCounts.experimentx, active: "bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-md shadow-violet-500/30" },
           ] as const).map((opt) => {
             const isActive = nicheFilterSet.has(opt.key);
