@@ -29,6 +29,7 @@ docker run -d \
 echo ""
 echo "=== Rebuilding frontend ==="
 cd "$FRONTEND_DIR"
+npm ci
 npm run build
 
 echo ""
