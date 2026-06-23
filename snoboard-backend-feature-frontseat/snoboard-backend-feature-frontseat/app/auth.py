@@ -46,6 +46,29 @@ def _get_jwk_client() -> PyJWKClient:
     return PyJWKClient(_get_jwks_url(), cache_keys=True, lifespan=300)
 
 
+def _verify_via_supabase_auth(token: str) -> dict:
+    """Validate JWT via Supabase Auth (works for HS256 projects without local JWT secret)."""
+    from app.database.client import get_supabase_client
+
+    try:
+        response = get_supabase_client().auth.get_user(token)
+    except Exception as e:
+        logger.warning("Supabase auth.get_user failed: %s", e)
+        raise HTTPException(status_code=401, detail="Invalid token") from e
+
+    user = getattr(response, "user", None)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    email = (getattr(user, "email", None) or "").strip()
+    user_metadata = getattr(user, "user_metadata", None) or {}
+    return {
+        "sub": getattr(user, "id", ""),
+        "email": email or user_metadata.get("email", ""),
+        "role": "authenticated",
+    }
+
+
 def verify_token(token: str) -> dict:
     """Verify a Supabase JWT and return its claims."""
     settings = get_settings()
@@ -77,6 +100,15 @@ def verify_token(token: str) -> dict:
     except Exception as e:
         last_err = e
         logger.warning("JWKS client error: %s", e)
+
+    # HS256 projects often expose an empty JWKS; verify directly with Supabase Auth.
+    try:
+        return _verify_via_supabase_auth(token)
+    except HTTPException:
+        raise
+    except Exception as e:
+        last_err = e
+        logger.warning("Supabase auth fallback failed: %s", e)
 
     if last_err:
         raise HTTPException(status_code=401, detail=f"Invalid token: {last_err}")
