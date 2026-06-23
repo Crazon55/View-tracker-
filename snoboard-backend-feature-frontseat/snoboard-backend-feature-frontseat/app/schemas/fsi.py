@@ -49,6 +49,7 @@ PERFORMANCE_LABELS = frozenset({
 
 
 class StudyCreate(BaseModel):
+    id: str | None = None
     title: str = Field(..., max_length=255)
     study_type: str
     target_account: str = Field(..., max_length=255)
@@ -70,6 +71,7 @@ class StudyUpdate(BaseModel):
 
 
 class NodeCreate(BaseModel):
+    id: str | None = None
     node_type: str
     display_title: str = Field(..., max_length=255)
     canvas_x: float
@@ -90,6 +92,7 @@ class NodeUpdate(BaseModel):
 
 
 class ConnectionCreate(BaseModel):
+    id: str | None = None
     source_node_id: str
     target_node_id: str
     edge_label_note: str | None = None

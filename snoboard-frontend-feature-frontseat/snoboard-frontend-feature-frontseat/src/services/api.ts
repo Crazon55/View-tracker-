@@ -738,7 +738,101 @@ export const getExpWorkingIdeas = (params?: { week?: number; page?: string }) =>
   createExpApi("bpb").getWorkingIdeas(params);
 export const distributeExpWorkingIdea = (id: string) => createExpApi("bpb").distributeWorkingIdea(id);
 
-// --- FSI Canvas Lite — direct Supabase (bypasses backend JWT, works without backend redeploy) ---
+// --- FSI Canvas Lite — dual-write: Supabase (canonical) + backend API in parallel ---
+const FSI_BACKEND_BASE = "/api/v1/fsi";
+const FSI_BACKEND_RETRY_KEY = "fsi-backend-sync-queue";
+
+type FsiBackendRetry = { path: string; method: string; body?: unknown; at: number };
+
+function fsiNewId(): string {
+  return crypto.randomUUID();
+}
+
+async function fsiWithRetry<T>(op: () => Promise<T>, attempts = 3): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await op();
+    } catch (e) {
+      lastErr = e;
+      if (i < attempts - 1) {
+        await new Promise((r) => setTimeout(r, 300 * (i + 1)));
+      }
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("FSI write failed");
+}
+
+function enqueueFsiBackendRetry(path: string, method: string, body?: unknown) {
+  try {
+    const q: FsiBackendRetry[] = JSON.parse(localStorage.getItem(FSI_BACKEND_RETRY_KEY) || "[]");
+    q.push({ path, method, body, at: Date.now() });
+    localStorage.setItem(FSI_BACKEND_RETRY_KEY, JSON.stringify(q.slice(-200)));
+  } catch {
+    /* ignore quota errors */
+  }
+}
+
+async function fsiBackendRequest(path: string, method: string, body?: unknown): Promise<void> {
+  if (!_accessToken) return;
+  await fetchApi(path, {
+    method,
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  });
+}
+
+/** Drain queued backend mirrors (runs on FSI page load). Supabase already has the data. */
+export async function flushFsiBackendSyncQueue(): Promise<void> {
+  if (!_accessToken) return;
+  let q: FsiBackendRetry[] = [];
+  try {
+    q = JSON.parse(localStorage.getItem(FSI_BACKEND_RETRY_KEY) || "[]");
+  } catch {
+    return;
+  }
+  if (!q.length) return;
+
+  const remaining: FsiBackendRetry[] = [];
+  for (const item of q) {
+    try {
+      await fsiBackendRequest(item.path, item.method, item.body);
+    } catch {
+      remaining.push(item);
+    }
+  }
+  try {
+    localStorage.setItem(FSI_BACKEND_RETRY_KEY, JSON.stringify(remaining));
+  } catch {
+    /* ignore */
+  }
+}
+
+async function fsiDualMutate<T>(opts: {
+  supabase: () => Promise<T>;
+  backend?: { path: string; method: string; body?: unknown };
+}): Promise<T> {
+  const backendTask =
+    opts.backend && _accessToken
+      ? fsiBackendRequest(opts.backend.path, opts.backend.method, opts.backend.body)
+      : Promise.resolve();
+
+  const [sbResult, beResult] = await Promise.allSettled([
+    fsiWithRetry(opts.supabase),
+    backendTask,
+  ]);
+
+  if (sbResult.status === "rejected") {
+    throw sbResult.reason instanceof Error ? sbResult.reason : new Error("Supabase write failed");
+  }
+
+  if (beResult.status === "rejected" && opts.backend) {
+    enqueueFsiBackendRetry(opts.backend.path, opts.backend.method, opts.backend.body);
+    console.warn("[FSI] Backend sync queued:", opts.backend.path, beResult.reason);
+  }
+
+  return sbResult.value;
+}
+
 async function fsiActorEmail(): Promise<string> {
   const { data: { user }, error } = await _sb.auth.getUser();
   if (error || !user?.email) throw new Error("Not signed in");
@@ -765,8 +859,10 @@ export function createFsiApi() {
       execution_date?: string;
       meta_notes?: string;
     }) => {
+      const id = fsiNewId();
       const email = (data.owner_id || (await fsiActorEmail())).trim();
       const row = {
+        id,
         title: data.title.trim(),
         study_type: data.study_type,
         target_account: data.target_account.trim(),
@@ -776,9 +872,24 @@ export function createFsiApi() {
         meta_notes: data.meta_notes ?? null,
         status: "Draft",
       };
-      const { data: created, error } = await _sb.from("studies").insert(row).select().single();
-      if (error) throw new Error(error.message);
-      return created;
+      const backendBody = {
+        id,
+        title: row.title,
+        study_type: row.study_type,
+        target_account: row.target_account,
+        niche_vertical: row.niche_vertical,
+        owner_id: row.owner_id,
+        execution_date: row.execution_date,
+        meta_notes: row.meta_notes ?? undefined,
+      };
+      return fsiDualMutate({
+        supabase: async () => {
+          const { data: created, error } = await _sb.from("studies").insert(row).select().single();
+          if (error) throw new Error(error.message);
+          return created;
+        },
+        backend: { path: `${FSI_BACKEND_BASE}/studies`, method: "POST", body: backendBody },
+      });
     },
     getStudyGraph: async (studyId: string) => {
       const [studyRes, nodesRes, connRes] = await Promise.all([
@@ -797,23 +908,36 @@ export function createFsiApi() {
     },
     updateStudy: async (studyId: string, data: Record<string, unknown>) => {
       const patch = { ...data, updated_at: new Date().toISOString() };
-      const { data: updated, error } = await _sb
-        .from("studies")
-        .update(patch)
-        .eq("id", studyId)
-        .select()
-        .single();
-      if (error) throw new Error(error.message);
-      return updated;
+      return fsiDualMutate({
+        supabase: async () => {
+          const { data: updated, error } = await _sb
+            .from("studies")
+            .update(patch)
+            .eq("id", studyId)
+            .select()
+            .single();
+          if (error) throw new Error(error.message);
+          return updated;
+        },
+        backend: { path: `${FSI_BACKEND_BASE}/studies/${studyId}`, method: "PATCH", body: data },
+      });
     },
     deleteStudy: async (studyId: string) => {
-      const { error } = await _sb.from("studies").delete().eq("id", studyId);
-      if (error) throw new Error(error.message);
+      await fsiDualMutate({
+        supabase: async () => {
+          const { error } = await _sb.from("studies").delete().eq("id", studyId);
+          if (error) throw new Error(error.message);
+          return { id: studyId };
+        },
+        backend: { path: `${FSI_BACKEND_BASE}/studies/${studyId}`, method: "DELETE" },
+      });
       return { id: studyId };
     },
     createNode: async (studyId: string, data: Record<string, unknown>) => {
+      const id = fsiNewId();
       const email = await fsiActorEmail();
       const row = {
+        id,
         study_id: studyId,
         node_type: data.node_type,
         display_title: String(data.display_title || "").trim(),
@@ -824,37 +948,67 @@ export function createFsiApi() {
         tags: data.tags ?? [],
         created_by: email,
       };
-      const { data: created, error } = await _sb.from("nodes").insert(row).select().single();
-      if (error) throw new Error(error.message);
-      await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", studyId);
-      return created;
+      const backendBody = {
+        id,
+        node_type: row.node_type,
+        display_title: row.display_title,
+        canvas_x: row.canvas_x,
+        canvas_y: row.canvas_y,
+        structured_payload: row.structured_payload,
+        raw_body_text: row.raw_body_text ?? undefined,
+        tags: row.tags,
+      };
+      return fsiDualMutate({
+        supabase: async () => {
+          const { data: created, error } = await _sb.from("nodes").insert(row).select().single();
+          if (error) throw new Error(error.message);
+          await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", studyId);
+          return created;
+        },
+        backend: {
+          path: `${FSI_BACKEND_BASE}/studies/${studyId}/nodes`,
+          method: "POST",
+          body: backendBody,
+        },
+      });
     },
     updateNode: async (nodeId: string, data: Record<string, unknown>) => {
       const patch = { ...data, updated_at: new Date().toISOString() };
-      const { data: updated, error } = await _sb
-        .from("nodes")
-        .update(patch)
-        .eq("id", nodeId)
-        .select("*, study_id")
-        .single();
-      if (error) throw new Error(error.message);
-      if (updated?.study_id) {
-        await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", updated.study_id);
-      }
-      return updated;
+      return fsiDualMutate({
+        supabase: async () => {
+          const { data: updated, error } = await _sb
+            .from("nodes")
+            .update(patch)
+            .eq("id", nodeId)
+            .select("*, study_id")
+            .single();
+          if (error) throw new Error(error.message);
+          if (updated?.study_id) {
+            await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", updated.study_id);
+          }
+          return updated;
+        },
+        backend: { path: `${FSI_BACKEND_BASE}/nodes/${nodeId}`, method: "PATCH", body: data },
+      });
     },
     deleteNode: async (nodeId: string) => {
-      const { data: existing, error: fetchErr } = await _sb
-        .from("nodes")
-        .select("study_id")
-        .eq("id", nodeId)
-        .single();
-      if (fetchErr) throw new Error(fetchErr.message);
-      const { error } = await _sb.from("nodes").delete().eq("id", nodeId);
-      if (error) throw new Error(error.message);
-      if (existing?.study_id) {
-        await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", existing.study_id);
-      }
+      await fsiDualMutate({
+        supabase: async () => {
+          const { data: existing, error: fetchErr } = await _sb
+            .from("nodes")
+            .select("study_id")
+            .eq("id", nodeId)
+            .single();
+          if (fetchErr) throw new Error(fetchErr.message);
+          const { error } = await _sb.from("nodes").delete().eq("id", nodeId);
+          if (error) throw new Error(error.message);
+          if (existing?.study_id) {
+            await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", existing.study_id);
+          }
+          return { id: nodeId };
+        },
+        backend: { path: `${FSI_BACKEND_BASE}/nodes/${nodeId}`, method: "DELETE" },
+      });
       return { id: nodeId };
     },
     createConnection: async (studyId: string, data: {
@@ -865,31 +1019,54 @@ export function createFsiApi() {
       if (data.source_node_id === data.target_node_id) {
         throw new Error("Self-loops are not allowed");
       }
+      const id = fsiNewId();
       const email = await fsiActorEmail();
       const row = {
+        id,
         study_id: studyId,
         source_node_id: data.source_node_id,
         target_node_id: data.target_node_id,
         edge_label_note: data.edge_label_note ?? null,
         created_by: email,
       };
-      const { data: created, error } = await _sb.from("connections").insert(row).select().single();
-      if (error) throw new Error(error.message);
-      await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", studyId);
-      return created;
+      const backendBody = {
+        id,
+        source_node_id: row.source_node_id,
+        target_node_id: row.target_node_id,
+        edge_label_note: row.edge_label_note ?? undefined,
+      };
+      return fsiDualMutate({
+        supabase: async () => {
+          const { data: created, error } = await _sb.from("connections").insert(row).select().single();
+          if (error) throw new Error(error.message);
+          await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", studyId);
+          return created;
+        },
+        backend: {
+          path: `${FSI_BACKEND_BASE}/studies/${studyId}/connections`,
+          method: "POST",
+          body: backendBody,
+        },
+      });
     },
     deleteConnection: async (connectionId: string) => {
-      const { data: existing, error: fetchErr } = await _sb
-        .from("connections")
-        .select("study_id")
-        .eq("id", connectionId)
-        .single();
-      if (fetchErr) throw new Error(fetchErr.message);
-      const { error } = await _sb.from("connections").delete().eq("id", connectionId);
-      if (error) throw new Error(error.message);
-      if (existing?.study_id) {
-        await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", existing.study_id);
-      }
+      await fsiDualMutate({
+        supabase: async () => {
+          const { data: existing, error: fetchErr } = await _sb
+            .from("connections")
+            .select("study_id")
+            .eq("id", connectionId)
+            .single();
+          if (fetchErr) throw new Error(fetchErr.message);
+          const { error } = await _sb.from("connections").delete().eq("id", connectionId);
+          if (error) throw new Error(error.message);
+          if (existing?.study_id) {
+            await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", existing.study_id);
+          }
+          return { id: connectionId };
+        },
+        backend: { path: `${FSI_BACKEND_BASE}/connections/${connectionId}`, method: "DELETE" },
+      });
       return { id: connectionId };
     },
   };

@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sparkles, Plus, Loader2, ArrowRight, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { fsiApi } from "@/services/api";
+import { fsiApi, flushFsiBackendSyncQueue } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { canEditFsiCanvas } from "@/lib/permissions";
@@ -27,6 +27,10 @@ export default function FsiCanvasHub() {
   const { user } = useAuth();
   const { role } = usePermissions();
   const canEdit = canEditFsiCanvas(role);
+
+  useEffect(() => {
+    void flushFsiBackendSyncQueue();
+  }, []);
 
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({

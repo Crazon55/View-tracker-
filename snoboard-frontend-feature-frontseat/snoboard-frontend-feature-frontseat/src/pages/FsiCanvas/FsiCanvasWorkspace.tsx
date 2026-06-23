@@ -1,9 +1,9 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
-import { fsiApi } from "@/services/api";
+import { fsiApi, flushFsiBackendSyncQueue } from "@/services/api";
 import { usePermissions } from "@/hooks/usePermissions";
 import { canEditFsiCanvas } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,10 @@ export default function FsiCanvasWorkspace() {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectedNodeRef = useRef<FsiNodeRecord | null>(null);
   selectedNodeRef.current = selectedNode;
+
+  useEffect(() => {
+    void flushFsiBackendSyncQueue();
+  }, []);
 
   const { data: graph, isLoading, error } = useQuery<FsiGraph>({
     queryKey: ["fsi-graph", studyId],

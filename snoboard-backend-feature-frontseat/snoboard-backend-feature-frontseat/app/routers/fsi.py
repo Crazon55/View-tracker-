@@ -76,18 +76,23 @@ async def create_study(req: StudyCreate, claims: dict = Depends(require_auth)):
         "meta_notes": req.meta_notes,
         "status": "Draft",
     }
-    client.table("studies").insert(row).execute()
-    verify = (
-        client.table("studies")
-        .select("*")
-        .eq("title", row["title"])
-        .eq("owner_id", row["owner_id"])
-        .order("created_at", desc=True)
-        .limit(1)
-        .execute()
-        .data
-    )
-    created = verify[0] if verify else row
+    if req.id:
+        row["id"] = req.id.strip()
+        client.table("studies").upsert(row).execute()
+        created = _get_study(client, req.id.strip())
+    else:
+        client.table("studies").insert(row).execute()
+        verify = (
+            client.table("studies")
+            .select("*")
+            .eq("title", row["title"])
+            .eq("owner_id", row["owner_id"])
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+            .data
+        )
+        created = verify[0] if verify else row
     return {"success": True, "data": created}
 
 
@@ -140,17 +145,22 @@ async def create_node(study_id: str, req: NodeCreate, claims: dict = Depends(req
         "tags": req.tags or [],
         "created_by": _email(claims),
     }
-    client.table("nodes").insert(row).execute()
-    verify = (
-        client.table("nodes")
-        .select("*")
-        .eq("study_id", study_id)
-        .order("created_at", desc=True)
-        .limit(1)
-        .execute()
-        .data
-    )
-    created = verify[0] if verify else row
+    if req.id:
+        row["id"] = req.id.strip()
+        client.table("nodes").upsert(row).execute()
+        created = _get_node(client, req.id.strip())
+    else:
+        client.table("nodes").insert(row).execute()
+        verify = (
+            client.table("nodes")
+            .select("*")
+            .eq("study_id", study_id)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+            .data
+        )
+        created = verify[0] if verify else row
     client.table("studies").update({"updated_at": _now_iso()}).eq("id", study_id).execute()
     return {"success": True, "data": created}
 
@@ -197,17 +207,23 @@ async def create_connection(study_id: str, req: ConnectionCreate, claims: dict =
         "edge_label_note": req.edge_label_note,
         "created_by": _email(claims),
     }
-    client.table("connections").insert(row).execute()
-    verify = (
-        client.table("connections")
-        .select("*")
-        .eq("study_id", study_id)
-        .order("created_at", desc=True)
-        .limit(1)
-        .execute()
-        .data
-    )
-    created = verify[0] if verify else row
+    if req.id:
+        row["id"] = req.id.strip()
+        client.table("connections").upsert(row).execute()
+        rows = client.table("connections").select("*").eq("id", req.id.strip()).limit(1).execute().data or []
+        created = rows[0] if rows else row
+    else:
+        client.table("connections").insert(row).execute()
+        verify = (
+            client.table("connections")
+            .select("*")
+            .eq("study_id", study_id)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+            .data
+        )
+        created = verify[0] if verify else row
     client.table("studies").update({"updated_at": _now_iso()}).eq("id", study_id).execute()
     return {"success": True, "data": created}
 
