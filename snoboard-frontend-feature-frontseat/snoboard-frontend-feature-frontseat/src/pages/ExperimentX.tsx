@@ -3057,7 +3057,7 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
     enabled: !!opsOnly,
   });
   const ideas = opsOnly
-    ? [...(yesterdayIdeasRaw as any[]), ...(todayIdeasRaw as any[])]
+    ? [...(todayIdeasRaw as any[]), ...(yesterdayIdeasRaw as any[])]
     : (todayIdeasRaw as any[]);
   const isLoading = opsOnly ? loadingToday || loadingYesterday : loadingToday;
 
@@ -3165,12 +3165,12 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
       result[p].sort((a: any, b: any) => {
         const da = (a.day_date || "").slice(0, 10);
         const db = (b.day_date || "").slice(0, 10);
-        if (da !== db) return da.localeCompare(db);
+        if (da !== db) return opsOnly ? db.localeCompare(da) : da.localeCompare(db);
         return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
       });
     });
     return result;
-  }, [todayIdeas, playbookPages]);
+  }, [todayIdeas, playbookPages, opsOnly]);
 
   const handleDrop = (page: string, e: React.DragEvent) => {
     if (readOnly) return;
@@ -3216,7 +3216,7 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
             </p>
             <p style={{ margin: "2px 0 0", fontSize: 10, color: "#52525b" }}>
               {opsOnly
-                ? "Yesterday & today · tap to update views"
+                ? "Today & yesterday · tap to update views"
                 : `${new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · drag to assign`}
             </p>
           </div>
@@ -3243,7 +3243,7 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
           {isLoading ? (
             <p style={{ color: "#52525b", fontSize: 12 }}>Loading…</p>
           ) : opsOnly ? (
-            [yesterdayStr, todayStr].map(day => {
+            [todayStr, yesterdayStr].map(day => {
               const dayIdeas = opsPageIdeas.filter((i: any) => (i.day_date || "").slice(0, 10) === day);
               const isToday = day === todayStr;
               return (
@@ -3378,7 +3378,7 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
                   </div>
                 )}
                 {opsOnly ? (
-                  [yesterdayStr, todayStr].map(day => {
+                  [todayStr, yesterdayStr].map(day => {
                     const dayColIdeas = colIdeas.filter((i: any) => (i.day_date || "").slice(0, 10) === day);
                     if (dayColIdeas.length === 0) return null;
                     const isToday = day === todayStr;
@@ -3386,7 +3386,7 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
                       <Fragment key={day}>
                         <div style={{
                           display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6,
-                          padding: "5px 4px 7px", marginTop: day === yesterdayStr ? 0 : 10,
+                          padding: "5px 4px 7px", marginTop: day === todayStr ? 0 : 10,
                         }}>
                           <OpsDayTag isToday={isToday} size="lg" />
                           <span style={{ fontSize: 9, color: "#52525b", fontWeight: 600 }}>{fmtDay(day)}</span>
