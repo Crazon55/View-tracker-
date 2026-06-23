@@ -463,13 +463,93 @@ function opsCardScheduleSummary(idea: any): { date: string; time: string } {
 function opsCardBaselineTag(idea: any) {
   const pages = ideaPages(idea);
   const results = (idea.page_test_results || {}) as Record<string, string>;
-  const RANK: Record<string, number> = { top_line: 4, above_baseline: 3, baseline: 2, below_baseline: 1 };
   let best = idea.test_result || "";
   for (const pg of pages) {
     const r = results[pg];
-    if (r && (RANK[r] || 0) > (RANK[best] || 0)) best = r;
+    if (r && (TEST_RESULT_RANK[r] || 0) > (TEST_RESULT_RANK[best] || 0)) best = r;
   }
   return TEST_RESULTS.find(t => t.value === best);
+}
+
+/** Content Ops — prominent Today / Yesterday badge. */
+function OpsDayTag({ isToday, size = "md" }: { isToday: boolean; size?: "sm" | "md" | "lg" }) {
+  const color = isToday ? "#50E0B0" : "#D4952A";
+  const bg = isToday ? "#50E0B022" : "#D4952A22";
+  const border = isToday ? "#50E0B066" : "#D4952A66";
+  const fontSize = size === "lg" ? 11 : size === "md" ? 10 : 9;
+  const padding = size === "lg" ? "3px 9px" : size === "md" ? "2px 8px" : "1px 6px";
+  return (
+    <span style={{
+      fontSize, fontWeight: 800, letterSpacing: "0.05em", textTransform: "uppercase",
+      color, background: bg, border: `1px solid ${border}`,
+      borderRadius: 5, padding, flexShrink: 0,
+    }}>
+      {isToday ? "Today" : "Yesterday"}
+    </span>
+  );
+}
+
+/** Content Ops — Frontseat page column card (today + yesterday checklist). */
+function OpsFrontseatPageCard({ idea, letter, todayStr, onClick }: {
+  idea: any; letter: string; todayStr: string; onClick: () => void;
+}) {
+  const stage = idea.status || "new";
+  const ss = STATUS_STYLE[stage] || STATUS_STYLE.new;
+  const dayIso = (idea.day_date || "").slice(0, 10);
+  const isToday = dayIso === todayStr;
+  const testCfg = opsCardBaselineTag(idea);
+  const { date: pgDate, time: pgTime } = opsCardScheduleSummary(idea);
+  const viewCount = (idea.views || 0) > 0 ? idea.views : 0;
+  const dayAccent = isToday ? "#50E0B0" : "#D4952A";
+
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        background: "#18181b", borderRadius: 8, overflow: "hidden",
+        border: `1.5px solid ${dayAccent}44`,
+        borderLeft: `4px solid ${dayAccent}`,
+        cursor: "pointer", marginBottom: 6, transition: "opacity 0.12s",
+      }}
+      onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
+      onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+    >
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6,
+        padding: "5px 10px",
+        background: isToday ? "#50E0B012" : "#D4952A12",
+        borderBottom: `1px solid ${dayAccent}33`,
+      }}>
+        <OpsDayTag isToday={isToday} size="lg" />
+        <span style={{ fontSize: 9, color: "#71717a", fontWeight: 600 }}>{fmtDay(dayIso)}</span>
+      </div>
+      <div style={{ padding: "8px 10px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 10, fontWeight: 800, color: "#a78bfa", background: "#7c3aed22", borderRadius: 4, padding: "1px 6px" }}>{letter}</span>
+          <span style={{ fontSize: 10, fontWeight: 600, color: ss.text, background: ss.bg, borderRadius: 4, padding: "1px 6px" }}>
+            {STAGE_LABEL[stage as IdeaStage] || stage}
+          </span>
+        </div>
+        <p style={{ margin: 0, fontSize: 12, fontWeight: 500, color: "#e4e4e7", lineHeight: 1.4,
+          overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
+          {idea.topic || <em style={{ color: "#52525b" }}>Untitled</em>}
+        </p>
+        <p style={{ margin: "5px 0 0", fontSize: 10, color: pgDate ? "#a78bfa" : "#52525b" }}>
+          {pgDate ? `${fmtShortDate(pgDate)}${pgTime ? ` · ${fmtTimeLabel(pgTime)}` : ""}` : "No posting date"}
+        </p>
+        <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: viewCount > 0 ? "#50E0B0" : "#52525b" }}>
+            {viewCount > 0 ? `${fmt(viewCount)} views` : "— views · tap to update"}
+          </span>
+          {testCfg && (
+            <span style={{ fontSize: 9, fontWeight: 700, color: testCfg.color, background: testCfg.bg, borderRadius: 4, padding: "1px 6px" }}>
+              {testCfg.label}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /** Content Ops — kanban card with schedule, views, baseline, frame & comp links. */
@@ -1032,10 +1112,7 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
                               onClick={() => {
                                 const updated: Record<string, string> = { ...(idea.page_test_results || {}), [pg]: active ? "" : value };
                                 if (!updated[pg]) delete updated[pg];
-                                // derive overall test_result as the best result across all pages
-                                const RANK: Record<string, number> = { top_line: 4, above_baseline: 3, baseline: 2, below_baseline: 1 };
-                                const best = Object.values(updated).reduce<string>((b, c) => (RANK[c] || 0) > (RANK[b] || 0) ? c : b, "");
-                                onUpdate(idea.id, { page_test_results: updated, test_result: best });
+                                onUpdate(idea.id, { page_test_results: updated, test_result: bestTestResult(updated) });
                               }}
                               style={{
                                 padding: "6px 13px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer",
@@ -1601,13 +1678,28 @@ const VIDEO_FORMATS = [
   "Creator videos",
 ] as const;
 
-// Testing performance result config
+// Testing performance result config (viral = highest tier)
 const TEST_RESULTS = [
   { value: "below_baseline", label: "Below baseline", color: "#C93B3B", bg: "rgba(201,59,59,0.12)" },
   { value: "baseline",       label: "Baseline",       color: "#D4952A", bg: "rgba(212,149,42,0.12)" },
   { value: "above_baseline", label: "Above baseline", color: "#4A7FD4", bg: "rgba(74,127,212,0.12)"  },
   { value: "top_line",       label: "Top line",       color: "#2D9E5F", bg: "rgba(45,158,95,0.12)"  },
+  { value: "viral",          label: "Viral",          color: "#B49EFF", bg: "rgba(123,97,196,0.15)" },
 ] as const;
+
+const TEST_RESULT_RANK: Record<string, number> = {
+  viral: 5,
+  top_line: 4,
+  above_baseline: 3,
+  baseline: 2,
+  below_baseline: 1,
+};
+
+function bestTestResult(results: Record<string, string> | string[]): string {
+  const values = Array.isArray(results) ? results : Object.values(results);
+  return values.reduce<string>((best, cur) =>
+    (TEST_RESULT_RANK[cur] || 0) > (TEST_RESULT_RANK[best] || 0) ? cur : best, "");
+}
 
 // ---------------------------------------------------------------------------
 // Content Ops — view-only reference links (frame + comp from CS)
@@ -1770,9 +1862,7 @@ function PerPageIdeaPanel({ idea, onUpdate, canEditSchedule, canEditPerformance,
                             if (pages.length > 1) {
                               const updated: Record<string, string> = { ...(idea.page_test_results || {}), [pg]: active ? "" : value };
                               if (!updated[pg]) delete updated[pg];
-                              const RANK: Record<string, number> = { top_line: 4, above_baseline: 3, baseline: 2, below_baseline: 1 };
-                              const best = Object.values(updated).reduce<string>((b, c) => (RANK[c] || 0) > (RANK[b] || 0) ? c : b, "");
-                              onUpdate(idea.id, { page_test_results: updated, test_result: best });
+                              onUpdate(idea.id, { page_test_results: updated, test_result: bestTestResult(updated) });
                             } else {
                               onUpdate(idea.id, { test_result: active ? "" : value });
                             }
@@ -2950,14 +3040,26 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
     return computeCurrentWeek(start);
   }, [settings]);
 
-  // Fetch by today's local date directly — no settings waterfall, loads immediately on page open
+  // Fetch by local date — ops also loads yesterday for morning view updates
   const todayStr = toLocalISO(new Date());
+  const yesterdayStr = addDays(todayStr, -1);
   const QK = expQk(playbookId, "idea-bank", "today", todayStr);
-  const { data: ideas = [], isLoading } = useQuery({
+  const QK_YESTERDAY = expQk(playbookId, "idea-bank", "today", yesterdayStr);
+  const { data: todayIdeasRaw = [], isLoading: loadingToday } = useQuery({
     queryKey: QK,
     queryFn: () => api.getIdeaBank({ day_date: todayStr }),
     staleTime: EXP_STALE_MS,
   });
+  const { data: yesterdayIdeasRaw = [], isLoading: loadingYesterday } = useQuery({
+    queryKey: QK_YESTERDAY,
+    queryFn: () => api.getIdeaBank({ day_date: yesterdayStr }),
+    staleTime: EXP_STALE_MS,
+    enabled: !!opsOnly,
+  });
+  const ideas = opsOnly
+    ? [...(yesterdayIdeasRaw as any[]), ...(todayIdeasRaw as any[])]
+    : (todayIdeasRaw as any[]);
+  const isLoading = opsOnly ? loadingToday || loadingYesterday : loadingToday;
 
   const createMut = useMutation({
     mutationFn: api.createIdea,
@@ -3015,10 +3117,18 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
     onSettled: () => qc.invalidateQueries({ queryKey: expQk(playbookId, "idea-bank") }),
   });
 
-  // Backend already filters to today; this guards against any stale optimistic entries
+  const frontseatDaySet = useMemo(
+    () => new Set(opsOnly ? [yesterdayStr, todayStr] : [todayStr]),
+    [opsOnly, yesterdayStr, todayStr],
+  );
+  // Guards against stale optimistic entries; ops includes yesterday for morning view updates
   const todayIdeas = useMemo(() =>
-    (ideas as any[]).filter((i: any) => (i.day_date || "").slice(0, 10) === todayStr),
-    [ideas, todayStr]
+    (ideas as any[]).filter((i: any) => frontseatDaySet.has((i.day_date || "").slice(0, 10))),
+    [ideas, frontseatDaySet],
+  );
+  const opsPageIdeas = useMemo(() =>
+    todayIdeas.filter((i: any) => !i.frontseat_pool),
+    [todayIdeas],
   );
 
   // Pool = permanent ideas added via Frontseat "+ New".
@@ -3052,12 +3162,15 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
       pages.forEach((p: string) => { if (result[p]) result[p].push(idea); });
     });
     playbookPages.forEach(p => {
-      result[p].sort((a: any, b: any) =>
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      );
+      result[p].sort((a: any, b: any) => {
+        const da = (a.day_date || "").slice(0, 10);
+        const db = (b.day_date || "").slice(0, 10);
+        if (da !== db) return da.localeCompare(db);
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      });
     });
     return result;
-  }, [todayIdeas]);
+  }, [todayIdeas, playbookPages]);
 
   const handleDrop = (page: string, e: React.DragEvent) => {
     if (readOnly) return;
@@ -3098,10 +3211,13 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
       }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <div>
-            <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "#a1a1aa", textTransform: "uppercase", letterSpacing: "0.06em" }}>Ideas Pool</p>
+            <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "#a1a1aa", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              {opsOnly ? "Morning checklist" : "Ideas Pool"}
+            </p>
             <p style={{ margin: "2px 0 0", fontSize: 10, color: "#52525b" }}>
-              {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
-              {opsOnly ? " · view & update scheduling" : " · drag to assign"}
+              {opsOnly
+                ? "Yesterday & today · tap to update views"
+                : `${new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · drag to assign`}
             </p>
           </div>
           {can("add_experiment_idea") && !dragDisabled && (
@@ -3122,10 +3238,60 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
           ))}
         </div>
 
-        {/* Pool cards */}
+        {/* Pool cards (editors) or day summary (ops) */}
         <div style={{ flex: 1, overflowY: "auto" }}>
           {isLoading ? (
             <p style={{ color: "#52525b", fontSize: 12 }}>Loading…</p>
+          ) : opsOnly ? (
+            [yesterdayStr, todayStr].map(day => {
+              const dayIdeas = opsPageIdeas.filter((i: any) => (i.day_date || "").slice(0, 10) === day);
+              const isToday = day === todayStr;
+              return (
+                <div key={day} style={{ marginBottom: 14 }}>
+                  <div style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6,
+                    marginBottom: 8, padding: "6px 8px", borderRadius: 7,
+                    background: isToday ? "#50E0B00A" : "#D4952A0A",
+                    border: `1px solid ${isToday ? "#50E0B033" : "#D4952A33"}`,
+                  }}>
+                    <OpsDayTag isToday={isToday} size="lg" />
+                    <span style={{ fontSize: 9, color: "#71717a", fontWeight: 600 }}>{fmtDay(day)}</span>
+                  </div>
+                  {dayIdeas.length === 0 ? (
+                    <p style={{ margin: 0, fontSize: 10, color: "#3f3f46", padding: "4px 8px" }}>No page assignments</p>
+                  ) : (
+                    dayIdeas.map((idea: any) => {
+                      const views = (idea.views || 0) > 0 ? idea.views : 0;
+                      return (
+                        <button
+                          key={idea.id}
+                          type="button"
+                          onClick={() => setDetailIdea(idea)}
+                          style={{
+                            display: "block", width: "100%", textAlign: "left", marginBottom: 5,
+                            padding: "7px 8px", background: "#18181b",
+                            border: `1px solid ${isToday ? "#50E0B033" : "#D4952A33"}`,
+                            borderLeft: `3px solid ${isToday ? "#50E0B0" : "#D4952A"}`,
+                            borderRadius: 7, cursor: "pointer",
+                          }}
+                        >
+                          <div style={{ marginBottom: 4 }}>
+                            <OpsDayTag isToday={isToday} size="sm" />
+                          </div>
+                          <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: "#e4e4e7", lineHeight: 1.3,
+                            overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
+                            {idea.topic || "Untitled"}
+                          </p>
+                          <p style={{ margin: "3px 0 0", fontSize: 10, color: views > 0 ? "#50E0B0" : "#52525b", fontWeight: 600 }}>
+                            {views > 0 ? `${fmt(views)} views` : "Update views"}
+                          </p>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              );
+            })
           ) : poolIdeas.length === 0 ? (
             <div style={{ padding: "24px 10px", textAlign: "center", color: "#3f3f46", fontSize: 11, border: "1.5px dashed #27272a", borderRadius: 9 }}>
               No ideas today<br />
@@ -3208,10 +3374,36 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
               }}>
                 {colIdeas.length === 0 && !isDrop && (
                   <div style={{ padding: "24px 10px", textAlign: "center", color: "#3f3f46", fontSize: 10 }}>
-                    Drop an idea here
+                    {opsOnly ? "No ideas yesterday or today" : "Drop an idea here"}
                   </div>
                 )}
-                {colIdeas.map((idea: any) => (
+                {opsOnly ? (
+                  [yesterdayStr, todayStr].map(day => {
+                    const dayColIdeas = colIdeas.filter((i: any) => (i.day_date || "").slice(0, 10) === day);
+                    if (dayColIdeas.length === 0) return null;
+                    const isToday = day === todayStr;
+                    return (
+                      <Fragment key={day}>
+                        <div style={{
+                          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6,
+                          padding: "5px 4px 7px", marginTop: day === yesterdayStr ? 0 : 10,
+                        }}>
+                          <OpsDayTag isToday={isToday} size="lg" />
+                          <span style={{ fontSize: 9, color: "#52525b", fontWeight: 600 }}>{fmtDay(day)}</span>
+                        </div>
+                        {dayColIdeas.map((idea: any) => (
+                          <OpsFrontseatPageCard
+                            key={idea.id}
+                            idea={idea}
+                            letter={ideaLetterMap[idea.source_pool_id] || "?"}
+                            todayStr={todayStr}
+                            onClick={() => setDetailIdea(idea)}
+                          />
+                        ))}
+                      </Fragment>
+                    );
+                  })
+                ) : colIdeas.map((idea: any) => (
                   <FrontseatPageCard
                     key={idea.id}
                     idea={idea}
