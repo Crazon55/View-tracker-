@@ -29,8 +29,10 @@ docker run -d \
 echo ""
 echo "=== Rebuilding frontend ==="
 cd "$FRONTEND_DIR"
+pm2 stop all 2>/dev/null || true
 npm ci
 npm run build
+pm2 restart all 2>/dev/null || true
 
 echo ""
 echo "=== Done ==="

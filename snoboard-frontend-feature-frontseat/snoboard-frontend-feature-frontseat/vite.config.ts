@@ -26,6 +26,7 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     chunkSizeWarningLimit: 600,
+    reportCompressedSize: false,
     rollupOptions: {
       output: {
         manualChunks: {
@@ -35,6 +36,7 @@ export default defineConfig(({ mode }) => ({
           "vendor-charts": ["recharts"],
           "vendor-motion": ["framer-motion"],
           "vendor-supabase": ["@supabase/supabase-js"],
+          "vendor-flow": ["@xyflow/react"],
         },
       },
     },
