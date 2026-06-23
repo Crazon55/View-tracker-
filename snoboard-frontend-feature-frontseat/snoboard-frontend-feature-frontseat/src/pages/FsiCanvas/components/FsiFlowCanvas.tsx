@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo } from "react";
 import {
   ReactFlow,
   Background,
+  BackgroundVariant,
   Controls,
   MiniMap,
   useNodesState,
@@ -156,9 +157,23 @@ function FlowInner({
       fitView
       fitViewOptions={{ padding: 0.2 }}
       deleteKeyCode={canEdit ? ["Backspace", "Delete"] : null}
-      className="bg-zinc-950"
+      className="bg-zinc-950 fsi-flow-canvas"
     >
-      <Background gap={20} size={1} color="#27272a" />
+      {/* Coarse + fine dots — larger flow-space size so grid stays visible when zoomed out */}
+      <Background
+        id="fsi-grid-coarse"
+        variant={BackgroundVariant.Dots}
+        gap={48}
+        size={3}
+        color="#3f3f46"
+      />
+      <Background
+        id="fsi-grid-fine"
+        variant={BackgroundVariant.Dots}
+        gap={24}
+        size={2}
+        color="#52525b"
+      />
       <Controls className="!bg-zinc-900 !border-zinc-700 [&>button]:!bg-zinc-800 [&>button]:!border-zinc-700 [&>button]:!text-white" />
       <MiniMap
         nodeColor={(n) => (n.data as FsiNodeData)?.color ?? "#64748b"}
