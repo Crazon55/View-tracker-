@@ -41,6 +41,8 @@ import PodcastAlerts from "./pages/PodcastAlerts";
 import RoleSelect from "./pages/RoleSelect";
 import TeamRolesPage from "./pages/TeamRolesPage";
 import ExperimentX from "./pages/ExperimentX";
+import FsiCanvasHub from "./pages/FsiCanvas/FsiCanvasHub";
+import FsiCanvasWorkspace from "./pages/FsiCanvas/FsiCanvasWorkspace";
 import NotFound from "./pages/NotFound";
 import { MonthlyWrapRoot, MonthlyWrapOpenButton } from "./components/MonthlyWrapHost";
 import { stashWrapMonthFromUrl } from "@/lib/monthlyWrap";
@@ -275,6 +277,7 @@ const playbookNavItems: NavItem[] = (["bpb", "xf", "tech"] as const).map((id) =>
 const navItems: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/content-tracker", label: "Reel Tracker", icon: ClipboardList },
+  { to: "/fsi-canvas", label: "FSI Canvas", icon: Sparkles },
   ...playbookNavItems,
   { to: "/post-tracker", label: "Post Tracker", icon: Image },
   { to: "/post-ips", label: "Post IPs", icon: Image },
@@ -410,7 +413,9 @@ function AppLayout() {
     location.pathname.startsWith("/post-ips/") ||
     location.pathname.startsWith("/page/") ||
     location.pathname === "/team-roles" ||
-    location.pathname.startsWith("/experiment-");
+    location.pathname.startsWith("/experiment-") ||
+    location.pathname === "/fsi-canvas" ||
+    location.pathname.startsWith("/fsi-canvas/");
 
   return (
     <>
@@ -462,6 +467,8 @@ function AppLayout() {
             <Route path="/experiment-xf" element={<ExperimentX playbookId="xf" />} />
             <Route path="/experiment-tech" element={<ExperimentX playbookId="tech" />} />
             <Route path="/experiment-x" element={<Navigate to="/experiment-bpb" replace />} />
+            <Route path="/fsi-canvas" element={<FsiCanvasHub />} />
+            <Route path="/fsi-canvas/:studyId" element={<FsiCanvasWorkspace />} />
           </Routes>
         </div>
       ) : (

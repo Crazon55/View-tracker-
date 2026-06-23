@@ -737,3 +737,49 @@ export const getExpContentBankWeeks = () => createExpApi("bpb").getContentBankWe
 export const getExpWorkingIdeas = (params?: { week?: number; page?: string }) =>
   createExpApi("bpb").getWorkingIdeas(params);
 export const distributeExpWorkingIdea = (id: string) => createExpApi("bpb").distributeWorkingIdea(id);
+
+// --- FSI Canvas Lite ---
+export type FsiApi = ReturnType<typeof createFsiApi>;
+
+export function createFsiApi() {
+  const base = "/api/v1/fsi";
+  return {
+    listStudies: (status?: string) => {
+      const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+      return fetchApi<any[]>(`${base}/studies${qs}`);
+    },
+    createStudy: (data: {
+      title: string;
+      study_type: string;
+      target_account: string;
+      niche_vertical: string;
+      owner_id?: string;
+      execution_date?: string;
+      meta_notes?: string;
+    }) => fetchApi<any>(`${base}/studies`, { method: "POST", body: JSON.stringify(data) }),
+    getStudyGraph: (studyId: string) => fetchApi<any>(`${base}/studies/${studyId}`),
+    updateStudy: (studyId: string, data: Record<string, unknown>) =>
+      fetchApi<any>(`${base}/studies/${studyId}`, { method: "PATCH", body: JSON.stringify(data) }),
+    deleteStudy: (studyId: string) =>
+      fetchApi<any>(`${base}/studies/${studyId}`, { method: "DELETE" }),
+    createNode: (studyId: string, data: Record<string, unknown>) =>
+      fetchApi<any>(`${base}/studies/${studyId}/nodes`, { method: "POST", body: JSON.stringify(data) }),
+    updateNode: (nodeId: string, data: Record<string, unknown>) =>
+      fetchApi<any>(`${base}/nodes/${nodeId}`, { method: "PATCH", body: JSON.stringify(data) }),
+    deleteNode: (nodeId: string) =>
+      fetchApi<any>(`${base}/nodes/${nodeId}`, { method: "DELETE" }),
+    createConnection: (studyId: string, data: {
+      source_node_id: string;
+      target_node_id: string;
+      edge_label_note?: string;
+    }) => fetchApi<any>(`${base}/studies/${studyId}/connections`, { method: "POST", body: JSON.stringify(data) }),
+    deleteConnection: (connectionId: string) =>
+      fetchApi<any>(`${base}/connections/${connectionId}`, { method: "DELETE" }),
+    generateSummary: (studyId: string) =>
+      fetchApi<any>(`${base}/studies/${studyId}/summary`, { method: "POST" }),
+    listSummaries: (studyId: string) =>
+      fetchApi<any[]>(`${base}/studies/${studyId}/summaries`),
+  };
+}
+
+export const fsiApi = createFsiApi();

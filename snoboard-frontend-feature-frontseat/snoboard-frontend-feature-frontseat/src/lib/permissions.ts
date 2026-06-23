@@ -38,6 +38,8 @@ export type Permission =
   | 'view_playbook_tech'
   | 'edit_playbook_tech'
   | 'ops_playbook_tech'
+  | 'view_fsi_canvas'
+  | 'edit_fsi_canvas'
 
 // ── Reusable permission sets ──────────────────────────────────────────────────
 
@@ -115,6 +117,8 @@ const ADMIN_PERMISSIONS: Permission[] = [
   'edit_experiment_x',
   'edit_experiment_ops',
   'edit_six_day_tracker',
+  'view_fsi_canvas',
+  'edit_fsi_canvas',
   ...PLAYBOOK_PERMISSIONS,
 ]
 
@@ -125,6 +129,8 @@ const CS_CW_PERMISSIONS: Permission[] = [
   'delete_own_idea',
   'tag_collaborator',
   'comment_on_idea',
+  'view_fsi_canvas',
+  'edit_fsi_canvas',
 ]
 
 const COLLABORATOR_PERMISSIONS: Permission[] = [
@@ -159,6 +165,7 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
   experiment_x: [
     'view_experiment_x',
     'edit_experiment_x',
+    'view_fsi_canvas',
     ...PLAYBOOK_PERMISSIONS,
     'view_all_ideas',
     'create_idea',
@@ -206,7 +213,7 @@ export const ROLE_NAV: Record<string, '*' | string[]> = {
   carousel_designer: ['/', '/post-tracker', '/growth'],
 
   smm:              ['/', '/content-tracker', '/post-tracker', '/growth', '/stage1-tracker'],
-  experiment_x:     ['/', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x', '/team-performance', '/tickets', '/news', '/growth'],
+  experiment_x:     ['/', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x', '/fsi-canvas', '/team-performance', '/tickets', '/news', '/growth'],
   content_ops_intern:  ['/', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x', '/six-day-tracker', '/growth'],
   // legacy — migrated to cs in backend
   content_creators: '*',
@@ -216,6 +223,9 @@ export function isRouteAllowed(role: string | null, path: string): boolean {
   if (!role) return false
   const playbookId = playbookIdFromPath(path)
   if (playbookId) return canAccessPlaybook(role, playbookId)
+  if (path.startsWith("/fsi-canvas")) {
+    return hasPermission(role, "view_fsi_canvas") || hasFullNav(role)
+  }
   // Multi-role: allowed if ANY role permits the route
   return parseRoles(role).some((r) => {
     const allowed = ROLE_NAV[r]
@@ -290,6 +300,11 @@ export function canEditExperimentOps(role: string | null, playbookId?: PlaybookI
 /** True when user has ops-level access on this playbook (not full editor). */
 export function isExperimentOpsOnly(role: string | null, playbookId: PlaybookId): boolean {
   return isPlaybookOpsMode(role, playbookId)
+}
+
+export function canEditFsiCanvas(role: string | null): boolean {
+  if (!role) return false
+  return hasPermission(role, "edit_fsi_canvas") || hasFullNav(role)
 }
 
 export function canEditSixDayTracker(role: string | null): boolean {

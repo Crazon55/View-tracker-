@@ -47,10 +47,12 @@ from app.experiment_playbooks import (
     exp_enrich_ideas_cross_playbook,
     exp_sum_views,
 )
+from app.routers.fsi import router as fsi_router
 
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="View Tracker", version="1.0.0")
+app.include_router(fsi_router, prefix="/api/v1/fsi")
 
 app.add_middleware(
     CORSMiddleware,
