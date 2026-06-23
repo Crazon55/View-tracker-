@@ -120,7 +120,7 @@ export default function FsiCanvasWorkspace() {
             raw_body_text: current.raw_body_text,
           },
         });
-      }, 500);
+      }, 300);
     },
     [canEdit, updateNodeMutation],
   );

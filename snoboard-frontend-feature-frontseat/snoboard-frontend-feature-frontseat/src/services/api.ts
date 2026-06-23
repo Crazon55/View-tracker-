@@ -774,14 +774,20 @@ function enqueueFsiBackendRetry(path: string, method: string, body?: unknown) {
 }
 
 async function fsiBackendRequest(path: string, method: string, body?: unknown): Promise<void> {
-  if (!_accessToken) return;
+  if (!_accessToken) {
+    throw new Error("Missing auth token — sign in again");
+  }
   await fetchApi(path, {
     method,
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
 }
 
-/** Drain queued backend mirrors (runs on FSI page load). Supabase already has the data. */
+async function fsiBackendRequestImmediate(path: string, method: string, body?: unknown): Promise<void> {
+  await fsiWithRetry(() => fsiBackendRequest(path, method, body), 3);
+}
+
+/** Drain queued backend mirrors (runs on FSI page load). */
 export async function flushFsiBackendSyncQueue(): Promise<void> {
   if (!_accessToken) return;
   let q: FsiBackendRetry[] = [];
@@ -809,25 +815,22 @@ export async function flushFsiBackendSyncQueue(): Promise<void> {
 
 async function fsiDualMutate<T>(opts: {
   supabase: () => Promise<T>;
-  backend?: { path: string; method: string; body?: unknown };
+  backend: { path: string; method: string; body?: unknown };
 }): Promise<T> {
-  const backendTask =
-    opts.backend && _accessToken
-      ? fsiBackendRequest(opts.backend.path, opts.backend.method, opts.backend.body)
-      : Promise.resolve();
-
+  // Fire Supabase + backend at the same time; both must complete before we return success.
   const [sbResult, beResult] = await Promise.allSettled([
     fsiWithRetry(opts.supabase),
-    backendTask,
+    fsiBackendRequestImmediate(opts.backend.path, opts.backend.method, opts.backend.body),
   ]);
 
   if (sbResult.status === "rejected") {
     throw sbResult.reason instanceof Error ? sbResult.reason : new Error("Supabase write failed");
   }
 
-  if (beResult.status === "rejected" && opts.backend) {
+  if (beResult.status === "rejected") {
+    const err = beResult.reason instanceof Error ? beResult.reason : new Error("Backend save failed");
     enqueueFsiBackendRetry(opts.backend.path, opts.backend.method, opts.backend.body);
-    console.warn("[FSI] Backend sync queued:", opts.backend.path, beResult.reason);
+    throw new Error(`${err.message} — queued for retry`);
   }
 
   return sbResult.value;
