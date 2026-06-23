@@ -311,25 +311,6 @@ function FsiCanvasMenuButton({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-function FsiCanvasLaunchBar() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  if (location.pathname.startsWith("/fsi-canvas")) return null;
-  return (
-    <div className="fixed top-0 inset-x-0 z-[200] flex items-center justify-center gap-3 border-b border-amber-400/30 bg-amber-500 px-4 py-2.5 text-sm font-bold text-black shadow-lg">
-      <Sparkles className="h-4 w-4" />
-      <span>FSI Canvas — structured study board</span>
-      <button
-        type="button"
-        onClick={() => navigate("/fsi-canvas")}
-        className="rounded-md bg-zinc-950 px-3 py-1 text-amber-300 hover:bg-zinc-900"
-      >
-        Open Canvas →
-      </button>
-    </div>
-  );
-}
-
 function FsiCanvasQuickLink() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -673,7 +654,6 @@ function AuthGate() {
 
   return (
     <MonthlyWrapRoot>
-      <FsiCanvasLaunchBar />
       <FsiCanvasQuickLink />
       <AppLayout />
     </MonthlyWrapRoot>
