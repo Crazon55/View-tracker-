@@ -29,6 +29,7 @@ type FlowInnerProps = {
   onNodeDragStop: (nodeId: string, x: number, y: number) => void;
   onConnect: (source: string, target: string) => void;
   onEdgeDelete: (edgeId: string) => void;
+  onNodeDelete: (nodeId: string) => void;
   selectedNodeId: string | null;
 };
 
@@ -41,6 +42,7 @@ function FlowInner({
   onNodeDragStop,
   onConnect,
   onEdgeDelete,
+  onNodeDelete,
   selectedNodeId,
 }: FlowInnerProps) {
   const { screenToFlowPosition } = useReactFlow();
@@ -51,17 +53,32 @@ function FlowInner({
   const dbSignature = useMemo(
     () =>
       JSON.stringify({
-        n: dbNodes.map((n) => ({ id: n.id, x: n.canvas_x, y: n.canvas_y, u: n.updated_at, t: n.display_title })),
-        c: connections.map((c) => c.id),
+        n: dbNodes.map((n) => ({
+          id: n.id,
+          x: n.canvas_x,
+          y: n.canvas_y,
+          t: n.display_title,
+          type: n.node_type,
+          p: n.structured_payload,
+        })),
+        c: connections.map((c) => ({ id: c.id, s: c.source_node_id, t: c.target_node_id, l: c.edge_label_note })),
       }),
     [dbNodes, connections],
   );
 
   useEffect(() => {
     const next = graphToFlow(dbNodes, connections);
-    setNodes(next.nodes);
+    setNodes((current) =>
+      next.nodes.map((n) => {
+        const cur = current.find((c) => c.id === n.id);
+        if (cur && cur.position.x === n.position.x && cur.position.y === n.position.y) {
+          return { ...n, position: cur.position };
+        }
+        return n;
+      }),
+    );
     setEdges(next.edges);
-  }, [dbSignature, dbNodes, connections, setNodes, setEdges]);
+  }, [dbSignature, setNodes, setEdges]);
 
   const handleConnect = useCallback(
     (params: Connection) => {
@@ -80,11 +97,9 @@ function FlowInner({
 
   const handlePaneClick = useCallback(() => onNodeSelect(null), [onNodeSelect]);
 
-  const handleDoubleClick = useCallback(
+  const handlePaneDoubleClick = useCallback(
     (e: React.MouseEvent) => {
       if (!canEdit) return;
-      const target = e.target as HTMLElement;
-      if (!target.classList.contains("react-flow__pane")) return;
       const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
       onPaneDoubleClick(pos.x, pos.y, e.clientX, e.clientY);
     },
@@ -107,6 +122,14 @@ function FlowInner({
     [canEdit, onEdgeDelete],
   );
 
+  const handleNodesDelete = useCallback(
+    (deleted: Node[]) => {
+      if (!canEdit) return;
+      deleted.forEach((node) => onNodeDelete(node.id));
+    },
+    [canEdit, onNodeDelete],
+  );
+
   const styledNodes = useMemo(
     () =>
       nodes.map((n) => ({
@@ -125,11 +148,13 @@ function FlowInner({
       onConnect={handleConnect}
       onNodeClick={handleNodeClick}
       onPaneClick={handlePaneClick}
-      onDoubleClick={handleDoubleClick}
+      onPaneDoubleClick={handlePaneDoubleClick}
       onNodeDragStop={handleNodeDragStop}
       onEdgesDelete={handleEdgesDelete}
+      onNodesDelete={handleNodesDelete}
       nodeTypes={nodeTypes}
       fitView
+      fitViewOptions={{ padding: 0.2 }}
       deleteKeyCode={canEdit ? ["Backspace", "Delete"] : null}
       className="bg-zinc-950"
     >

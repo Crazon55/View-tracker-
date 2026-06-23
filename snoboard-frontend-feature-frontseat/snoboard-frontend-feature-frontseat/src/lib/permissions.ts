@@ -212,9 +212,9 @@ export const ROLE_NAV: Record<string, '*' | string[]> = {
   editors:           ['/', '/content-tracker', '/growth'],
   carousel_designer: ['/', '/post-tracker', '/growth'],
 
-  smm:              ['/', '/content-tracker', '/post-tracker', '/growth', '/stage1-tracker'],
+  smm:              ['/', '/content-tracker', '/post-tracker', '/growth', '/stage1-tracker', '/fsi-canvas'],
   experiment_x:     ['/', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x', '/fsi-canvas', '/team-performance', '/tickets', '/news', '/growth'],
-  content_ops_intern:  ['/', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x', '/six-day-tracker', '/growth'],
+  content_ops_intern:  ['/', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x', '/fsi-canvas', '/six-day-tracker', '/growth'],
   // legacy — migrated to cs in backend
   content_creators: '*',
 }
@@ -223,8 +223,8 @@ export function isRouteAllowed(role: string | null, path: string): boolean {
   if (!role) return false
   const playbookId = playbookIdFromPath(path)
   if (playbookId) return canAccessPlaybook(role, playbookId)
-  if (path.startsWith("/fsi-canvas")) {
-    return hasPermission(role, "view_fsi_canvas") || hasFullNav(role)
+  if (path.startsWith("/fsi-canvas") || path === "/canvas") {
+    return !!role
   }
   // Multi-role: allowed if ANY role permits the route
   return parseRoles(role).some((r) => {
@@ -300,6 +300,17 @@ export function canEditExperimentOps(role: string | null, playbookId?: PlaybookI
 /** True when user has ops-level access on this playbook (not full editor). */
 export function isExperimentOpsOnly(role: string | null, playbookId: PlaybookId): boolean {
   return isPlaybookOpsMode(role, playbookId)
+}
+
+export function canAccessFsiCanvas(role: string | null): boolean {
+  if (!role) return false
+  return (
+    hasPermission(role, "view_fsi_canvas") ||
+    hasPermission(role, "edit_fsi_canvas") ||
+    hasPermission(role, "manage_team") ||
+    hasFullNav(role) ||
+    parseRoles(role).some((r) => r in ROLE_PERMISSIONS)
+  )
 }
 
 export function canEditFsiCanvas(role: string | null): boolean {

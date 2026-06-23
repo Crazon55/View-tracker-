@@ -82,7 +82,7 @@ export default function FsiCanvasHub() {
             </div>
             <h1 className="text-3xl font-bold">FSI Canvas</h1>
             <p className="mt-2 text-zinc-400 max-w-xl">
-              Structured content intelligence ingestion — visual canvas, relational data backend.
+              Visual canvas for structured content research — every node saves to the database.
             </p>
           </div>
 

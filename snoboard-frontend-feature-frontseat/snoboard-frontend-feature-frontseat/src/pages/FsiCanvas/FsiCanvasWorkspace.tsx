@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Loader2, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { ArrowLeft, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { fsiApi } from "@/services/api";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import FsiFlowCanvas from "./components/FsiFlowCanvas";
 import NodeTypePicker from "./components/NodeTypePicker";
 import NodeInspector from "./components/NodeInspector";
-import SummaryPanel from "./components/SummaryPanel";
 import type { FsiGraph, FsiNodeRecord, IronNodeType } from "./lib/fsiNodeSchemas";
 import { defaultPayloadForType, defaultTitleForType } from "./lib/fsiNodeSchemas";
 
@@ -23,11 +22,9 @@ export default function FsiCanvasWorkspace() {
 
   const [selectedNode, setSelectedNode] = useState<FsiNodeRecord | null>(null);
   const [picker, setPicker] = useState<{ x: number; y: number; flowX: number; flowY: number } | null>(null);
-  const [showSummary, setShowSummary] = useState(false);
-  const [summary, setSummary] = useState<Record<string, string | string[]> | null>(null);
-  const [summaryLoading, setSummaryLoading] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingInspector = useRef<Partial<FsiNodeRecord> | null>(null);
+  const selectedNodeRef = useRef<FsiNodeRecord | null>(null);
+  selectedNodeRef.current = selectedNode;
 
   const { data: graph, isLoading, error } = useQuery<FsiGraph>({
     queryKey: ["fsi-graph", studyId],
@@ -59,8 +56,14 @@ export default function FsiCanvasWorkspace() {
     mutationFn: ({ id, patch }: { id: string; patch: Record<string, unknown> }) =>
       fsiApi.updateNode(id, patch),
     onSuccess: (node) => {
-      invalidate();
       setSelectedNode(node);
+      queryClient.setQueryData<FsiGraph>(["fsi-graph", studyId], (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          nodes: old.nodes.map((n) => (n.id === node.id ? node : n)),
+        };
+      });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -88,32 +91,34 @@ export default function FsiCanvasWorkspace() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const flushInspectorSave = useCallback(
-    (node: FsiNodeRecord, patch: Partial<FsiNodeRecord>) => {
-      if (!canEdit) return;
-      const merged = {
-        display_title: patch.display_title ?? node.display_title,
-        structured_payload: patch.structured_payload ?? node.structured_payload,
-        raw_body_text: patch.raw_body_text ?? node.raw_body_text,
-      };
-      updateNodeMutation.mutate({ id: node.id, patch: merged });
-    },
-    [canEdit, updateNodeMutation],
-  );
-
   const handleInspectorChange = useCallback(
     (patch: Partial<FsiNodeRecord>) => {
-      if (!selectedNode || !canEdit) return;
-      const next = { ...selectedNode, ...patch, structured_payload: patch.structured_payload ?? selectedNode.structured_payload };
+      const node = selectedNodeRef.current;
+      if (!node || !canEdit) return;
+
+      const next: FsiNodeRecord = {
+        ...node,
+        ...patch,
+        structured_payload: patch.structured_payload ?? node.structured_payload,
+      };
       setSelectedNode(next);
-      pendingInspector.current = patch;
+      selectedNodeRef.current = next;
+
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => {
-        flushInspectorSave(selectedNode, { ...pendingInspector.current });
-        pendingInspector.current = null;
-      }, 400);
+        const current = selectedNodeRef.current;
+        if (!current) return;
+        updateNodeMutation.mutate({
+          id: current.id,
+          patch: {
+            display_title: current.display_title,
+            structured_payload: current.structured_payload,
+            raw_body_text: current.raw_body_text,
+          },
+        });
+      }, 500);
     },
-    [selectedNode, canEdit, flushInspectorSave],
+    [canEdit, updateNodeMutation],
   );
 
   const handleNodeDragStop = useCallback(
@@ -124,19 +129,13 @@ export default function FsiCanvasWorkspace() {
     [canEdit, updateNodeMutation],
   );
 
-  const handleGenerateSummary = async () => {
-    if (!studyId) return;
-    setSummaryLoading(true);
-    try {
-      const result = await fsiApi.generateSummary(studyId);
-      setSummary(result);
-      setShowSummary(true);
-      toast.success("Summary generated");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Summary failed");
-    } finally {
-      setSummaryLoading(false);
-    }
+  const openPickerAtCenter = () => {
+    setPicker({
+      x: window.innerWidth / 2 - 112,
+      y: window.innerHeight / 2 - 80,
+      flowX: 0,
+      flowY: 0,
+    });
   };
 
   if (!studyId) return null;
@@ -159,7 +158,6 @@ export default function FsiCanvasWorkspace() {
   }
 
   const { study, nodes, connections } = graph;
-  const rightPanel = showSummary ? "summary" : selectedNode ? "inspector" : null;
 
   return (
     <div className="flex h-screen flex-col bg-zinc-950 text-white">
@@ -171,25 +169,15 @@ export default function FsiCanvasWorkspace() {
         <div className="min-w-0 flex-1">
           <div className="truncate font-semibold">{study.title}</div>
           <div className="truncate text-xs text-zinc-500">
-            {study.study_type} · {study.target_account} · {study.status}
+            {study.study_type} · {study.target_account} · {nodes.length} nodes · {connections.length} connections
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {canEdit && (
-            <span className="hidden sm:inline text-xs text-zinc-500">Double-click canvas to add node</span>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setShowSummary(!showSummary);
-              if (!showSummary) setSelectedNode(null);
-            }}
-          >
-            {showSummary ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
-            Summary
+        {canEdit && (
+          <Button size="sm" onClick={openPickerAtCenter}>
+            <Plus className="mr-1 h-4 w-4" />
+            Add node
           </Button>
-        </div>
+        )}
       </header>
 
       <div className="flex min-h-0 flex-1">
@@ -199,16 +187,15 @@ export default function FsiCanvasWorkspace() {
             connections={connections}
             canEdit={canEdit}
             selectedNodeId={selectedNode?.id ?? null}
-            onNodeSelect={(n) => {
-              setSelectedNode(n);
-              setShowSummary(false);
-            }}
+            onNodeSelect={setSelectedNode}
             onPaneDoubleClick={(x, y, screenX, screenY) => {
-              setPicker({ x: screenX, y: screenY, flowX: x, flowY: y });
+              if (!canEdit) return;
+              setPicker({ x: screenX + 12, y: screenY + 12, flowX: x, flowY: y });
             }}
             onNodeDragStop={handleNodeDragStop}
             onConnect={(source, target) => createConnectionMutation.mutate({ source, target })}
             onEdgeDelete={(id) => deleteConnectionMutation.mutate(id)}
+            onNodeDelete={(id) => deleteNodeMutation.mutate(id)}
           />
 
           {picker && canEdit && (
@@ -221,23 +208,13 @@ export default function FsiCanvasWorkspace() {
           )}
         </div>
 
-        {rightPanel === "inspector" && selectedNode && (
-          <div className="w-[340px] shrink-0">
+        {selectedNode && (
+          <div className="w-[340px] shrink-0 border-l border-zinc-800">
             <NodeInspector
               node={selectedNode}
               canEdit={canEdit}
               onChange={handleInspectorChange}
               onDelete={() => deleteNodeMutation.mutate(selectedNode.id)}
-            />
-          </div>
-        )}
-
-        {rightPanel === "summary" && (
-          <div className="w-[360px] shrink-0">
-            <SummaryPanel
-              onGenerate={handleGenerateSummary}
-              loading={summaryLoading}
-              summary={summary}
             />
           </div>
         )}

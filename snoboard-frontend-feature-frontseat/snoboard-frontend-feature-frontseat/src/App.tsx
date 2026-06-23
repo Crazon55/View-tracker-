@@ -276,8 +276,8 @@ const playbookNavItems: NavItem[] = (["bpb", "xf", "tech"] as const).map((id) =>
 
 const navItems: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/content-tracker", label: "Reel Tracker", icon: ClipboardList },
   { to: "/fsi-canvas", label: "FSI Canvas", icon: Sparkles },
+  { to: "/content-tracker", label: "Reel Tracker", icon: ClipboardList },
   ...playbookNavItems,
   { to: "/post-tracker", label: "Post Tracker", icon: Image },
   { to: "/post-ips", label: "Post IPs", icon: Image },
@@ -293,6 +293,58 @@ const navItems: NavItem[] = [
   { to: "/pages", label: "IP's", icon: Users },
   { to: "http://16.112.125.207:5173/", label: "Pintu", icon: Scissors, external: true },
 ];
+
+function FsiCanvasMenuButton({ onNavigate }: { onNavigate?: () => void }) {
+  const navigate = useNavigate();
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        navigate("/fsi-canvas");
+        onNavigate?.();
+      }}
+      className="flex w-full items-center gap-3 rounded-lg border border-amber-500/40 bg-amber-500/15 px-3 py-3 text-sm font-semibold text-amber-100 transition-colors hover:bg-amber-500/25 mb-2"
+    >
+      <Sparkles className="h-4 w-4 shrink-0" />
+      FSI Canvas
+    </button>
+  );
+}
+
+function FsiCanvasLaunchBar() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  if (location.pathname.startsWith("/fsi-canvas")) return null;
+  return (
+    <div className="fixed top-0 inset-x-0 z-[200] flex items-center justify-center gap-3 border-b border-amber-400/30 bg-amber-500 px-4 py-2.5 text-sm font-bold text-black shadow-lg">
+      <Sparkles className="h-4 w-4" />
+      <span>FSI Canvas — structured study board</span>
+      <button
+        type="button"
+        onClick={() => navigate("/fsi-canvas")}
+        className="rounded-md bg-zinc-950 px-3 py-1 text-amber-300 hover:bg-zinc-900"
+      >
+        Open Canvas →
+      </button>
+    </div>
+  );
+}
+
+function FsiCanvasQuickLink() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  if (location.pathname.startsWith("/fsi-canvas")) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => navigate("/fsi-canvas")}
+      className="fixed bottom-6 left-6 z-[60] flex items-center gap-2 rounded-full border border-amber-500/40 bg-amber-950/90 px-4 py-2.5 text-sm font-semibold text-amber-100 shadow-xl backdrop-blur hover:bg-amber-500/20"
+    >
+      <Sparkles className="h-4 w-4" />
+      FSI Canvas
+    </button>
+  );
+}
 
 function HamburgerMenu() {
   const [open, setOpen] = useState(false);
@@ -328,9 +380,15 @@ function HamburgerMenu() {
           <div className="px-5 py-6 border-b border-zinc-800">
             <h1 className="text-lg font-bold text-white tracking-tight">FSBOARD</h1>
             <p className="text-xs text-muted-foreground mt-0.5">Frontseat Media</p>
+            {import.meta.env.DEV && (
+              <p className="mt-2 text-[10px] font-medium uppercase tracking-wide text-amber-400">
+                Local dev · port 8080
+              </p>
+            )}
           </div>
           <nav className="px-3 py-4 space-y-1 flex-1 overflow-y-auto">
-            {allowedNavItems.map(({ to, label, icon: Icon, external }) => (
+            <FsiCanvasMenuButton onNavigate={() => setOpen(false)} />
+            {allowedNavItems.filter((item) => item.to !== "/fsi-canvas").map(({ to, label, icon: Icon, external }) => (
               <button
                 key={to}
                 onClick={() => {
@@ -415,12 +473,13 @@ function AppLayout() {
     location.pathname === "/team-roles" ||
     location.pathname.startsWith("/experiment-") ||
     location.pathname === "/fsi-canvas" ||
-    location.pathname.startsWith("/fsi-canvas/");
+    location.pathname.startsWith("/fsi-canvas/") ||
+    location.pathname === "/canvas";
 
   return (
     <>
       {isFullScreen ? (
-        <div className="relative">
+        <div className="relative pt-12">
           <HamburgerMenu />
           <div className="fixed top-5 right-5 z-[60] flex items-center gap-2 sm:gap-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl px-3 sm:px-4 py-2 shadow-lg max-w-[min(100vw-1rem,480px)] flex-wrap justify-end">
             <MonthlyWrapOpenButton />
@@ -469,10 +528,11 @@ function AppLayout() {
             <Route path="/experiment-x" element={<Navigate to="/experiment-bpb" replace />} />
             <Route path="/fsi-canvas" element={<FsiCanvasHub />} />
             <Route path="/fsi-canvas/:studyId" element={<FsiCanvasWorkspace />} />
+            <Route path="/canvas" element={<Navigate to="/fsi-canvas" replace />} />
           </Routes>
         </div>
       ) : (
-        <div className="flex min-h-screen bg-zinc-950">
+        <div className="flex min-h-screen bg-zinc-950 pt-12">
           {/* Sidebar */}
           <aside className="w-60 shrink-0 border-r border-zinc-800 bg-zinc-950 flex flex-col">
             <div className="px-5 py-5 border-b border-zinc-800">
@@ -481,7 +541,20 @@ function AppLayout() {
             </div>
 
             <nav className="flex-1 px-3 py-4 space-y-1">
-              {sidebarNavItems.map(({ to, label, icon: Icon, external }) => (
+              <NavLink
+                to="/fsi-canvas"
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition-colors mb-2 border ${
+                    isActive
+                      ? "border-amber-500/40 bg-amber-500/15 text-amber-100"
+                      : "border-amber-500/30 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20"
+                  }`
+                }
+              >
+                <Sparkles className="w-4 h-4" />
+                FSI Canvas
+              </NavLink>
+              {sidebarNavItems.filter((item) => item.to !== "/fsi-canvas").map(({ to, label, icon: Icon, external }) => (
                 external ? (
                   <a
                     key={to}
@@ -600,6 +673,8 @@ function AuthGate() {
 
   return (
     <MonthlyWrapRoot>
+      <FsiCanvasLaunchBar />
+      <FsiCanvasQuickLink />
       <AppLayout />
     </MonthlyWrapRoot>
   );

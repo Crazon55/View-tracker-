@@ -775,10 +775,6 @@ export function createFsiApi() {
     }) => fetchApi<any>(`${base}/studies/${studyId}/connections`, { method: "POST", body: JSON.stringify(data) }),
     deleteConnection: (connectionId: string) =>
       fetchApi<any>(`${base}/connections/${connectionId}`, { method: "DELETE" }),
-    generateSummary: (studyId: string) =>
-      fetchApi<any>(`${base}/studies/${studyId}/summary`, { method: "POST" }),
-    listSummaries: (studyId: string) =>
-      fetchApi<any[]>(`${base}/studies/${studyId}/summaries`),
   };
 }
 

@@ -15,7 +15,6 @@ from app.schemas.fsi import (
     NodeUpdate,
     ConnectionCreate,
 )
-from app.services.fsi_summary_service import generate_study_summary
 
 router = APIRouter(tags=["fsi"])
 
@@ -77,8 +76,18 @@ async def create_study(req: StudyCreate, claims: dict = Depends(require_auth)):
         "meta_notes": req.meta_notes,
         "status": "Draft",
     }
-    result = client.table("studies").insert(row).execute()
-    created = (result.data or [row])[0]
+    client.table("studies").insert(row).execute()
+    verify = (
+        client.table("studies")
+        .select("*")
+        .eq("title", row["title"])
+        .eq("owner_id", row["owner_id"])
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+        .data
+    )
+    created = verify[0] if verify else row
     return {"success": True, "data": created}
 
 
@@ -131,8 +140,17 @@ async def create_node(study_id: str, req: NodeCreate, claims: dict = Depends(req
         "tags": req.tags or [],
         "created_by": _email(claims),
     }
-    result = client.table("nodes").insert(row).execute()
-    created = (result.data or [row])[0]
+    client.table("nodes").insert(row).execute()
+    verify = (
+        client.table("nodes")
+        .select("*")
+        .eq("study_id", study_id)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+        .data
+    )
+    created = verify[0] if verify else row
     client.table("studies").update({"updated_at": _now_iso()}).eq("id", study_id).execute()
     return {"success": True, "data": created}
 
@@ -179,8 +197,17 @@ async def create_connection(study_id: str, req: ConnectionCreate, claims: dict =
         "edge_label_note": req.edge_label_note,
         "created_by": _email(claims),
     }
-    result = client.table("connections").insert(row).execute()
-    created = (result.data or [row])[0]
+    client.table("connections").insert(row).execute()
+    verify = (
+        client.table("connections")
+        .select("*")
+        .eq("study_id", study_id)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+        .data
+    )
+    created = verify[0] if verify else row
     client.table("studies").update({"updated_at": _now_iso()}).eq("id", study_id).execute()
     return {"success": True, "data": created}
 
@@ -195,42 +222,3 @@ async def delete_connection(connection_id: str, claims: dict = Depends(require_a
     client.table("connections").delete().eq("id", connection_id).execute()
     client.table("studies").update({"updated_at": _now_iso()}).eq("id", study_id).execute()
     return {"success": True, "data": {"id": connection_id}}
-
-
-@router.post("/studies/{study_id}/summary")
-async def generate_summary(study_id: str, claims: dict = Depends(require_auth)):
-    client = get_supabase_client()
-    study = _get_study(client, study_id)
-    nodes = client.table("nodes").select("*").eq("study_id", study_id).execute().data or []
-    connections = client.table("connections").select("*").eq("study_id", study_id).execute().data or []
-    try:
-        summary = await generate_study_summary(study, nodes, connections)
-    except ValueError as e:
-        raise HTTPException(status_code=503, detail=str(e)) from e
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Summary generation failed: {e}") from e
-
-    email = _email(claims)
-    client.table("study_summaries").insert({
-        "study_id": study_id,
-        "summary_json": summary,
-        "created_by": email,
-    }).execute()
-    client.table("studies").update({"updated_at": _now_iso()}).eq("id", study_id).execute()
-    return {"success": True, "data": summary}
-
-
-@router.get("/studies/{study_id}/summaries")
-async def list_summaries(study_id: str, claims: dict = Depends(require_auth)):
-    client = get_supabase_client()
-    _get_study(client, study_id)
-    data = (
-        client.table("study_summaries")
-        .select("*")
-        .eq("study_id", study_id)
-        .order("created_at", desc=True)
-        .execute()
-        .data
-        or []
-    )
-    return {"success": True, "data": data}
