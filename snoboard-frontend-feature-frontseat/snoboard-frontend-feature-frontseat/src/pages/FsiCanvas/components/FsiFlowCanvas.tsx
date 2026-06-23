@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   ReactFlow,
   Background,
@@ -16,10 +16,12 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import FsiCanvasNode from "./FsiCanvasNode";
+import FsiFieldNode from "./FsiFieldNode";
 import type { FsiConnectionRecord, FsiNodeRecord } from "../lib/fsiNodeSchemas";
 import { graphToFlow, type FsiNodeData } from "../lib/fsiFlowAdapter";
+import { isFieldNode, isParentNode } from "../lib/fsiHierarchy";
 
-const nodeTypes = { fsiNode: FsiCanvasNode };
+const nodeTypes = { fsiNode: FsiCanvasNode, fsiFieldNode: FsiFieldNode };
 
 type FlowInnerProps = {
   nodes: FsiNodeRecord[];
@@ -31,6 +33,7 @@ type FlowInnerProps = {
   onConnect: (source: string, target: string) => void;
   onEdgeDelete: (edgeId: string) => void;
   onNodeDelete: (nodeId: string) => void;
+  onFieldChange: (nodeId: string, value: string) => void;
   selectedNodeId: string | null;
 };
 
@@ -44,54 +47,66 @@ function FlowInner({
   onConnect,
   onEdgeDelete,
   onNodeDelete,
+  onFieldChange,
   selectedNodeId,
 }: FlowInnerProps) {
   const { screenToFlowPosition } = useReactFlow();
-  const initial = useMemo(() => graphToFlow(dbNodes, connections), []);
-  const [nodes, setNodes, onNodesChange] = useNodesState(initial.nodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
+  const onFieldChangeRef = useRef(onFieldChange);
+  onFieldChangeRef.current = onFieldChange;
+
+  const stableFieldChange = useCallback((nodeId: string, value: string) => {
+    onFieldChangeRef.current(nodeId, value);
+  }, []);
 
   const dbSignature = useMemo(
     () =>
       JSON.stringify({
         n: dbNodes.map((n) => ({
           id: n.id,
+          pid: n.parent_node_id,
           x: n.canvas_x,
           y: n.canvas_y,
           t: n.display_title,
           type: n.node_type,
           p: n.structured_payload,
         })),
-        c: connections.map((c) => ({ id: c.id, s: c.source_node_id, t: c.target_node_id, l: c.edge_label_note })),
+        c: connections.map((c) => ({ id: c.id, s: c.source_node_id, t: c.target_node_id })),
       }),
     [dbNodes, connections],
   );
 
-  useEffect(() => {
-    const next = graphToFlow(dbNodes, connections);
-    setNodes((current) =>
-      next.nodes.map((n) => {
-        const cur = current.find((c) => c.id === n.id);
-        if (cur && cur.position.x === n.position.x && cur.position.y === n.position.y) {
-          return { ...n, position: cur.position };
-        }
-        return n;
+  const flowGraph = useMemo(
+    () =>
+      graphToFlow(dbNodes, connections, {
+        canEdit,
+        onFieldChange: stableFieldChange,
       }),
-    );
-    setEdges(next.edges);
-  }, [dbSignature, setNodes, setEdges]);
+    [dbSignature, canEdit, stableFieldChange],
+  );
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(flowGraph.nodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(flowGraph.edges);
+
+  useEffect(() => {
+    setNodes(flowGraph.nodes);
+    setEdges(flowGraph.edges);
+  }, [flowGraph, setNodes, setEdges]);
 
   const handleConnect = useCallback(
     (params: Connection) => {
       if (!canEdit || !params.source || !params.target) return;
+      const sourceNode = dbNodes.find((n) => n.id === params.source);
+      const targetNode = dbNodes.find((n) => n.id === params.target);
+      if (!sourceNode || !targetNode || isFieldNode(sourceNode) || isFieldNode(targetNode)) return;
       onConnect(params.source, params.target);
     },
-    [canEdit, onConnect],
+    [canEdit, dbNodes, onConnect],
   );
 
   const handleNodeClick = useCallback(
-    (_: React.MouseEvent, node: Node<FsiNodeData>) => {
-      onNodeSelect(node.data.fsiNode);
+    (_: React.MouseEvent, node: Node) => {
+      const data = node.data as FsiNodeData | { fsiNode: FsiNodeRecord };
+      onNodeSelect(data.fsiNode);
     },
     [onNodeSelect],
   );
@@ -108,8 +123,10 @@ function FlowInner({
   );
 
   const handleNodeDragStop = useCallback(
-    (_: React.MouseEvent, node: Node<FsiNodeData>) => {
+    (_: React.MouseEvent, node: Node) => {
       if (!canEdit) return;
+      const data = node.data as FsiNodeData;
+      if (isFieldNode(data.fsiNode)) return;
       onNodeDragStop(node.id, node.position.x, node.position.y);
     },
     [canEdit, onNodeDragStop],
@@ -118,7 +135,9 @@ function FlowInner({
   const handleEdgesDelete = useCallback(
     (deleted: Edge[]) => {
       if (!canEdit) return;
-      deleted.forEach((edge) => onEdgeDelete(edge.id));
+      deleted.forEach((edge) => {
+        if (!edge.id.startsWith("tree-")) onEdgeDelete(edge.id);
+      });
     },
     [canEdit, onEdgeDelete],
   );
@@ -126,17 +145,24 @@ function FlowInner({
   const handleNodesDelete = useCallback(
     (deleted: Node[]) => {
       if (!canEdit) return;
-      deleted.forEach((node) => onNodeDelete(node.id));
+      deleted.forEach((node) => {
+        const data = node.data as FsiNodeData;
+        if (isParentNode(data.fsiNode)) onNodeDelete(node.id);
+      });
     },
     [canEdit, onNodeDelete],
   );
 
   const styledNodes = useMemo(
     () =>
-      nodes.map((n) => ({
-        ...n,
-        selected: n.id === selectedNodeId,
-      })),
+      nodes.map((n) => {
+        const fsiNode = (n.data as { fsiNode: FsiNodeRecord }).fsiNode;
+        return {
+          ...n,
+          selected: n.id === selectedNodeId,
+          connectable: isParentNode(fsiNode),
+        };
+      }),
     [nodes, selectedNodeId],
   );
 
@@ -155,28 +181,19 @@ function FlowInner({
       onNodesDelete={handleNodesDelete}
       nodeTypes={nodeTypes}
       fitView
-      fitViewOptions={{ padding: 0.2 }}
+      fitViewOptions={{ padding: 0.25 }}
       deleteKeyCode={canEdit ? ["Backspace", "Delete"] : null}
+      defaultEdgeOptions={{ type: "smoothstep", style: { stroke: "#71717a", strokeWidth: 2 } }}
       className="bg-zinc-950 fsi-flow-canvas"
     >
-      {/* Coarse + fine dots — larger flow-space size so grid stays visible when zoomed out */}
-      <Background
-        id="fsi-grid-coarse"
-        variant={BackgroundVariant.Dots}
-        gap={48}
-        size={3}
-        color="#3f3f46"
-      />
-      <Background
-        id="fsi-grid-fine"
-        variant={BackgroundVariant.Dots}
-        gap={24}
-        size={2}
-        color="#52525b"
-      />
+      <Background id="fsi-grid-coarse" variant={BackgroundVariant.Dots} gap={48} size={3} color="#3f3f46" />
+      <Background id="fsi-grid-fine" variant={BackgroundVariant.Dots} gap={24} size={2} color="#52525b" />
       <Controls className="!bg-zinc-900 !border-zinc-700 [&>button]:!bg-zinc-800 [&>button]:!border-zinc-700 [&>button]:!text-white" />
       <MiniMap
-        nodeColor={(n) => (n.data as FsiNodeData)?.color ?? "#64748b"}
+        nodeColor={(n) => {
+          const d = n.data as FsiNodeData | undefined;
+          return d?.color ?? "#22c55e";
+        }}
         maskColor="rgba(0,0,0,0.6)"
         className="!bg-zinc-900 !border-zinc-700"
       />

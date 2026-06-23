@@ -32,6 +32,7 @@ export const PERFORMANCE_LABELS = [
 export type FsiNodeRecord = {
   id: string;
   study_id: string;
+  parent_node_id?: string | null;
   node_type: string;
   display_title: string;
   canvas_x: number;

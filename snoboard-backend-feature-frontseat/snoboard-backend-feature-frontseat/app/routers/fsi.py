@@ -145,6 +145,8 @@ async def create_node(study_id: str, req: NodeCreate, claims: dict = Depends(req
         "tags": req.tags or [],
         "created_by": _email(claims),
     }
+    if req.parent_node_id:
+        row["parent_node_id"] = req.parent_node_id.strip()
     if req.id:
         row["id"] = req.id.strip()
         client.table("nodes").upsert(row).execute()

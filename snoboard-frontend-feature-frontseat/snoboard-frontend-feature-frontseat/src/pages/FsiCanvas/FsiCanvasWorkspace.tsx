@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Loader2, Plus } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { fsiApi, flushFsiBackendSyncQueue } from "@/services/api";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -9,9 +9,10 @@ import { canEditFsiCanvas } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import FsiFlowCanvas from "./components/FsiFlowCanvas";
 import NodeTypePicker from "./components/NodeTypePicker";
-import NodeInspector from "./components/NodeInspector";
 import type { FsiGraph, FsiNodeRecord, IronNodeType } from "./lib/fsiNodeSchemas";
 import { defaultPayloadForType, defaultTitleForType } from "./lib/fsiNodeSchemas";
+import { NODE_FIELD_DEFS } from "./lib/fsiNodeFieldDefs";
+import { fieldPayload, isParentNode, parentPayload } from "./lib/fsiHierarchy";
 
 export default function FsiCanvasWorkspace() {
   const { studyId } = useParams<{ studyId: string }>();
@@ -22,9 +23,7 @@ export default function FsiCanvasWorkspace() {
 
   const [selectedNode, setSelectedNode] = useState<FsiNodeRecord | null>(null);
   const [picker, setPicker] = useState<{ x: number; y: number; flowX: number; flowY: number } | null>(null);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const selectedNodeRef = useRef<FsiNodeRecord | null>(null);
-  selectedNodeRef.current = selectedNode;
+  const graphRef = useRef<FsiGraph | null>(null);
 
   useEffect(() => {
     void flushFsiBackendSyncQueue();
@@ -36,22 +35,49 @@ export default function FsiCanvasWorkspace() {
     enabled: !!studyId,
   });
 
+  graphRef.current = graph ?? null;
+
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["fsi-graph", studyId] });
 
   const createNodeMutation = useMutation({
-    mutationFn: (args: { type: IronNodeType; x: number; y: number }) =>
-      fsiApi.createNode(studyId!, {
+    mutationFn: async (args: { type: IronNodeType; x: number; y: number }) => {
+      const defaults = defaultPayloadForType(args.type);
+      const parent = await fsiApi.createNode(studyId!, {
         node_type: args.type,
         display_title: defaultTitleForType(args.type),
         canvas_x: args.x,
         canvas_y: args.y,
-        structured_payload: defaultPayloadForType(args.type),
-      }),
+        structured_payload: parentPayload(defaults),
+      });
+
+      const fieldDefs = NODE_FIELD_DEFS[args.type];
+      for (const def of fieldDefs) {
+        const initial =
+          def.key === "observation"
+            ? String(defaults.observation ?? "")
+            : String(defaults[def.key as keyof typeof defaults] ?? "");
+        await fsiApi.createNode(studyId!, {
+          parent_node_id: parent.id,
+          node_type: args.type,
+          display_title: def.label,
+          canvas_x: 0,
+          canvas_y: 0,
+          structured_payload: fieldPayload(
+            def.key,
+            def.label,
+            initial,
+            def.inputType ?? "text",
+          ),
+        });
+      }
+
+      return parent;
+    },
     onSuccess: (node) => {
       invalidate();
       setSelectedNode(node);
       setPicker(null);
-      toast.success("Node added");
+      toast.success("Parent node added with field sub-children");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -59,16 +85,7 @@ export default function FsiCanvasWorkspace() {
   const updateNodeMutation = useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: Record<string, unknown> }) =>
       fsiApi.updateNode(id, patch),
-    onSuccess: (node) => {
-      setSelectedNode(node);
-      queryClient.setQueryData<FsiGraph>(["fsi-graph", studyId], (old) => {
-        if (!old) return old;
-        return {
-          ...old,
-          nodes: old.nodes.map((n) => (n.id === node.id ? node : n)),
-        };
-      });
-    },
+    onSuccess: () => invalidate(),
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -95,32 +112,20 @@ export default function FsiCanvasWorkspace() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const handleInspectorChange = useCallback(
-    (patch: Partial<FsiNodeRecord>) => {
-      const node = selectedNodeRef.current;
-      if (!node || !canEdit) return;
-
-      const next: FsiNodeRecord = {
-        ...node,
-        ...patch,
-        structured_payload: patch.structured_payload ?? node.structured_payload,
-      };
-      setSelectedNode(next);
-      selectedNodeRef.current = next;
-
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(() => {
-        const current = selectedNodeRef.current;
-        if (!current) return;
-        updateNodeMutation.mutate({
-          id: current.id,
-          patch: {
-            display_title: current.display_title,
-            structured_payload: current.structured_payload,
-            raw_body_text: current.raw_body_text,
+  const handleFieldChange = useCallback(
+    (nodeId: string, value: string) => {
+      if (!canEdit) return;
+      const node = graphRef.current?.nodes.find((n) => n.id === nodeId);
+      if (!node) return;
+      updateNodeMutation.mutate({
+        id: nodeId,
+        patch: {
+          structured_payload: {
+            ...(node.structured_payload ?? {}),
+            field_value: value,
           },
-        });
-      }, 300);
+        },
+      });
     },
     [canEdit, updateNodeMutation],
   );
@@ -137,8 +142,8 @@ export default function FsiCanvasWorkspace() {
     setPicker({
       x: window.innerWidth / 2 - 112,
       y: window.innerHeight / 2 - 80,
-      flowX: 0,
-      flowY: 0,
+      flowX: 40,
+      flowY: 40,
     });
   };
 
@@ -162,6 +167,7 @@ export default function FsiCanvasWorkspace() {
   }
 
   const { study, nodes, connections } = graph;
+  const parentCount = nodes.filter(isParentNode).length;
 
   return (
     <div className="flex h-screen flex-col bg-zinc-950 text-white">
@@ -173,55 +179,58 @@ export default function FsiCanvasWorkspace() {
         <div className="min-w-0 flex-1">
           <div className="truncate font-semibold">{study.title}</div>
           <div className="truncate text-xs text-zinc-500">
-            {study.study_type} · {study.target_account} · {nodes.length} nodes · {connections.length} connections
+            {study.study_type} · {study.target_account} · {parentCount} parents · tree layout
           </div>
         </div>
+        {canEdit && selectedNode && isParentNode(selectedNode) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-red-400"
+            onClick={() => deleteNodeMutation.mutate(selectedNode.id)}
+          >
+            <Trash2 className="mr-1 h-4 w-4" />
+            Delete parent
+          </Button>
+        )}
         {canEdit && (
           <Button size="sm" onClick={openPickerAtCenter}>
             <Plus className="mr-1 h-4 w-4" />
-            Add node
+            Add parent
           </Button>
         )}
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        <div className="relative min-w-0 flex-1">
-          <FsiFlowCanvas
-            nodes={nodes}
-            connections={connections}
-            canEdit={canEdit}
-            selectedNodeId={selectedNode?.id ?? null}
-            onNodeSelect={setSelectedNode}
-            onPaneDoubleClick={(x, y, screenX, screenY) => {
-              if (!canEdit) return;
-              setPicker({ x: screenX + 12, y: screenY + 12, flowX: x, flowY: y });
-            }}
-            onNodeDragStop={handleNodeDragStop}
-            onConnect={(source, target) => createConnectionMutation.mutate({ source, target })}
-            onEdgeDelete={(id) => deleteConnectionMutation.mutate(id)}
-            onNodeDelete={(id) => deleteNodeMutation.mutate(id)}
+      <div className="relative min-h-0 flex-1">
+        <FsiFlowCanvas
+          nodes={nodes}
+          connections={connections}
+          canEdit={canEdit}
+          selectedNodeId={selectedNode?.id ?? null}
+          onNodeSelect={setSelectedNode}
+          onFieldChange={handleFieldChange}
+          onPaneDoubleClick={(x, y, screenX, screenY) => {
+            if (!canEdit) return;
+            setPicker({ x: screenX + 12, y: screenY + 12, flowX: x, flowY: y });
+          }}
+          onNodeDragStop={handleNodeDragStop}
+          onConnect={(source, target) => createConnectionMutation.mutate({ source, target })}
+          onEdgeDelete={(id) => deleteConnectionMutation.mutate(id)}
+          onNodeDelete={(id) => deleteNodeMutation.mutate(id)}
+        />
+
+        {picker && canEdit && (
+          <NodeTypePicker
+            x={picker.x}
+            y={picker.y}
+            onCancel={() => setPicker(null)}
+            onSelect={(type) => createNodeMutation.mutate({ type, x: picker.flowX, y: picker.flowY })}
           />
-
-          {picker && canEdit && (
-            <NodeTypePicker
-              x={picker.x}
-              y={picker.y}
-              onCancel={() => setPicker(null)}
-              onSelect={(type) => createNodeMutation.mutate({ type, x: picker.flowX, y: picker.flowY })}
-            />
-          )}
-        </div>
-
-        {selectedNode && (
-          <div className="w-[340px] shrink-0 border-l border-zinc-800">
-            <NodeInspector
-              node={selectedNode}
-              canEdit={canEdit}
-              onChange={handleInspectorChange}
-              onDelete={() => deleteNodeMutation.mutate(selectedNode.id)}
-            />
-          </div>
         )}
+
+        <div className="pointer-events-none absolute bottom-4 left-4 max-w-xs rounded-lg border border-zinc-800 bg-zinc-950/90 px-3 py-2 text-xs text-zinc-500">
+          Parent → field sub-children (Godot-style). Connect parent bottoms to other parents for structural children.
+        </div>
       </div>
     </div>
   );

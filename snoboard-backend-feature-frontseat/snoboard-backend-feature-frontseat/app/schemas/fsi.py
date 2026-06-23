@@ -72,6 +72,7 @@ class StudyUpdate(BaseModel):
 
 class NodeCreate(BaseModel):
     id: str | None = None
+    parent_node_id: str | None = None
     node_type: str
     display_title: str = Field(..., max_length=255)
     canvas_x: float

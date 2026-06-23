@@ -950,6 +950,7 @@ export function createFsiApi() {
         raw_body_text: data.raw_body_text ?? null,
         tags: data.tags ?? [],
         created_by: email,
+        ...(data.parent_node_id ? { parent_node_id: data.parent_node_id } : {}),
       };
       const backendBody = {
         id,
@@ -960,6 +961,7 @@ export function createFsiApi() {
         structured_payload: row.structured_payload,
         raw_body_text: row.raw_body_text ?? undefined,
         tags: row.tags,
+        ...(data.parent_node_id ? { parent_node_id: data.parent_node_id } : {}),
       };
       return fsiDualMutate({
         supabase: async () => {
