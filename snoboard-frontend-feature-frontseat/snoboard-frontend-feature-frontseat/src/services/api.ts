@@ -738,17 +738,25 @@ export const getExpWorkingIdeas = (params?: { week?: number; page?: string }) =>
   createExpApi("bpb").getWorkingIdeas(params);
 export const distributeExpWorkingIdea = (id: string) => createExpApi("bpb").distributeWorkingIdea(id);
 
-// --- FSI Canvas Lite ---
+// --- FSI Canvas Lite — direct Supabase (bypasses backend JWT, works without backend redeploy) ---
+async function fsiActorEmail(): Promise<string> {
+  const { data: { user }, error } = await _sb.auth.getUser();
+  if (error || !user?.email) throw new Error("Not signed in");
+  return user.email;
+}
+
 export type FsiApi = ReturnType<typeof createFsiApi>;
 
 export function createFsiApi() {
-  const base = "/api/v1/fsi";
   return {
-    listStudies: (status?: string) => {
-      const qs = status ? `?status=${encodeURIComponent(status)}` : "";
-      return fetchApi<any[]>(`${base}/studies${qs}`);
+    listStudies: async (status?: string) => {
+      let q = _sb.from("studies").select("*").order("updated_at", { ascending: false });
+      if (status) q = q.eq("status", status);
+      const { data, error } = await q;
+      if (error) throw new Error(error.message);
+      return data ?? [];
     },
-    createStudy: (data: {
+    createStudy: async (data: {
       title: string;
       study_type: string;
       target_account: string;
@@ -756,25 +764,134 @@ export function createFsiApi() {
       owner_id?: string;
       execution_date?: string;
       meta_notes?: string;
-    }) => fetchApi<any>(`${base}/studies`, { method: "POST", body: JSON.stringify(data) }),
-    getStudyGraph: (studyId: string) => fetchApi<any>(`${base}/studies/${studyId}`),
-    updateStudy: (studyId: string, data: Record<string, unknown>) =>
-      fetchApi<any>(`${base}/studies/${studyId}`, { method: "PATCH", body: JSON.stringify(data) }),
-    deleteStudy: (studyId: string) =>
-      fetchApi<any>(`${base}/studies/${studyId}`, { method: "DELETE" }),
-    createNode: (studyId: string, data: Record<string, unknown>) =>
-      fetchApi<any>(`${base}/studies/${studyId}/nodes`, { method: "POST", body: JSON.stringify(data) }),
-    updateNode: (nodeId: string, data: Record<string, unknown>) =>
-      fetchApi<any>(`${base}/nodes/${nodeId}`, { method: "PATCH", body: JSON.stringify(data) }),
-    deleteNode: (nodeId: string) =>
-      fetchApi<any>(`${base}/nodes/${nodeId}`, { method: "DELETE" }),
-    createConnection: (studyId: string, data: {
+    }) => {
+      const email = (data.owner_id || (await fsiActorEmail())).trim();
+      const row = {
+        title: data.title.trim(),
+        study_type: data.study_type,
+        target_account: data.target_account.trim(),
+        niche_vertical: data.niche_vertical.trim(),
+        owner_id: email,
+        execution_date: data.execution_date || new Date().toISOString().slice(0, 10),
+        meta_notes: data.meta_notes ?? null,
+        status: "Draft",
+      };
+      const { data: created, error } = await _sb.from("studies").insert(row).select().single();
+      if (error) throw new Error(error.message);
+      return created;
+    },
+    getStudyGraph: async (studyId: string) => {
+      const [studyRes, nodesRes, connRes] = await Promise.all([
+        _sb.from("studies").select("*").eq("id", studyId).single(),
+        _sb.from("nodes").select("*").eq("study_id", studyId),
+        _sb.from("connections").select("*").eq("study_id", studyId),
+      ]);
+      if (studyRes.error) throw new Error(studyRes.error.message);
+      if (nodesRes.error) throw new Error(nodesRes.error.message);
+      if (connRes.error) throw new Error(connRes.error.message);
+      return {
+        study: studyRes.data,
+        nodes: nodesRes.data ?? [],
+        connections: connRes.data ?? [],
+      };
+    },
+    updateStudy: async (studyId: string, data: Record<string, unknown>) => {
+      const patch = { ...data, updated_at: new Date().toISOString() };
+      const { data: updated, error } = await _sb
+        .from("studies")
+        .update(patch)
+        .eq("id", studyId)
+        .select()
+        .single();
+      if (error) throw new Error(error.message);
+      return updated;
+    },
+    deleteStudy: async (studyId: string) => {
+      const { error } = await _sb.from("studies").delete().eq("id", studyId);
+      if (error) throw new Error(error.message);
+      return { id: studyId };
+    },
+    createNode: async (studyId: string, data: Record<string, unknown>) => {
+      const email = await fsiActorEmail();
+      const row = {
+        study_id: studyId,
+        node_type: data.node_type,
+        display_title: String(data.display_title || "").trim(),
+        canvas_x: data.canvas_x,
+        canvas_y: data.canvas_y,
+        structured_payload: data.structured_payload ?? {},
+        raw_body_text: data.raw_body_text ?? null,
+        tags: data.tags ?? [],
+        created_by: email,
+      };
+      const { data: created, error } = await _sb.from("nodes").insert(row).select().single();
+      if (error) throw new Error(error.message);
+      await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", studyId);
+      return created;
+    },
+    updateNode: async (nodeId: string, data: Record<string, unknown>) => {
+      const patch = { ...data, updated_at: new Date().toISOString() };
+      const { data: updated, error } = await _sb
+        .from("nodes")
+        .update(patch)
+        .eq("id", nodeId)
+        .select("*, study_id")
+        .single();
+      if (error) throw new Error(error.message);
+      if (updated?.study_id) {
+        await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", updated.study_id);
+      }
+      return updated;
+    },
+    deleteNode: async (nodeId: string) => {
+      const { data: existing, error: fetchErr } = await _sb
+        .from("nodes")
+        .select("study_id")
+        .eq("id", nodeId)
+        .single();
+      if (fetchErr) throw new Error(fetchErr.message);
+      const { error } = await _sb.from("nodes").delete().eq("id", nodeId);
+      if (error) throw new Error(error.message);
+      if (existing?.study_id) {
+        await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", existing.study_id);
+      }
+      return { id: nodeId };
+    },
+    createConnection: async (studyId: string, data: {
       source_node_id: string;
       target_node_id: string;
       edge_label_note?: string;
-    }) => fetchApi<any>(`${base}/studies/${studyId}/connections`, { method: "POST", body: JSON.stringify(data) }),
-    deleteConnection: (connectionId: string) =>
-      fetchApi<any>(`${base}/connections/${connectionId}`, { method: "DELETE" }),
+    }) => {
+      if (data.source_node_id === data.target_node_id) {
+        throw new Error("Self-loops are not allowed");
+      }
+      const email = await fsiActorEmail();
+      const row = {
+        study_id: studyId,
+        source_node_id: data.source_node_id,
+        target_node_id: data.target_node_id,
+        edge_label_note: data.edge_label_note ?? null,
+        created_by: email,
+      };
+      const { data: created, error } = await _sb.from("connections").insert(row).select().single();
+      if (error) throw new Error(error.message);
+      await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", studyId);
+      return created;
+    },
+    deleteConnection: async (connectionId: string) => {
+      const { data: existing, error: fetchErr } = await _sb
+        .from("connections")
+        .select("study_id")
+        .eq("id", connectionId)
+        .single();
+      if (fetchErr) throw new Error(fetchErr.message);
+      const { error } = await _sb.from("connections").delete().eq("id", connectionId);
+      if (error) throw new Error(error.message);
+      if (existing?.study_id) {
+        await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", existing.study_id);
+      }
+      return { id: connectionId };
+    },
   };
 }
 

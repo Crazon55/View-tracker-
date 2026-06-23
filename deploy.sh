@@ -11,20 +11,20 @@ cd "$REPO_ROOT"
 git pull
 
 echo ""
-echo "=== Rebuilding backend ==="
-cd "$BACKEND_DIR"
-docker build -t view-tracker-backend .
-
-echo ""
-echo "=== Restarting backend container ==="
-docker stop view-tracker-backend 2>/dev/null || true
-docker rm   view-tracker-backend 2>/dev/null || true
-docker run -d \
-  --name view-tracker-backend \
-  --restart unless-stopped \
-  -p 8080:8080 \
-  --env-file "$BACKEND_DIR/.env" \
-  view-tracker-backend
+echo "=== Rebuilding backend (background) ==="
+(
+  cd "$BACKEND_DIR"
+  docker build -t view-tracker-backend .
+  docker stop view-tracker-backend 2>/dev/null || true
+  docker rm   view-tracker-backend 2>/dev/null || true
+  docker run -d \
+    --name view-tracker-backend \
+    --restart unless-stopped \
+    -p 8080:8080 \
+    --env-file "$BACKEND_DIR/.env" \
+    view-tracker-backend
+) &
+BACKEND_PID=$!
 
 echo ""
 echo "=== Rebuilding frontend ==="
@@ -33,6 +33,10 @@ pm2 stop all 2>/dev/null || true
 npm ci
 npm run build
 pm2 restart all 2>/dev/null || true
+
+echo ""
+echo "=== Waiting for backend ==="
+wait "$BACKEND_PID"
 
 echo ""
 echo "=== Done ==="
