@@ -460,7 +460,7 @@ function AppLayout() {
   return (
     <>
       {isFullScreen ? (
-        <div className="relative pt-12">
+        <div className="relative">
           <HamburgerMenu />
           <div className="fixed top-5 right-5 z-[60] flex items-center gap-2 sm:gap-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl px-3 sm:px-4 py-2 shadow-lg max-w-[min(100vw-1rem,480px)] flex-wrap justify-end">
             <MonthlyWrapOpenButton />
@@ -513,7 +513,7 @@ function AppLayout() {
           </Routes>
         </div>
       ) : (
-        <div className="flex min-h-screen bg-zinc-950 pt-12">
+        <div className="flex min-h-screen bg-zinc-950">
           {/* Sidebar */}
           <aside className="w-60 shrink-0 border-r border-zinc-800 bg-zinc-950 flex flex-col">
             <div className="px-5 py-5 border-b border-zinc-800">
