@@ -12,6 +12,7 @@ import {
   type Node,
   type Edge,
   type OnSelectionChangeFunc,
+  type Viewport,
   ReactFlowProvider,
   useReactFlow,
 } from "@xyflow/react";
@@ -20,6 +21,7 @@ import "@xyflow/react/dist/style.css";
 import FsiCanvasNode from "./FsiCanvasNode";
 import type { FsiConnectionRecord, FsiNodeRecord } from "../lib/fsiNodeSchemas";
 import { graphToFlow, type FsiNodeData } from "../lib/fsiFlowAdapter";
+import { loadSavedViewport, saveViewport } from "../lib/fsiViewportStorage";
 import {
   FSI_NODE_SUGGESTION_MIME,
   FSI_NOTE_SUGGESTION_MIME,
@@ -32,9 +34,11 @@ const nodeTypes = { fsiNode: FsiCanvasNode };
 export type FsiFlowCanvasHandle = {
   getViewportCenter: () => { x: number; y: number };
   focusNode: (nodeId: string) => void;
+  fitAll: () => void;
 };
 
 type FlowInnerProps = {
+  studyId: string;
   nodes: FsiNodeRecord[];
   connections: FsiConnectionRecord[];
   canEdit: boolean;
@@ -47,6 +51,7 @@ type FlowInnerProps = {
   onPaneClick?: () => void;
   onSelectionChange: OnSelectionChangeFunc;
   onPaneDoubleClick: (x: number, y: number) => void;
+  onNodeDragStart: (nodeId: string, x: number, y: number) => void;
   onNodeDragStop: (nodeId: string, x: number, y: number) => void;
   onConnect: (source: string, target: string) => void;
   onEdgeDelete: (edgeId: string) => void;
@@ -60,6 +65,7 @@ type FlowInnerProps = {
 
 const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowInner(
   {
+    studyId,
     nodes: dbNodes,
     connections,
     canEdit,
@@ -72,6 +78,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     onPaneClick,
     onSelectionChange,
     onPaneDoubleClick,
+    onNodeDragStart,
     onNodeDragStop,
     onConnect,
     onEdgeDelete,
@@ -84,10 +91,28 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   },
   ref,
 ) {
-  const { screenToFlowPosition, fitView } = useReactFlow();
+  const { screenToFlowPosition, fitView, setViewport, getViewport, setCenter } = useReactFlow();
   const paneRef = useRef<HTMLDivElement>(null);
-  const didInitialFit = useRef(false);
   const dropLockRef = useRef(false);
+  const viewportReadyRef = useRef(false);
+  const saveViewportTimer = useRef<number | null>(null);
+
+  const persistViewport = useCallback(
+    (viewport: Viewport) => {
+      saveViewport(studyId, { x: viewport.x, y: viewport.y, zoom: viewport.zoom });
+    },
+    [studyId],
+  );
+
+  const schedulePersistViewport = useCallback(
+    (viewport: Viewport) => {
+      if (saveViewportTimer.current) window.clearTimeout(saveViewportTimer.current);
+      saveViewportTimer.current = window.setTimeout(() => {
+        persistViewport(viewport);
+      }, 200);
+    },
+    [persistViewport],
+  );
 
   useImperativeHandle(ref, () => ({
     getViewportCenter: () => {
@@ -100,11 +125,38 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
       });
     },
     focusNode: (nodeId: string) => {
-      requestAnimationFrame(() =>
-        fitView({ nodes: [{ id: nodeId }], padding: 0.55, duration: 350, maxZoom: 1.4 }),
-      );
+      const target = dbNodes.find((n) => n.id === nodeId);
+      if (!target) return;
+      const cx = (target.canvas_x ?? 0) + 120;
+      const cy = (target.canvas_y ?? 0) + 50;
+      void setCenter(cx, cy, { zoom: getViewport().zoom, duration: 280 });
+    },
+    fitAll: () => {
+      requestAnimationFrame(() => {
+        void fitView({ padding: 0.25, duration: 300 }).then(() => {
+          persistViewport(getViewport());
+        });
+      });
     },
   }));
+
+  useEffect(() => {
+    if (viewportReadyRef.current) return;
+    viewportReadyRef.current = true;
+
+    requestAnimationFrame(() => {
+      const saved = loadSavedViewport(studyId);
+      if (saved) {
+        void setViewport(saved, { duration: 0 });
+        return;
+      }
+      if (dbNodes.length > 0) {
+        void fitView({ padding: 0.25, duration: 0 }).then(() => {
+          persistViewport(getViewport());
+        });
+      }
+    });
+  }, [studyId, dbNodes.length, fitView, setViewport, getViewport, persistViewport]);
 
   const onTitleChangeRef = useRef(onTitleChange);
   const onBodyChangeRef = useRef(onBodyChange);
@@ -171,24 +223,30 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   }, [flowGraph, setNodes, setEdges]);
 
   useEffect(() => {
-    if (!didInitialFit.current && flowGraph.nodes.length > 0) {
-      didInitialFit.current = true;
-      requestAnimationFrame(() => fitView({ padding: 0.25, duration: 200 }));
-    }
-  }, [flowGraph.nodes.length, fitView]);
-
-  useEffect(() => {
     if (fitTrigger > 0) {
-      requestAnimationFrame(() => fitView({ padding: 0.25, duration: 300 }));
+      requestAnimationFrame(() => {
+        void fitView({ padding: 0.25, duration: 300 }).then(() => {
+          persistViewport(getViewport());
+        });
+      });
     }
-  }, [fitTrigger, fitView]);
+  }, [fitTrigger, fitView, getViewport, persistViewport]);
 
   useEffect(() => {
     if (!focusNodeId) return;
-    requestAnimationFrame(() =>
-      fitView({ nodes: [{ id: focusNodeId }], padding: 0.55, duration: 350, maxZoom: 1.4 }),
-    );
-  }, [focusNodeId, fitView]);
+    const target = dbNodes.find((n) => n.id === focusNodeId);
+    if (!target) return;
+    const cx = (target.canvas_x ?? 0) + 120;
+    const cy = (target.canvas_y ?? 0) + 50;
+    void setCenter(cx, cy, { zoom: getViewport().zoom, duration: 280 });
+  }, [focusNodeId, dbNodes, setCenter, getViewport]);
+
+  const handleMoveEnd = useCallback(
+    (_: unknown, viewport: Viewport) => {
+      schedulePersistViewport(viewport);
+    },
+    [schedulePersistViewport],
+  );
 
   const handleConnect = useCallback(
     (params: Connection) => {
@@ -222,6 +280,13 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
       onPaneDoubleClick(pos.x, pos.y);
     },
     [canEdit, onPaneClick, onPaneDoubleClick, onNodeSelect, screenToFlowPosition, setNodes],
+  );
+
+  const handleNodeDragStart = useCallback(
+    (_: React.MouseEvent, node: Node) => {
+      onNodeDragStart(node.id, node.position.x, node.position.y);
+    },
+    [onNodeDragStart],
   );
 
   const handleNodeDragStop = useCallback(
@@ -307,8 +372,13 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     [nodes, selectedNodeId, multiSet],
   );
 
+  const miniMapNodeColor = useCallback((n: Node) => {
+    const d = n.data as FsiNodeData | undefined;
+    return d?.color ?? "#22c55e";
+  }, []);
+
   return (
-    <div ref={paneRef} className="h-full w-full" onDragOver={handleDragOver} onDrop={handleDrop}>
+    <div ref={paneRef} className="relative h-full w-full overflow-hidden" onDragOver={handleDragOver} onDrop={handleDrop}>
       <ReactFlow
         nodes={styledNodes}
         edges={edges}
@@ -318,7 +388,9 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         onNodeClick={handleNodeClick}
         onPaneClick={handlePaneClick}
         onPaneDoubleClick={handlePaneDoubleClick}
+        onNodeDragStart={handleNodeDragStart}
         onNodeDragStop={handleNodeDragStop}
+        onMoveEnd={handleMoveEnd}
         onDragOver={handleDragOver}
         onEdgesDelete={handleEdgesDelete}
         onNodesDelete={handleNodesDelete}
@@ -329,18 +401,22 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         selectionMode={SelectionMode.Partial}
         deleteKeyCode={canEdit ? ["Backspace", "Delete"] : null}
         defaultEdgeOptions={{ type: "smoothstep", style: { stroke: "#71717a", strokeWidth: 2 } }}
+        minZoom={0.08}
+        maxZoom={2.5}
         className="bg-zinc-950 fsi-flow-canvas"
       >
         <Background id="fsi-grid-coarse" variant={BackgroundVariant.Dots} gap={48} size={3} color="#3f3f46" />
         <Background id="fsi-grid-fine" variant={BackgroundVariant.Dots} gap={24} size={2} color="#52525b" />
-        <Controls className="!bg-zinc-900 !border-zinc-700 [&>button]:!bg-zinc-800 [&>button]:!border-zinc-700 [&>button]:!text-white" />
+        <Controls className="!z-20 !bg-zinc-900 !border-zinc-700 [&>button]:!bg-zinc-800 [&>button]:!border-zinc-700 [&>button]:!text-white" />
         <MiniMap
-          nodeColor={(n) => {
-            const d = n.data as FsiNodeData | undefined;
-            return d?.color ?? "#22c55e";
-          }}
-          maskColor="rgba(0,0,0,0.6)"
-          className="!bg-zinc-900 !border-zinc-700"
+          pannable
+          zoomable
+          position="bottom-right"
+          nodeColor={miniMapNodeColor}
+          nodeStrokeWidth={2}
+          maskColor="rgba(0,0,0,0.55)"
+          style={{ width: 160, height: 120 }}
+          className="!z-20 !rounded-md !border !border-zinc-600 !bg-zinc-900/95 !shadow-lg"
         />
       </ReactFlow>
     </div>
