@@ -4,12 +4,13 @@ import type { FsiNodeData } from "../lib/fsiFlowAdapter";
 
 function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
   const nodeData = data as FsiNodeData;
+  const active = nodeData.isActiveParent;
 
   return (
     <div
-      className={`min-w-[200px] max-w-[260px] rounded-md border-2 border-emerald-600 bg-emerald-500 shadow-lg ${
-        selected ? "ring-2 ring-white/50" : ""
-      }`}
+      className={`min-w-[200px] max-w-[260px] rounded-md border-2 bg-emerald-500 shadow-lg ${
+        active ? "border-white ring-2 ring-white/60" : "border-emerald-600"
+      } ${selected ? "ring-2 ring-white/50" : ""}`}
     >
       <Handle type="target" position={Position.Top} className="!h-2.5 !w-2.5 !border-2 !border-emerald-800 !bg-white" />
       <div className="px-3 py-2.5 text-center">

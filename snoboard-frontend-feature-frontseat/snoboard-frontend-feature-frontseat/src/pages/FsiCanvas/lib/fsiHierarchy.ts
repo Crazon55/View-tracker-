@@ -9,6 +9,7 @@ export function getHierarchyLevel(node: FsiNodeRecord): HierarchyLevel {
 
 export function isFieldNode(node: FsiNodeRecord): boolean {
   if (node.structured_payload?.hierarchy_level === "field") return true;
+  if (typeof node.structured_payload?.field_key === "string") return true;
   return !!node.parent_node_id;
 }
 
@@ -44,13 +45,10 @@ export function fieldPayload(
   };
 }
 
-/** Field nodes on the canvas keep their position; palette-only defs are not rendered in React Flow. */
+/** Only field nodes explicitly placed on the canvas (avoids legacy auto-spawn clutter). */
 export function isPlacedOnCanvas(node: FsiNodeRecord): boolean {
   if (!isFieldNode(node)) return true;
-  if (node.structured_payload?.placed_on_canvas === true) return true;
-  if (node.structured_payload?.placed_on_canvas === false) return false;
-  // Legacy rows created before palette workflow: treat as on-canvas if not at origin sentinel.
-  return !(node.canvas_x === 0 && node.canvas_y === 0);
+  return node.structured_payload?.placed_on_canvas === true;
 }
 
 export function parentPayload(existing: Record<string, unknown> = {}) {

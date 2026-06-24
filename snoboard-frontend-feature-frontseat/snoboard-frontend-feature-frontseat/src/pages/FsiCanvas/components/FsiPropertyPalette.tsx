@@ -5,11 +5,17 @@ import { NODE_FIELD_DEFS, type FieldDef } from "../lib/fsiNodeFieldDefs";
 import { isPlacedOnCanvas } from "../lib/fsiHierarchy";
 
 export const FSI_FIELD_DRAG_MIME = "application/fsi-field-def";
+export const FSI_PLACED_FIELD_DRAG_MIME = "application/fsi-placed-field";
 
 export type FieldDragPayload = {
   fieldKey: string;
   label: string;
   inputType?: FieldDef["inputType"];
+};
+
+export type PlacedFieldDragPayload = {
+  nodeId: string;
+  label: string;
 };
 
 type Props = {
@@ -20,7 +26,7 @@ type Props = {
   onDeleteField: (nodeId: string) => void;
 };
 
-function startFieldDrag(e: React.DragEvent, def: FieldDef) {
+function startTemplateDrag(e: React.DragEvent, def: FieldDef) {
   const payload: FieldDragPayload = {
     fieldKey: def.key,
     label: def.label,
@@ -28,6 +34,15 @@ function startFieldDrag(e: React.DragEvent, def: FieldDef) {
   };
   e.dataTransfer.setData(FSI_FIELD_DRAG_MIME, JSON.stringify(payload));
   e.dataTransfer.effectAllowed = "copy";
+}
+
+function startPlacedDrag(e: React.DragEvent, node: FsiNodeRecord) {
+  const payload: PlacedFieldDragPayload = {
+    nodeId: node.id,
+    label: String(node.structured_payload?.field_label ?? node.display_title),
+  };
+  e.dataTransfer.setData(FSI_PLACED_FIELD_DRAG_MIME, JSON.stringify(payload));
+  e.dataTransfer.effectAllowed = "move";
 }
 
 export default function FsiPropertyPalette({
@@ -41,11 +56,30 @@ export default function FsiPropertyPalette({
   const defs = NODE_FIELD_DEFS[nodeType] ?? [];
   const placed = fieldNodes.filter(isPlacedOnCanvas);
 
+  const handlePaletteDragOver = (e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes(FSI_PLACED_FIELD_DRAG_MIME)) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+    }
+  };
+
+  const handlePaletteDrop = (e: React.DragEvent) => {
+    const raw = e.dataTransfer.getData(FSI_PLACED_FIELD_DRAG_MIME);
+    if (!raw || !canEdit) return;
+    e.preventDefault();
+    try {
+      const { nodeId } = JSON.parse(raw) as PlacedFieldDragPayload;
+      onDeleteField(nodeId);
+    } catch {
+      /* ignore */
+    }
+  };
+
   return (
-    <aside className="flex w-72 shrink-0 flex-col border-l border-zinc-800 bg-zinc-950">
+    <aside className="flex w-80 shrink-0 flex-col border-l border-zinc-800 bg-zinc-950">
       <div className="flex items-start justify-between gap-2 border-b border-zinc-800 px-3 py-3">
         <div className="min-w-0">
-          <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Properties</div>
+          <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Inspector</div>
           <div className="truncate text-sm font-semibold text-white">{parent.display_title}</div>
           <div className="truncate text-xs text-zinc-500">{parent.node_type}</div>
         </div>
@@ -54,26 +88,35 @@ export default function FsiPropertyPalette({
         </Button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-4">
+      {canEdit && (
+        <div
+          onDragOver={handlePaletteDragOver}
+          onDrop={handlePaletteDrop}
+          className="mx-3 mt-3 rounded-lg border border-dashed border-zinc-700 bg-zinc-900/40 px-3 py-4 text-center text-xs text-zinc-500"
+        >
+          Drop a canvas property here to remove it
+        </div>
+      )}
+
+      <div className="flex-1 overflow-y-auto p-3 space-y-5">
         <section>
           <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-            Drag onto canvas
+            Optional fields — drag to canvas
           </div>
-          <p className="mb-2 text-xs text-zinc-600">
-            Pick a property, drop it on the canvas, then connect it to this parent with the node handles.
-          </p>
-          <div className="space-y-1">
+          <div className="space-y-2">
             {defs.map((def) => (
               <div
                 key={def.key}
                 draggable={canEdit}
-                onDragStart={(e) => canEdit && startFieldDrag(e, def)}
-                className={`flex items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900/80 px-2 py-2 text-xs text-zinc-200 ${
-                  canEdit ? "cursor-grab active:cursor-grabbing hover:border-emerald-700/60 hover:bg-zinc-900" : "opacity-60"
+                onDragStart={(e) => canEdit && startTemplateDrag(e, def)}
+                className={`flex items-center gap-2 rounded-lg border border-zinc-700/80 bg-zinc-900 px-3 py-2.5 shadow-sm ${
+                  canEdit
+                    ? "cursor-grab active:cursor-grabbing hover:border-emerald-600/50 hover:bg-zinc-900/90"
+                    : "opacity-60"
                 }`}
               >
-                <GripVertical className="h-3.5 w-3.5 shrink-0 text-zinc-600" />
-                <span className="min-w-0 flex-1 truncate">{def.label}</span>
+                <GripVertical className="h-4 w-4 shrink-0 text-zinc-600" />
+                <span className="min-w-0 flex-1 text-sm text-zinc-200">{def.label}</span>
               </div>
             ))}
           </div>
@@ -82,9 +125,9 @@ export default function FsiPropertyPalette({
         {placed.length > 0 && (
           <section>
             <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-              On canvas ({placed.length})
+              On canvas ({placed.length}) — drag back to remove
             </div>
-            <div className="space-y-1">
+            <div className="space-y-2">
               {placed.map((node) => {
                 const label =
                   String(node.structured_payload?.field_label ?? node.display_title) || "Field";
@@ -92,12 +135,17 @@ export default function FsiPropertyPalette({
                 return (
                   <div
                     key={node.id}
-                    className="flex items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900/50 px-2 py-2"
+                    draggable={canEdit}
+                    onDragStart={(e) => canEdit && startPlacedDrag(e, node)}
+                    className={`flex items-center gap-2 rounded-lg border border-emerald-900/40 bg-emerald-950/30 px-3 py-2.5 ${
+                      canEdit ? "cursor-grab active:cursor-grabbing" : ""
+                    }`}
                   >
+                    <GripVertical className="h-4 w-4 shrink-0 text-emerald-700/80" />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-xs font-medium text-zinc-300">{label}</div>
+                      <div className="truncate text-sm font-medium text-emerald-100">{label}</div>
                       {preview ? (
-                        <div className="truncate text-[10px] text-zinc-600">{preview}</div>
+                        <div className="truncate text-[10px] text-emerald-700/80">{preview}</div>
                       ) : null}
                     </div>
                     {canEdit && (

@@ -1,22 +1,68 @@
 import type { FsiConnectionRecord, FsiNodeRecord } from "./fsiNodeSchemas";
-import { isFieldNode, isParentNode } from "./fsiHierarchy";
+import { isFieldNode, isParentNode, isPlacedOnCanvas } from "./fsiHierarchy";
 
 export const PARENT_NODE_W = 220;
 export const FIELD_NODE_W = 200;
+export const FIELD_NODE_H = 88;
 export const H_GAP = 20;
 export const V_GAP = 72;
 
 type TreeEdge = { source: string; target: string };
 
-function buildTreeEdges(nodes: FsiNodeRecord[], connections: FsiConnectionRecord[]): TreeEdge[] {
+/** Tree edges = explicit connections + parent→field hierarchy links. */
+export function buildTreeEdges(nodes: FsiNodeRecord[], connections: FsiConnectionRecord[]): TreeEdge[] {
   const nodeIds = new Set(nodes.map((n) => n.id));
-  return connections
-    .filter((c) => nodeIds.has(c.source_node_id) && nodeIds.has(c.target_node_id))
-    .map((c) => ({ source: c.source_node_id, target: c.target_node_id }));
+  const seen = new Set<string>();
+  const edges: TreeEdge[] = [];
+
+  for (const c of connections) {
+    if (!nodeIds.has(c.source_node_id) || !nodeIds.has(c.target_node_id)) continue;
+    const key = `${c.source_node_id}->${c.target_node_id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    edges.push({ source: c.source_node_id, target: c.target_node_id });
+  }
+
+  for (const n of nodes) {
+    if (n.parent_node_id && nodeIds.has(n.parent_node_id) && isPlacedOnCanvas(n)) {
+      const key = `${n.parent_node_id}->${n.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      edges.push({ source: n.parent_node_id, target: n.id });
+    }
+  }
+
+  return edges;
 }
 
 function nodeWidth(node: FsiNodeRecord): number {
   return isFieldNode(node) ? FIELD_NODE_W : PARENT_NODE_W;
+}
+
+function layoutFieldColumn(
+  parentId: string,
+  childIds: string[],
+  nodesById: Map<string, FsiNodeRecord>,
+  positions: Map<string, { x: number; y: number }>,
+  anchorX: number,
+  anchorY: number,
+): number {
+  const parent = nodesById.get(parentId);
+  if (!parent) return PARENT_NODE_W;
+
+  const parentW = nodeWidth(parent);
+  positions.set(parentId, { x: anchorX, y: anchorY });
+
+  const fieldW = FIELD_NODE_W;
+  const centerX = anchorX + parentW / 2 - fieldW / 2;
+  let y = anchorY + V_GAP;
+
+  for (const childId of childIds) {
+    positions.set(childId, { x: centerX, y });
+    y += FIELD_NODE_H + 24;
+  }
+
+  return Math.max(parentW, fieldW);
 }
 
 function layoutSubtree(
@@ -36,6 +82,11 @@ function layoutSubtree(
     return nodeWidth(node);
   }
 
+  // Field properties stack vertically under their parent (Godot-style column).
+  if (childIds.every((id) => isFieldNode(nodesById.get(id)!))) {
+    return layoutFieldColumn(nodeId, childIds, nodesById, positions, x, y);
+  }
+
   let cursorX = x;
   let totalChildrenW = 0;
   for (const childId of childIds) {
@@ -51,6 +102,30 @@ function layoutSubtree(
   positions.set(nodeId, { x: parentX, y });
 
   return clusterW;
+}
+
+/** Layout one parent and its placed field children in a vertical column. */
+export function layoutFieldsUnderParent(
+  parent: FsiNodeRecord,
+  fieldChildren: FsiNodeRecord[],
+): Map<string, { x: number; y: number }> {
+  const positions = new Map<string, { x: number; y: number }>();
+  const nodesById = new Map<string, FsiNodeRecord>([[parent.id, parent]]);
+  for (const f of fieldChildren) nodesById.set(f.id, f);
+
+  const sorted = [...fieldChildren].sort((a, b) =>
+    (a.display_title ?? "").localeCompare(b.display_title ?? ""),
+  );
+
+  layoutFieldColumn(
+    parent.id,
+    sorted.map((f) => f.id),
+    nodesById,
+    positions,
+    parent.canvas_x ?? 40,
+    parent.canvas_y ?? 40,
+  );
+  return positions;
 }
 
 export function layoutFsiTree(
@@ -97,7 +172,7 @@ export function layoutFsiTree(
     const anchorX = root.canvas_x > 0 ? root.canvas_x : cursorX;
     const anchorY = root.canvas_y > 0 ? root.canvas_y : baseY;
     const w = layoutSubtree(root.id, nodesById, childrenByParent, positions, anchorX, anchorY);
-    cursorX = Math.max(cursorX, anchorX + w + 80);
+    cursorX = Math.max(cursorX, anchorX + w + 120);
   }
 
   for (const n of nodes) {

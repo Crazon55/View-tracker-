@@ -10,6 +10,7 @@ export type FsiNodeData = {
   label: string;
   nodeType: IronNodeType | string;
   color: string;
+  isActiveParent?: boolean;
 };
 
 export type FsiFieldNodeData = {
@@ -26,12 +27,21 @@ export function graphToFlow(
   options?: {
     canEdit?: boolean;
     onFieldChange?: (nodeId: string, value: string) => void;
+    activeParentId?: string | null;
   },
 ): {
   nodes: Node[];
   edges: Edge[];
 } {
-  const visibleDbNodes = nodes.filter((n) => isParentNode(n) || isPlacedOnCanvas(n));
+  const activeParentId = options?.activeParentId ?? null;
+
+  const visibleDbNodes = nodes.filter((n) => {
+    if (isParentNode(n)) return true;
+    if (!activeParentId) return false;
+    if (n.parent_node_id !== activeParentId) return false;
+    return isPlacedOnCanvas(n);
+  });
+
   const visibleIds = new Set(visibleDbNodes.map((n) => n.id));
   const positions = new Map(visibleDbNodes.map((n) => [n.id, { x: n.canvas_x ?? 0, y: n.canvas_y ?? 0 }]));
 
@@ -73,20 +83,38 @@ export function graphToFlow(
         label: n.display_title,
         nodeType: n.node_type,
         color: NODE_TYPE_COLORS[n.node_type as IronNodeType] ?? "#22c55e",
+        isActiveParent: activeParentId === n.id,
       } satisfies FsiNodeData,
     };
   });
 
-  const flowEdges: Edge[] = connections
-    .filter((c) => visibleIds.has(c.source_node_id) && visibleIds.has(c.target_node_id))
-    .map((c) => ({
+  const flowEdges: Edge[] = [];
+
+  // Hierarchy edges: parent → placed field (vertical tree).
+  for (const n of visibleDbNodes) {
+    if (n.parent_node_id && visibleIds.has(n.parent_node_id)) {
+      flowEdges.push({
+        id: `tree-${n.parent_node_id}-${n.id}`,
+        source: n.parent_node_id,
+        target: n.id,
+        type: "smoothstep",
+        style: { stroke: "#52525b", strokeWidth: 2 },
+      });
+    }
+  }
+
+  for (const c of connections) {
+    if (!visibleIds.has(c.source_node_id) || !visibleIds.has(c.target_node_id)) continue;
+    if (flowEdges.some((e) => e.source === c.source_node_id && e.target === c.target_node_id)) continue;
+    flowEdges.push({
       id: c.id,
       source: c.source_node_id,
       target: c.target_node_id,
       label: c.edge_label_note || undefined,
       type: "smoothstep",
       style: { stroke: "#71717a", strokeWidth: 2 },
-    }));
+    });
+  }
 
   return { nodes: flowNodes, edges: flowEdges };
 }

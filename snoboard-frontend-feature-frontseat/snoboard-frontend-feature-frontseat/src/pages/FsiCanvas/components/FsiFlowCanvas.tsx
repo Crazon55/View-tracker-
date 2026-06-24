@@ -37,8 +37,9 @@ type FlowInnerProps = {
   onEdgeDelete: (edgeId: string) => void;
   onNodeDelete: (nodeId: string) => void;
   onFieldChange: (nodeId: string, value: string) => void;
-  onFieldDrop: (x: number, y: number, field: FieldDragPayload) => void;
+  onFieldDrop: (field: FieldDragPayload) => void;
   selectedNodeId: string | null;
+  activeParentId: string | null;
 };
 
 function FlowInner({
@@ -56,6 +57,7 @@ function FlowInner({
   onFieldChange,
   onFieldDrop,
   selectedNodeId,
+  activeParentId,
 }: FlowInnerProps) {
   const { screenToFlowPosition, fitView } = useReactFlow();
   const onFieldChangeRef = useRef(onFieldChange);
@@ -91,8 +93,9 @@ function FlowInner({
       graphToFlow(dbNodes, connections, {
         canEdit,
         onFieldChange: stableFieldChange,
+        activeParentId,
       }),
-    [structureSignature, positionSignature, canEdit, stableFieldChange],
+    [structureSignature, positionSignature, canEdit, stableFieldChange, activeParentId],
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(flowGraph.nodes);
@@ -121,6 +124,17 @@ function FlowInner({
       requestAnimationFrame(() => fitView({ padding: 0.25, duration: 300 }));
     }
   }, [fitTrigger, fitView]);
+
+  useEffect(() => {
+    if (!activeParentId || flowGraph.nodes.length === 0) return;
+    requestAnimationFrame(() =>
+      fitView({
+        nodes: flowGraph.nodes.map((n) => ({ id: n.id })),
+        padding: 0.35,
+        duration: 280,
+      }),
+    );
+  }, [activeParentId, flowGraph.nodes.length, fitView]);
 
   const handleConnect = useCallback(
     (params: Connection) => {
@@ -177,8 +191,7 @@ function FlowInner({
       e.preventDefault();
       try {
         const field = JSON.parse(raw) as FieldDragPayload;
-        const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-        onFieldDrop(pos.x, pos.y, field);
+        onFieldDrop(field);
       } catch {
         /* ignore malformed drag payload */
       }
