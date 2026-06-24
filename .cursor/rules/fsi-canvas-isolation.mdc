@@ -1,0 +1,10 @@
+# FSI Canvas isolation from main site
+
+When working on **FSI Canvas** (`src/pages/FsiCanvas/`, `src/services/fsiApi.ts`, `app/routers/fsi.py`, FSI migrations):
+
+1. **Do not modify** `src/services/api.ts` except shared primitives (`fetchApi`, `setAccessToken`, `getAccessToken`). All FSI logic lives in `src/services/fsiApi.ts`.
+2. **Do not change** playbook/tracker endpoints in `app/main.py`, `AuthContext`, or shared React Query defaults unless the task explicitly requires it.
+3. **Before merging** FSI work, verify these pages still load data: Bizz playbook (`/experiment-bpb`), Content Tracker, Six-Day Tracker, Dashboard.
+4. If a shared file must change, **tell the user** which non-FSI areas are affected and why.
+
+FSI uses its own Supabase tables (`studies`, `nodes`, `connections`) and optional backend mirror at `/api/v1/fsi`. The rest of the site uses `/api/v1/*` tracker and experiment routes.

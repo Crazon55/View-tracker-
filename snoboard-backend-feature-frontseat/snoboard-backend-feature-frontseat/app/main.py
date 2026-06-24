@@ -5445,9 +5445,22 @@ def _exp_settings_row(client, playbook: str) -> dict:
     if data:
         return data[0]
     from datetime import date
+    # Align start date with existing ideas so week filters don't show empty after settings reset.
+    earliest = (
+        client.table(tables.idea_bank)
+        .select("day_date")
+        .order("day_date")
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    start_date = str(date.today())
+    if earliest and earliest[0].get("day_date"):
+        start_date = str(earliest[0]["day_date"])
     inserted = client.table(tables.settings).insert({
         "view_goal": 100000,
-        "experiment_start_date": str(date.today()),
+        "experiment_start_date": start_date,
     }).execute().data
     return inserted[0] if inserted else {}
 
@@ -5574,7 +5587,10 @@ async def exp_list_idea_bank(
     data = q.execute().data or []
     do_enrich = enrich_cross not in ("0", "false", "False")
     if do_enrich:
-        data = exp_enrich_ideas_cross_playbook(client, pb, data)
+        try:
+            data = exp_enrich_ideas_cross_playbook(client, pb, data)
+        except Exception as e:
+            logger.warning("Cross-playbook enrich failed for %s: %s", pb, e)
     return {"success": True, "data": data}
 
 

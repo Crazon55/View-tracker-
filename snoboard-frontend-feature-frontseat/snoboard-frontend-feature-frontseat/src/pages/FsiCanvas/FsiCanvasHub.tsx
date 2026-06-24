@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sparkles, Plus, Loader2, ArrowRight, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { fsiApi, flushFsiBackendSyncQueue } from "@/services/api";
+import { fsiApi, flushFsiBackendSyncQueue } from "@/services/fsiApi";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { canEditFsiCanvas } from "@/lib/permissions";

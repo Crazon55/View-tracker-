@@ -2166,10 +2166,11 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
   const autoArchiveDone = useRef(false);
   const migrationDone = useRef(false);
 
-  const { data: settings } = useQuery({
+  const { data: settings, isError: settingsError, error: settingsErr } = useQuery({
     queryKey: expQk(playbookId, "settings"),
     queryFn: api.getSettings,
     staleTime: EXP_STALE_MS,
+    retry: 2,
   });
   const currentWeek = useMemo(() => {
     const start = settings?.experiment_start_date;
@@ -2179,12 +2180,13 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
 
   // Auto-archive past weeks silently
   const archiveMut = useMutation({ mutationFn: api.archiveWeek });
-  const { data: allIdeas = [] } = useQuery({
+  const { data: allIdeas = [], isError: allIdeasError, error: allIdeasErr } = useQuery({
     queryKey: expQk(playbookId, "idea-bank-all"),
     queryFn: () => api.getIdeaBank({ enrich_cross: false }),
     enabled: !!settings,
     staleTime: EXP_STALE_MS,
     refetchOnWindowFocus: false,
+    retry: 2,
   });
   useEffect(() => {
     if (!settings || autoArchiveDone.current || allIdeas.length === 0) return;
@@ -2208,17 +2210,54 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
     });
   }, [allIdeas, api, playbookId, qc]);
 
-  const { data: ideas = [], isLoading } = useQuery({
-    queryKey: expQk(playbookId, "idea-bank", currentWeek, pageFilter),
-    queryFn: () => api.getIdeaBank({
-      week: currentWeek,
-      page: pageFilter !== "all" ? pageFilter : undefined,
-      enrich_cross: true,
-    }),
+  const displayWeek = useMemo(() => {
+    const bankIdeas = (allIdeas as any[]).filter((i: any) => !i.frontseat_pool);
+    if (!bankIdeas.length) return currentWeek;
+    const weeks = [...new Set(bankIdeas.map((i: any) => Number(i.week_number) || 1))].sort((a, b) => b - a);
+    if (weeks.includes(currentWeek)) return currentWeek;
+    return weeks[0];
+  }, [allIdeas, currentWeek]);
+
+  const { data: ideasRaw = [], isLoading, isError: ideasError, error: ideasErr } = useQuery({
+    queryKey: expQk(playbookId, "idea-bank", displayWeek, pageFilter),
+    queryFn: async () => {
+      try {
+        return await api.getIdeaBank({
+          week: displayWeek,
+          page: pageFilter !== "all" ? pageFilter : undefined,
+          enrich_cross: true,
+        });
+      } catch (e) {
+        // If cross-playbook enrich fails on server, retry without enrich so ideas still load.
+        return api.getIdeaBank({
+          week: displayWeek,
+          page: pageFilter !== "all" ? pageFilter : undefined,
+          enrich_cross: false,
+        });
+      }
+    },
     enabled: !!settings,
     staleTime: EXP_STALE_MS,
     refetchOnWindowFocus: false,
+    retry: 1,
   });
+
+  const ideas = useMemo(() => {
+    if ((ideasRaw as any[]).length > 0) return ideasRaw as any[];
+    const bankIdeas = (allIdeas as any[]).filter((i: any) => !i.frontseat_pool);
+    if (!bankIdeas.length) return [];
+    return bankIdeas.filter((i: any) => Number(i.week_number) === displayWeek);
+  }, [ideasRaw, allIdeas, displayWeek]);
+
+  useEffect(() => {
+    if (settingsError) toast.error(settingsErr instanceof Error ? settingsErr.message : "Failed to load playbook settings");
+  }, [settingsError, settingsErr]);
+  useEffect(() => {
+    if (allIdeasError) toast.error(allIdeasErr instanceof Error ? allIdeasErr.message : "Failed to load ideas");
+  }, [allIdeasError, allIdeasErr]);
+  useEffect(() => {
+    if (ideasError) toast.error(ideasErr instanceof Error ? ideasErr.message : "Failed to load idea bank");
+  }, [ideasError, ideasErr]);
 
   const createMut = useMutation({
     mutationFn: api.createIdea,
@@ -2288,6 +2327,20 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
     return c;
   }, [opsFiltered]);
 
+  if (settingsError || (allIdeasError && ideasError)) {
+    const msg =
+      (settingsErr instanceof Error && settingsErr.message) ||
+      (allIdeasErr instanceof Error && allIdeasErr.message) ||
+      (ideasErr instanceof Error && ideasErr.message) ||
+      "Could not load playbook data — check backend is running and redeploy if needed.";
+    return (
+      <div style={{ padding: "24px 0", color: "#fca5a5", fontSize: 13 }}>
+        <p style={{ marginBottom: 8 }}>{msg}</p>
+        <p style={{ color: "#71717a", fontSize: 12 }}>If this started after a deploy, rebuild the backend (docker) and confirm VITE_API_URL in the frontend build.</p>
+      </div>
+    );
+  }
+
   if (isLoading) return <p style={{ color: "#52525b", fontSize: 12, padding: "20px 0" }}>Loading…</p>;
 
   if (opsOnly) {
@@ -2333,7 +2386,9 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
     <div>
       {/* Toolbar */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 12, color: "#71717a" }}>Week {currentWeek} · {filtered.length} idea{filtered.length !== 1 ? "s" : ""}</span>
+        <span style={{ fontSize: 12, color: "#71717a" }}>
+          Week {displayWeek}{displayWeek !== currentWeek ? ` (calendar week ${currentWeek})` : ""} · {filtered.length} idea{filtered.length !== 1 ? "s" : ""}
+        </span>
         {can('add_experiment_idea') && !readOnly && (
           <button onClick={() => setAddOpen(true)} style={{ ...btnPrimary, padding: "5px 14px" }}>
             + New idea
