@@ -43,7 +43,6 @@ type FlowInnerProps = {
   connections: FsiConnectionRecord[];
   canEdit: boolean;
   fitTrigger?: number;
-  focusNodeId?: string | null;
   selectedNodeId: string | null;
   boxSelectMode: boolean;
   multiSelectedIds: string[];
@@ -70,7 +69,6 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     connections,
     canEdit,
     fitTrigger = 0,
-    focusNodeId,
     selectedNodeId,
     boxSelectMode,
     multiSelectedIds,
@@ -114,16 +112,19 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     [persistViewport],
   );
 
+  const flowCenterFromViewport = useCallback(() => {
+    const pane = paneRef.current?.querySelector(".react-flow__pane") as HTMLElement | null;
+    if (!pane) return { x: 200, y: 200 };
+    const { x, y, zoom } = getViewport();
+    const rect = pane.getBoundingClientRect();
+    return {
+      x: (rect.width / 2 - x) / zoom,
+      y: (rect.height / 2 - y) / zoom,
+    };
+  }, [getViewport]);
+
   useImperativeHandle(ref, () => ({
-    getViewportCenter: () => {
-      const el = paneRef.current;
-      if (!el) return { x: 200, y: 200 };
-      const rect = el.getBoundingClientRect();
-      return screenToFlowPosition({
-        x: rect.left + rect.width / 2,
-        y: rect.top + rect.height / 2,
-      });
-    },
+    getViewportCenter: () => flowCenterFromViewport(),
     focusNode: (nodeId: string) => {
       const target = dbNodes.find((n) => n.id === nodeId);
       if (!target) return;
@@ -140,14 +141,15 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     },
   }));
 
+  const savedViewport = useMemo(() => loadSavedViewport(studyId), [studyId]);
+
   useEffect(() => {
     if (viewportReadyRef.current) return;
     viewportReadyRef.current = true;
 
     requestAnimationFrame(() => {
-      const saved = loadSavedViewport(studyId);
-      if (saved) {
-        void setViewport(saved, { duration: 0 });
+      if (savedViewport) {
+        void setViewport(savedViewport, { duration: 0 });
         return;
       }
       if (dbNodes.length > 0) {
@@ -156,7 +158,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         });
       }
     });
-  }, [studyId, dbNodes.length, fitView, setViewport, getViewport, persistViewport]);
+  }, [studyId, savedViewport, dbNodes.length, fitView, setViewport, getViewport, persistViewport]);
 
   const onTitleChangeRef = useRef(onTitleChange);
   const onBodyChangeRef = useRef(onBodyChange);
@@ -216,6 +218,14 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
       flowGraph.nodes.map((next) => {
         const cur = current.find((c) => c.id === next.id);
         if (cur?.dragging) return cur;
+        if (
+          cur &&
+          cur.position.x === next.position.x &&
+          cur.position.y === next.position.y &&
+          cur.type === next.type
+        ) {
+          return { ...cur, data: next.data, selected: cur.selected };
+        }
         return next;
       }),
     );
@@ -231,15 +241,6 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
       });
     }
   }, [fitTrigger, fitView, getViewport, persistViewport]);
-
-  useEffect(() => {
-    if (!focusNodeId) return;
-    const target = dbNodes.find((n) => n.id === focusNodeId);
-    if (!target) return;
-    const cx = (target.canvas_x ?? 0) + 120;
-    const cy = (target.canvas_y ?? 0) + 50;
-    void setCenter(cx, cy, { zoom: getViewport().zoom, duration: 280 });
-  }, [focusNodeId, dbNodes, setCenter, getViewport]);
 
   const handleMoveEnd = useCallback(
     (_: unknown, viewport: Viewport) => {
@@ -382,6 +383,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
       <ReactFlow
         nodes={styledNodes}
         edges={edges}
+        defaultViewport={savedViewport ?? { x: 0, y: 0, zoom: 1 }}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={handleConnect}

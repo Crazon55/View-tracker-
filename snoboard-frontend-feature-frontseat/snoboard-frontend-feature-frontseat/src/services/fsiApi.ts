@@ -95,7 +95,7 @@ async function fsiDualMutate<T>(opts: {
   if (beResult.status === "rejected") {
     const err = beResult.reason instanceof Error ? beResult.reason : new Error("Backend save failed");
     enqueueFsiBackendRetry(opts.backend.path, opts.backend.method, opts.backend.body);
-    throw new Error(`${err.message} — queued for retry`);
+    console.warn("[fsiApi] Backend mirror failed (queued for retry):", err.message);
   }
 
   return sbResult.value;
@@ -260,34 +260,39 @@ export function createFsiApi() {
       const patch = { ...data, updated_at: new Date().toISOString() };
       return fsiDualMutate({
         supabase: async () => {
-          const { data: updated, error } = await _sb
+          const { error: updateErr } = await _sb.from("nodes").update(patch).eq("id", nodeId);
+          if (updateErr) throw new Error(updateErr.message);
+          const { data: updated, error: fetchErr } = await _sb
             .from("nodes")
-            .update(patch)
+            .select("*")
             .eq("id", nodeId)
-            .select("*, study_id")
-            .single();
-          if (error) throw new Error(error.message);
+            .maybeSingle();
+          if (fetchErr) throw new Error(fetchErr.message);
           if (updated?.study_id) {
             await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", updated.study_id);
           }
-          return updated;
+          return updated ?? { id: nodeId, ...patch };
         },
         backend: { path: `${FSI_BACKEND_BASE}/nodes/${nodeId}`, method: "PATCH", body: data },
       });
     },
-    deleteNode: async (nodeId: string) => {
+    deleteNode: async (nodeId: string, studyId?: string) => {
       await fsiDualMutate({
         supabase: async () => {
-          const { data: existing, error: fetchErr } = await _sb
+          const { data: existing } = await _sb
             .from("nodes")
             .select("study_id")
             .eq("id", nodeId)
-            .single();
-          if (fetchErr) throw new Error(fetchErr.message);
+            .maybeSingle();
+
+          await _sb.from("connections").delete().or(`source_node_id.eq.${nodeId},target_node_id.eq.${nodeId}`);
+
           const { error } = await _sb.from("nodes").delete().eq("id", nodeId);
           if (error) throw new Error(error.message);
-          if (existing?.study_id) {
-            await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", existing.study_id);
+
+          const sid = existing?.study_id ?? studyId;
+          if (sid) {
+            await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", sid);
           }
           return { id: nodeId };
         },
@@ -333,19 +338,19 @@ export function createFsiApi() {
         },
       });
     },
-    deleteConnection: async (connectionId: string) => {
+    deleteConnection: async (connectionId: string, studyId?: string) => {
       await fsiDualMutate({
         supabase: async () => {
-          const { data: existing, error: fetchErr } = await _sb
+          const { data: existing } = await _sb
             .from("connections")
             .select("study_id")
             .eq("id", connectionId)
-            .single();
-          if (fetchErr) throw new Error(fetchErr.message);
+            .maybeSingle();
           const { error } = await _sb.from("connections").delete().eq("id", connectionId);
           if (error) throw new Error(error.message);
-          if (existing?.study_id) {
-            await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", existing.study_id);
+          const sid = existing?.study_id ?? studyId;
+          if (sid) {
+            await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", sid);
           }
           return { id: connectionId };
         },

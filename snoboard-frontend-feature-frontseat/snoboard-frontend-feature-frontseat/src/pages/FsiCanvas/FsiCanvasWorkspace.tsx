@@ -74,7 +74,6 @@ export default function FsiCanvasWorkspace() {
   const canEdit = canEditFsiCanvas(role);
 
   const [selectedNode, setSelectedNode] = useState<FsiNodeRecord | null>(null);
-  const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
   const [multiSelectedIds, setMultiSelectedIds] = useState<string[]>([]);
   const [boxSelectMode, setBoxSelectMode] = useState(false);
   const [fitTrigger, setFitTrigger] = useState(0);
@@ -192,7 +191,6 @@ export default function FsiCanvasWorkspace() {
         history.pushEntry({ type: "node_add", node });
       }
       setSelectedNode(node);
-      setFocusNodeId(node.id);
       const g = graphRef.current;
       if (g) {
         setGraph(appendGraphNode(g, node));
@@ -249,21 +247,25 @@ export default function FsiCanvasWorkspace() {
   });
 
   const deleteNodeMutation = useMutation({
-    mutationFn: (id: string) => fsiApi.deleteNode(id),
-    onSuccess: (_, id) => {
-      setSelectedNode((prev) => (prev?.id === id ? null : prev));
+    mutationFn: (id: string) => fsiApi.deleteNode(id, studyId!),
+    onMutate: (id) => {
       const g = graphRef.current;
-      if (g) {
-        setGraph({
-          ...g,
-          nodes: g.nodes.filter((n) => n.id !== id),
-          connections: g.connections.filter(
-            (c) => c.source_node_id !== id && c.target_node_id !== id,
-          ),
-        });
-      }
+      if (!g) return;
+      const previous = g;
+      setSelectedNode((prev) => (prev?.id === id ? null : prev));
+      setGraph({
+        ...g,
+        nodes: g.nodes.filter((n) => n.id !== id),
+        connections: g.connections.filter(
+          (c) => c.source_node_id !== id && c.target_node_id !== id,
+        ),
+      });
+      return { previous };
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error, _id, ctx) => {
+      if (ctx?.previous) setGraph(ctx.previous);
+      toast.error(e.message);
+    },
   });
 
   const handleDeleteNode = useCallback(
@@ -285,27 +287,32 @@ export default function FsiCanvasWorkspace() {
 
   const deleteNodesBulkMutation = useMutation({
     mutationFn: async (ids: string[]) => {
-      await Promise.all(ids.map((id) => fsiApi.deleteNode(id)));
+      await Promise.all(ids.map((id) => fsiApi.deleteNode(id, studyId!)));
       return ids;
     },
-    onSuccess: (ids) => {
+    onMutate: (ids) => {
+      const g = graphRef.current;
+      if (!g) return;
+      const previous = g;
+      const idSet = new Set(ids);
       setSelectedNode((prev) => (prev && ids.includes(prev.id) ? null : prev));
       setMultiSelectedIds([]);
-      const g = graphRef.current;
-      if (g) {
-        const idSet = new Set(ids);
-        const next = {
-          ...g,
-          nodes: g.nodes.filter((n) => !idSet.has(n.id)),
-          connections: g.connections.filter(
-            (c) => !idSet.has(c.source_node_id) && !idSet.has(c.target_node_id),
-          ),
-        };
-        setGraph(next);
-      }
+      setGraph({
+        ...g,
+        nodes: g.nodes.filter((n) => !idSet.has(n.id)),
+        connections: g.connections.filter(
+          (c) => !idSet.has(c.source_node_id) && !idSet.has(c.target_node_id),
+        ),
+      });
+      return { previous };
+    },
+    onSuccess: (ids) => {
       toast.success(`Deleted ${ids.length} nodes`);
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error, _ids, ctx) => {
+      if (ctx?.previous) setGraph(ctx.previous);
+      toast.error(e.message);
+    },
   });
 
   const createConnectionMutation = useMutation({
@@ -324,7 +331,7 @@ export default function FsiCanvasWorkspace() {
   });
 
   const deleteConnectionMutation = useMutation({
-    mutationFn: (id: string) => fsiApi.deleteConnection(id),
+    mutationFn: (id: string) => fsiApi.deleteConnection(id, studyId!),
     onSuccess: (_, id) => {
       const g = graphRef.current;
       if (g) {
@@ -455,8 +462,7 @@ export default function FsiCanvasWorkspace() {
 
   const handleFocusNode = useCallback((node: FsiNodeRecord) => {
     setSelectedNode(node);
-    setFocusNodeId(node.id);
-    canvasRef.current?.focusNode(node.id);
+    requestAnimationFrame(() => canvasRef.current?.focusNode(node.id));
   }, []);
 
   const handleSelectionChange: OnSelectionChangeFunc = useCallback(({ nodes: selected }) => {
@@ -753,7 +759,6 @@ export default function FsiCanvasWorkspace() {
             connections={connections}
             canEdit={canEdit}
             fitTrigger={fitTrigger}
-            focusNodeId={focusNodeId}
             selectedNodeId={selectedNode?.id ?? null}
             boxSelectMode={boxSelectMode}
             multiSelectedIds={multiSelectedIds}
