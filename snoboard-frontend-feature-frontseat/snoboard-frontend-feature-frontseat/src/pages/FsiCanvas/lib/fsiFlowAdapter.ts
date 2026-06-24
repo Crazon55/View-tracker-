@@ -1,7 +1,7 @@
 import type { Edge, Node } from "@xyflow/react";
 import type { FsiConnectionRecord, FsiNodeRecord, IronNodeType } from "./fsiNodeSchemas";
 import { NODE_TYPE_COLORS } from "./fsiNodeSchemas";
-import { isFieldNode, isParentNode } from "./fsiHierarchy";
+import { isFieldNode, isParentNode, isPlacedOnCanvas } from "./fsiHierarchy";
 import type { FieldDef } from "./fsiNodeFieldDefs";
 import { NODE_FIELD_DEFS } from "./fsiNodeFieldDefs";
 
@@ -26,18 +26,12 @@ export function graphToFlow(
   options?: {
     canEdit?: boolean;
     onFieldChange?: (nodeId: string, value: string) => void;
-    expandedParentIds?: Set<string>;
   },
 ): {
   nodes: Node[];
   edges: Edge[];
 } {
-  const expanded = options?.expandedParentIds ?? new Set<string>();
-  const visibleDbNodes = nodes.filter((n) => {
-    if (isParentNode(n)) return true;
-    if (n.parent_node_id) return expanded.has(n.parent_node_id);
-    return true;
-  });
+  const visibleDbNodes = nodes.filter((n) => isParentNode(n) || isPlacedOnCanvas(n));
   const visibleIds = new Set(visibleDbNodes.map((n) => n.id));
   const positions = new Map(visibleDbNodes.map((n) => [n.id, { x: n.canvas_x ?? 0, y: n.canvas_y ?? 0 }]));
 
@@ -46,7 +40,7 @@ export function graphToFlow(
 
     if (isFieldNode(n)) {
       const fieldKey = String(n.structured_payload?.field_key ?? "");
-      const parentType = visibleDbNodes.find((p) => p.id === n.parent_node_id)?.node_type as IronNodeType | undefined;
+      const parentType = nodes.find((p) => p.id === n.parent_node_id)?.node_type as IronNodeType | undefined;
       const defs = parentType ? NODE_FIELD_DEFS[parentType] : [];
       const fieldDef = defs.find((d) => d.key === fieldKey) ?? {
         key: fieldKey,
@@ -58,7 +52,7 @@ export function graphToFlow(
         id: n.id,
         type: "fsiFieldNode",
         position: pos,
-        draggable: false,
+        draggable: true,
         data: {
           fsiNode: n,
           fieldDef,
@@ -83,32 +77,16 @@ export function graphToFlow(
     };
   });
 
-  const flowEdges: Edge[] = [];
-
-  for (const n of visibleDbNodes) {
-    if (n.parent_node_id && visibleIds.has(n.parent_node_id)) {
-      flowEdges.push({
-        id: `tree-${n.parent_node_id}-${n.id}`,
-        source: n.parent_node_id,
-        target: n.id,
-        type: "smoothstep",
-        style: { stroke: "#52525b", strokeWidth: 2 },
-      });
-    }
-  }
-
-  for (const c of connections) {
-    if (!visibleIds.has(c.source_node_id) || !visibleIds.has(c.target_node_id)) continue;
-    if (flowEdges.some((e) => e.source === c.source_node_id && e.target === c.target_node_id)) continue;
-    flowEdges.push({
+  const flowEdges: Edge[] = connections
+    .filter((c) => visibleIds.has(c.source_node_id) && visibleIds.has(c.target_node_id))
+    .map((c) => ({
       id: c.id,
       source: c.source_node_id,
       target: c.target_node_id,
       label: c.edge_label_note || undefined,
       type: "smoothstep",
       style: { stroke: "#71717a", strokeWidth: 2 },
-    });
-  }
+    }));
 
   return { nodes: flowNodes, edges: flowEdges };
 }

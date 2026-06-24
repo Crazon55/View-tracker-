@@ -20,6 +20,7 @@ import FsiFieldNode from "./FsiFieldNode";
 import type { FsiConnectionRecord, FsiNodeRecord } from "../lib/fsiNodeSchemas";
 import { graphToFlow, type FsiNodeData } from "../lib/fsiFlowAdapter";
 import { isFieldNode, isParentNode } from "../lib/fsiHierarchy";
+import { FSI_FIELD_DRAG_MIME, type FieldDragPayload } from "./FsiPropertyPalette";
 
 const nodeTypes = { fsiNode: FsiCanvasNode, fsiFieldNode: FsiFieldNode };
 
@@ -29,14 +30,15 @@ type FlowInnerProps = {
   canEdit: boolean;
   fitTrigger?: number;
   onNodeSelect: (node: FsiNodeRecord | null) => void;
+  onParentSelect: (node: FsiNodeRecord) => void;
   onPaneDoubleClick: (x: number, y: number, screenX: number, screenY: number) => void;
   onNodeDragStop: (nodeId: string, x: number, y: number) => void;
   onConnect: (source: string, target: string) => void;
   onEdgeDelete: (edgeId: string) => void;
   onNodeDelete: (nodeId: string) => void;
   onFieldChange: (nodeId: string, value: string) => void;
+  onFieldDrop: (x: number, y: number, field: FieldDragPayload) => void;
   selectedNodeId: string | null;
-  expandedParentIds: string[];
 };
 
 function FlowInner({
@@ -45,14 +47,15 @@ function FlowInner({
   canEdit,
   fitTrigger = 0,
   onNodeSelect,
+  onParentSelect,
   onPaneDoubleClick,
   onNodeDragStop,
   onConnect,
   onEdgeDelete,
   onNodeDelete,
   onFieldChange,
+  onFieldDrop,
   selectedNodeId,
-  expandedParentIds,
 }: FlowInnerProps) {
   const { screenToFlowPosition, fitView } = useReactFlow();
   const onFieldChangeRef = useRef(onFieldChange);
@@ -83,22 +86,18 @@ function FlowInner({
     [dbNodes],
   );
 
-  const expandedKey = expandedParentIds.slice().sort().join(",");
-
   const flowGraph = useMemo(
     () =>
       graphToFlow(dbNodes, connections, {
         canEdit,
         onFieldChange: stableFieldChange,
-        expandedParentIds: new Set(expandedParentIds),
       }),
-    [structureSignature, positionSignature, canEdit, stableFieldChange, expandedKey],
+    [structureSignature, positionSignature, canEdit, stableFieldChange],
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(flowGraph.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(flowGraph.edges);
 
-  // Sync structure + saved positions from DB; never fight an in-progress drag.
   useEffect(() => {
     setNodes((current) =>
       flowGraph.nodes.map((next) => {
@@ -128,7 +127,8 @@ function FlowInner({
       if (!canEdit || !params.source || !params.target) return;
       const sourceNode = dbNodes.find((n) => n.id === params.source);
       const targetNode = dbNodes.find((n) => n.id === params.target);
-      if (!sourceNode || !targetNode || isFieldNode(sourceNode) || isFieldNode(targetNode)) return;
+      if (!sourceNode || !targetNode) return;
+      if (isFieldNode(sourceNode) && isFieldNode(targetNode)) return;
       onConnect(params.source, params.target);
     },
     [canEdit, dbNodes, onConnect],
@@ -138,8 +138,9 @@ function FlowInner({
     (_: React.MouseEvent, node: Node) => {
       const data = node.data as FsiNodeData | { fsiNode: FsiNodeRecord };
       onNodeSelect(data.fsiNode);
+      if (isParentNode(data.fsiNode)) onParentSelect(data.fsiNode);
     },
-    [onNodeSelect],
+    [onNodeSelect, onParentSelect],
   );
 
   const handlePaneClick = useCallback(() => onNodeSelect(null), [onNodeSelect]);
@@ -156,19 +157,39 @@ function FlowInner({
   const handleNodeDragStop = useCallback(
     (_: React.MouseEvent, node: Node) => {
       if (!canEdit) return;
-      const data = node.data as FsiNodeData;
-      if (isFieldNode(data.fsiNode)) return;
       onNodeDragStop(node.id, node.position.x, node.position.y);
     },
     [canEdit, onNodeDragStop],
   );
 
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes(FSI_FIELD_DRAG_MIME)) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    }
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      if (!canEdit) return;
+      const raw = e.dataTransfer.getData(FSI_FIELD_DRAG_MIME);
+      if (!raw) return;
+      e.preventDefault();
+      try {
+        const field = JSON.parse(raw) as FieldDragPayload;
+        const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+        onFieldDrop(pos.x, pos.y, field);
+      } catch {
+        /* ignore malformed drag payload */
+      }
+    },
+    [canEdit, onFieldDrop, screenToFlowPosition],
+  );
+
   const handleEdgesDelete = useCallback(
     (deleted: Edge[]) => {
       if (!canEdit) return;
-      deleted.forEach((edge) => {
-        if (!edge.id.startsWith("tree-")) onEdgeDelete(edge.id);
-      });
+      deleted.forEach((edge) => onEdgeDelete(edge.id));
     },
     [canEdit, onEdgeDelete],
   );
@@ -176,24 +197,18 @@ function FlowInner({
   const handleNodesDelete = useCallback(
     (deleted: Node[]) => {
       if (!canEdit) return;
-      deleted.forEach((node) => {
-        const data = node.data as FsiNodeData;
-        if (isParentNode(data.fsiNode)) onNodeDelete(node.id);
-      });
+      deleted.forEach((node) => onNodeDelete(node.id));
     },
     [canEdit, onNodeDelete],
   );
 
   const styledNodes = useMemo(
     () =>
-      nodes.map((n) => {
-        const fsiNode = (n.data as { fsiNode: FsiNodeRecord }).fsiNode;
-        return {
-          ...n,
-          selected: n.id === selectedNodeId,
-          connectable: isParentNode(fsiNode),
-        };
-      }),
+      nodes.map((n) => ({
+        ...n,
+        selected: n.id === selectedNodeId,
+        connectable: true,
+      })),
     [nodes, selectedNodeId],
   );
 
@@ -208,6 +223,8 @@ function FlowInner({
       onPaneClick={handlePaneClick}
       onPaneDoubleClick={handlePaneDoubleClick}
       onNodeDragStop={handleNodeDragStop}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
       onEdgesDelete={handleEdgesDelete}
       onNodesDelete={handleNodesDelete}
       nodeTypes={nodeTypes}

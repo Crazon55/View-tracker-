@@ -27,14 +27,30 @@ export function getFieldValue(node: FsiNodeRecord): string {
   return String(v);
 }
 
-export function fieldPayload(key: string, label: string, value: string, inputType: string) {
+export function fieldPayload(
+  key: string,
+  label: string,
+  value: string,
+  inputType: string,
+  placedOnCanvas = false,
+) {
   return {
     hierarchy_level: "field" as const,
     field_key: key,
     field_label: label,
     field_value: value,
     field_input_type: inputType,
+    placed_on_canvas: placedOnCanvas,
   };
+}
+
+/** Field nodes on the canvas keep their position; palette-only defs are not rendered in React Flow. */
+export function isPlacedOnCanvas(node: FsiNodeRecord): boolean {
+  if (!isFieldNode(node)) return true;
+  if (node.structured_payload?.placed_on_canvas === true) return true;
+  if (node.structured_payload?.placed_on_canvas === false) return false;
+  // Legacy rows created before palette workflow: treat as on-canvas if not at origin sentinel.
+  return !(node.canvas_x === 0 && node.canvas_y === 0);
 }
 
 export function parentPayload(existing: Record<string, unknown> = {}) {

@@ -8,11 +8,12 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { canEditFsiCanvas } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import FsiFlowCanvas from "./components/FsiFlowCanvas";
+import FsiPropertyPalette from "./components/FsiPropertyPalette";
+import type { FieldDragPayload } from "./components/FsiPropertyPalette";
 import NodeTypePicker from "./components/NodeTypePicker";
 import type { FsiGraph, FsiNodeRecord, IronNodeType } from "./lib/fsiNodeSchemas";
 import { defaultPayloadForType, defaultTitleForType } from "./lib/fsiNodeSchemas";
-import { NODE_FIELD_DEFS } from "./lib/fsiNodeFieldDefs";
-import { fieldPayload, isParentNode, parentPayload } from "./lib/fsiHierarchy";
+import { fieldPayload, isFieldNode, isParentNode, parentPayload } from "./lib/fsiHierarchy";
 import { layoutFsiTree } from "./lib/fsiTreeLayout";
 
 function patchGraphNodePositions(
@@ -37,10 +38,12 @@ export default function FsiCanvasWorkspace() {
   const canEdit = canEditFsiCanvas(role);
 
   const [selectedNode, setSelectedNode] = useState<FsiNodeRecord | null>(null);
-  const [expandedParentIds, setExpandedParentIds] = useState<string[]>([]);
+  const [activeParent, setActiveParent] = useState<FsiNodeRecord | null>(null);
   const [picker, setPicker] = useState<{ x: number; y: number; flowX: number; flowY: number } | null>(null);
   const [fitTrigger, setFitTrigger] = useState(0);
   const graphRef = useRef<FsiGraph | null>(null);
+  const activeParentRef = useRef<FsiNodeRecord | null>(null);
+  activeParentRef.current = activeParent;
 
   useEffect(() => {
     void flushFsiBackendSyncQueue();
@@ -78,117 +81,53 @@ export default function FsiCanvasWorkspace() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const spawnFieldChildrenMutation = useMutation({
-    mutationFn: async (parent: FsiNodeRecord) => {
-      const type = parent.node_type as IronNodeType;
-      const fieldDefs = NODE_FIELD_DEFS[type];
-      if (!fieldDefs?.length) return;
-
-      const payload = parent.structured_payload ?? {};
-      const existingKeys = new Set(
-        (graphRef.current?.nodes ?? [])
-          .filter((n) => n.parent_node_id === parent.id)
-          .map((n) => n.structured_payload?.field_key)
-          .filter((k): k is string => typeof k === "string"),
-      );
-
-      for (const def of fieldDefs) {
-        if (existingKeys.has(def.key)) continue;
-        const initial =
-          def.key === "observation"
-            ? String(payload.observation ?? "")
-            : String(payload[def.key] ?? "");
-        await fsiApi.createNode(studyId!, {
-          parent_node_id: parent.id,
-          node_type: type,
-          display_title: def.label,
-          canvas_x: 0,
-          canvas_y: 0,
-          structured_payload: fieldPayload(
-            def.key,
-            def.label,
-            initial,
-            def.inputType ?? "text",
-          ),
-        });
-      }
-
-      await queryClient.invalidateQueries({ queryKey: ["fsi-graph", studyId] });
-      const fresh = queryClient.getQueryData<FsiGraph>(["fsi-graph", studyId]);
-      if (fresh) await applyPrettifyLayout(fresh);
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const handleNodeSelect = useCallback(
-    (node: FsiNodeRecord | null) => {
-      setSelectedNode(node);
-
-      if (!node) {
-        setExpandedParentIds([]);
-        return;
-      }
-
-      if (!isParentNode(node)) return;
-
-      setExpandedParentIds((prev) => (prev.includes(node.id) ? prev : [...prev, node.id]));
-
-      const g = graphRef.current;
-      if (!g || !canEdit) return;
-      const fieldChildren = g.nodes.filter((n) => n.parent_node_id === node.id);
-      if (fieldChildren.length === 0) {
-        spawnFieldChildrenMutation.mutate(node);
-        return;
-      }
-      const allAtOrigin = fieldChildren.every((f) => f.canvas_x === 0 && f.canvas_y === 0);
-      if (allAtOrigin) void applyPrettifyLayout(g);
-    },
-    [canEdit, spawnFieldChildrenMutation, applyPrettifyLayout],
-  );
-
   const createNodeMutation = useMutation({
     mutationFn: async (args: { type: IronNodeType; x: number; y: number }) => {
-      const defaults = defaultPayloadForType(args.type);
-      const parent = await fsiApi.createNode(studyId!, {
+      return fsiApi.createNode(studyId!, {
         node_type: args.type,
         display_title: defaultTitleForType(args.type),
         canvas_x: args.x,
         canvas_y: args.y,
-        structured_payload: parentPayload(defaults),
+        structured_payload: parentPayload(defaultPayloadForType(args.type)),
       });
-
-      const fieldDefs = NODE_FIELD_DEFS[args.type];
-      for (const def of fieldDefs) {
-        const initial =
-          def.key === "observation"
-            ? String(defaults.observation ?? "")
-            : String(defaults[def.key as keyof typeof defaults] ?? "");
-        await fsiApi.createNode(studyId!, {
-          parent_node_id: parent.id,
-          node_type: args.type,
-          display_title: def.label,
-          canvas_x: 0,
-          canvas_y: 0,
-          structured_payload: fieldPayload(
-            def.key,
-            def.label,
-            initial,
-            def.inputType ?? "text",
-          ),
-        });
-      }
-
-      await queryClient.invalidateQueries({ queryKey: ["fsi-graph", studyId] });
-      const fresh = queryClient.getQueryData<FsiGraph>(["fsi-graph", studyId]);
-      if (fresh) await applyPrettifyLayout(fresh);
-
-      return parent;
     },
     onSuccess: (node) => {
       setSelectedNode(node);
-      setExpandedParentIds((prev) => (prev.includes(node.id) ? prev : [...prev, node.id]));
+      setActiveParent(node);
       setPicker(null);
-      toast.success("Parent node added");
+      invalidate();
+      toast.success("Parent node added — drag properties from the right panel");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const placeFieldMutation = useMutation({
+    mutationFn: async (args: { parent: FsiNodeRecord; field: FieldDragPayload; x: number; y: number }) => {
+      const payload = args.parent.structured_payload ?? {};
+      const initial =
+        args.field.fieldKey === "observation"
+          ? String(payload.observation ?? "")
+          : String(payload[args.field.fieldKey] ?? "");
+
+      return fsiApi.createNode(studyId!, {
+        parent_node_id: args.parent.id,
+        node_type: args.parent.node_type,
+        display_title: args.field.label,
+        canvas_x: args.x,
+        canvas_y: args.y,
+        structured_payload: fieldPayload(
+          args.field.fieldKey,
+          args.field.label,
+          initial,
+          args.field.inputType ?? "text",
+          true,
+        ),
+      });
+    },
+    onSuccess: (node) => {
+      setSelectedNode(node);
+      invalidate();
+      toast.success("Property placed — connect it to the parent with handles");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -211,10 +150,13 @@ export default function FsiCanvasWorkspace() {
 
   const deleteNodeMutation = useMutation({
     mutationFn: (id: string) => fsiApi.deleteNode(id),
-    onSuccess: () => {
-      setSelectedNode(null);
+    onSuccess: (_, id) => {
+      setSelectedNode((prev) => (prev?.id === id ? null : prev));
+      if (activeParentRef.current?.id === id) setActiveParent(null);
       invalidate();
-      toast.success("Node deleted");
+      const node = graphRef.current?.nodes.find((n) => n.id === id);
+      if (node && isFieldNode(node)) toast.success("Property removed from canvas");
+      else toast.success("Node deleted");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -231,6 +173,27 @@ export default function FsiCanvasWorkspace() {
     onSuccess: () => invalidate(),
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const handleParentSelect = useCallback((node: FsiNodeRecord) => {
+    setActiveParent(node);
+  }, []);
+
+  const handleFieldDrop = useCallback(
+    (x: number, y: number, field: FieldDragPayload) => {
+      const parent = activeParentRef.current;
+      if (!parent) {
+        toast.error("Select a parent node first to place its properties");
+        return;
+      }
+      placeFieldMutation.mutate({ parent, field, x, y });
+    },
+    [placeFieldMutation],
+  );
+
+  const handleDeleteField = useCallback(
+    (nodeId: string) => deleteNodeMutation.mutate(nodeId),
+    [deleteNodeMutation],
+  );
 
   const handleFieldChange = useCallback(
     (nodeId: string, value: string) => {
@@ -259,23 +222,12 @@ export default function FsiCanvasWorkspace() {
     (nodeId: string, x: number, y: number) => {
       if (!canEdit || !graphRef.current) return;
 
-      const g = graphRef.current;
-      const dragged = g.nodes.find((n) => n.id === nodeId);
-      if (!dragged) return;
+      queryClient.setQueryData<FsiGraph>(["fsi-graph", studyId], (g) => {
+        if (!g) return g;
+        return patchGraphNodePositions(g, [{ id: nodeId, x, y }]);
+      });
 
-      const dx = x - dragged.canvas_x;
-      const dy = y - dragged.canvas_y;
-      const updates: Array<{ id: string; x: number; y: number }> = [{ id: nodeId, x, y }];
-
-      for (const child of g.nodes.filter((n) => n.parent_node_id === nodeId)) {
-        updates.push({ id: child.id, x: child.canvas_x + dx, y: child.canvas_y + dy });
-      }
-
-      queryClient.setQueryData<FsiGraph>(["fsi-graph", studyId], patchGraphNodePositions(g, updates));
-
-      for (const u of updates) {
-        updateNodeMutation.mutate({ id: u.id, patch: { canvas_x: u.x, canvas_y: u.y } });
-      }
+      updateNodeMutation.mutate({ id: nodeId, patch: { canvas_x: x, canvas_y: y } });
     },
     [canEdit, queryClient, studyId, updateNodeMutation],
   );
@@ -310,6 +262,9 @@ export default function FsiCanvasWorkspace() {
 
   const { study, nodes, connections } = graph;
   const parentCount = nodes.filter(isParentNode).length;
+  const activeParentFields = activeParent
+    ? nodes.filter((n) => n.parent_node_id === activeParent.id && isFieldNode(n))
+    : [];
 
   return (
     <div className="flex h-screen flex-col bg-zinc-950 text-white">
@@ -335,12 +290,12 @@ export default function FsiCanvasWorkspace() {
             Prettify layout
           </Button>
         )}
-        {canEdit && selectedNode && isParentNode(selectedNode) && (
+        {canEdit && activeParent && (
           <Button
             variant="ghost"
             size="sm"
             className="text-red-400"
-            onClick={() => deleteNodeMutation.mutate(selectedNode.id)}
+            onClick={() => deleteNodeMutation.mutate(activeParent.id)}
           >
             <Trash2 className="mr-1 h-4 w-4" />
             Delete parent
@@ -354,35 +309,47 @@ export default function FsiCanvasWorkspace() {
         )}
       </header>
 
-      <div className="relative min-h-0 flex-1">
-        <FsiFlowCanvas
-          nodes={nodes}
-          connections={connections}
-          canEdit={canEdit}
-          fitTrigger={fitTrigger}
-          selectedNodeId={selectedNode?.id ?? null}
-          expandedParentIds={expandedParentIds}
-          onNodeSelect={handleNodeSelect}
-          onFieldChange={handleFieldChange}
-          onPaneDoubleClick={(x, y, screenX, screenY) => {
-            if (!canEdit) return;
-            setPicker({ x: screenX + 12, y: screenY + 12, flowX: x, flowY: y });
-          }}
-          onNodeDragStop={handleNodeDragStop}
-          onConnect={(source, target) => createConnectionMutation.mutate({ source, target })}
-          onEdgeDelete={(id) => deleteConnectionMutation.mutate(id)}
-          onNodeDelete={(id) => deleteNodeMutation.mutate(id)}
-        />
+      <div className="flex min-h-0 flex-1">
+        <div className="relative min-h-0 min-w-0 flex-1">
+          <FsiFlowCanvas
+            nodes={nodes}
+            connections={connections}
+            canEdit={canEdit}
+            fitTrigger={fitTrigger}
+            selectedNodeId={selectedNode?.id ?? null}
+            onNodeSelect={setSelectedNode}
+            onParentSelect={handleParentSelect}
+            onFieldChange={handleFieldChange}
+            onFieldDrop={handleFieldDrop}
+            onPaneDoubleClick={(x, y, screenX, screenY) => {
+              if (!canEdit) return;
+              setPicker({ x: screenX + 12, y: screenY + 12, flowX: x, flowY: y });
+            }}
+            onNodeDragStop={handleNodeDragStop}
+            onConnect={(source, target) => createConnectionMutation.mutate({ source, target })}
+            onEdgeDelete={(id) => deleteConnectionMutation.mutate(id)}
+            onNodeDelete={(id) => deleteNodeMutation.mutate(id)}
+          />
 
-        {picker && canEdit && (
-          <NodeTypePicker
-            x={picker.x}
-            y={picker.y}
-            onCancel={() => setPicker(null)}
-            onSelect={(type) => createNodeMutation.mutate({ type, x: picker.flowX, y: picker.flowY })}
+          {picker && canEdit && (
+            <NodeTypePicker
+              x={picker.x}
+              y={picker.y}
+              onCancel={() => setPicker(null)}
+              onSelect={(type) => createNodeMutation.mutate({ type, x: picker.flowX, y: picker.flowY })}
+            />
+          )}
+        </div>
+
+        {activeParent && (
+          <FsiPropertyPalette
+            parent={activeParent}
+            fieldNodes={activeParentFields}
+            canEdit={canEdit}
+            onClose={() => setActiveParent(null)}
+            onDeleteField={handleDeleteField}
           />
         )}
-
       </div>
     </div>
   );

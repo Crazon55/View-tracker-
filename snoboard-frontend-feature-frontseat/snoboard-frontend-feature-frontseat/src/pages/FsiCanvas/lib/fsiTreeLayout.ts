@@ -9,22 +9,10 @@ export const V_GAP = 72;
 type TreeEdge = { source: string; target: string };
 
 function buildTreeEdges(nodes: FsiNodeRecord[], connections: FsiConnectionRecord[]): TreeEdge[] {
-  const edges: TreeEdge[] = [];
   const nodeIds = new Set(nodes.map((n) => n.id));
-
-  for (const n of nodes) {
-    if (n.parent_node_id && nodeIds.has(n.parent_node_id)) {
-      edges.push({ source: n.parent_node_id, target: n.id });
-    }
-  }
-
-  for (const c of connections) {
-    if (nodeIds.has(c.source_node_id) && nodeIds.has(c.target_node_id)) {
-      edges.push({ source: c.source_node_id, target: c.target_node_id });
-    }
-  }
-
-  return edges;
+  return connections
+    .filter((c) => nodeIds.has(c.source_node_id) && nodeIds.has(c.target_node_id))
+    .map((c) => ({ source: c.source_node_id, target: c.target_node_id }));
 }
 
 function nodeWidth(node: FsiNodeRecord): number {
