@@ -298,6 +298,11 @@ export default function FsiCanvasWorkspace() {
     [canEdit, createTypedNodeMutation, getCanvasCenter],
   );
 
+  const handleClearSelection = useCallback(() => {
+    setSelectedNode(null);
+    setMultiSelectedIds([]);
+  }, []);
+
   const handleFocusNode = useCallback((node: FsiNodeRecord) => {
     setSelectedNode(node);
     setFocusNodeId(node.id);
@@ -306,9 +311,13 @@ export default function FsiCanvasWorkspace() {
 
   const handleSelectionChange: OnSelectionChangeFunc = useCallback(({ nodes: selected }) => {
     setMultiSelectedIds(selected.map((n) => n.id));
-    if (selected.length === 1) {
+    if (selected.length === 0) {
+      setSelectedNode(null);
+    } else if (selected.length === 1) {
       const data = selected[0].data as { fsiNode?: FsiNodeRecord };
       if (data.fsiNode) setSelectedNode(data.fsiNode);
+    } else {
+      setSelectedNode(null);
     }
   }, []);
 
@@ -499,6 +508,7 @@ export default function FsiCanvasWorkspace() {
             boxSelectMode={boxSelectMode}
             multiSelectedIds={multiSelectedIds}
             onNodeSelect={setSelectedNode}
+            onPaneClick={handleClearSelection}
             onSelectionChange={handleSelectionChange}
             onPaneDoubleClick={addFreeformNode}
             onNodeDragStop={handleNodeDragStop}

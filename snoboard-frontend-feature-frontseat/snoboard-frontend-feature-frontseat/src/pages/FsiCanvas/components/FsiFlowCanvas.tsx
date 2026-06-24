@@ -42,6 +42,7 @@ type FlowInnerProps = {
   boxSelectMode: boolean;
   multiSelectedIds: string[];
   onNodeSelect: (node: FsiNodeRecord | null) => void;
+  onPaneClick?: () => void;
   onSelectionChange: OnSelectionChangeFunc;
   onPaneDoubleClick: (x: number, y: number) => void;
   onNodeDragStop: (nodeId: string, x: number, y: number) => void;
@@ -65,6 +66,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     boxSelectMode,
     multiSelectedIds,
     onNodeSelect,
+    onPaneClick,
     onSelectionChange,
     onPaneDoubleClick,
     onNodeDragStop,
@@ -199,15 +201,22 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     [onNodeSelect],
   );
 
-  const handlePaneClick = useCallback(() => onNodeSelect(null), [onNodeSelect]);
+  const handlePaneClick = useCallback(() => {
+    onNodeSelect(null);
+    onPaneClick?.();
+    setNodes((nds) => nds.map((n) => ({ ...n, selected: false })));
+  }, [onNodeSelect, onPaneClick, setNodes]);
 
   const handlePaneDoubleClick = useCallback(
     (e: React.MouseEvent) => {
+      onNodeSelect(null);
+      onPaneClick?.();
+      setNodes((nds) => nds.map((n) => ({ ...n, selected: false })));
       if (!canEdit) return;
       const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
       onPaneDoubleClick(pos.x, pos.y);
     },
-    [canEdit, onPaneDoubleClick, screenToFlowPosition],
+    [canEdit, onPaneClick, onPaneDoubleClick, onNodeSelect, screenToFlowPosition, setNodes],
   );
 
   const handleNodeDragStop = useCallback(
