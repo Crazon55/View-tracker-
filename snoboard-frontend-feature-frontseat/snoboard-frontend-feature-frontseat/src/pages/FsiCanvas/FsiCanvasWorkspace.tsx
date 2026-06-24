@@ -318,29 +318,84 @@ export default function FsiCanvasWorkspace() {
   const createConnectionMutation = useMutation({
     mutationFn: ({ source, target }: { source: string; target: string }) =>
       fsiApi.createConnection(studyId!, { source_node_id: source, target_node_id: target }),
-    onSuccess: (connection) => {
+    onMutate: ({ source, target }) => {
       const g = graphRef.current;
-      if (g) {
-        setGraph({ ...g, connections: [...g.connections, connection] });
+      if (!g) return;
+      if (
+        g.connections.some(
+          (c) => c.source_node_id === source && c.target_node_id === target,
+        )
+      ) {
+        return { skipped: true as const };
       }
+      const tempId = `opt-${source}-${target}`;
+      const optimistic = {
+        id: tempId,
+        study_id: studyId!,
+        source_node_id: source,
+        target_node_id: target,
+        edge_label_note: null as string | null,
+        created_by: "",
+      };
+      const previous = g;
+      setGraph({ ...g, connections: [...g.connections, optimistic] });
+      return { previous, tempId, skipped: false as const };
+    },
+    onSuccess: (connection, { source, target }, ctx) => {
+      if (ctx?.skipped) return;
+      const g = graphRef.current;
+      if (!g) return;
+      setGraph({
+        ...g,
+        connections: [
+          ...g.connections.filter(
+            (c) =>
+              c.id !== ctx?.tempId &&
+              !(c.source_node_id === source && c.target_node_id === target && c.id.startsWith("opt-")),
+          ),
+          connection,
+        ],
+      });
       if (!history.isApplying.current) {
         history.pushEntry({ type: "connection_add", connection });
       }
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error, _vars, ctx) => {
+      if (ctx?.previous && !ctx.skipped) setGraph(ctx.previous);
+      toast.error(e.message);
+    },
   });
 
   const deleteConnectionMutation = useMutation({
     mutationFn: (id: string) => fsiApi.deleteConnection(id, studyId!),
-    onSuccess: (_, id) => {
+    onMutate: (id) => {
       const g = graphRef.current;
-      if (g) {
-        setGraph({ ...g, connections: g.connections.filter((c) => c.id !== id) });
-      }
+      if (!g) return;
+      const previous = g;
+      setGraph({ ...g, connections: g.connections.filter((c) => c.id !== id) });
+      return { previous };
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error, _id, ctx) => {
+      if (ctx?.previous) setGraph(ctx.previous);
+      toast.error(e.message);
+    },
   });
 
+  const handleConnect = useCallback(
+    (source: string, target: string) => {
+      const g = graphRef.current;
+      if (!g) return;
+      if (
+        g.connections.some(
+          (c) => c.source_node_id === source && c.target_node_id === target,
+        )
+      ) {
+        return;
+      }
+      createConnectionMutation.mutate({ source, target });
+    },
+    [createConnectionMutation],
+  );
   const handleDeleteConnection = useCallback(
     (id: string) => {
       const g = graphRef.current;
@@ -768,7 +823,7 @@ export default function FsiCanvasWorkspace() {
             onPaneDoubleClick={(x, y) => addNote("blank", x, y)}
             onNodeDragStart={handleNodeDragStart}
             onNodeDragStop={handleNodeDragStop}
-            onConnect={(source, target) => createConnectionMutation.mutate({ source, target })}
+            onConnect={handleConnect}
             onEdgeDelete={handleDeleteConnection}
             onNodeDelete={handleDeleteNode}
             onSuggestionDrop={handleSuggestionDrop}

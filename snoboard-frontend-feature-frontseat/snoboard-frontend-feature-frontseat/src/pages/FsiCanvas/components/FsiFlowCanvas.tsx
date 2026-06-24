@@ -6,6 +6,7 @@ import {
   Controls,
   MiniMap,
   SelectionMode,
+  addEdge,
   useNodesState,
   useEdgesState,
   type Connection,
@@ -197,6 +198,11 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     [dbNodes],
   );
 
+  const connectionSignature = useMemo(
+    () => connections.map((c) => `${c.id}:${c.source_node_id}:${c.target_node_id}`).join("|"),
+    [connections],
+  );
+
   const flowGraph = useMemo(
     () =>
       graphToFlow(dbNodes, connections, {
@@ -208,15 +214,18 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     [structureSignature, positionSignature, canEdit, stableTitleChange, stableBodyChange, stablePayloadChange],
   );
 
+  const flowEdges = flowGraph.edges;
+
   const [nodes, setNodes, onNodesChange] = useNodesState(flowGraph.nodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(flowGraph.edges);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(flowEdges);
 
   const multiSet = useMemo(() => new Set(multiSelectedIds), [multiSelectedIds]);
 
   useEffect(() => {
-    setNodes((current) =>
-      flowGraph.nodes.map((next) => {
-        const cur = current.find((c) => c.id === next.id);
+    setNodes((current) => {
+      const byId = new Map(current.map((n) => [n.id, n]));
+      return flowGraph.nodes.map((next) => {
+        const cur = byId.get(next.id);
         if (cur?.dragging) return cur;
         if (
           cur &&
@@ -227,10 +236,13 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
           return { ...cur, data: next.data, selected: cur.selected };
         }
         return next;
-      }),
-    );
-    setEdges(flowGraph.edges);
-  }, [flowGraph, setNodes, setEdges]);
+      });
+    });
+  }, [structureSignature, positionSignature, flowGraph.nodes, setNodes]);
+
+  useEffect(() => {
+    setEdges(flowEdges);
+  }, [connectionSignature, flowEdges, setEdges]);
 
   useEffect(() => {
     if (fitTrigger > 0) {
@@ -252,9 +264,22 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   const handleConnect = useCallback(
     (params: Connection) => {
       if (!canEdit || !params.source || !params.target) return;
+      setEdges((eds) => {
+        if (eds.some((e) => e.source === params.source && e.target === params.target)) {
+          return eds;
+        }
+        return addEdge(
+          {
+            ...params,
+            type: "smoothstep",
+            style: { stroke: "#71717a", strokeWidth: 2 },
+          },
+          eds,
+        );
+      });
       onConnect(params.source, params.target);
     },
-    [canEdit, onConnect],
+    [canEdit, onConnect, setEdges],
   );
 
   const handleNodeClick = useCallback(

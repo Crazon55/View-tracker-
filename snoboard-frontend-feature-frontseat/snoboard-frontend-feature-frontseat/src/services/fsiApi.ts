@@ -83,22 +83,17 @@ async function fsiDualMutate<T>(opts: {
   supabase: () => Promise<T>;
   backend: { path: string; method: string; body?: unknown };
 }): Promise<T> {
-  const [sbResult, beResult] = await Promise.allSettled([
-    fsiWithRetry(opts.supabase),
-    fsiBackendRequestImmediate(opts.backend.path, opts.backend.method, opts.backend.body),
-  ]);
+  const sbResult = await fsiWithRetry(opts.supabase);
 
-  if (sbResult.status === "rejected") {
-    throw sbResult.reason instanceof Error ? sbResult.reason : new Error("Supabase write failed");
-  }
+  void fsiBackendRequestImmediate(opts.backend.path, opts.backend.method, opts.backend.body).catch(
+    (err) => {
+      const message = err instanceof Error ? err.message : "Backend save failed";
+      enqueueFsiBackendRetry(opts.backend.path, opts.backend.method, opts.backend.body);
+      console.warn("[fsiApi] Backend mirror failed (queued for retry):", message);
+    },
+  );
 
-  if (beResult.status === "rejected") {
-    const err = beResult.reason instanceof Error ? beResult.reason : new Error("Backend save failed");
-    enqueueFsiBackendRetry(opts.backend.path, opts.backend.method, opts.backend.body);
-    console.warn("[fsiApi] Backend mirror failed (queued for retry):", err.message);
-  }
-
-  return sbResult.value;
+  return sbResult;
 }
 
 async function fsiActorEmail(): Promise<string> {

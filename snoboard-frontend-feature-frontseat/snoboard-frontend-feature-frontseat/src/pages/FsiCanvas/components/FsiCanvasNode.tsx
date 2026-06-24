@@ -11,11 +11,22 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
   const [title, setTitle] = useState(fsiNode.display_title);
   const [body, setBody] = useState(fsiNode.raw_body_text ?? "");
   const payload = fsiNode.structured_payload ?? {};
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(fieldDefs.map((def) => [def.key, String(payload[def.key] ?? "")])),
+  );
 
   useEffect(() => {
     setTitle(fsiNode.display_title);
     setBody(fsiNode.raw_body_text ?? "");
   }, [fsiNode.display_title, fsiNode.raw_body_text]);
+
+  useEffect(() => {
+    setFieldValues(
+      Object.fromEntries(
+        fieldDefs.map((def) => [def.key, String(fsiNode.structured_payload?.[def.key] ?? "")]),
+      ),
+    );
+  }, [fsiNode.id, fieldDefs, fsiNode.structured_payload]);
 
   const commitTitle = useCallback(
     (next: string) => {
@@ -99,7 +110,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
           {expanded && fieldDefs.length > 0 && (
             <div className="max-h-48 space-y-2 overflow-y-auto border-t border-emerald-900/30 px-3 pb-3 pt-2">
               {fieldDefs.slice(0, 8).map((def) => {
-                const val = String(payload[def.key] ?? "");
+                const val = fieldValues[def.key] ?? "";
                 return (
                   <div key={def.key}>
                     <label className="mb-0.5 block text-[9px] font-semibold uppercase text-emerald-950/60">
@@ -109,13 +120,19 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
                       <textarea
                         rows={def.rows ?? 2}
                         value={val}
-                        onChange={(e) => commitField(def.key, e.target.value)}
+                        onChange={(e) =>
+                          setFieldValues((prev) => ({ ...prev, [def.key]: e.target.value }))
+                        }
+                        onBlur={(e) => commitField(def.key, e.target.value)}
                         className={`${inputClass} resize-none`}
                       />
                     ) : def.inputType === "select" ? (
                       <select
                         value={val || "Average"}
-                        onChange={(e) => commitField(def.key, e.target.value)}
+                        onChange={(e) => {
+                          setFieldValues((prev) => ({ ...prev, [def.key]: e.target.value }));
+                          commitField(def.key, e.target.value);
+                        }}
                         className={inputClass}
                       >
                         {(def.selectOptions ?? PERFORMANCE_LABELS).map((o) => (
@@ -128,7 +145,10 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
                       <input
                         type={def.inputType === "number" ? "number" : "text"}
                         value={val}
-                        onChange={(e) => commitField(def.key, e.target.value)}
+                        onChange={(e) =>
+                          setFieldValues((prev) => ({ ...prev, [def.key]: e.target.value }))
+                        }
+                        onBlur={(e) => commitField(def.key, e.target.value)}
                         className={inputClass}
                       />
                     )}
