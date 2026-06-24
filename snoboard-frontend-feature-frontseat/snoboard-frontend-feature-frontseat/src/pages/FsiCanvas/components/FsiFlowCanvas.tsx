@@ -27,6 +27,7 @@ type FlowInnerProps = {
   nodes: FsiNodeRecord[];
   connections: FsiConnectionRecord[];
   canEdit: boolean;
+  fitTrigger?: number;
   onNodeSelect: (node: FsiNodeRecord | null) => void;
   onPaneDoubleClick: (x: number, y: number, screenX: number, screenY: number) => void;
   onNodeDragStop: (nodeId: string, x: number, y: number) => void;
@@ -41,6 +42,7 @@ function FlowInner({
   nodes: dbNodes,
   connections,
   canEdit,
+  fitTrigger = 0,
   onNodeSelect,
   onPaneDoubleClick,
   onNodeDragStop,
@@ -50,22 +52,21 @@ function FlowInner({
   onFieldChange,
   selectedNodeId,
 }: FlowInnerProps) {
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, fitView } = useReactFlow();
   const onFieldChangeRef = useRef(onFieldChange);
   onFieldChangeRef.current = onFieldChange;
+  const didInitialFit = useRef(false);
 
   const stableFieldChange = useCallback((nodeId: string, value: string) => {
     onFieldChangeRef.current(nodeId, value);
   }, []);
 
-  const dbSignature = useMemo(
+  const structureSignature = useMemo(
     () =>
       JSON.stringify({
         n: dbNodes.map((n) => ({
           id: n.id,
           pid: n.parent_node_id,
-          x: n.canvas_x,
-          y: n.canvas_y,
           t: n.display_title,
           type: n.node_type,
           p: n.structured_payload,
@@ -75,22 +76,47 @@ function FlowInner({
     [dbNodes, connections],
   );
 
+  const positionSignature = useMemo(
+    () => dbNodes.map((n) => `${n.id}:${n.canvas_x}:${n.canvas_y}`).join("|"),
+    [dbNodes],
+  );
+
   const flowGraph = useMemo(
     () =>
       graphToFlow(dbNodes, connections, {
         canEdit,
         onFieldChange: stableFieldChange,
       }),
-    [dbSignature, canEdit, stableFieldChange],
+    [structureSignature, positionSignature, canEdit, stableFieldChange],
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(flowGraph.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(flowGraph.edges);
 
+  // Sync structure + saved positions from DB; never fight an in-progress drag.
   useEffect(() => {
-    setNodes(flowGraph.nodes);
+    setNodes((current) =>
+      flowGraph.nodes.map((next) => {
+        const cur = current.find((c) => c.id === next.id);
+        if (cur?.dragging) return cur;
+        return next;
+      }),
+    );
     setEdges(flowGraph.edges);
   }, [flowGraph, setNodes, setEdges]);
+
+  useEffect(() => {
+    if (!didInitialFit.current && flowGraph.nodes.length > 0) {
+      didInitialFit.current = true;
+      requestAnimationFrame(() => fitView({ padding: 0.25, duration: 200 }));
+    }
+  }, [flowGraph.nodes.length, fitView]);
+
+  useEffect(() => {
+    if (fitTrigger > 0) {
+      requestAnimationFrame(() => fitView({ padding: 0.25, duration: 300 }));
+    }
+  }, [fitTrigger, fitView]);
 
   const handleConnect = useCallback(
     (params: Connection) => {
@@ -180,8 +206,6 @@ function FlowInner({
       onEdgesDelete={handleEdgesDelete}
       onNodesDelete={handleNodesDelete}
       nodeTypes={nodeTypes}
-      fitView
-      fitViewOptions={{ padding: 0.25 }}
       deleteKeyCode={canEdit ? ["Backspace", "Delete"] : null}
       defaultEdgeOptions={{ type: "smoothstep", style: { stroke: "#71717a", strokeWidth: 2 } }}
       className="bg-zinc-950 fsi-flow-canvas"

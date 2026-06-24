@@ -2,7 +2,6 @@ import type { Edge, Node } from "@xyflow/react";
 import type { FsiConnectionRecord, FsiNodeRecord, IronNodeType } from "./fsiNodeSchemas";
 import { NODE_TYPE_COLORS } from "./fsiNodeSchemas";
 import { isFieldNode, isParentNode } from "./fsiHierarchy";
-import { layoutFsiTree } from "./fsiTreeLayout";
 import type { FieldDef } from "./fsiNodeFieldDefs";
 import { NODE_FIELD_DEFS } from "./fsiNodeFieldDefs";
 
@@ -24,12 +23,15 @@ export type FsiFieldNodeData = {
 export function graphToFlow(
   nodes: FsiNodeRecord[],
   connections: FsiConnectionRecord[],
-  options?: { canEdit?: boolean; onFieldChange?: (nodeId: string, value: string) => void },
+  options?: {
+    canEdit?: boolean;
+    onFieldChange?: (nodeId: string, value: string) => void;
+  },
 ): {
   nodes: Node[];
   edges: Edge[];
 } {
-  const positions = layoutFsiTree(nodes, connections);
+  const positions = new Map(nodes.map((n) => [n.id, { x: n.canvas_x ?? 0, y: n.canvas_y ?? 0 }]));
   const nodeIds = new Set(nodes.map((n) => n.id));
 
   const flowNodes: Node[] = nodes.map((n) => {

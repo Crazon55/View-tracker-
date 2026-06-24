@@ -65,7 +65,6 @@ function layoutSubtree(
   return clusterW;
 }
 
-/** Top-down Miro-style tree layout from parent_node_id + connections. */
 export function layoutFsiTree(
   nodes: FsiNodeRecord[],
   connections: FsiConnectionRecord[],

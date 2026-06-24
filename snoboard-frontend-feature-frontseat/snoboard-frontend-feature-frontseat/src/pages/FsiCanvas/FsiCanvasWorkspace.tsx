@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Trash2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { fsiApi, flushFsiBackendSyncQueue } from "@/services/api";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -13,6 +13,21 @@ import type { FsiGraph, FsiNodeRecord, IronNodeType } from "./lib/fsiNodeSchemas
 import { defaultPayloadForType, defaultTitleForType } from "./lib/fsiNodeSchemas";
 import { NODE_FIELD_DEFS } from "./lib/fsiNodeFieldDefs";
 import { fieldPayload, isParentNode, parentPayload } from "./lib/fsiHierarchy";
+import { layoutFsiTree } from "./lib/fsiTreeLayout";
+
+function patchGraphNodePositions(
+  graph: FsiGraph,
+  updates: Array<{ id: string; x: number; y: number }>,
+): FsiGraph {
+  const byId = new Map(updates.map((u) => [u.id, u]));
+  return {
+    ...graph,
+    nodes: graph.nodes.map((n) => {
+      const u = byId.get(n.id);
+      return u ? { ...n, canvas_x: u.x, canvas_y: u.y } : n;
+    }),
+  };
+}
 
 export default function FsiCanvasWorkspace() {
   const { studyId } = useParams<{ studyId: string }>();
@@ -23,6 +38,7 @@ export default function FsiCanvasWorkspace() {
 
   const [selectedNode, setSelectedNode] = useState<FsiNodeRecord | null>(null);
   const [picker, setPicker] = useState<{ x: number; y: number; flowX: number; flowY: number } | null>(null);
+  const [fitTrigger, setFitTrigger] = useState(0);
   const graphRef = useRef<FsiGraph | null>(null);
 
   useEffect(() => {
@@ -38,6 +54,28 @@ export default function FsiCanvasWorkspace() {
   graphRef.current = graph ?? null;
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["fsi-graph", studyId] });
+
+  const applyPrettifyLayout = useCallback(
+    async (sourceGraph: FsiGraph) => {
+      const positions = layoutFsiTree(sourceGraph.nodes, sourceGraph.connections);
+      const updates = [...positions.entries()].map(([id, pos]) => ({ id, x: pos.x, y: pos.y }));
+
+      queryClient.setQueryData<FsiGraph>(["fsi-graph", studyId], patchGraphNodePositions(sourceGraph, updates));
+
+      await Promise.all(
+        updates.map(({ id, x, y }) => fsiApi.updateNode(id, { canvas_x: x, canvas_y: y })),
+      );
+
+      setFitTrigger((n) => n + 1);
+    },
+    [queryClient, studyId],
+  );
+
+  const prettifyMutation = useMutation({
+    mutationFn: () => applyPrettifyLayout(graphRef.current!),
+    onSuccess: () => toast.success("Canvas tidied into tree layout"),
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const createNodeMutation = useMutation({
     mutationFn: async (args: { type: IronNodeType; x: number; y: number }) => {
@@ -71,13 +109,16 @@ export default function FsiCanvasWorkspace() {
         });
       }
 
+      await queryClient.invalidateQueries({ queryKey: ["fsi-graph", studyId] });
+      const fresh = queryClient.getQueryData<FsiGraph>(["fsi-graph", studyId]);
+      if (fresh) await applyPrettifyLayout(fresh);
+
       return parent;
     },
     onSuccess: (node) => {
-      invalidate();
       setSelectedNode(node);
       setPicker(null);
-      toast.success("Parent node added with field sub-children");
+      toast.success("Parent node added");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -85,7 +126,16 @@ export default function FsiCanvasWorkspace() {
   const updateNodeMutation = useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: Record<string, unknown> }) =>
       fsiApi.updateNode(id, patch),
-    onSuccess: () => invalidate(),
+    onSuccess: (node, { patch }) => {
+      const keys = Object.keys(patch);
+      const isPositionOnly = keys.every((k) => k === "canvas_x" || k === "canvas_y");
+      if (isPositionOnly) return;
+
+      queryClient.setQueryData<FsiGraph>(["fsi-graph", studyId], (old) => {
+        if (!old) return old;
+        return { ...old, nodes: old.nodes.map((n) => (n.id === node.id ? { ...n, ...node } : n)) };
+      });
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -115,27 +165,49 @@ export default function FsiCanvasWorkspace() {
   const handleFieldChange = useCallback(
     (nodeId: string, value: string) => {
       if (!canEdit) return;
-      const node = graphRef.current?.nodes.find((n) => n.id === nodeId);
-      if (!node) return;
+      const g = graphRef.current;
+      const node = g?.nodes.find((n) => n.id === nodeId);
+      if (!node || !g) return;
+
+      const nextPayload = { ...(node.structured_payload ?? {}), field_value: value };
+      queryClient.setQueryData<FsiGraph>(["fsi-graph", studyId], {
+        ...g,
+        nodes: g.nodes.map((n) =>
+          n.id === nodeId ? { ...n, structured_payload: nextPayload } : n,
+        ),
+      });
+
       updateNodeMutation.mutate({
         id: nodeId,
-        patch: {
-          structured_payload: {
-            ...(node.structured_payload ?? {}),
-            field_value: value,
-          },
-        },
+        patch: { structured_payload: nextPayload },
       });
     },
-    [canEdit, updateNodeMutation],
+    [canEdit, queryClient, studyId, updateNodeMutation],
   );
 
   const handleNodeDragStop = useCallback(
     (nodeId: string, x: number, y: number) => {
-      if (!canEdit) return;
-      updateNodeMutation.mutate({ id: nodeId, patch: { canvas_x: x, canvas_y: y } });
+      if (!canEdit || !graphRef.current) return;
+
+      const g = graphRef.current;
+      const dragged = g.nodes.find((n) => n.id === nodeId);
+      if (!dragged) return;
+
+      const dx = x - dragged.canvas_x;
+      const dy = y - dragged.canvas_y;
+      const updates: Array<{ id: string; x: number; y: number }> = [{ id: nodeId, x, y }];
+
+      for (const child of g.nodes.filter((n) => n.parent_node_id === nodeId)) {
+        updates.push({ id: child.id, x: child.canvas_x + dx, y: child.canvas_y + dy });
+      }
+
+      queryClient.setQueryData<FsiGraph>(["fsi-graph", studyId], patchGraphNodePositions(g, updates));
+
+      for (const u of updates) {
+        updateNodeMutation.mutate({ id: u.id, patch: { canvas_x: u.x, canvas_y: u.y } });
+      }
     },
-    [canEdit, updateNodeMutation],
+    [canEdit, queryClient, studyId, updateNodeMutation],
   );
 
   const openPickerAtCenter = () => {
@@ -179,9 +251,20 @@ export default function FsiCanvasWorkspace() {
         <div className="min-w-0 flex-1">
           <div className="truncate font-semibold">{study.title}</div>
           <div className="truncate text-xs text-zinc-500">
-            {study.study_type} · {study.target_account} · {parentCount} parents · tree layout
+            {study.study_type} · {study.target_account} · {parentCount} parents
           </div>
         </div>
+        {canEdit && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={prettifyMutation.isPending}
+            onClick={() => prettifyMutation.mutate()}
+          >
+            <Wand2 className="mr-1 h-4 w-4" />
+            Prettify layout
+          </Button>
+        )}
         {canEdit && selectedNode && isParentNode(selectedNode) && (
           <Button
             variant="ghost"
@@ -206,6 +289,7 @@ export default function FsiCanvasWorkspace() {
           nodes={nodes}
           connections={connections}
           canEdit={canEdit}
+          fitTrigger={fitTrigger}
           selectedNodeId={selectedNode?.id ?? null}
           onNodeSelect={setSelectedNode}
           onFieldChange={handleFieldChange}
@@ -228,8 +312,8 @@ export default function FsiCanvasWorkspace() {
           />
         )}
 
-        <div className="pointer-events-none absolute bottom-4 left-4 max-w-xs rounded-lg border border-zinc-800 bg-zinc-950/90 px-3 py-2 text-xs text-zinc-500">
-          Parent → field sub-children (Godot-style). Connect parent bottoms to other parents for structural children.
+        <div className="pointer-events-none absolute bottom-4 left-4 max-w-sm rounded-lg border border-zinc-800 bg-zinc-950/90 px-3 py-2 text-xs text-zinc-500">
+          Drag nodes freely — positions save on drop. Use <strong className="text-zinc-400">Prettify layout</strong> to auto-arrange into a tree.
         </div>
       </div>
     </div>
