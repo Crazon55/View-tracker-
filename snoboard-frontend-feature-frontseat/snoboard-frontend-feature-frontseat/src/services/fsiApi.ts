@@ -8,6 +8,18 @@ import { fetchApi, getAccessToken } from "./api";
 const FSI_BACKEND_BASE = "/api/v1/fsi";
 const FSI_BACKEND_RETRY_KEY = "fsi-backend-sync-queue";
 
+export type FsiCloudinarySignedUpload = {
+  cloud_name: string;
+  api_key: string;
+  timestamp: number;
+  signature: string;
+  upload_url: string;
+  folder: string;
+  tags: string;
+  context: string;
+  expires_at: string;
+};
+
 type FsiBackendRetry = { path: string; method: string; body?: unknown; at: number };
 
 function fsiNewId(): string {
@@ -355,6 +367,50 @@ export function createFsiApi() {
         backend: { path: `${FSI_BACKEND_BASE}/connections/${connectionId}`, method: "DELETE" },
       });
       return { id: connectionId };
+    },
+    signNodeCloudinaryUpload: async (studyId: string, nodeId: string, uploader?: string) => {
+      const actor = (uploader ?? (await fsiActorEmail())).trim();
+      return fetchApi<FsiCloudinarySignedUpload>(
+        `${FSI_BACKEND_BASE}/studies/${studyId}/nodes/${nodeId}/cloudinary-sign`,
+        { method: "POST", body: JSON.stringify({ uploader: actor || undefined }) },
+      );
+    },
+    uploadNodeScreenshotFiles: async (
+      studyId: string,
+      nodeId: string,
+      files: File[],
+      uploader?: string,
+    ) => {
+      if (!files.length) return [] as string[];
+      const signed = await fetchApi<FsiCloudinarySignedUpload>(
+        `${FSI_BACKEND_BASE}/studies/${studyId}/nodes/${nodeId}/cloudinary-sign`,
+        {
+          method: "POST",
+          body: JSON.stringify({ uploader: (uploader ?? (await fsiActorEmail())).trim() || undefined }),
+        },
+      );
+      const urls: string[] = [];
+      for (const file of files) {
+        if (!file.type.startsWith("image/")) continue;
+        const fd = new FormData();
+        fd.append("file", file);
+        fd.append("api_key", String(signed.api_key));
+        fd.append("timestamp", String(signed.timestamp));
+        fd.append("signature", String(signed.signature));
+        fd.append("folder", String(signed.folder));
+        if (signed.tags) fd.append("tags", String(signed.tags));
+        if (signed.context) fd.append("context", String(signed.context));
+        const res = await fetch(String(signed.upload_url), { method: "POST", body: fd });
+        if (!res.ok) {
+          const txt = await res.text().catch(() => "");
+          throw new Error(txt || `Cloudinary upload failed (${res.status})`);
+        }
+        const js = (await res.json()) as { secure_url?: string; url?: string };
+        const url = js.secure_url || js.url;
+        if (!url) throw new Error("Cloudinary upload returned no URL");
+        urls.push(url);
+      }
+      return urls;
     },
   };
 }

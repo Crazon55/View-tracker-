@@ -2,10 +2,11 @@
 
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.auth import require_auth
 from app.database.client import get_supabase_client
+from app.services.cloudinary_sign import build_signed_upload
 from app.schemas.fsi import (
     STUDY_TYPES,
     NODE_TYPES,
@@ -250,3 +251,42 @@ async def delete_connection(connection_id: str, claims: dict = Depends(require_a
     client.table("connections").delete().eq("id", connection_id).execute()
     client.table("studies").update({"updated_at": _now_iso()}).eq("id", study_id).execute()
     return {"success": True, "data": {"id": connection_id}}
+
+
+@router.post("/studies/{study_id}/nodes/{node_id}/cloudinary-sign")
+async def fsi_node_cloudinary_sign(
+    study_id: str,
+    node_id: str,
+    request: Request,
+    claims: dict = Depends(require_auth),
+):
+    """Signed upload params for FSI canvas node screenshots."""
+    client = get_supabase_client()
+    _get_study(client, study_id)
+    node = _get_node(client, node_id)
+    if node["study_id"] != study_id:
+        raise HTTPException(status_code=400, detail="Node does not belong to this study")
+
+    body = await request.json()
+    uploader = str(body.get("uploader") or _email(claims) or "").strip()
+
+    folder = f"fsi-canvas/{study_id}/{node_id}"
+    tag_parts = [
+        "fsi_canvas",
+        f"fsi_study_{study_id}",
+        f"fsi_node_{node_id}",
+    ]
+    if uploader:
+        tag_parts.append(f"uploader_{uploader.split('@')[0]}")
+    tags = ",".join(tag_parts)
+
+    context_parts = [
+        f"study_id={study_id}",
+        f"node_id={node_id}",
+    ]
+    if uploader:
+        context_parts.append(f"uploader={uploader}")
+    context = "|".join(context_parts)
+
+    signed = build_signed_upload(folder=folder, tags=tags, context=context, expires_days=30)
+    return {"success": True, "data": signed}

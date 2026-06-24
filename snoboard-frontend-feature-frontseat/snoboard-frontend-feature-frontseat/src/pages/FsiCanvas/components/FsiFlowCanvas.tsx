@@ -64,6 +64,7 @@ type FlowInnerProps = {
   onTitleChange: (nodeId: string, title: string) => void;
   onBodyChange: (nodeId: string, body: string) => void;
   onPayloadChange: (nodeId: string, key: string, value: string) => void;
+  onScreenshotsChange: (nodeId: string, screenshots: string[]) => void;
 };
 
 const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowInner(
@@ -90,6 +91,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     onTitleChange,
     onBodyChange,
     onPayloadChange,
+    onScreenshotsChange,
   },
   ref,
 ) {
@@ -181,6 +183,12 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     onPayloadChangeRef.current(id, k, v);
   }, []);
 
+  const onScreenshotsChangeRef = useRef(onScreenshotsChange);
+  onScreenshotsChangeRef.current = onScreenshotsChange;
+  const stableScreenshotsChange = useCallback((id: string, screenshots: string[]) => {
+    onScreenshotsChangeRef.current(id, screenshots);
+  }, []);
+
   const onEdgeDeleteRef = useRef(onEdgeDelete);
   onEdgeDeleteRef.current = onEdgeDelete;
   const stableEdgeDelete = useCallback((id: string) => {
@@ -220,8 +228,9 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         onBodyChange: stableBodyChange,
         onPayloadChange: stablePayloadChange,
         onEdgeDelete: stableEdgeDelete,
+        onScreenshotsChange: stableScreenshotsChange,
       }),
-    [structureSignature, positionSignature, canEdit, stableTitleChange, stableBodyChange, stablePayloadChange, stableEdgeDelete],
+    [structureSignature, positionSignature, canEdit, stableTitleChange, stableBodyChange, stablePayloadChange, stableEdgeDelete, stableScreenshotsChange],
   );
 
   const flowEdges = flowGraph.edges;

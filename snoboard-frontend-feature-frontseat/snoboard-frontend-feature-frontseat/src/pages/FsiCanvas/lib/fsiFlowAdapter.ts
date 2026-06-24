@@ -16,6 +16,7 @@ export type FsiNodeData = {
   onTitleChange?: (nodeId: string, title: string) => void;
   onBodyChange?: (nodeId: string, body: string) => void;
   onPayloadChange?: (nodeId: string, key: string, value: string) => void;
+  onScreenshotsChange?: (nodeId: string, screenshots: string[]) => void;
 };
 
 export function graphToFlow(
@@ -27,6 +28,7 @@ export function graphToFlow(
     onBodyChange?: (nodeId: string, body: string) => void;
     onPayloadChange?: (nodeId: string, key: string, value: string) => void;
     onEdgeDelete?: (edgeId: string) => void;
+    onScreenshotsChange?: (nodeId: string, screenshots: string[]) => void;
   },
 ): { nodes: Node[]; edges: Edge[] } {
   const visible = nodes.filter(isCanvasNode);
@@ -49,6 +51,7 @@ export function graphToFlow(
         onTitleChange: options?.onTitleChange,
         onBodyChange: options?.onBodyChange,
         onPayloadChange: options?.onPayloadChange,
+        onScreenshotsChange: options?.onScreenshotsChange,
       } satisfies FsiNodeData,
     };
   });

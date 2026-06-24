@@ -10,16 +10,7 @@ export type FieldDef = {
 };
 
 export const NODE_FIELD_DEFS: Record<IronNodeType, FieldDef[]> = {
-  "Content Bucket": [
-    { key: "operational_label", label: "Operational label" },
-    { key: "parent_pillar_association", label: "Parent pillar association" },
-    { key: "contextual_subject_bound", label: "Contextual subject bound", rows: 2, inputType: "textarea" },
-    { key: "production_topics", label: "Production topics", rows: 2, inputType: "textarea" },
-    { key: "reusable_seed_hooks", label: "Reusable seed hooks", rows: 3, inputType: "textarea" },
-    { key: "target_distribution_formats", label: "Target distribution formats" },
-    { key: "target_output_handle", label: "Target output handle" },
-    { key: "strategist_observation_note", label: "Strategist observation", rows: 3, inputType: "textarea" },
-  ],
+  "Content Bucket": [],
   "Hook Pattern": [
     { key: "title_descriptor", label: "Title descriptor" },
     { key: "structural_group_type", label: "Structural group type" },

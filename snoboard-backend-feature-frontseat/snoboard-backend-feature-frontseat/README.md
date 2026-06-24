@@ -181,11 +181,15 @@ SUPABASE_URL=https://xxx.supabase.co
 SUPABASE_KEY=your_key
 REPORTS_DIR=reports/files/
 
-# Tickets uploads (Cloudinary) — backend only
+# Cloudinary — backend only (Tickets attachments + FSI Canvas node screenshots)
+# Set in snoboard-backend-feature-frontseat/snoboard-backend-feature-frontseat/.env locally,
+# or in EC2 pm2 ecosystem.config.js env / shell before starting the API.
 CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_api_key
 CLOUDINARY_API_SECRET=your_api_secret
 ```
+
+FSI Canvas uses the same keys. Signed uploads: `POST /api/v1/fsi/studies/{study_id}/nodes/{node_id}/cloudinary-sign`. Files go to Cloudinary folder `fsi-canvas/{study_id}/{node_id}/`. Only **HTTPS URLs** are stored in Supabase (`structured_payload.screenshots`); the frontend never sees the API secret.
 
 ---
 

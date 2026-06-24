@@ -1,11 +1,14 @@
+import { useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Trash2 } from "lucide-react";
+import { ImagePlus, Loader2, Trash2, X } from "lucide-react";
+import { toast } from "sonner";
 import type { FsiNodeRecord } from "../lib/fsiNodeSchemas";
 import { PERFORMANCE_LABELS } from "../lib/fsiNodeSchemas";
+import { parseNodeScreenshots, uploadFsiNodeScreenshotFiles } from "../lib/fsiNodeMedia";
 
 type Props = {
   node: FsiNodeRecord;
@@ -59,11 +62,38 @@ function Field({
 
 export default function NodeInspector({ node, canEdit, onChange, onDelete }: Props) {
   const payload = node.structured_payload || {};
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const screenshots = parseNodeScreenshots(payload);
 
   const setPayload = (key: string, value: unknown) => {
     onChange({
       structured_payload: { ...payload, [key]: value },
     });
+  };
+
+  const setScreenshots = (next: string[]) => {
+    setPayload("screenshots", next);
+  };
+
+  const addScreenshotFiles = async (files: FileList | File[] | null) => {
+    if (!files || !canEdit || uploading) return;
+    setUploading(true);
+    try {
+      const urls = await uploadFsiNodeScreenshotFiles({
+        studyId: node.study_id,
+        nodeId: node.id,
+        files,
+      });
+      if (urls.length > 0) {
+        setScreenshots([...screenshots, ...urls]);
+        toast.success(`Uploaded ${urls.length} screenshot${urls.length === 1 ? "" : "s"}`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Screenshot upload failed");
+    } finally {
+      setUploading(false);
+    }
   };
 
   const numField = (key: string, label: string) => (
@@ -97,6 +127,70 @@ export default function NodeInspector({ node, canEdit, onChange, onDelete }: Pro
           onChange={(v) => onChange({ display_title: v })}
           disabled={!canEdit}
         />
+
+        {node.node_type !== "Strategist Note" && (
+          <Field
+            label="Content"
+            value={node.raw_body_text ?? ""}
+            onChange={(v) => onChange({ raw_body_text: v })}
+            disabled={!canEdit}
+            rows={4}
+          />
+        )}
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs text-zinc-400">Screenshots</Label>
+            {canEdit && (
+              <>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    void addScreenshotFiles(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 border-zinc-700 text-xs"
+                  disabled={uploading}
+                  onClick={() => fileRef.current?.click()}
+                >
+                  {uploading ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="mr-1 h-3.5 w-3.5" />}
+                  {uploading ? "Uploading…" : "Add"}
+                </Button>
+              </>
+            )}
+          </div>
+          {screenshots.length > 0 ? (
+            <div className="grid grid-cols-2 gap-2">
+              {screenshots.map((src, index) => (
+                <div key={`${index}-${src.slice(0, 24)}`} className="group relative overflow-hidden rounded border border-zinc-700">
+                  <img src={src} alt={`Screenshot ${index + 1}`} className="block h-24 w-full object-cover" />
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => setScreenshots(screenshots.filter((_, i) => i !== index))}
+                      className="absolute right-1 top-1 rounded bg-black/70 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded border border-dashed border-zinc-700 px-3 py-4 text-center text-xs text-zinc-500">
+              No screenshots yet
+            </div>
+          )}
+        </div>
 
         {node.node_type === "Post Example" && (
           <>
@@ -148,19 +242,6 @@ export default function NodeInspector({ node, canEdit, onChange, onDelete }: Pro
             <Field label="Target demographic profile" value={payload.target_demographic_profile as string} onChange={(v) => setPayload("target_demographic_profile", v)} disabled={!canEdit} />
             <Field label="Operational rules" value={payload.operational_rules as string} onChange={(v) => setPayload("operational_rules", v)} disabled={!canEdit} rows={3} />
             <Field label="Reference post URLs" value={payload.representative_post_reference_urls as string} onChange={(v) => setPayload("representative_post_reference_urls", v)} disabled={!canEdit} rows={2} />
-            <Field label="Strategist observation" value={payload.strategist_observation_note as string} onChange={(v) => setPayload("strategist_observation_note", v)} disabled={!canEdit} rows={3} />
-          </>
-        )}
-
-        {node.node_type === "Content Bucket" && (
-          <>
-            <Field label="Operational label" value={payload.operational_label as string} onChange={(v) => setPayload("operational_label", v)} disabled={!canEdit} />
-            <Field label="Parent pillar association" value={payload.parent_pillar_association as string} onChange={(v) => setPayload("parent_pillar_association", v)} disabled={!canEdit} />
-            <Field label="Contextual subject bound" value={payload.contextual_subject_bound as string} onChange={(v) => setPayload("contextual_subject_bound", v)} disabled={!canEdit} rows={2} />
-            <Field label="Production topics" value={payload.production_topics as string} onChange={(v) => setPayload("production_topics", v)} disabled={!canEdit} rows={2} />
-            <Field label="Reusable seed hooks" value={payload.reusable_seed_hooks as string} onChange={(v) => setPayload("reusable_seed_hooks", v)} disabled={!canEdit} rows={3} />
-            <Field label="Target distribution formats" value={payload.target_distribution_formats as string} onChange={(v) => setPayload("target_distribution_formats", v)} disabled={!canEdit} />
-            <Field label="Target output handle" value={payload.target_output_handle as string} onChange={(v) => setPayload("target_output_handle", v)} disabled={!canEdit} />
             <Field label="Strategist observation" value={payload.strategist_observation_note as string} onChange={(v) => setPayload("strategist_observation_note", v)} disabled={!canEdit} rows={3} />
           </>
         )}

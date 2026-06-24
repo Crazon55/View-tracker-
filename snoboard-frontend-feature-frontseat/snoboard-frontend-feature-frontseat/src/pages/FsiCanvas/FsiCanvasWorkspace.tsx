@@ -638,6 +638,34 @@ export default function FsiCanvasWorkspace() {
     [canEdit, history, setGraph, updateNodeMutation],
   );
 
+  const handleScreenshotsChange = useCallback(
+    (nodeId: string, screenshots: string[]) => {
+      if (!canEdit) return;
+      const g = graphRef.current;
+      const node = g?.nodes.find((n) => n.id === nodeId);
+      if (!node || !g) return;
+      const beforePayload = { ...(node.structured_payload ?? {}) };
+      const nextPayload = { ...beforePayload, screenshots };
+      if (JSON.stringify(beforePayload) === JSON.stringify(nextPayload)) return;
+      if (!history.isApplying.current) {
+        history.pushEntry({
+          type: "node_patch",
+          nodeId,
+          before: { structured_payload: beforePayload },
+          after: { structured_payload: nextPayload },
+        });
+      }
+      setGraph({
+        ...g,
+        nodes: g.nodes.map((n) =>
+          n.id === nodeId ? { ...n, structured_payload: nextPayload } : n,
+        ),
+      });
+      updateNodeMutation.mutate({ id: nodeId, patch: { structured_payload: nextPayload } });
+    },
+    [canEdit, history, setGraph, updateNodeMutation],
+  );
+
   const handleNodeDragStart = useCallback((nodeId: string, x: number, y: number) => {
     const node = graphRef.current?.nodes.find((n) => n.id === nodeId);
     dragOriginRef.current.set(
@@ -856,6 +884,7 @@ export default function FsiCanvasWorkspace() {
             onTitleChange={handleTitleChange}
             onBodyChange={handleBodyChange}
             onPayloadChange={handlePayloadChange}
+            onScreenshotsChange={handleScreenshotsChange}
           />
 
           {boxSelectMode && (
