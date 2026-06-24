@@ -16,30 +16,31 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import FsiCanvasNode from "./FsiCanvasNode";
-import FsiFieldNode from "./FsiFieldNode";
 import type { FsiConnectionRecord, FsiNodeRecord } from "../lib/fsiNodeSchemas";
 import { graphToFlow, type FsiNodeData } from "../lib/fsiFlowAdapter";
-import { isFieldNode, isParentNode } from "../lib/fsiHierarchy";
-import { FSI_FIELD_DRAG_MIME, type FieldDragPayload } from "./FsiPropertyPalette";
+import {
+  FSI_NODE_SUGGESTION_MIME,
+  type NodeSuggestionPayload,
+} from "./FsiNodeSuggestionsPanel";
 
-const nodeTypes = { fsiNode: FsiCanvasNode, fsiFieldNode: FsiFieldNode };
+const nodeTypes = { fsiNode: FsiCanvasNode };
 
 type FlowInnerProps = {
   nodes: FsiNodeRecord[];
   connections: FsiConnectionRecord[];
   canEdit: boolean;
   fitTrigger?: number;
+  selectedNodeId: string | null;
   onNodeSelect: (node: FsiNodeRecord | null) => void;
-  onParentSelect: (node: FsiNodeRecord) => void;
-  onPaneDoubleClick: (x: number, y: number, screenX: number, screenY: number) => void;
+  onPaneDoubleClick: (x: number, y: number) => void;
   onNodeDragStop: (nodeId: string, x: number, y: number) => void;
   onConnect: (source: string, target: string) => void;
   onEdgeDelete: (edgeId: string) => void;
   onNodeDelete: (nodeId: string) => void;
-  onFieldChange: (nodeId: string, value: string) => void;
-  onFieldDrop: (field: FieldDragPayload) => void;
-  selectedNodeId: string | null;
-  activeParentId: string | null;
+  onSuggestionDrop: (payload: NodeSuggestionPayload, x: number, y: number) => void;
+  onTitleChange: (nodeId: string, title: string) => void;
+  onBodyChange: (nodeId: string, body: string) => void;
+  onPayloadChange: (nodeId: string, key: string, value: string) => void;
 };
 
 function FlowInner({
@@ -47,25 +48,36 @@ function FlowInner({
   connections,
   canEdit,
   fitTrigger = 0,
+  selectedNodeId,
   onNodeSelect,
-  onParentSelect,
   onPaneDoubleClick,
   onNodeDragStop,
   onConnect,
   onEdgeDelete,
   onNodeDelete,
-  onFieldChange,
-  onFieldDrop,
-  selectedNodeId,
-  activeParentId,
+  onSuggestionDrop,
+  onTitleChange,
+  onBodyChange,
+  onPayloadChange,
 }: FlowInnerProps) {
   const { screenToFlowPosition, fitView } = useReactFlow();
-  const onFieldChangeRef = useRef(onFieldChange);
-  onFieldChangeRef.current = onFieldChange;
   const didInitialFit = useRef(false);
 
-  const stableFieldChange = useCallback((nodeId: string, value: string) => {
-    onFieldChangeRef.current(nodeId, value);
+  const onTitleChangeRef = useRef(onTitleChange);
+  const onBodyChangeRef = useRef(onBodyChange);
+  const onPayloadChangeRef = useRef(onPayloadChange);
+  onTitleChangeRef.current = onTitleChange;
+  onBodyChangeRef.current = onBodyChange;
+  onPayloadChangeRef.current = onPayloadChange;
+
+  const stableTitleChange = useCallback((id: string, t: string) => {
+    onTitleChangeRef.current(id, t);
+  }, []);
+  const stableBodyChange = useCallback((id: string, b: string) => {
+    onBodyChangeRef.current(id, b);
+  }, []);
+  const stablePayloadChange = useCallback((id: string, k: string, v: string) => {
+    onPayloadChangeRef.current(id, k, v);
   }, []);
 
   const structureSignature = useMemo(
@@ -73,10 +85,10 @@ function FlowInner({
       JSON.stringify({
         n: dbNodes.map((n) => ({
           id: n.id,
-          pid: n.parent_node_id,
           t: n.display_title,
           type: n.node_type,
           p: n.structured_payload,
+          b: n.raw_body_text,
         })),
         c: connections.map((c) => ({ id: c.id, s: c.source_node_id, t: c.target_node_id })),
       }),
@@ -92,10 +104,11 @@ function FlowInner({
     () =>
       graphToFlow(dbNodes, connections, {
         canEdit,
-        onFieldChange: stableFieldChange,
-        activeParentId,
+        onTitleChange: stableTitleChange,
+        onBodyChange: stableBodyChange,
+        onPayloadChange: stablePayloadChange,
       }),
-    [structureSignature, positionSignature, canEdit, stableFieldChange, activeParentId],
+    [structureSignature, positionSignature, canEdit, stableTitleChange, stableBodyChange, stablePayloadChange],
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(flowGraph.nodes);
@@ -125,36 +138,20 @@ function FlowInner({
     }
   }, [fitTrigger, fitView]);
 
-  useEffect(() => {
-    if (!activeParentId || flowGraph.nodes.length === 0) return;
-    requestAnimationFrame(() =>
-      fitView({
-        nodes: flowGraph.nodes.map((n) => ({ id: n.id })),
-        padding: 0.35,
-        duration: 280,
-      }),
-    );
-  }, [activeParentId, flowGraph.nodes.length, fitView]);
-
   const handleConnect = useCallback(
     (params: Connection) => {
       if (!canEdit || !params.source || !params.target) return;
-      const sourceNode = dbNodes.find((n) => n.id === params.source);
-      const targetNode = dbNodes.find((n) => n.id === params.target);
-      if (!sourceNode || !targetNode) return;
-      if (isFieldNode(sourceNode) && isFieldNode(targetNode)) return;
       onConnect(params.source, params.target);
     },
-    [canEdit, dbNodes, onConnect],
+    [canEdit, onConnect],
   );
 
   const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
-      const data = node.data as FsiNodeData | { fsiNode: FsiNodeRecord };
+      const data = node.data as FsiNodeData;
       onNodeSelect(data.fsiNode);
-      if (isParentNode(data.fsiNode)) onParentSelect(data.fsiNode);
     },
-    [onNodeSelect, onParentSelect],
+    [onNodeSelect],
   );
 
   const handlePaneClick = useCallback(() => onNodeSelect(null), [onNodeSelect]);
@@ -163,7 +160,7 @@ function FlowInner({
     (e: React.MouseEvent) => {
       if (!canEdit) return;
       const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-      onPaneDoubleClick(pos.x, pos.y, e.clientX, e.clientY);
+      onPaneDoubleClick(pos.x, pos.y);
     },
     [canEdit, onPaneDoubleClick, screenToFlowPosition],
   );
@@ -177,7 +174,7 @@ function FlowInner({
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes(FSI_FIELD_DRAG_MIME)) {
+    if (e.dataTransfer.types.includes(FSI_NODE_SUGGESTION_MIME)) {
       e.preventDefault();
       e.dataTransfer.dropEffect = "copy";
     }
@@ -186,17 +183,18 @@ function FlowInner({
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       if (!canEdit) return;
-      const raw = e.dataTransfer.getData(FSI_FIELD_DRAG_MIME);
+      const raw = e.dataTransfer.getData(FSI_NODE_SUGGESTION_MIME);
       if (!raw) return;
       e.preventDefault();
       try {
-        const field = JSON.parse(raw) as FieldDragPayload;
-        onFieldDrop(field);
+        const payload = JSON.parse(raw) as NodeSuggestionPayload;
+        const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+        onSuggestionDrop(payload, pos.x, pos.y);
       } catch {
-        /* ignore malformed drag payload */
+        /* ignore */
       }
     },
-    [canEdit, onFieldDrop, screenToFlowPosition],
+    [canEdit, onSuggestionDrop, screenToFlowPosition],
   );
 
   const handleEdgesDelete = useCallback(
@@ -226,45 +224,43 @@ function FlowInner({
   );
 
   return (
-    <ReactFlow
-      nodes={styledNodes}
-      edges={edges}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
-      onConnect={handleConnect}
-      onNodeClick={handleNodeClick}
-      onPaneClick={handlePaneClick}
-      onPaneDoubleClick={handlePaneDoubleClick}
-      onNodeDragStop={handleNodeDragStop}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
-      onEdgesDelete={handleEdgesDelete}
-      onNodesDelete={handleNodesDelete}
-      nodeTypes={nodeTypes}
-      deleteKeyCode={canEdit ? ["Backspace", "Delete"] : null}
-      defaultEdgeOptions={{ type: "smoothstep", style: { stroke: "#71717a", strokeWidth: 2 } }}
-      className="bg-zinc-950 fsi-flow-canvas"
-    >
-      <Background id="fsi-grid-coarse" variant={BackgroundVariant.Dots} gap={48} size={3} color="#3f3f46" />
-      <Background id="fsi-grid-fine" variant={BackgroundVariant.Dots} gap={24} size={2} color="#52525b" />
-      <Controls className="!bg-zinc-900 !border-zinc-700 [&>button]:!bg-zinc-800 [&>button]:!border-zinc-700 [&>button]:!text-white" />
-      <MiniMap
-        nodeColor={(n) => {
-          const d = n.data as FsiNodeData | undefined;
-          return d?.color ?? "#22c55e";
-        }}
-        maskColor="rgba(0,0,0,0.6)"
-        className="!bg-zinc-900 !border-zinc-700"
-      />
-    </ReactFlow>
+    <div className="h-full w-full" onDragOver={handleDragOver} onDrop={handleDrop}>
+      <ReactFlow
+        nodes={styledNodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={handleConnect}
+        onNodeClick={handleNodeClick}
+        onPaneClick={handlePaneClick}
+        onPaneDoubleClick={handlePaneDoubleClick}
+        onNodeDragStop={handleNodeDragStop}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+        onEdgesDelete={handleEdgesDelete}
+        onNodesDelete={handleNodesDelete}
+        nodeTypes={nodeTypes}
+        deleteKeyCode={canEdit ? ["Backspace", "Delete"] : null}
+        defaultEdgeOptions={{ type: "smoothstep", style: { stroke: "#71717a", strokeWidth: 2 } }}
+        className="bg-zinc-950 fsi-flow-canvas"
+      >
+        <Background id="fsi-grid-coarse" variant={BackgroundVariant.Dots} gap={48} size={3} color="#3f3f46" />
+        <Background id="fsi-grid-fine" variant={BackgroundVariant.Dots} gap={24} size={2} color="#52525b" />
+        <Controls className="!bg-zinc-900 !border-zinc-700 [&>button]:!bg-zinc-800 [&>button]:!border-zinc-700 [&>button]:!text-white" />
+        <MiniMap
+          nodeColor={(n) => {
+            const d = n.data as FsiNodeData | undefined;
+            return d?.color ?? "#22c55e";
+          }}
+          maskColor="rgba(0,0,0,0.6)"
+          className="!bg-zinc-900 !border-zinc-700"
+        />
+      </ReactFlow>
+    </div>
   );
 }
 
-type Props = Omit<FlowInnerProps, "onPaneDoubleClick"> & {
-  onPaneDoubleClick: (x: number, y: number, screenX: number, screenY: number) => void;
-};
-
-export default function FsiFlowCanvas(props: Props) {
+export default function FsiFlowCanvas(props: FlowInnerProps) {
   return (
     <ReactFlowProvider>
       <FlowInner {...props} />

@@ -19,6 +19,28 @@ export const IRON_NODE_TYPES = [
 
 export type IronNodeType = (typeof IRON_NODE_TYPES)[number];
 
+export const PRD_NODE_TYPES = [
+  "Page",
+  "Post Example",
+  "Carousel Example",
+  "Reel Example",
+  "Content Pillar",
+  "Content Bucket",
+  "Hook Pattern",
+  "Hook Example",
+  "Visual Pattern",
+  "Topic Pattern",
+  "Audience Insight",
+  "Strategy Rule",
+  "Warning / What To Avoid",
+  "Repeatable Formula",
+  "Client Narrative Angle",
+  "Strategist Note",
+  "Performance Insight",
+] as const;
+
+export type PrdNodeType = (typeof PRD_NODE_TYPES)[number];
+
 export const PERFORMANCE_LABELS = [
   "Viral",
   "Strong",
@@ -123,21 +145,34 @@ export type StrategistNotePayload = {
   observation?: string;
 };
 
-export const NODE_TYPE_COLORS: Record<IronNodeType, string> = {
+export const NODE_TYPE_COLORS: Record<string, string> = {
+  Page: "#6366f1",
   "Post Example": "#3b82f6",
-  "Hook Pattern": "#a855f7",
+  "Carousel Example": "#06b6d4",
+  "Reel Example": "#14b8a6",
+  "Content Pillar": "#84cc16",
   "Content Bucket": "#22c55e",
+  "Hook Pattern": "#a855f7",
+  "Hook Example": "#c084fc",
+  "Visual Pattern": "#ec4899",
+  "Topic Pattern": "#f472b6",
+  "Audience Insight": "#f97316",
+  "Strategy Rule": "#eab308",
+  "Warning / What To Avoid": "#ef4444",
+  "Repeatable Formula": "#10b981",
+  "Client Narrative Angle": "#8b5cf6",
   "Strategist Note": "#f59e0b",
+  "Performance Insight": "#64748b",
 };
 
-export function defaultPayloadForType(nodeType: IronNodeType): Record<string, unknown> {
+export function colorForNodeType(nodeType: string): string {
+  return NODE_TYPE_COLORS[nodeType] ?? "#22c55e";
+}
+
+export function defaultPayloadForType(nodeType: string): Record<string, unknown> {
   switch (nodeType) {
     case "Post Example":
       return { performance_label: "Average" };
-    case "Hook Pattern":
-      return {};
-    case "Content Bucket":
-      return {};
     case "Strategist Note":
       return { observation: "" };
     default:
@@ -145,19 +180,12 @@ export function defaultPayloadForType(nodeType: IronNodeType): Record<string, un
   }
 }
 
-export function defaultTitleForType(nodeType: IronNodeType): string {
-  switch (nodeType) {
-    case "Post Example":
-      return "Post Example";
-    case "Hook Pattern":
-      return "Hook Pattern";
-    case "Content Bucket":
-      return "Content Bucket";
-    case "Strategist Note":
-      return "Strategist Note";
-    default:
-      return nodeType;
-  }
+export function defaultTitleForType(nodeType: string): string {
+  return nodeType;
+}
+
+export function freeformPayload(): Record<string, unknown> {
+  return { freeform: true };
 }
 
 export const SUMMARY_SECTION_LABELS: Record<string, string> = {

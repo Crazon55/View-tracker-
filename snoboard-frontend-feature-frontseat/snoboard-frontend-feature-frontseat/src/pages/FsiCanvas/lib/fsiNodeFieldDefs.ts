@@ -56,3 +56,7 @@ export const NODE_FIELD_DEFS: Record<IronNodeType, FieldDef[]> = {
     { key: "observation", label: "Observation", rows: 6, inputType: "textarea" },
   ],
 };
+
+export function getFieldDefs(nodeType: string): FieldDef[] {
+  return (NODE_FIELD_DEFS as Record<string, FieldDef[]>)[nodeType] ?? [];
+}

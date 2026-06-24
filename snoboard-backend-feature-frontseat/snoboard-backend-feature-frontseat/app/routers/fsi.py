@@ -129,6 +129,16 @@ async def delete_study(study_id: str, claims: dict = Depends(require_auth)):
     return {"success": True, "data": {"id": study_id}}
 
 
+@router.delete("/studies/{study_id}/graph")
+async def clear_study_graph(study_id: str, claims: dict = Depends(require_auth)):
+    client = get_supabase_client()
+    _get_study(client, study_id)
+    client.table("connections").delete().eq("study_id", study_id).execute()
+    client.table("nodes").delete().eq("study_id", study_id).execute()
+    client.table("studies").update({"updated_at": _now_iso()}).eq("id", study_id).execute()
+    return {"success": True, "data": {"id": study_id}}
+
+
 @router.post("/studies/{study_id}/nodes")
 async def create_node(study_id: str, req: NodeCreate, claims: dict = Depends(require_auth)):
     _validate_node_type(req.node_type)

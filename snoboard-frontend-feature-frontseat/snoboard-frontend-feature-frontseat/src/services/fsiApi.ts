@@ -201,6 +201,20 @@ export function createFsiApi() {
       });
       return { id: studyId };
     },
+    clearStudyGraph: async (studyId: string) => {
+      await fsiDualMutate({
+        supabase: async () => {
+          const { error: connErr } = await _sb.from("connections").delete().eq("study_id", studyId);
+          if (connErr) throw new Error(connErr.message);
+          const { error: nodeErr } = await _sb.from("nodes").delete().eq("study_id", studyId);
+          if (nodeErr) throw new Error(nodeErr.message);
+          await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", studyId);
+          return { id: studyId };
+        },
+        backend: { path: `${FSI_BACKEND_BASE}/studies/${studyId}/graph`, method: "DELETE" },
+      });
+      return { id: studyId };
+    },
     createNode: async (studyId: string, data: Record<string, unknown>) => {
       const id = fsiNewId();
       const email = await fsiActorEmail();
