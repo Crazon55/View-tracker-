@@ -55,8 +55,60 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
     "nodrag nopan w-full rounded border border-emerald-900/40 bg-emerald-950/30 px-2 py-1 text-xs text-emerald-950 placeholder:text-emerald-900/40 focus:border-emerald-700 focus:outline-none";
 
   const expanded = selected && canEdit;
+  const isNiche = nodeData.nodeType === "Niche";
   const noteInputClass =
     "nodrag nopan w-full rounded-md border border-amber-900/30 bg-amber-950/25 px-2.5 py-2 text-xs text-emerald-950 placeholder:text-emerald-900/40 focus:border-amber-800 focus:outline-none";
+  const nicheFieldClass =
+    "nodrag nopan w-full rounded border border-amber-950/45 bg-amber-950/35 px-2 py-1.5 text-xs text-emerald-950 placeholder:text-emerald-900/35 focus:border-amber-900 focus:outline-none";
+
+  const renderFieldInput = (def: (typeof fieldDefs)[0], val: string) => {
+    if (def.inputType === "textarea") {
+      return expanded ? (
+        <textarea
+          rows={def.rows ?? 2}
+          value={val}
+          onChange={(e) => setFieldValues((prev) => ({ ...prev, [def.key]: e.target.value }))}
+          onBlur={(e) => commitField(def.key, e.target.value)}
+          className={`${isNiche ? nicheFieldClass : inputClass} resize-none`}
+        />
+      ) : (
+        <div className={`${isNiche ? nicheFieldClass : inputClass} min-h-[2rem] whitespace-pre-wrap`}>
+          {val || "—"}
+        </div>
+      );
+    }
+    if (def.inputType === "select") {
+      return expanded ? (
+        <select
+          value={val || "Average"}
+          onChange={(e) => {
+            setFieldValues((prev) => ({ ...prev, [def.key]: e.target.value }));
+            commitField(def.key, e.target.value);
+          }}
+          className={isNiche ? nicheFieldClass : inputClass}
+        >
+          {(def.selectOptions ?? PERFORMANCE_LABELS).map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <div className={isNiche ? nicheFieldClass : inputClass}>{val || "Average"}</div>
+      );
+    }
+    return expanded ? (
+      <input
+        type={def.inputType === "number" ? "number" : "text"}
+        value={val}
+        onChange={(e) => setFieldValues((prev) => ({ ...prev, [def.key]: e.target.value }))}
+        onBlur={(e) => commitField(def.key, e.target.value)}
+        className={isNiche ? nicheFieldClass : inputClass}
+      />
+    ) : (
+      <div className={isNiche ? nicheFieldClass : inputClass}>{val || "—"}</div>
+    );
+  };
 
   return (
     <div
@@ -89,6 +141,38 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
             )}
           </div>
         </>
+      ) : isNiche ? (
+        <>
+          <div className="px-3 py-2.5">
+            {expanded ? (
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onBlur={(e) => commitTitle(e.target.value)}
+                placeholder="Niche name"
+                className={`${nicheFieldClass} mb-1 text-sm font-bold`}
+              />
+            ) : (
+              <div className="text-sm font-bold leading-tight text-emerald-950">{title || "Niche"}</div>
+            )}
+            <div className="text-[10px] font-medium uppercase tracking-wide text-emerald-950/70">Niche</div>
+          </div>
+          {fieldDefs.length > 0 && (
+            <div className="max-h-56 space-y-2 overflow-y-auto border-t border-amber-950/30 px-3 pb-3 pt-2">
+              {fieldDefs.map((def) => {
+                const val = fieldValues[def.key] ?? "";
+                return (
+                  <div key={def.key}>
+                    <label className="mb-0.5 block text-[9px] font-semibold uppercase text-emerald-950/70">
+                      {def.label}
+                    </label>
+                    {renderFieldInput(def, val)}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
       ) : (
         <>
           <div className="px-3 py-2.5">
@@ -116,42 +200,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
                     <label className="mb-0.5 block text-[9px] font-semibold uppercase text-emerald-950/60">
                       {def.label}
                     </label>
-                    {def.inputType === "textarea" ? (
-                      <textarea
-                        rows={def.rows ?? 2}
-                        value={val}
-                        onChange={(e) =>
-                          setFieldValues((prev) => ({ ...prev, [def.key]: e.target.value }))
-                        }
-                        onBlur={(e) => commitField(def.key, e.target.value)}
-                        className={`${inputClass} resize-none`}
-                      />
-                    ) : def.inputType === "select" ? (
-                      <select
-                        value={val || "Average"}
-                        onChange={(e) => {
-                          setFieldValues((prev) => ({ ...prev, [def.key]: e.target.value }));
-                          commitField(def.key, e.target.value);
-                        }}
-                        className={inputClass}
-                      >
-                        {(def.selectOptions ?? PERFORMANCE_LABELS).map((o) => (
-                          <option key={o} value={o}>
-                            {o}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input
-                        type={def.inputType === "number" ? "number" : "text"}
-                        value={val}
-                        onChange={(e) =>
-                          setFieldValues((prev) => ({ ...prev, [def.key]: e.target.value }))
-                        }
-                        onBlur={(e) => commitField(def.key, e.target.value)}
-                        className={inputClass}
-                      />
-                    )}
+                    {renderFieldInput(def, val)}
                   </div>
                 );
               })}
