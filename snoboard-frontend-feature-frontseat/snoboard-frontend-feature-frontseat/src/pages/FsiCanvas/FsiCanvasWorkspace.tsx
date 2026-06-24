@@ -1,7 +1,8 @@
 import { useCallback, useRef, useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Loader2, Plus, RotateCcw, Wand2 } from "lucide-react";
+import type { OnSelectionChangeFunc } from "@xyflow/react";
+import { ArrowLeft, Loader2, MousePointer2, Plus, RotateCcw, SquareDashedMousePointer, Trash2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { fsiApi, flushFsiBackendSyncQueue } from "@/services/fsiApi";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -18,7 +19,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import FsiFlowCanvas from "./components/FsiFlowCanvas";
+import FsiFlowCanvas, { type FsiFlowCanvasHandle } from "./components/FsiFlowCanvas";
 import FsiNodeSuggestionsPanel from "./components/FsiNodeSuggestionsPanel";
 import type { NodeSuggestionPayload } from "./components/FsiNodeSuggestionsPanel";
 import type { FsiGraph, FsiNodeRecord } from "./lib/fsiNodeSchemas";
@@ -58,9 +59,13 @@ export default function FsiCanvasWorkspace() {
   const canEdit = canEditFsiCanvas(role);
 
   const [selectedNode, setSelectedNode] = useState<FsiNodeRecord | null>(null);
+  const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
+  const [multiSelectedIds, setMultiSelectedIds] = useState<string[]>([]);
+  const [boxSelectMode, setBoxSelectMode] = useState(false);
   const [fitTrigger, setFitTrigger] = useState(0);
   const [resetOpen, setResetOpen] = useState(false);
   const graphRef = useRef<FsiGraph | null>(null);
+  const canvasRef = useRef<FsiFlowCanvasHandle>(null);
   const migratedRef = useRef(false);
 
   useEffect(() => {
@@ -149,6 +154,7 @@ export default function FsiCanvasWorkspace() {
       }),
     onSuccess: (node) => {
       setSelectedNode(node);
+      setFocusNodeId(node.id);
       const g = graphRef.current;
       if (g) {
         const next = { ...g, nodes: [...g.nodes, node] };
@@ -172,6 +178,7 @@ export default function FsiCanvasWorkspace() {
       }),
     onSuccess: (node) => {
       setSelectedNode(node);
+      setFocusNodeId(node.id);
       const g = graphRef.current;
       if (g) {
         const next = { ...g, nodes: [...g.nodes, node] };
@@ -221,6 +228,33 @@ export default function FsiCanvasWorkspace() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const deleteNodesBulkMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await Promise.all(ids.map((id) => fsiApi.deleteNode(id)));
+      return ids;
+    },
+    onSuccess: (ids) => {
+      setSelectedNode((prev) => (prev && ids.includes(prev.id) ? null : prev));
+      setMultiSelectedIds([]);
+      const g = graphRef.current;
+      if (g) {
+        const idSet = new Set(ids);
+        const next = {
+          ...g,
+          nodes: g.nodes.filter((n) => !idSet.has(n.id)),
+          connections: g.connections.filter(
+            (c) => !idSet.has(c.source_node_id) && !idSet.has(c.target_node_id),
+          ),
+        };
+        queryClient.setQueryData(["fsi-graph", studyId], next);
+        graphRef.current = next;
+      }
+      toast.success(`Deleted ${ids.length} nodes`);
+      void invalidate();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const createConnectionMutation = useMutation({
     mutationFn: ({ source, target }: { source: string; target: string }) =>
       fsiApi.createConnection(studyId!, { source_node_id: source, target_node_id: target }),
@@ -234,12 +268,17 @@ export default function FsiCanvasWorkspace() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const getCanvasCenter = useCallback(() => {
+    return canvasRef.current?.getViewportCenter() ?? { x: 200, y: 200 };
+  }, []);
+
   const addFreeformNode = useCallback(
-    (x: number, y: number) => {
+    (x?: number, y?: number) => {
       if (!canEdit) return;
-      createFreeformNodeMutation.mutate({ x, y });
+      const pos = x !== undefined && y !== undefined ? { x, y } : getCanvasCenter();
+      createFreeformNodeMutation.mutate(pos);
     },
-    [canEdit, createFreeformNodeMutation],
+    [canEdit, createFreeformNodeMutation, getCanvasCenter],
   );
 
   const handleSuggestionDrop = useCallback(
@@ -253,10 +292,30 @@ export default function FsiCanvasWorkspace() {
   const handleAddSuggestion = useCallback(
     (nodeType: string) => {
       if (!canEdit) return;
-      createTypedNodeMutation.mutate({ nodeType, x: 120, y: 120 });
+      const pos = getCanvasCenter();
+      createTypedNodeMutation.mutate({ nodeType, x: pos.x, y: pos.y });
     },
-    [canEdit, createTypedNodeMutation],
+    [canEdit, createTypedNodeMutation, getCanvasCenter],
   );
+
+  const handleFocusNode = useCallback((node: FsiNodeRecord) => {
+    setSelectedNode(node);
+    setFocusNodeId(node.id);
+    canvasRef.current?.focusNode(node.id);
+  }, []);
+
+  const handleSelectionChange: OnSelectionChangeFunc = useCallback(({ nodes: selected }) => {
+    setMultiSelectedIds(selected.map((n) => n.id));
+    if (selected.length === 1) {
+      const data = selected[0].data as { fsiNode?: FsiNodeRecord };
+      if (data.fsiNode) setSelectedNode(data.fsiNode);
+    }
+  }, []);
+
+  const handleDeleteSelected = useCallback(() => {
+    if (!canEdit || multiSelectedIds.length === 0) return;
+    deleteNodesBulkMutation.mutate(multiSelectedIds);
+  }, [canEdit, multiSelectedIds, deleteNodesBulkMutation]);
 
   const handleTitleChange = useCallback(
     (nodeId: string, title: string) => {
@@ -355,6 +414,33 @@ export default function FsiCanvasWorkspace() {
         </div>
         {canEdit && (
           <Button
+            variant={boxSelectMode ? "default" : "outline"}
+            size="sm"
+            onClick={() => setBoxSelectMode((v) => !v)}
+            title="Draw a box on the canvas to select multiple nodes"
+          >
+            {boxSelectMode ? (
+              <SquareDashedMousePointer className="mr-1 h-4 w-4" />
+            ) : (
+              <MousePointer2 className="mr-1 h-4 w-4" />
+            )}
+            {boxSelectMode ? "Box select on" : "Box select"}
+          </Button>
+        )}
+        {canEdit && multiSelectedIds.length > 1 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-red-400 border-red-900/50"
+            disabled={deleteNodesBulkMutation.isPending}
+            onClick={handleDeleteSelected}
+          >
+            <Trash2 className="mr-1 h-4 w-4" />
+            Delete {multiSelectedIds.length}
+          </Button>
+        )}
+        {canEdit && (
+          <Button
             variant="outline"
             size="sm"
             disabled={prettifyMutation.isPending}
@@ -393,7 +479,7 @@ export default function FsiCanvasWorkspace() {
           </AlertDialog>
         )}
         {canEdit && (
-          <Button size="sm" onClick={() => addFreeformNode(120, 120)}>
+          <Button size="sm" onClick={() => addFreeformNode()}>
             <Plus className="mr-1 h-4 w-4" />
             Node
           </Button>
@@ -403,12 +489,17 @@ export default function FsiCanvasWorkspace() {
       <div className="flex min-h-0 flex-1">
         <div className="relative min-h-0 min-w-0 flex-1">
           <FsiFlowCanvas
+            ref={canvasRef}
             nodes={nodes}
             connections={connections}
             canEdit={canEdit}
             fitTrigger={fitTrigger}
+            focusNodeId={focusNodeId}
             selectedNodeId={selectedNode?.id ?? null}
+            boxSelectMode={boxSelectMode}
+            multiSelectedIds={multiSelectedIds}
             onNodeSelect={setSelectedNode}
+            onSelectionChange={handleSelectionChange}
             onPaneDoubleClick={addFreeformNode}
             onNodeDragStop={handleNodeDragStop}
             onConnect={(source, target) => createConnectionMutation.mutate({ source, target })}
@@ -420,6 +511,12 @@ export default function FsiCanvasWorkspace() {
             onPayloadChange={handlePayloadChange}
           />
 
+          {boxSelectMode && (
+            <div className="pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 rounded-lg border border-emerald-700/50 bg-emerald-950/90 px-3 py-1.5 text-xs text-emerald-200">
+              Drag on canvas to select · Delete key removes selection · middle-mouse to pan
+            </div>
+          )}
+
           {canvasNodes.length === 0 && (
             <div className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2 rounded-lg border border-zinc-700 bg-zinc-950/90 px-4 py-2 text-xs text-zinc-400">
               + Node for a freeform box · drag suggested nodes from the right · connect with handles
@@ -430,9 +527,13 @@ export default function FsiCanvasWorkspace() {
         <FsiNodeSuggestionsPanel
           study={study}
           canvasNodes={canvasNodes}
+          focusedNodeId={selectedNode?.id ?? null}
           canEdit={canEdit}
           onAddSuggestion={handleAddSuggestion}
+          onFocusNode={handleFocusNode}
           onDeleteNode={(id) => deleteNodeMutation.mutate(id)}
+          onDeleteSelected={handleDeleteSelected}
+          selectedCount={multiSelectedIds.length}
         />
       </div>
     </div>

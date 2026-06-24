@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, forwardRef } from "react";
 import {
   ReactFlow,
   Background,
   BackgroundVariant,
   Controls,
   MiniMap,
+  SelectionMode,
   useNodesState,
   useEdgesState,
   type Connection,
   type Node,
   type Edge,
+  type OnSelectionChangeFunc,
   ReactFlowProvider,
   useReactFlow,
 } from "@xyflow/react";
@@ -25,13 +27,22 @@ import {
 
 const nodeTypes = { fsiNode: FsiCanvasNode };
 
+export type FsiFlowCanvasHandle = {
+  getViewportCenter: () => { x: number; y: number };
+  focusNode: (nodeId: string) => void;
+};
+
 type FlowInnerProps = {
   nodes: FsiNodeRecord[];
   connections: FsiConnectionRecord[];
   canEdit: boolean;
   fitTrigger?: number;
+  focusNodeId?: string | null;
   selectedNodeId: string | null;
+  boxSelectMode: boolean;
+  multiSelectedIds: string[];
   onNodeSelect: (node: FsiNodeRecord | null) => void;
+  onSelectionChange: OnSelectionChangeFunc;
   onPaneDoubleClick: (x: number, y: number) => void;
   onNodeDragStop: (nodeId: string, x: number, y: number) => void;
   onConnect: (source: string, target: string) => void;
@@ -43,25 +54,50 @@ type FlowInnerProps = {
   onPayloadChange: (nodeId: string, key: string, value: string) => void;
 };
 
-function FlowInner({
-  nodes: dbNodes,
-  connections,
-  canEdit,
-  fitTrigger = 0,
-  selectedNodeId,
-  onNodeSelect,
-  onPaneDoubleClick,
-  onNodeDragStop,
-  onConnect,
-  onEdgeDelete,
-  onNodeDelete,
-  onSuggestionDrop,
-  onTitleChange,
-  onBodyChange,
-  onPayloadChange,
-}: FlowInnerProps) {
+const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowInner(
+  {
+    nodes: dbNodes,
+    connections,
+    canEdit,
+    fitTrigger = 0,
+    focusNodeId,
+    selectedNodeId,
+    boxSelectMode,
+    multiSelectedIds,
+    onNodeSelect,
+    onSelectionChange,
+    onPaneDoubleClick,
+    onNodeDragStop,
+    onConnect,
+    onEdgeDelete,
+    onNodeDelete,
+    onSuggestionDrop,
+    onTitleChange,
+    onBodyChange,
+    onPayloadChange,
+  },
+  ref,
+) {
   const { screenToFlowPosition, fitView } = useReactFlow();
+  const paneRef = useRef<HTMLDivElement>(null);
   const didInitialFit = useRef(false);
+
+  useImperativeHandle(ref, () => ({
+    getViewportCenter: () => {
+      const el = paneRef.current;
+      if (!el) return { x: 200, y: 200 };
+      const rect = el.getBoundingClientRect();
+      return screenToFlowPosition({
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+      });
+    },
+    focusNode: (nodeId: string) => {
+      requestAnimationFrame(() =>
+        fitView({ nodes: [{ id: nodeId }], padding: 0.55, duration: 350, maxZoom: 1.4 }),
+      );
+    },
+  }));
 
   const onTitleChangeRef = useRef(onTitleChange);
   const onBodyChangeRef = useRef(onBodyChange);
@@ -114,6 +150,8 @@ function FlowInner({
   const [nodes, setNodes, onNodesChange] = useNodesState(flowGraph.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(flowGraph.edges);
 
+  const multiSet = useMemo(() => new Set(multiSelectedIds), [multiSelectedIds]);
+
   useEffect(() => {
     setNodes((current) =>
       flowGraph.nodes.map((next) => {
@@ -137,6 +175,13 @@ function FlowInner({
       requestAnimationFrame(() => fitView({ padding: 0.25, duration: 300 }));
     }
   }, [fitTrigger, fitView]);
+
+  useEffect(() => {
+    if (!focusNodeId) return;
+    requestAnimationFrame(() =>
+      fitView({ nodes: [{ id: focusNodeId }], padding: 0.55, duration: 350, maxZoom: 1.4 }),
+    );
+  }, [focusNodeId, fitView]);
 
   const handleConnect = useCallback(
     (params: Connection) => {
@@ -186,6 +231,7 @@ function FlowInner({
       const raw = e.dataTransfer.getData(FSI_NODE_SUGGESTION_MIME);
       if (!raw) return;
       e.preventDefault();
+      e.stopPropagation();
       try {
         const payload = JSON.parse(raw) as NodeSuggestionPayload;
         const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
@@ -217,14 +263,14 @@ function FlowInner({
     () =>
       nodes.map((n) => ({
         ...n,
-        selected: n.id === selectedNodeId,
+        selected: n.id === selectedNodeId || multiSet.has(n.id),
         connectable: true,
       })),
-    [nodes, selectedNodeId],
+    [nodes, selectedNodeId, multiSet],
   );
 
   return (
-    <div className="h-full w-full" onDragOver={handleDragOver} onDrop={handleDrop}>
+    <div ref={paneRef} className="h-full w-full" onDragOver={handleDragOver}>
       <ReactFlow
         nodes={styledNodes}
         edges={edges}
@@ -235,11 +281,15 @@ function FlowInner({
         onPaneClick={handlePaneClick}
         onPaneDoubleClick={handlePaneDoubleClick}
         onNodeDragStop={handleNodeDragStop}
-        onDragOver={handleDragOver}
         onDrop={handleDrop}
+        onDragOver={handleDragOver}
         onEdgesDelete={handleEdgesDelete}
         onNodesDelete={handleNodesDelete}
+        onSelectionChange={onSelectionChange}
         nodeTypes={nodeTypes}
+        selectionOnDrag={boxSelectMode}
+        panOnDrag={boxSelectMode ? [1, 2] : true}
+        selectionMode={SelectionMode.Partial}
         deleteKeyCode={canEdit ? ["Backspace", "Delete"] : null}
         defaultEdgeOptions={{ type: "smoothstep", style: { stroke: "#71717a", strokeWidth: 2 } }}
         className="bg-zinc-950 fsi-flow-canvas"
@@ -258,12 +308,22 @@ function FlowInner({
       </ReactFlow>
     </div>
   );
-}
+});
 
-export default function FsiFlowCanvas(props: FlowInnerProps) {
+type FsiFlowCanvasProps = Omit<FlowInnerProps, "onSelectionChange"> & {
+  onSelectionChange?: OnSelectionChangeFunc;
+};
+
+const FsiFlowCanvas = forwardRef<FsiFlowCanvasHandle, FsiFlowCanvasProps>(function FsiFlowCanvas(
+  { onSelectionChange, ...props },
+  ref,
+) {
+  const noopSelection: OnSelectionChangeFunc = useCallback(() => {}, []);
   return (
     <ReactFlowProvider>
-      <FlowInner {...props} />
+      <FlowInner ref={ref} {...props} onSelectionChange={onSelectionChange ?? noopSelection} />
     </ReactFlowProvider>
   );
-}
+});
+
+export default FsiFlowCanvas;

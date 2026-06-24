@@ -13,9 +13,13 @@ export type NodeSuggestionPayload = {
 type Props = {
   study: FsiStudy;
   canvasNodes: FsiNodeRecord[];
+  focusedNodeId: string | null;
   canEdit: boolean;
   onAddSuggestion: (nodeType: string) => void;
+  onFocusNode: (node: FsiNodeRecord) => void;
   onDeleteNode: (nodeId: string) => void;
+  onDeleteSelected?: () => void;
+  selectedCount?: number;
 };
 
 function startSuggestionDrag(e: React.DragEvent, nodeType: string) {
@@ -27,9 +31,13 @@ function startSuggestionDrag(e: React.DragEvent, nodeType: string) {
 export default function FsiNodeSuggestionsPanel({
   study,
   canvasNodes,
+  focusedNodeId,
   canEdit,
   onAddSuggestion,
+  onFocusNode,
   onDeleteNode,
+  onDeleteSelected,
+  selectedCount = 0,
 }: Props) {
   const suggestions = getSuggestedNodeTypes(study.study_type);
 
@@ -46,7 +54,7 @@ export default function FsiNodeSuggestionsPanel({
       <div className="flex-1 overflow-y-auto p-3 space-y-5">
         <section>
           <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-            Drag onto canvas
+            Drag onto canvas ({suggestions.length} types)
           </div>
           <div className="space-y-2">
             {suggestions.map((nodeType) => (
@@ -71,8 +79,11 @@ export default function FsiNodeSuggestionsPanel({
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 shrink-0 text-emerald-400 hover:text-emerald-300"
-                    onClick={() => onAddSuggestion(nodeType)}
-                    title="Add to canvas"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAddSuggestion(nodeType);
+                    }}
+                    title="Add at canvas center"
                   >
                     <Plus className="h-4 w-4" />
                   </Button>
@@ -84,35 +95,63 @@ export default function FsiNodeSuggestionsPanel({
 
         {canvasNodes.length > 0 && (
           <section>
-            <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-              On canvas ({canvasNodes.length})
-            </div>
-            <div className="space-y-2">
-              {canvasNodes.map((node) => (
-                <div
-                  key={node.id}
-                  className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2"
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                On canvas ({canvasNodes.length})
+              </div>
+              {canEdit && selectedCount > 1 && onDeleteSelected && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs text-red-400 hover:text-red-300"
+                  onClick={onDeleteSelected}
                 >
-                  <span
-                    className="h-2.5 w-2.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: colorForNodeType(node.node_type) }}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm text-zinc-200">{node.display_title}</div>
-                    <div className="truncate text-[10px] text-zinc-500">{node.node_type}</div>
+                  Delete {selectedCount}
+                </Button>
+              )}
+            </div>
+            <p className="mb-2 text-[10px] text-zinc-600">Click a row to jump to that node on the canvas.</p>
+            <div className="space-y-2">
+              {canvasNodes.map((node) => {
+                const isFocused = focusedNodeId === node.id;
+                return (
+                  <div
+                    key={node.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onFocusNode(node)}
+                    onKeyDown={(e) => e.key === "Enter" && onFocusNode(node)}
+                    className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 transition-colors ${
+                      isFocused
+                        ? "border-emerald-600/60 bg-emerald-950/30"
+                        : "border-zinc-800 bg-zinc-900/60 hover:border-zinc-600 hover:bg-zinc-900"
+                    }`}
+                  >
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: colorForNodeType(node.node_type) }}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm text-zinc-200">{node.display_title}</div>
+                      <div className="truncate text-[10px] text-zinc-500">{node.node_type}</div>
+                    </div>
+                    {canEdit && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0 text-red-400 hover:text-red-300"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteNode(node.id);
+                        }}
+                        title="Delete node"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                   </div>
-                  {canEdit && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 shrink-0 text-red-400 hover:text-red-300"
-                      onClick={() => onDeleteNode(node.id)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
         )}
