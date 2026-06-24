@@ -540,7 +540,12 @@ export default function FsiCanvasWorkspace() {
     requestAnimationFrame(() => canvasRef.current?.focusNode(node.id));
   }, []);
 
-  const handleSelectionChange: OnSelectionChangeFunc = useCallback(({ nodes: selected }) => {
+  const handleSelectionChange: OnSelectionChangeFunc = useCallback(({ nodes: selected, edges: selectedEdges }) => {
+    if (selectedEdges.length > 0) {
+      setMultiSelectedIds([]);
+      setSelectedNode(null);
+      return;
+    }
     setMultiSelectedIds(selected.map((n) => n.id));
     if (selected.length === 0) {
       setSelectedNode(null);

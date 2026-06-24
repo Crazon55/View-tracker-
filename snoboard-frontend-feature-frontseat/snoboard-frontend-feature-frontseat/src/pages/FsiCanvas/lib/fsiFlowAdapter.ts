@@ -26,6 +26,7 @@ export function graphToFlow(
     onTitleChange?: (nodeId: string, title: string) => void;
     onBodyChange?: (nodeId: string, body: string) => void;
     onPayloadChange?: (nodeId: string, key: string, value: string) => void;
+    onEdgeDelete?: (edgeId: string) => void;
   },
 ): { nodes: Node[]; edges: Edge[] } {
   const visible = nodes.filter(isCanvasNode);
@@ -60,8 +61,13 @@ export function graphToFlow(
       source: c.source_node_id,
       target: c.target_node_id,
       label: c.edge_label_note || undefined,
-      type: "smoothstep",
-      style: { stroke: "#71717a", strokeWidth: 2 },
+      type: "fsiEdge",
+      selectable: true,
+      focusable: true,
+      data: {
+        canEdit: options?.canEdit ?? false,
+        onDelete: options?.onEdgeDelete,
+      },
     }));
 
   return { nodes: flowNodes, edges: flowEdges };

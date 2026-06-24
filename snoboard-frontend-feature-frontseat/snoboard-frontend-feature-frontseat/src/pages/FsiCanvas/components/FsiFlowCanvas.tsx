@@ -21,6 +21,7 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import FsiCanvasNode from "./FsiCanvasNode";
+import FsiCanvasEdge from "./FsiCanvasEdge";
 import type { FsiConnectionRecord, FsiNodeRecord } from "../lib/fsiNodeSchemas";
 import { graphToFlow, type FsiNodeData } from "../lib/fsiFlowAdapter";
 import { loadSavedViewport, saveViewport } from "../lib/fsiViewportStorage";
@@ -32,6 +33,7 @@ import {
 } from "./FsiNodeSuggestionsPanel";
 
 const nodeTypes = { fsiNode: FsiCanvasNode };
+const edgeTypes = { fsiEdge: FsiCanvasEdge };
 
 export type FsiFlowCanvasHandle = {
   getViewportCenter: () => { x: number; y: number };
@@ -179,6 +181,12 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     onPayloadChangeRef.current(id, k, v);
   }, []);
 
+  const onEdgeDeleteRef = useRef(onEdgeDelete);
+  onEdgeDeleteRef.current = onEdgeDelete;
+  const stableEdgeDelete = useCallback((id: string) => {
+    onEdgeDeleteRef.current(id);
+  }, []);
+
   const structureSignature = useMemo(
     () =>
       JSON.stringify({
@@ -211,8 +219,9 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         onTitleChange: stableTitleChange,
         onBodyChange: stableBodyChange,
         onPayloadChange: stablePayloadChange,
+        onEdgeDelete: stableEdgeDelete,
       }),
-    [structureSignature, positionSignature, canEdit, stableTitleChange, stableBodyChange, stablePayloadChange],
+    [structureSignature, positionSignature, canEdit, stableTitleChange, stableBodyChange, stablePayloadChange, stableEdgeDelete],
   );
 
   const flowEdges = flowGraph.edges;
@@ -249,7 +258,14 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   }, [structureSignature, positionSignature, flowGraph.nodes, setNodes]);
 
   useEffect(() => {
-    setEdges(flowEdges);
+    setEdges((current) => {
+      const byId = new Map(current.map((e) => [e.id, e]));
+      return flowEdges.map((next) => {
+        const cur = byId.get(next.id);
+        if (cur) return { ...next, selected: cur.selected };
+        return next;
+      });
+    });
   }, [connectionSignature, flowEdges, setEdges]);
 
   useEffect(() => {
@@ -279,41 +295,50 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         return addEdge(
           {
             ...params,
-            type: "smoothstep",
-            style: { stroke: "#71717a", strokeWidth: 2 },
+            type: "fsiEdge",
+            selectable: true,
+            focusable: true,
+            data: { canEdit, onDelete: stableEdgeDelete },
           },
           eds,
         );
       });
       onConnect(params.source, params.target);
     },
-    [canEdit, onConnect, setEdges],
+    [canEdit, onConnect, setEdges, stableEdgeDelete],
   );
+
+  const clearEdgeSelection = useCallback(() => {
+    setEdges((eds) => eds.map((e) => ({ ...e, selected: false })));
+  }, [setEdges]);
 
   const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
+      clearEdgeSelection();
       const data = node.data as FsiNodeData;
       onNodeSelect(data.fsiNode);
     },
-    [onNodeSelect],
+    [clearEdgeSelection, onNodeSelect],
   );
 
   const handlePaneClick = useCallback(() => {
     onNodeSelect(null);
     onPaneClick?.();
     setNodes((nds) => nds.map((n) => ({ ...n, selected: false })));
-  }, [onNodeSelect, onPaneClick, setNodes]);
+    clearEdgeSelection();
+  }, [onNodeSelect, onPaneClick, setNodes, clearEdgeSelection]);
 
   const handlePaneDoubleClick = useCallback(
     (e: React.MouseEvent) => {
       onNodeSelect(null);
       onPaneClick?.();
       setNodes((nds) => nds.map((n) => ({ ...n, selected: false })));
+      clearEdgeSelection();
       if (!canEdit) return;
       const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
       onPaneDoubleClick(pos.x, pos.y);
     },
-    [canEdit, onPaneClick, onPaneDoubleClick, onNodeSelect, screenToFlowPosition, setNodes],
+    [canEdit, clearEdgeSelection, onPaneClick, onPaneDoubleClick, onNodeSelect, screenToFlowPosition, setNodes],
   );
 
   const handleNodeDragStart = useCallback(
@@ -380,6 +405,14 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     [canEdit, onNoteDrop, onSuggestionDrop, screenToFlowPosition],
   );
 
+  const handleEdgeClick = useCallback(
+    (_: React.MouseEvent, _edge: Edge) => {
+      onNodeSelect(null);
+      setNodes((nds) => nds.map((n) => ({ ...n, selected: false })));
+    },
+    [onNodeSelect, setNodes],
+  );
+
   const handleEdgesDelete = useCallback(
     (deleted: Edge[]) => {
       if (!canEdit) return;
@@ -421,6 +454,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         onEdgesChange={handleEdgesChange}
         onConnect={handleConnect}
         onNodeClick={handleNodeClick}
+        onEdgeClick={handleEdgeClick}
         onPaneClick={handlePaneClick}
         onPaneDoubleClick={handlePaneDoubleClick}
         onNodeDragStart={handleNodeDragStart}
@@ -431,11 +465,18 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         onNodesDelete={handleNodesDelete}
         onSelectionChange={onSelectionChange}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        edgesFocusable
         selectionOnDrag={boxSelectMode}
         panOnDrag={boxSelectMode ? [1, 2] : true}
         selectionMode={SelectionMode.Partial}
         deleteKeyCode={canEdit ? ["Backspace", "Delete"] : null}
-        defaultEdgeOptions={{ type: "smoothstep", style: { stroke: "#71717a", strokeWidth: 2 } }}
+        defaultEdgeOptions={{
+          type: "fsiEdge",
+          selectable: true,
+          focusable: true,
+          data: { canEdit, onDelete: stableEdgeDelete },
+        }}
         minZoom={0.08}
         maxZoom={2.5}
         className="bg-zinc-950 fsi-flow-canvas"
