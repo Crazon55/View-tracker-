@@ -334,6 +334,9 @@ export function createFsiApi() {
       });
     },
     deleteConnection: async (connectionId: string, studyId?: string) => {
+      if (connectionId.startsWith("opt-")) {
+        return { id: connectionId };
+      }
       await fsiDualMutate({
         supabase: async () => {
           const { data: existing } = await _sb

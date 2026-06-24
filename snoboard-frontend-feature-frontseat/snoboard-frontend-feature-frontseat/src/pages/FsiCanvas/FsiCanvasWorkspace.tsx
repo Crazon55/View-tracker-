@@ -82,6 +82,7 @@ export default function FsiCanvasWorkspace() {
   const canvasRef = useRef<FsiFlowCanvasHandle>(null);
   const migratedRef = useRef(false);
   const creatingRef = useRef(false);
+  const deletingConnectionRef = useRef<Set<string>>(new Set());
   const dragOriginRef = useRef<Map<string, { x: number; y: number }>>(new Map());
 
   const history = useFsiCanvasHistory(studyId);
@@ -345,6 +346,13 @@ export default function FsiCanvasWorkspace() {
       if (ctx?.skipped) return;
       const g = graphRef.current;
       if (!g) return;
+      const stillWanted = g.connections.some(
+        (c) => c.source_node_id === source && c.target_node_id === target,
+      );
+      if (!stillWanted) {
+        void fsiApi.deleteConnection(connection.id, studyId!);
+        return;
+      }
       setGraph({
         ...g,
         connections: [
@@ -367,10 +375,13 @@ export default function FsiCanvasWorkspace() {
   });
 
   const deleteConnectionMutation = useMutation({
-    mutationFn: (id: string) => fsiApi.deleteConnection(id, studyId!),
+    mutationFn: (id: string) => {
+      if (id.startsWith("opt-")) return Promise.resolve({ id });
+      return fsiApi.deleteConnection(id, studyId!);
+    },
     onMutate: (id) => {
       const g = graphRef.current;
-      if (!g) return;
+      if (!g?.connections.some((c) => c.id === id)) return;
       const previous = g;
       setGraph({ ...g, connections: g.connections.filter((c) => c.id !== id) });
       return { previous };
@@ -398,16 +409,25 @@ export default function FsiCanvasWorkspace() {
   );
   const handleDeleteConnection = useCallback(
     (id: string) => {
+      if (!canEdit || deletingConnectionRef.current.has(id)) return;
       const g = graphRef.current;
-      if (g && !history.isApplying.current) {
+      if (!g?.connections.some((c) => c.id === id)) return;
+
+      if (!history.isApplying.current) {
         const connection = g.connections.find((c) => c.id === id);
         if (connection) {
           history.pushEntry({ type: "connection_remove", connection });
         }
       }
-      deleteConnectionMutation.mutate(id);
+
+      deletingConnectionRef.current.add(id);
+      deleteConnectionMutation.mutate(id, {
+        onSettled: () => {
+          deletingConnectionRef.current.delete(id);
+        },
+      });
     },
-    [deleteConnectionMutation, history],
+    [canEdit, deleteConnectionMutation, history],
   );
 
   const getCanvasCenter = useCallback(() => {

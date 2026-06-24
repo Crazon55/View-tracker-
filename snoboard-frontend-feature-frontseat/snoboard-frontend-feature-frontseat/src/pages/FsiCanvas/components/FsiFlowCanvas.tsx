@@ -12,6 +12,7 @@ import {
   type Connection,
   type Node,
   type Edge,
+  type EdgeChange,
   type OnSelectionChangeFunc,
   type Viewport,
   ReactFlowProvider,
@@ -219,6 +220,13 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   const [nodes, setNodes, onNodesChange] = useNodesState(flowGraph.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(flowEdges);
 
+  const handleEdgesChange = useCallback(
+    (changes: EdgeChange[]) => {
+      onEdgesChange(changes.filter((c) => c.type !== "remove"));
+    },
+    [onEdgesChange],
+  );
+
   const multiSet = useMemo(() => new Set(multiSelectedIds), [multiSelectedIds]);
 
   useEffect(() => {
@@ -410,7 +418,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         edges={edges}
         defaultViewport={savedViewport ?? { x: 0, y: 0, zoom: 1 }}
         onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
+        onEdgesChange={handleEdgesChange}
         onConnect={handleConnect}
         onNodeClick={handleNodeClick}
         onPaneClick={handlePaneClick}
