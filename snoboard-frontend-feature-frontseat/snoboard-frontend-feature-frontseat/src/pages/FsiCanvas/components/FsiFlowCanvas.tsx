@@ -22,7 +22,9 @@ import type { FsiConnectionRecord, FsiNodeRecord } from "../lib/fsiNodeSchemas";
 import { graphToFlow, type FsiNodeData } from "../lib/fsiFlowAdapter";
 import {
   FSI_NODE_SUGGESTION_MIME,
+  FSI_NOTE_SUGGESTION_MIME,
   type NodeSuggestionPayload,
+  type NoteSuggestionPayload,
 } from "./FsiNodeSuggestionsPanel";
 
 const nodeTypes = { fsiNode: FsiCanvasNode };
@@ -50,6 +52,7 @@ type FlowInnerProps = {
   onEdgeDelete: (edgeId: string) => void;
   onNodeDelete: (nodeId: string) => void;
   onSuggestionDrop: (payload: NodeSuggestionPayload, x: number, y: number) => void;
+  onNoteDrop: (payload: NoteSuggestionPayload, x: number, y: number) => void;
   onTitleChange: (nodeId: string, title: string) => void;
   onBodyChange: (nodeId: string, body: string) => void;
   onPayloadChange: (nodeId: string, key: string, value: string) => void;
@@ -74,6 +77,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     onEdgeDelete,
     onNodeDelete,
     onSuggestionDrop,
+    onNoteDrop,
     onTitleChange,
     onBodyChange,
     onPayloadChange,
@@ -83,6 +87,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   const { screenToFlowPosition, fitView } = useReactFlow();
   const paneRef = useRef<HTMLDivElement>(null);
   const didInitialFit = useRef(false);
+  const dropLockRef = useRef(false);
 
   useImperativeHandle(ref, () => ({
     getViewportCenter: () => {
@@ -228,7 +233,10 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes(FSI_NODE_SUGGESTION_MIME)) {
+    if (
+      e.dataTransfer.types.includes(FSI_NODE_SUGGESTION_MIME) ||
+      e.dataTransfer.types.includes(FSI_NOTE_SUGGESTION_MIME)
+    ) {
       e.preventDefault();
       e.dataTransfer.dropEffect = "copy";
     }
@@ -236,20 +244,41 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
-      if (!canEdit) return;
-      const raw = e.dataTransfer.getData(FSI_NODE_SUGGESTION_MIME);
-      if (!raw) return;
       e.preventDefault();
       e.stopPropagation();
+      if (!canEdit || dropLockRef.current) return;
+
+      const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+
+      const noteRaw = e.dataTransfer.getData(FSI_NOTE_SUGGESTION_MIME);
+      if (noteRaw) {
+        try {
+          const payload = JSON.parse(noteRaw) as NoteSuggestionPayload;
+          dropLockRef.current = true;
+          onNoteDrop(payload, pos.x, pos.y);
+          window.setTimeout(() => {
+            dropLockRef.current = false;
+          }, 600);
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+
+      const raw = e.dataTransfer.getData(FSI_NODE_SUGGESTION_MIME);
+      if (!raw) return;
       try {
         const payload = JSON.parse(raw) as NodeSuggestionPayload;
-        const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+        dropLockRef.current = true;
         onSuggestionDrop(payload, pos.x, pos.y);
+        window.setTimeout(() => {
+          dropLockRef.current = false;
+        }, 600);
       } catch {
         /* ignore */
       }
     },
-    [canEdit, onSuggestionDrop, screenToFlowPosition],
+    [canEdit, onNoteDrop, onSuggestionDrop, screenToFlowPosition],
   );
 
   const handleEdgesDelete = useCallback(
@@ -279,7 +308,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   );
 
   return (
-    <div ref={paneRef} className="h-full w-full" onDragOver={handleDragOver}>
+    <div ref={paneRef} className="h-full w-full" onDragOver={handleDragOver} onDrop={handleDrop}>
       <ReactFlow
         nodes={styledNodes}
         edges={edges}
@@ -290,7 +319,6 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         onPaneClick={handlePaneClick}
         onPaneDoubleClick={handlePaneDoubleClick}
         onNodeDragStop={handleNodeDragStop}
-        onDrop={handleDrop}
         onDragOver={handleDragOver}
         onEdgesDelete={handleEdgesDelete}
         onNodesDelete={handleNodesDelete}

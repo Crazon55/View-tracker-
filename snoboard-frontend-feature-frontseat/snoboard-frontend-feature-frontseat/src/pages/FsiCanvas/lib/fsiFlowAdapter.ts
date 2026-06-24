@@ -2,7 +2,8 @@ import type { Edge, Node } from "@xyflow/react";
 import type { FsiConnectionRecord, FsiNodeRecord } from "./fsiNodeSchemas";
 import { colorForNodeType } from "./fsiNodeSchemas";
 import { getFieldDefs } from "./fsiNodeFieldDefs";
-import { isCanvasNode, isFreeformNode } from "./fsiHierarchy";
+import { isCanvasNode, isNoteNode } from "./fsiHierarchy";
+import { NOTE_COLOR } from "./fsiNoteTemplates";
 
 export type FsiNodeData = {
   fsiNode: FsiNodeRecord;
@@ -10,7 +11,7 @@ export type FsiNodeData = {
   nodeType: string;
   color: string;
   canEdit: boolean;
-  isFreeform: boolean;
+  isNote: boolean;
   fieldDefs: ReturnType<typeof getFieldDefs>;
   onTitleChange?: (nodeId: string, title: string) => void;
   onBodyChange?: (nodeId: string, body: string) => void;
@@ -29,24 +30,27 @@ export function graphToFlow(
 ): { nodes: Node[]; edges: Edge[] } {
   const visible = nodes.filter(isCanvasNode);
 
-  const flowNodes: Node[] = visible.map((n) => ({
-    id: n.id,
-    type: "fsiNode",
-    position: { x: n.canvas_x ?? 0, y: n.canvas_y ?? 0 },
-    draggable: true,
-    data: {
-      fsiNode: n,
-      label: n.display_title,
-      nodeType: isFreeformNode(n) ? "Note" : n.node_type,
-      color: colorForNodeType(n.node_type),
-      canEdit: options?.canEdit ?? false,
-      isFreeform: isFreeformNode(n),
-      fieldDefs: isFreeformNode(n) ? [] : getFieldDefs(n.node_type),
-      onTitleChange: options?.onTitleChange,
-      onBodyChange: options?.onBodyChange,
-      onPayloadChange: options?.onPayloadChange,
-    } satisfies FsiNodeData,
-  }));
+  const flowNodes: Node[] = visible.map((n) => {
+    const isNote = isNoteNode(n);
+    return {
+      id: n.id,
+      type: "fsiNode",
+      position: { x: n.canvas_x ?? 0, y: n.canvas_y ?? 0 },
+      draggable: true,
+      data: {
+        fsiNode: n,
+        label: isNote ? "Note" : n.display_title,
+        nodeType: isNote ? "Note" : n.node_type,
+        color: isNote ? NOTE_COLOR : colorForNodeType(n.node_type),
+        canEdit: options?.canEdit ?? false,
+        isNote,
+        fieldDefs: isNote ? [] : getFieldDefs(n.node_type),
+        onTitleChange: options?.onTitleChange,
+        onBodyChange: options?.onBodyChange,
+        onPayloadChange: options?.onPayloadChange,
+      } satisfies FsiNodeData,
+    };
+  });
 
   const visibleIds = new Set(visible.map((n) => n.id));
   const flowEdges: Edge[] = connections
@@ -64,7 +68,7 @@ export function graphToFlow(
 }
 
 export function previewLines(node: FsiNodeRecord): string[] {
-  if (isFreeformNode(node)) {
+  if (isNoteNode(node)) {
     return node.raw_body_text ? [node.raw_body_text.slice(0, 60)] : [];
   }
   return [node.node_type];

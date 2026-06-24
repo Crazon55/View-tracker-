@@ -13,8 +13,13 @@ export function isCanvasNode(node: FsiNodeRecord): boolean {
   return !isLegacyFieldNode(node);
 }
 
+export function isNoteNode(node: FsiNodeRecord): boolean {
+  return node.structured_payload?.is_note === true || node.structured_payload?.freeform === true;
+}
+
+/** @deprecated use isNoteNode */
 export function isFreeformNode(node: FsiNodeRecord): boolean {
-  return node.structured_payload?.freeform === true;
+  return isNoteNode(node);
 }
 
 export async function migrateLegacyFieldNodes(

@@ -184,8 +184,18 @@ export function defaultTitleForType(nodeType: string): string {
   return nodeType;
 }
 
+export function notePayload(noteKind: string): Record<string, unknown> {
+  return { is_note: true, note_kind: noteKind };
+}
+
+/** @deprecated use notePayload */
 export function freeformPayload(): Record<string, unknown> {
-  return { freeform: true };
+  return notePayload("blank");
+}
+
+export function appendGraphNode(graph: FsiGraph, node: FsiNodeRecord): FsiGraph {
+  if (graph.nodes.some((n) => n.id === node.id)) return graph;
+  return { ...graph, nodes: [...graph.nodes, node] };
 }
 
 export const SUMMARY_SECTION_LABELS: Record<string, string> = {

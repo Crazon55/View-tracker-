@@ -20,15 +20,20 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import FsiFlowCanvas, { type FsiFlowCanvasHandle } from "./components/FsiFlowCanvas";
-import FsiNodeSuggestionsPanel from "./components/FsiNodeSuggestionsPanel";
-import type { NodeSuggestionPayload } from "./components/FsiNodeSuggestionsPanel";
+import FsiNodeSuggestionsPanel, {
+  type NodeSuggestionPayload,
+  type NoteSuggestionPayload,
+} from "./components/FsiNodeSuggestionsPanel";
 import type { FsiGraph, FsiNodeRecord } from "./lib/fsiNodeSchemas";
 import {
+  appendGraphNode,
   defaultPayloadForType,
   defaultTitleForType,
-  freeformPayload,
+  notePayload,
 } from "./lib/fsiNodeSchemas";
 import { isCanvasNode, migrateLegacyFieldNodes } from "./lib/fsiLegacyMigrate";
+import { isNoteNode } from "./lib/fsiHierarchy";
+import { NOTE_TEMPLATES } from "./lib/fsiNoteTemplates";
 import { layoutFsiTree } from "./lib/fsiTreeLayout";
 
 function patchGraphNodePositions(
@@ -67,6 +72,7 @@ export default function FsiCanvasWorkspace() {
   const graphRef = useRef<FsiGraph | null>(null);
   const canvasRef = useRef<FsiFlowCanvasHandle>(null);
   const migratedRef = useRef(false);
+  const creatingRef = useRef(false);
 
   useEffect(() => {
     void flushFsiBackendSyncQueue();
@@ -142,28 +148,35 @@ export default function FsiCanvasWorkspace() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const createFreeformNodeMutation = useMutation({
-    mutationFn: ({ x, y }: { x: number; y: number }) =>
-      fsiApi.createNode(studyId!, {
-        node_type: "Strategist Note",
-        display_title: "New node",
-        canvas_x: x,
-        canvas_y: y,
-        raw_body_text: "",
-        structured_payload: freeformPayload(),
-      }),
-    onSuccess: (node) => {
+  const appendCreatedNode = useCallback(
+    (node: FsiNodeRecord) => {
       setSelectedNode(node);
       setFocusNodeId(node.id);
       const g = graphRef.current;
       if (g) {
-        const next = { ...g, nodes: [...g.nodes, node] };
+        const next = appendGraphNode(g, node);
         queryClient.setQueryData(["fsi-graph", studyId], next);
         graphRef.current = next;
       } else {
         invalidate();
       }
     },
+    [queryClient, studyId],
+  );
+
+  const createNoteMutation = useMutation({
+    mutationFn: ({ noteKey, x, y }: { noteKey: string; x: number; y: number }) => {
+      const template = NOTE_TEMPLATES.find((t) => t.key === noteKey) ?? NOTE_TEMPLATES[NOTE_TEMPLATES.length - 1];
+      return fsiApi.createNode(studyId!, {
+        node_type: "Strategist Note",
+        display_title: "Note",
+        canvas_x: x,
+        canvas_y: y,
+        raw_body_text: template.body,
+        structured_payload: notePayload(template.key),
+      });
+    },
+    onSuccess: appendCreatedNode,
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -176,18 +189,7 @@ export default function FsiCanvasWorkspace() {
         canvas_y: y,
         structured_payload: defaultPayloadForType(nodeType),
       }),
-    onSuccess: (node) => {
-      setSelectedNode(node);
-      setFocusNodeId(node.id);
-      const g = graphRef.current;
-      if (g) {
-        const next = { ...g, nodes: [...g.nodes, node] };
-        queryClient.setQueryData(["fsi-graph", studyId], next);
-        graphRef.current = next;
-      } else {
-        invalidate();
-      }
-    },
+    onSuccess: appendCreatedNode,
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -223,7 +225,6 @@ export default function FsiCanvasWorkspace() {
         queryClient.setQueryData(["fsi-graph", studyId], next);
         graphRef.current = next;
       }
-      void invalidate();
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -250,7 +251,6 @@ export default function FsiCanvasWorkspace() {
         graphRef.current = next;
       }
       toast.success(`Deleted ${ids.length} nodes`);
-      void invalidate();
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -272,30 +272,66 @@ export default function FsiCanvasWorkspace() {
     return canvasRef.current?.getViewportCenter() ?? { x: 200, y: 200 };
   }, []);
 
-  const addFreeformNode = useCallback(
-    (x?: number, y?: number) => {
+  const runCreate = useCallback(
+    (
+      mutate: typeof createTypedNodeMutation.mutate,
+      vars: { nodeType: string; x: number; y: number } | { noteKey: string; x: number; y: number },
+    ) => {
+      if (
+        !canEdit ||
+        creatingRef.current ||
+        createTypedNodeMutation.isPending ||
+        createNoteMutation.isPending
+      ) {
+        return;
+      }
+      creatingRef.current = true;
+      mutate(vars as never, {
+        onSettled: () => {
+          creatingRef.current = false;
+        },
+      });
+    },
+    [canEdit, createNoteMutation.isPending, createTypedNodeMutation.isPending],
+  );
+
+  const addNote = useCallback(
+    (noteKey: string, x?: number, y?: number) => {
       if (!canEdit) return;
       const pos = x !== undefined && y !== undefined ? { x, y } : getCanvasCenter();
-      createFreeformNodeMutation.mutate(pos);
+      runCreate(createNoteMutation.mutate, { noteKey, x: pos.x, y: pos.y });
     },
-    [canEdit, createFreeformNodeMutation, getCanvasCenter],
+    [canEdit, createNoteMutation.mutate, getCanvasCenter, runCreate],
   );
 
   const handleSuggestionDrop = useCallback(
     (payload: NodeSuggestionPayload, x: number, y: number) => {
-      if (!canEdit) return;
-      createTypedNodeMutation.mutate({ nodeType: payload.nodeType, x, y });
+      runCreate(createTypedNodeMutation.mutate, { nodeType: payload.nodeType, x, y });
     },
-    [canEdit, createTypedNodeMutation],
+    [createTypedNodeMutation.mutate, runCreate],
+  );
+
+  const handleNoteDrop = useCallback(
+    (payload: NoteSuggestionPayload, x: number, y: number) => {
+      runCreate(createNoteMutation.mutate, { noteKey: payload.noteKey, x, y });
+    },
+    [createNoteMutation.mutate, runCreate],
   );
 
   const handleAddSuggestion = useCallback(
     (nodeType: string) => {
-      if (!canEdit) return;
       const pos = getCanvasCenter();
-      createTypedNodeMutation.mutate({ nodeType, x: pos.x, y: pos.y });
+      runCreate(createTypedNodeMutation.mutate, { nodeType, x: pos.x, y: pos.y });
     },
-    [canEdit, createTypedNodeMutation, getCanvasCenter],
+    [createTypedNodeMutation.mutate, getCanvasCenter, runCreate],
+  );
+
+  const handleAddNote = useCallback(
+    (noteKey: string) => {
+      const pos = getCanvasCenter();
+      runCreate(createNoteMutation.mutate, { noteKey, x: pos.x, y: pos.y });
+    },
+    [createNoteMutation.mutate, getCanvasCenter, runCreate],
   );
 
   const handleClearSelection = useCallback(() => {
@@ -407,6 +443,8 @@ export default function FsiCanvasWorkspace() {
 
   const { study, nodes, connections } = graph;
   const canvasNodes = nodes.filter(isCanvasNode);
+  const noteCount = canvasNodes.filter(isNoteNode).length;
+  const nodeCount = canvasNodes.length - noteCount;
 
   return (
     <div className="flex h-screen flex-col bg-zinc-950 text-white">
@@ -418,7 +456,7 @@ export default function FsiCanvasWorkspace() {
         <div className="min-w-0 flex-1">
           <div className="truncate font-semibold">{study.title}</div>
           <div className="truncate text-xs text-zinc-500">
-            {study.study_type} · {study.target_account} · {canvasNodes.length} nodes
+            {study.study_type} · {study.target_account} · {nodeCount} nodes · {noteCount} notes
           </div>
         </div>
         {canEdit && (
@@ -488,9 +526,9 @@ export default function FsiCanvasWorkspace() {
           </AlertDialog>
         )}
         {canEdit && (
-          <Button size="sm" onClick={() => addFreeformNode()}>
+          <Button size="sm" onClick={() => addNote("blank")}>
             <Plus className="mr-1 h-4 w-4" />
-            Node
+            Note
           </Button>
         )}
       </header>
@@ -510,12 +548,13 @@ export default function FsiCanvasWorkspace() {
             onNodeSelect={setSelectedNode}
             onPaneClick={handleClearSelection}
             onSelectionChange={handleSelectionChange}
-            onPaneDoubleClick={addFreeformNode}
+            onPaneDoubleClick={(x, y) => addNote("blank", x, y)}
             onNodeDragStop={handleNodeDragStop}
             onConnect={(source, target) => createConnectionMutation.mutate({ source, target })}
             onEdgeDelete={(id) => deleteConnectionMutation.mutate(id)}
             onNodeDelete={(id) => deleteNodeMutation.mutate(id)}
             onSuggestionDrop={handleSuggestionDrop}
+            onNoteDrop={handleNoteDrop}
             onTitleChange={handleTitleChange}
             onBodyChange={handleBodyChange}
             onPayloadChange={handlePayloadChange}
@@ -529,7 +568,7 @@ export default function FsiCanvasWorkspace() {
 
           {canvasNodes.length === 0 && (
             <div className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2 rounded-lg border border-zinc-700 bg-zinc-950/90 px-4 py-2 text-xs text-zinc-400">
-              + Node for a freeform box · drag suggested nodes from the right · connect with handles
+              Drag study nodes or quick notes from the right · double-click for a blank note · connect with handles
             </div>
           )}
         </div>
@@ -540,6 +579,7 @@ export default function FsiCanvasWorkspace() {
           focusedNodeId={selectedNode?.id ?? null}
           canEdit={canEdit}
           onAddSuggestion={handleAddSuggestion}
+          onAddNote={handleAddNote}
           onFocusNode={handleFocusNode}
           onDeleteNode={(id) => deleteNodeMutation.mutate(id)}
           onDeleteSelected={handleDeleteSelected}
