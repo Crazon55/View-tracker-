@@ -58,5 +58,13 @@ export const NODE_FIELD_DEFS: Record<IronNodeType, FieldDef[]> = {
 };
 
 export function getFieldDefs(nodeType: string): FieldDef[] {
+  if (nodeType === "Niche") {
+    return [
+      { key: "niche_label", label: "Niche name" },
+      { key: "vertical_description", label: "Vertical / category", rows: 2, inputType: "textarea" },
+      { key: "target_audience", label: "Target audience" },
+      { key: "strategist_observation_note", label: "Strategist observation", rows: 3, inputType: "textarea" },
+    ];
+  }
   return (NODE_FIELD_DEFS as Record<string, FieldDef[]>)[nodeType] ?? [];
 }

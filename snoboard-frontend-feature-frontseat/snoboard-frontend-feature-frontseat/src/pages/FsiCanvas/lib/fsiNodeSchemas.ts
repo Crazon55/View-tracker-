@@ -21,6 +21,7 @@ export type IronNodeType = (typeof IRON_NODE_TYPES)[number];
 
 export const PRD_NODE_TYPES = [
   "Page",
+  "Niche",
   "Post Example",
   "Carousel Example",
   "Reel Example",
@@ -147,6 +148,7 @@ export type StrategistNotePayload = {
 
 export const NODE_TYPE_COLORS: Record<string, string> = {
   Page: "#6366f1",
+  Niche: "#d97706",
   "Post Example": "#3b82f6",
   "Carousel Example": "#06b6d4",
   "Reel Example": "#14b8a6",

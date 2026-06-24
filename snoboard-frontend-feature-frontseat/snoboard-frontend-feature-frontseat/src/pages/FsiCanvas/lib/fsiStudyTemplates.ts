@@ -4,6 +4,7 @@ import type { StudyType } from "./fsiNodeSchemas";
 export const STUDY_NODE_TEMPLATES: Record<StudyType, readonly string[]> = {
   "Page Study": [
     "Page",
+    "Niche",
     "Content Pillar",
     "Content Bucket",
     "Post Example",
@@ -44,6 +45,7 @@ export const STUDY_NODE_TEMPLATES: Record<StudyType, readonly string[]> = {
   ],
   "Competitor Study": [
     "Page",
+    "Niche",
     "Post Example",
     "Hook Pattern",
     "Performance Insight",
@@ -58,6 +60,7 @@ export const STUDY_NODE_TEMPLATES: Record<StudyType, readonly string[]> = {
   ],
   "New Page Strategy": [
     "Page",
+    "Niche",
     "Content Pillar",
     "Content Bucket",
     "Strategy Rule",

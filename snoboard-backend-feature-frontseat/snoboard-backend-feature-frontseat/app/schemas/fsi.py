@@ -18,6 +18,7 @@ STUDY_TYPES = [
 
 NODE_TYPES = [
     "Page",
+    "Niche",
     "Post Example",
     "Carousel Example",
     "Reel Example",
