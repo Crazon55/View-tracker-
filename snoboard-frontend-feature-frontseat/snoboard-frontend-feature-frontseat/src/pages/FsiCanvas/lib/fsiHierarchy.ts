@@ -8,7 +8,8 @@ export function getHierarchyLevel(node: FsiNodeRecord): HierarchyLevel {
 }
 
 export function isFieldNode(node: FsiNodeRecord): boolean {
-  return getHierarchyLevel(node) === "field";
+  if (node.structured_payload?.hierarchy_level === "field") return true;
+  return !!node.parent_node_id;
 }
 
 export function isParentNode(node: FsiNodeRecord): boolean {

@@ -36,6 +36,7 @@ type FlowInnerProps = {
   onNodeDelete: (nodeId: string) => void;
   onFieldChange: (nodeId: string, value: string) => void;
   selectedNodeId: string | null;
+  expandedParentIds: string[];
 };
 
 function FlowInner({
@@ -51,6 +52,7 @@ function FlowInner({
   onNodeDelete,
   onFieldChange,
   selectedNodeId,
+  expandedParentIds,
 }: FlowInnerProps) {
   const { screenToFlowPosition, fitView } = useReactFlow();
   const onFieldChangeRef = useRef(onFieldChange);
@@ -81,13 +83,16 @@ function FlowInner({
     [dbNodes],
   );
 
+  const expandedKey = expandedParentIds.slice().sort().join(",");
+
   const flowGraph = useMemo(
     () =>
       graphToFlow(dbNodes, connections, {
         canEdit,
         onFieldChange: stableFieldChange,
+        expandedParentIds: new Set(expandedParentIds),
       }),
-    [structureSignature, positionSignature, canEdit, stableFieldChange],
+    [structureSignature, positionSignature, canEdit, stableFieldChange, expandedKey],
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(flowGraph.nodes);

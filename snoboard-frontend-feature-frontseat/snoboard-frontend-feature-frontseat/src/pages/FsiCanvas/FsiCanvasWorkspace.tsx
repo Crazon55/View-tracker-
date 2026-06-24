@@ -37,6 +37,7 @@ export default function FsiCanvasWorkspace() {
   const canEdit = canEditFsiCanvas(role);
 
   const [selectedNode, setSelectedNode] = useState<FsiNodeRecord | null>(null);
+  const [expandedParentIds, setExpandedParentIds] = useState<string[]>([]);
   const [picker, setPicker] = useState<{ x: number; y: number; flowX: number; flowY: number } | null>(null);
   const [fitTrigger, setFitTrigger] = useState(0);
   const graphRef = useRef<FsiGraph | null>(null);
@@ -76,6 +77,74 @@ export default function FsiCanvasWorkspace() {
     onSuccess: () => toast.success("Canvas tidied into tree layout"),
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const spawnFieldChildrenMutation = useMutation({
+    mutationFn: async (parent: FsiNodeRecord) => {
+      const type = parent.node_type as IronNodeType;
+      const fieldDefs = NODE_FIELD_DEFS[type];
+      if (!fieldDefs?.length) return;
+
+      const payload = parent.structured_payload ?? {};
+      const existingKeys = new Set(
+        (graphRef.current?.nodes ?? [])
+          .filter((n) => n.parent_node_id === parent.id)
+          .map((n) => n.structured_payload?.field_key)
+          .filter((k): k is string => typeof k === "string"),
+      );
+
+      for (const def of fieldDefs) {
+        if (existingKeys.has(def.key)) continue;
+        const initial =
+          def.key === "observation"
+            ? String(payload.observation ?? "")
+            : String(payload[def.key] ?? "");
+        await fsiApi.createNode(studyId!, {
+          parent_node_id: parent.id,
+          node_type: type,
+          display_title: def.label,
+          canvas_x: 0,
+          canvas_y: 0,
+          structured_payload: fieldPayload(
+            def.key,
+            def.label,
+            initial,
+            def.inputType ?? "text",
+          ),
+        });
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ["fsi-graph", studyId] });
+      const fresh = queryClient.getQueryData<FsiGraph>(["fsi-graph", studyId]);
+      if (fresh) await applyPrettifyLayout(fresh);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const handleNodeSelect = useCallback(
+    (node: FsiNodeRecord | null) => {
+      setSelectedNode(node);
+
+      if (!node) {
+        setExpandedParentIds([]);
+        return;
+      }
+
+      if (!isParentNode(node)) return;
+
+      setExpandedParentIds((prev) => (prev.includes(node.id) ? prev : [...prev, node.id]));
+
+      const g = graphRef.current;
+      if (!g || !canEdit) return;
+      const fieldChildren = g.nodes.filter((n) => n.parent_node_id === node.id);
+      if (fieldChildren.length === 0) {
+        spawnFieldChildrenMutation.mutate(node);
+        return;
+      }
+      const allAtOrigin = fieldChildren.every((f) => f.canvas_x === 0 && f.canvas_y === 0);
+      if (allAtOrigin) void applyPrettifyLayout(g);
+    },
+    [canEdit, spawnFieldChildrenMutation, applyPrettifyLayout],
+  );
 
   const createNodeMutation = useMutation({
     mutationFn: async (args: { type: IronNodeType; x: number; y: number }) => {
@@ -117,6 +186,7 @@ export default function FsiCanvasWorkspace() {
     },
     onSuccess: (node) => {
       setSelectedNode(node);
+      setExpandedParentIds((prev) => (prev.includes(node.id) ? prev : [...prev, node.id]));
       setPicker(null);
       toast.success("Parent node added");
     },
@@ -291,7 +361,8 @@ export default function FsiCanvasWorkspace() {
           canEdit={canEdit}
           fitTrigger={fitTrigger}
           selectedNodeId={selectedNode?.id ?? null}
-          onNodeSelect={setSelectedNode}
+          expandedParentIds={expandedParentIds}
+          onNodeSelect={handleNodeSelect}
           onFieldChange={handleFieldChange}
           onPaneDoubleClick={(x, y, screenX, screenY) => {
             if (!canEdit) return;
@@ -312,9 +383,6 @@ export default function FsiCanvasWorkspace() {
           />
         )}
 
-        <div className="pointer-events-none absolute bottom-4 left-4 max-w-sm rounded-lg border border-zinc-800 bg-zinc-950/90 px-3 py-2 text-xs text-zinc-500">
-          Drag nodes freely — positions save on drop. Use <strong className="text-zinc-400">Prettify layout</strong> to auto-arrange into a tree.
-        </div>
       </div>
     </div>
   );

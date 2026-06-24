@@ -26,20 +26,27 @@ export function graphToFlow(
   options?: {
     canEdit?: boolean;
     onFieldChange?: (nodeId: string, value: string) => void;
+    expandedParentIds?: Set<string>;
   },
 ): {
   nodes: Node[];
   edges: Edge[];
 } {
-  const positions = new Map(nodes.map((n) => [n.id, { x: n.canvas_x ?? 0, y: n.canvas_y ?? 0 }]));
-  const nodeIds = new Set(nodes.map((n) => n.id));
+  const expanded = options?.expandedParentIds ?? new Set<string>();
+  const visibleDbNodes = nodes.filter((n) => {
+    if (isParentNode(n)) return true;
+    if (n.parent_node_id) return expanded.has(n.parent_node_id);
+    return true;
+  });
+  const visibleIds = new Set(visibleDbNodes.map((n) => n.id));
+  const positions = new Map(visibleDbNodes.map((n) => [n.id, { x: n.canvas_x ?? 0, y: n.canvas_y ?? 0 }]));
 
-  const flowNodes: Node[] = nodes.map((n) => {
+  const flowNodes: Node[] = visibleDbNodes.map((n) => {
     const pos = positions.get(n.id) ?? { x: n.canvas_x, y: n.canvas_y };
 
     if (isFieldNode(n)) {
       const fieldKey = String(n.structured_payload?.field_key ?? "");
-      const parentType = nodes.find((p) => p.id === n.parent_node_id)?.node_type as IronNodeType | undefined;
+      const parentType = visibleDbNodes.find((p) => p.id === n.parent_node_id)?.node_type as IronNodeType | undefined;
       const defs = parentType ? NODE_FIELD_DEFS[parentType] : [];
       const fieldDef = defs.find((d) => d.key === fieldKey) ?? {
         key: fieldKey,
@@ -78,8 +85,8 @@ export function graphToFlow(
 
   const flowEdges: Edge[] = [];
 
-  for (const n of nodes) {
-    if (n.parent_node_id && nodeIds.has(n.parent_node_id)) {
+  for (const n of visibleDbNodes) {
+    if (n.parent_node_id && visibleIds.has(n.parent_node_id)) {
       flowEdges.push({
         id: `tree-${n.parent_node_id}-${n.id}`,
         source: n.parent_node_id,
@@ -91,7 +98,7 @@ export function graphToFlow(
   }
 
   for (const c of connections) {
-    if (!nodeIds.has(c.source_node_id) || !nodeIds.has(c.target_node_id)) continue;
+    if (!visibleIds.has(c.source_node_id) || !visibleIds.has(c.target_node_id)) continue;
     if (flowEdges.some((e) => e.source === c.source_node_id && e.target === c.target_node_id)) continue;
     flowEdges.push({
       id: c.id,
