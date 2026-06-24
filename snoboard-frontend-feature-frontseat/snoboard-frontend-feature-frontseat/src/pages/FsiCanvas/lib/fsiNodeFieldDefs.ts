@@ -7,6 +7,7 @@ export type FieldDef = {
   rows?: number;
   inputType?: "text" | "textarea" | "number" | "select";
   selectOptions?: readonly string[];
+  linkify?: boolean;
 };
 
 export const NODE_FIELD_DEFS: Record<IronNodeType, FieldDef[]> = {
@@ -19,11 +20,11 @@ export const NODE_FIELD_DEFS: Record<IronNodeType, FieldDef[]> = {
     { key: "curiosity_gap_mechanism", label: "Curiosity gap mechanism", rows: 2, inputType: "textarea" },
     { key: "target_demographic_profile", label: "Target demographic profile" },
     { key: "operational_rules", label: "Operational rules", rows: 3, inputType: "textarea" },
-    { key: "representative_post_reference_urls", label: "Reference post URLs", rows: 2, inputType: "textarea" },
+    { key: "representative_post_reference_urls", label: "Reference post URLs", rows: 2, inputType: "textarea", linkify: true },
     { key: "strategist_observation_note", label: "Strategist observation", rows: 3, inputType: "textarea" },
   ],
   "Post Example": [
-    { key: "source_url", label: "Source URL" },
+    { key: "source_url", label: "Source URL", linkify: true },
     { key: "account_handle", label: "Account handle" },
     { key: "target_network", label: "Target network" },
     { key: "format_classification", label: "Format classification" },

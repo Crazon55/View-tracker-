@@ -1,6 +1,8 @@
 import { useCallback, useRef, useState } from "react";
 import { ImagePlus, Loader2, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
+import { FsiLinkifiedText } from "../lib/fsiLinkText";
+import { clipboardImageFiles } from "../lib/fsiScreenshotNode";
 import { uploadFsiNodeScreenshotFiles } from "../lib/fsiNodeMedia";
 
 type ContentBlockProps = {
@@ -12,6 +14,7 @@ type ContentBlockProps = {
   inputClass: string;
   onChange: (value: string) => void;
   onCommit: (value: string) => void;
+  onImagePaste?: (files: File[]) => void;
 };
 
 export function FsiNodeContentBlock({
@@ -23,11 +26,24 @@ export function FsiNodeContentBlock({
   inputClass,
   onChange,
   onCommit,
+  onImagePaste,
 }: ContentBlockProps) {
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      if (!editing || !canEdit || !onImagePaste) return;
+      const files = clipboardImageFiles(e.clipboardData);
+      if (files.length === 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      onImagePaste(files);
+    },
+    [canEdit, editing, onImagePaste],
+  );
+
   if (!value && !editing) return null;
 
   return (
-    <div>
+    <div onPaste={handlePaste}>
       <label className="mb-0.5 block text-[9px] font-semibold uppercase text-emerald-950/70">{label}</label>
       {editing ? (
         <textarea
@@ -35,11 +51,14 @@ export function FsiNodeContentBlock({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onBlur={(e) => onCommit(e.target.value)}
+          onPaste={handlePaste}
           placeholder={placeholder}
           className={`${inputClass} resize-none`}
         />
       ) : (
-        <div className={`${inputClass} min-h-[2.5rem] whitespace-pre-wrap`}>{value || "—"}</div>
+        <div className={`${inputClass} min-h-[2.5rem] whitespace-pre-wrap`}>
+          <FsiLinkifiedText text={value} />
+        </div>
       )}
     </div>
   );
@@ -90,17 +109,10 @@ export function FsiNodeScreenshotsBlock({
   const handlePaste = useCallback(
     (e: React.ClipboardEvent) => {
       if (!editing || !canEdit || uploading) return;
-      const items = e.clipboardData?.items;
-      if (!items) return;
-      const imageFiles: File[] = [];
-      for (const item of items) {
-        if (item.type.startsWith("image/")) {
-          const file = item.getAsFile();
-          if (file) imageFiles.push(file);
-        }
-      }
+      const imageFiles = clipboardImageFiles(e.clipboardData);
       if (imageFiles.length === 0) return;
       e.preventDefault();
+      e.stopPropagation();
       void addFiles(imageFiles);
     },
     [addFiles, canEdit, editing, uploading],

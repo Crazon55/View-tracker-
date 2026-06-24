@@ -2,7 +2,7 @@ import type { Edge, Node } from "@xyflow/react";
 import type { FsiConnectionRecord, FsiNodeRecord } from "./fsiNodeSchemas";
 import { colorForNodeType } from "./fsiNodeSchemas";
 import { getFieldDefs } from "./fsiNodeFieldDefs";
-import { isCanvasNode, isNoteNode } from "./fsiHierarchy";
+import { isCanvasNode, isNoteNode, isScreenshotNode } from "./fsiHierarchy";
 import { NOTE_COLOR } from "./fsiNoteTemplates";
 
 export type FsiNodeData = {
@@ -34,6 +34,7 @@ export function graphToFlow(
   const visible = nodes.filter(isCanvasNode);
 
   const flowNodes: Node[] = visible.map((n) => {
+    const isScreenshot = isScreenshotNode(n);
     const isNote = isNoteNode(n);
     return {
       id: n.id,
@@ -42,12 +43,12 @@ export function graphToFlow(
       draggable: true,
       data: {
         fsiNode: n,
-        label: isNote ? "Note" : n.display_title,
-        nodeType: isNote ? "Note" : n.node_type,
-        color: isNote ? NOTE_COLOR : colorForNodeType(n.node_type),
+        label: isScreenshot ? "Screenshot" : isNote ? "Note" : n.display_title,
+        nodeType: isScreenshot ? "Screenshot" : isNote ? "Note" : n.node_type,
+        color: isScreenshot ? "#ec4899" : isNote ? NOTE_COLOR : colorForNodeType(n.node_type),
         canEdit: options?.canEdit ?? false,
         isNote,
-        fieldDefs: isNote ? [] : getFieldDefs(n.node_type),
+        fieldDefs: isScreenshot || isNote ? [] : getFieldDefs(n.node_type),
         onTitleChange: options?.onTitleChange,
         onBodyChange: options?.onBodyChange,
         onPayloadChange: options?.onPayloadChange,

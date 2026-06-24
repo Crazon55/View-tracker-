@@ -2,7 +2,7 @@ import { useCallback, useRef, useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { OnSelectionChangeFunc } from "@xyflow/react";
-import { ArrowLeft, ChevronDown, Loader2, MousePointer2, Plus, Redo2, RotateCcw, SquareDashedMousePointer, Trash2, Undo2, Wand2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, ImageIcon, Loader2, MousePointer2, Plus, Redo2, RotateCcw, SquareDashedMousePointer, Trash2, Undo2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { fsiApi, flushFsiBackendSyncQueue } from "@/services/fsiApi";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -40,6 +40,7 @@ import {
 } from "./lib/fsiNodeSchemas";
 import { isCanvasNode, migrateLegacyFieldNodes } from "./lib/fsiLegacyMigrate";
 import { isNoteNode } from "./lib/fsiHierarchy";
+import { SCREENSHOT_NODE_TYPE, screenshotNodePayload } from "./lib/fsiScreenshotNode";
 import { NOTE_TEMPLATES } from "./lib/fsiNoteTemplates";
 import { getSuggestedNodeTypes } from "./lib/fsiStudyTemplates";
 import { clearSavedViewport } from "./lib/fsiViewportStorage";
@@ -228,6 +229,35 @@ export default function FsiCanvasWorkspace() {
         structured_payload: defaultPayloadForType(nodeType),
       }),
     onSuccess: appendCreatedNode,
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const createScreenshotMutation = useMutation({
+    mutationFn: async ({ files, x, y }: { files: File[]; x: number; y: number }) => {
+      const created: FsiNodeRecord[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]!;
+        const node = (await fsiApi.createNode(studyId!, {
+          node_type: SCREENSHOT_NODE_TYPE,
+          display_title: "Screenshot",
+          canvas_x: x + i * 28,
+          canvas_y: y + i * 28,
+          structured_payload: screenshotNodePayload(""),
+        })) as FsiNodeRecord;
+        const urls = await fsiApi.uploadNodeScreenshotFiles(studyId!, node.id, [file]);
+        const updated = (await fsiApi.updateNode(node.id, {
+          structured_payload: screenshotNodePayload(urls[0]!),
+        })) as FsiNodeRecord;
+        created.push(updated);
+      }
+      return created;
+    },
+    onSuccess: (nodes) => {
+      for (const node of nodes) {
+        appendCreatedNode(node);
+      }
+      toast.success(`Added ${nodes.length} screenshot${nodes.length === 1 ? "" : "s"}`);
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -464,6 +494,32 @@ export default function FsiCanvasWorkspace() {
       runCreate(createNoteMutation.mutate, { noteKey, x: pos.x, y: pos.y });
     },
     [canEdit, createNoteMutation.mutate, getCanvasCenter, runCreate],
+  );
+
+  const handleScreenshotDrop = useCallback(
+    (files: File[], x: number, y: number) => {
+      if (!canEdit || files.length === 0 || createScreenshotMutation.isPending) return;
+      createScreenshotMutation.mutate({ files, x, y });
+    },
+    [canEdit, createScreenshotMutation],
+  );
+
+  const addScreenshot = useCallback(
+    (x?: number, y?: number) => {
+      if (!canEdit) return;
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.multiple = true;
+      input.onchange = () => {
+        const files = Array.from(input.files || []);
+        if (!files.length) return;
+        const pos = x !== undefined && y !== undefined ? { x, y } : getCanvasCenter();
+        handleScreenshotDrop(files, pos.x, pos.y);
+      };
+      input.click();
+    },
+    [canEdit, getCanvasCenter, handleScreenshotDrop],
   );
 
   const handleSuggestionDrop = useCallback(
@@ -850,6 +906,17 @@ export default function FsiCanvasWorkspace() {
           </DropdownMenu>
         )}
         {canEdit && (
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={createScreenshotMutation.isPending}
+            onClick={() => addScreenshot()}
+          >
+            <ImageIcon className="mr-1 h-4 w-4" />
+            Screenshot
+          </Button>
+        )}
+        {canEdit && (
           <Button size="sm" variant="secondary" onClick={() => addNote("blank")}>
             <Plus className="mr-1 h-4 w-4" />
             Note
@@ -881,6 +948,7 @@ export default function FsiCanvasWorkspace() {
             onNodeDelete={handleDeleteNode}
             onSuggestionDrop={handleSuggestionDrop}
             onNoteDrop={handleNoteDrop}
+            onScreenshotDrop={handleScreenshotDrop}
             onTitleChange={handleTitleChange}
             onBodyChange={handleBodyChange}
             onPayloadChange={handlePayloadChange}
@@ -895,7 +963,7 @@ export default function FsiCanvasWorkspace() {
 
           {canvasNodes.length === 0 && (
             <div className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2 rounded-lg border border-zinc-700 bg-zinc-950/90 px-4 py-2 text-xs text-zinc-400">
-              Drag study nodes or quick notes from the right · double-click for a blank note · connect with handles
+              Drag study nodes or quick notes from the right · paste screenshots on the canvas · double-click for a blank note
             </div>
           )}
         </div>

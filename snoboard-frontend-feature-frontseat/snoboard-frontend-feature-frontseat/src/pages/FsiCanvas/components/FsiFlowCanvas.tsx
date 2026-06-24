@@ -31,6 +31,7 @@ import {
   type NodeSuggestionPayload,
   type NoteSuggestionPayload,
 } from "./FsiNodeSuggestionsPanel";
+import { clipboardImageFiles } from "../lib/fsiScreenshotNode";
 
 const nodeTypes = { fsiNode: FsiCanvasNode };
 const edgeTypes = { fsiEdge: FsiCanvasEdge };
@@ -61,6 +62,7 @@ type FlowInnerProps = {
   onNodeDelete: (nodeId: string) => void;
   onSuggestionDrop: (payload: NodeSuggestionPayload, x: number, y: number) => void;
   onNoteDrop: (payload: NoteSuggestionPayload, x: number, y: number) => void;
+  onScreenshotDrop: (files: File[], x: number, y: number) => void;
   onTitleChange: (nodeId: string, title: string) => void;
   onBodyChange: (nodeId: string, body: string) => void;
   onPayloadChange: (nodeId: string, key: string, value: string) => void;
@@ -88,6 +90,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     onNodeDelete,
     onSuggestionDrop,
     onNoteDrop,
+    onScreenshotDrop,
     onTitleChange,
     onBodyChange,
     onPayloadChange,
@@ -98,6 +101,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   const { screenToFlowPosition, fitView, setViewport, getViewport, setCenter } = useReactFlow();
   const paneRef = useRef<HTMLDivElement>(null);
   const dropLockRef = useRef(false);
+  const lastPointerRef = useRef({ x: 200, y: 200 });
   const viewportReadyRef = useRef(false);
   const saveViewportTimer = useRef<number | null>(null);
 
@@ -368,12 +372,41 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   const handleDragOver = useCallback((e: React.DragEvent) => {
     if (
       e.dataTransfer.types.includes(FSI_NODE_SUGGESTION_MIME) ||
-      e.dataTransfer.types.includes(FSI_NOTE_SUGGESTION_MIME)
+      e.dataTransfer.types.includes(FSI_NOTE_SUGGESTION_MIME) ||
+      Array.from(e.dataTransfer.types).includes("Files")
     ) {
       e.preventDefault();
       e.dataTransfer.dropEffect = "copy";
     }
   }, []);
+
+  const handlePaneMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      lastPointerRef.current = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+    },
+    [screenToFlowPosition],
+  );
+
+  const handlePanePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (!canEdit) return;
+      const files = clipboardImageFiles(e.clipboardData);
+      if (files.length === 0) return;
+      e.preventDefault();
+      onScreenshotDrop(files, lastPointerRef.current.x, lastPointerRef.current.y);
+    },
+    [canEdit, onScreenshotDrop],
+  );
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -382,6 +415,12 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
       if (!canEdit || dropLockRef.current) return;
 
       const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+
+      const droppedImages = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/"));
+      if (droppedImages.length > 0) {
+        onScreenshotDrop(droppedImages, pos.x, pos.y);
+        return;
+      }
 
       const noteRaw = e.dataTransfer.getData(FSI_NOTE_SUGGESTION_MIME);
       if (noteRaw) {
@@ -411,7 +450,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         /* ignore */
       }
     },
-    [canEdit, onNoteDrop, onSuggestionDrop, screenToFlowPosition],
+    [canEdit, onNoteDrop, onScreenshotDrop, onSuggestionDrop, screenToFlowPosition],
   );
 
   const handleEdgeClick = useCallback(
@@ -454,7 +493,15 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   }, []);
 
   return (
-    <div ref={paneRef} className="relative h-full w-full overflow-hidden" onDragOver={handleDragOver} onDrop={handleDrop}>
+    <div
+      ref={paneRef}
+      className="relative h-full w-full overflow-hidden outline-none"
+      tabIndex={0}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+      onMouseMove={handlePaneMouseMove}
+      onPaste={handlePanePaste}
+    >
       <ReactFlow
         nodes={styledNodes}
         edges={edges}

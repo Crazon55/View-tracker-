@@ -1,6 +1,7 @@
 import type { FsiNodeRecord } from "./fsiNodeSchemas";
 
 export { isLegacyFieldNode, isCanvasNode, isNoteNode, isFreeformNode } from "./fsiLegacyMigrate";
+export { isScreenshotNode, getScreenshotImageUrl, screenshotNodePayload, SCREENSHOT_NODE_TYPE } from "./fsiScreenshotNode";
 
 /** @deprecated Legacy field-node detection — used only during migration. */
 export function isFieldNode(node: FsiNodeRecord): boolean {
