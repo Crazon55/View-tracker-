@@ -174,6 +174,10 @@ export function colorForNodeType(nodeType: string): string {
 export function defaultPayloadForType(nodeType: string): Record<string, unknown> {
   switch (nodeType) {
     case "Post Example":
+    case "Carousel Example":
+    case "Reel Example":
+    case "Hook Example":
+    case "Performance Insight":
       return { performance_label: "Average" };
     case "Strategist Note":
       return { observation: "" };
