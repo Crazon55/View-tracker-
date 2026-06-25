@@ -1,5 +1,12 @@
 import { GripVertical, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { FsiNodeRecord, FsiStudy } from "../lib/fsiNodeSchemas";
 import { colorForNodeType } from "../lib/fsiNodeSchemas";
 import { getSuggestedNodeTypes } from "../lib/fsiStudyTemplates";
@@ -78,16 +85,76 @@ export default function FsiNodeSuggestionsPanel({
       <div className="flex-1 overflow-y-auto p-3 space-y-5">
         <section>
           <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-            Study nodes ({suggestions.length})
+            Add to canvas
           </div>
-          <p className="mb-2 text-[10px] text-zinc-600">Typed blocks — drag or use +.</p>
-          <div className="space-y-2">
-            {suggestions.map((nodeType) => (
+          {canEdit ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="w-full justify-between border-zinc-700 bg-zinc-900">
+                  <span className="flex items-center gap-2">
+                    <Plus className="h-4 w-4 text-emerald-400" />
+                    Choose node or note
+                  </span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="start"
+                className="max-h-80 w-72 overflow-y-auto bg-zinc-900 border-zinc-700"
+              >
+                <div className="px-2 py-1.5 text-[10px] font-semibold uppercase text-zinc-500">
+                  Study nodes
+                </div>
+                {suggestions.map((nodeType) => (
+                  <DropdownMenuItem
+                    key={nodeType}
+                    className="cursor-pointer text-zinc-200 focus:bg-zinc-800 focus:text-white"
+                    onClick={() => onAddSuggestion(nodeType)}
+                  >
+                    <span
+                      className="mr-2 inline-block h-2 w-2 rounded-full"
+                      style={{ backgroundColor: colorForNodeType(nodeType) }}
+                    />
+                    {nodeType}
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator className="bg-zinc-800" />
+                <div className="px-2 py-1.5 text-[10px] font-semibold uppercase text-zinc-500">
+                  Quick notes
+                </div>
+                {NOTE_TEMPLATES.map((t) => (
+                  <DropdownMenuItem
+                    key={t.key}
+                    className="cursor-pointer text-zinc-200 focus:bg-zinc-800 focus:text-white"
+                    onClick={() => onAddNote(t.key)}
+                  >
+                    <span
+                      className="mr-2 inline-block h-2 w-2 rounded-full"
+                      style={{ backgroundColor: NOTE_COLOR }}
+                    />
+                    {t.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <p className="text-xs text-zinc-600">View-only access</p>
+          )}
+          <p className="mt-2 text-[10px] text-zinc-600">
+            Or drag types below onto the canvas · double-click canvas for picker
+          </p>
+        </section>
+
+        <section>
+          <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+            Drag shortcuts ({suggestions.length})
+          </div>
+          <div className="space-y-2 max-h-48 overflow-y-auto">
+            {suggestions.slice(0, 8).map((nodeType) => (
               <div
                 key={nodeType}
                 draggable={canEdit}
                 onDragStart={(e) => canEdit && startNodeDrag(e, nodeType)}
-                className={`flex items-center gap-2 rounded-lg border border-zinc-700/80 bg-zinc-900 px-3 py-2.5 ${
+                className={`flex items-center gap-2 rounded-lg border border-zinc-700/80 bg-zinc-900 px-3 py-2 ${
                   canEdit
                     ? "cursor-grab active:cursor-grabbing hover:border-emerald-600/50"
                     : "opacity-60"
@@ -98,21 +165,7 @@ export default function FsiNodeSuggestionsPanel({
                   className="h-2.5 w-2.5 shrink-0 rounded-full"
                   style={{ backgroundColor: colorForNodeType(nodeType) }}
                 />
-                <span className="min-w-0 flex-1 text-sm text-zinc-200">{nodeType}</span>
-                {canEdit && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 shrink-0 text-emerald-400 hover:text-emerald-300"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onAddSuggestion(nodeType);
-                    }}
-                    title="Add at canvas center"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                )}
+                <span className="min-w-0 flex-1 truncate text-sm text-zinc-200">{nodeType}</span>
               </div>
             ))}
           </div>
@@ -120,16 +173,15 @@ export default function FsiNodeSuggestionsPanel({
 
         <section>
           <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-            Quick notes ({NOTE_TEMPLATES.length})
+            Quick note drag ({NOTE_TEMPLATES.length})
           </div>
-          <p className="mb-2 text-[10px] text-zinc-600">Post IDs, views, URLs — separate from study nodes.</p>
           <div className="space-y-2">
             {NOTE_TEMPLATES.map((t) => (
               <div
                 key={t.key}
                 draggable={canEdit}
                 onDragStart={(e) => canEdit && startNoteDrag(e, t.key)}
-                className={`flex items-center gap-2 rounded-lg border border-zinc-700/80 bg-zinc-900 px-3 py-2.5 ${
+                className={`flex items-center gap-2 rounded-lg border border-zinc-700/80 bg-zinc-900 px-3 py-2 ${
                   canEdit
                     ? "cursor-grab active:cursor-grabbing hover:border-amber-600/50"
                     : "opacity-60"
@@ -138,20 +190,6 @@ export default function FsiNodeSuggestionsPanel({
                 <GripVertical className="h-4 w-4 shrink-0 text-zinc-600" />
                 <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: NOTE_COLOR }} />
                 <span className="min-w-0 flex-1 text-sm text-zinc-200">{t.label}</span>
-                {canEdit && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 shrink-0 text-amber-400 hover:text-amber-300"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onAddNote(t.key);
-                    }}
-                    title="Add at canvas center"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                )}
               </div>
             ))}
           </div>

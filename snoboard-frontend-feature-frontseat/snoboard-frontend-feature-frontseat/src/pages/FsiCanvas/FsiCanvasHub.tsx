@@ -39,6 +39,7 @@ export default function FsiCanvasHub() {
     target_account: "",
     niche_vertical: "",
     meta_notes: "",
+    execution_date: new Date().toISOString().slice(0, 10),
   });
 
   const { data: studies = [], isLoading } = useQuery<FsiStudy[]>({
@@ -55,11 +56,19 @@ export default function FsiCanvasHub() {
         niche_vertical: form.niche_vertical,
         owner_id: user?.email || "",
         meta_notes: form.meta_notes || undefined,
+        execution_date: form.execution_date,
       }),
     onSuccess: (study) => {
       queryClient.invalidateQueries({ queryKey: ["fsi-studies"] });
       setOpen(false);
-      setForm({ title: "", study_type: STUDY_TYPES[0], target_account: "", niche_vertical: "", meta_notes: "" });
+      setForm({
+        title: "",
+        study_type: STUDY_TYPES[0],
+        target_account: "",
+        niche_vertical: "",
+        meta_notes: "",
+        execution_date: new Date().toISOString().slice(0, 10),
+      });
       navigate(`/fsi-canvas/${study.id}`);
       toast.success("Study created");
     },
@@ -140,6 +149,15 @@ export default function FsiCanvasHub() {
                       value={form.niche_vertical}
                       onChange={(e) => setForm({ ...form, niche_vertical: e.target.value })}
                       placeholder="Indian startup founders"
+                      className="bg-zinc-950 border-zinc-700"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-zinc-400">Execution date</Label>
+                    <Input
+                      type="date"
+                      value={form.execution_date}
+                      onChange={(e) => setForm({ ...form, execution_date: e.target.value })}
                       className="bg-zinc-950 border-zinc-700"
                     />
                   </div>

@@ -98,3 +98,7 @@ class ConnectionCreate(BaseModel):
     source_node_id: str
     target_node_id: str
     edge_label_note: str | None = None
+
+
+class ConnectionUpdate(BaseModel):
+    edge_label_note: str | None = None

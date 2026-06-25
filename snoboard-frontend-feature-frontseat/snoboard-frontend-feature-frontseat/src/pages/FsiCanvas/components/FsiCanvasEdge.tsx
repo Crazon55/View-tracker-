@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -9,7 +9,9 @@ import { Trash2 } from "lucide-react";
 
 export type FsiEdgeData = {
   canEdit?: boolean;
+  labelNote?: string | null;
   onDelete?: (edgeId: string) => void;
+  onLabelChange?: (edgeId: string, label: string) => void;
 };
 
 function FsiCanvasEdgeComponent({
@@ -26,6 +28,12 @@ function FsiCanvasEdgeComponent({
   const edgeData = (data ?? {}) as FsiEdgeData;
   const canEdit = edgeData.canEdit ?? false;
   const onDelete = edgeData.onDelete;
+  const onLabelChange = edgeData.onLabelChange;
+  const [labelDraft, setLabelDraft] = useState(edgeData.labelNote ?? "");
+
+  useEffect(() => {
+    setLabelDraft(edgeData.labelNote ?? "");
+  }, [edgeData.labelNote, id]);
 
   const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX,
@@ -35,6 +43,15 @@ function FsiCanvasEdgeComponent({
     sourcePosition,
     targetPosition,
   });
+
+  const commitLabel = useCallback(() => {
+    const next = labelDraft.trim();
+    const prev = (edgeData.labelNote ?? "").trim();
+    if (next === prev) return;
+    onLabelChange?.(id, next);
+  }, [edgeData.labelNote, id, labelDraft, onLabelChange]);
+
+  const displayLabel = (edgeData.labelNote ?? "").trim();
 
   return (
     <>
@@ -47,27 +64,57 @@ function FsiCanvasEdgeComponent({
           strokeWidth: selected ? 2.5 : 2,
         }}
       />
-      {canEdit && selected && onDelete ? (
+      {!selected && displayLabel ? (
         <EdgeLabelRenderer>
           <div
-            className="nodrag nopan pointer-events-auto"
+            className="nodrag nopan pointer-events-none rounded bg-zinc-900/90 px-1.5 py-0.5 text-[10px] text-zinc-400"
             style={{
               position: "absolute",
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
             }}
           >
-            <button
-              type="button"
-              title="Delete connection"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(id);
+            {displayLabel}
+          </div>
+        </EdgeLabelRenderer>
+      ) : null}
+      {canEdit && selected ? (
+        <EdgeLabelRenderer>
+          <div
+            className="nodrag nopan pointer-events-auto flex flex-col items-center gap-1"
+            style={{
+              position: "absolute",
+              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+            }}
+          >
+            <input
+              type="text"
+              value={labelDraft}
+              placeholder="Connection label"
+              onChange={(e) => setLabelDraft(e.target.value)}
+              onBlur={commitLabel}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitLabel();
+                  (e.target as HTMLInputElement).blur();
+                }
               }}
-              className="flex items-center gap-1 rounded-md border border-red-900/60 bg-zinc-900 px-2 py-1 text-xs font-medium text-red-400 shadow-lg hover:bg-red-950/40"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Delete
-            </button>
+              className="w-36 rounded-md border border-zinc-600 bg-zinc-900 px-2 py-1 text-xs text-white shadow-lg focus:border-emerald-600 focus:outline-none"
+            />
+            {onDelete ? (
+              <button
+                type="button"
+                title="Delete connection"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(id);
+                }}
+                className="flex items-center gap-1 rounded-md border border-red-900/60 bg-zinc-900 px-2 py-1 text-xs font-medium text-red-400 shadow-lg hover:bg-red-950/40"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete
+              </button>
+            ) : null}
           </div>
         </EdgeLabelRenderer>
       ) : null}

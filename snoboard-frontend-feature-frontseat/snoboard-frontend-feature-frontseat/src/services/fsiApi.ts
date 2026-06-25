@@ -345,6 +345,35 @@ export function createFsiApi() {
         },
       });
     },
+    updateConnection: async (connectionId: string, data: { edge_label_note?: string | null }) => {
+      const patch: Record<string, unknown> = {};
+      if ("edge_label_note" in data) {
+        patch.edge_label_note = data.edge_label_note ?? null;
+      }
+      return fsiDualMutate({
+        supabase: async () => {
+          const { data: updated, error } = await _sb
+            .from("connections")
+            .update(patch)
+            .eq("id", connectionId)
+            .select()
+            .single();
+          if (error) throw new Error(error.message);
+          if (updated?.study_id) {
+            await _sb
+              .from("studies")
+              .update({ updated_at: new Date().toISOString() })
+              .eq("id", updated.study_id);
+          }
+          return updated;
+        },
+        backend: {
+          path: `${FSI_BACKEND_BASE}/connections/${connectionId}`,
+          method: "PATCH",
+          body: patch,
+        },
+      });
+    },
     deleteConnection: async (connectionId: string, studyId?: string) => {
       if (connectionId.startsWith("opt-")) {
         return { id: connectionId };

@@ -54,11 +54,12 @@ type FlowInnerProps = {
   onNodeSelect: (node: FsiNodeRecord | null) => void;
   onPaneClick?: () => void;
   onSelectionChange: OnSelectionChangeFunc;
-  onPaneDoubleClick: (x: number, y: number) => void;
+  onPaneDoubleClick: (flowX: number, flowY: number, screenX: number, screenY: number) => void;
   onNodeDragStart: (nodeId: string, x: number, y: number) => void;
   onNodeDragStop: (nodeId: string, x: number, y: number) => void;
   onConnect: (source: string, target: string) => void;
   onEdgeDelete: (edgeId: string) => void;
+  onEdgeLabelChange: (edgeId: string, label: string) => void;
   onNodeDelete: (nodeId: string) => void;
   onSuggestionDrop: (payload: NodeSuggestionPayload, x: number, y: number) => void;
   onNoteDrop: (payload: NoteSuggestionPayload, x: number, y: number) => void;
@@ -87,6 +88,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     onNodeDragStop,
     onConnect,
     onEdgeDelete,
+    onEdgeLabelChange,
     onNodeDelete,
     onSuggestionDrop,
     onNoteDrop,
@@ -199,6 +201,12 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     onEdgeDeleteRef.current(id);
   }, []);
 
+  const onEdgeLabelChangeRef = useRef(onEdgeLabelChange);
+  onEdgeLabelChangeRef.current = onEdgeLabelChange;
+  const stableEdgeLabelChange = useCallback((id: string, label: string) => {
+    onEdgeLabelChangeRef.current(id, label);
+  }, []);
+
   const structureSignature = useMemo(
     () =>
       JSON.stringify({
@@ -209,7 +217,12 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
           p: n.structured_payload,
           b: n.raw_body_text,
         })),
-        c: connections.map((c) => ({ id: c.id, s: c.source_node_id, t: c.target_node_id })),
+        c: connections.map((c) => ({
+          id: c.id,
+          s: c.source_node_id,
+          t: c.target_node_id,
+          l: c.edge_label_note,
+        })),
       }),
     [dbNodes, connections],
   );
@@ -220,7 +233,10 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   );
 
   const connectionSignature = useMemo(
-    () => connections.map((c) => `${c.id}:${c.source_node_id}:${c.target_node_id}`).join("|"),
+    () =>
+      connections
+        .map((c) => `${c.id}:${c.source_node_id}:${c.target_node_id}:${c.edge_label_note ?? ""}`)
+        .join("|"),
     [connections],
   );
 
@@ -232,9 +248,10 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         onBodyChange: stableBodyChange,
         onPayloadChange: stablePayloadChange,
         onEdgeDelete: stableEdgeDelete,
+        onEdgeLabelChange: stableEdgeLabelChange,
         onScreenshotsChange: stableScreenshotsChange,
       }),
-    [structureSignature, positionSignature, canEdit, stableTitleChange, stableBodyChange, stablePayloadChange, stableEdgeDelete, stableScreenshotsChange],
+    [structureSignature, positionSignature, canEdit, stableTitleChange, stableBodyChange, stablePayloadChange, stableEdgeDelete, stableEdgeLabelChange, stableScreenshotsChange],
   );
 
   const flowEdges = flowGraph.edges;
@@ -311,7 +328,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
             type: "fsiEdge",
             selectable: true,
             focusable: true,
-            data: { canEdit, onDelete: stableEdgeDelete },
+            data: { canEdit, onDelete: stableEdgeDelete, onLabelChange: stableEdgeLabelChange },
           },
           eds,
         );
@@ -349,7 +366,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
       clearEdgeSelection();
       if (!canEdit) return;
       const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-      onPaneDoubleClick(pos.x, pos.y);
+      onPaneDoubleClick(pos.x, pos.y, e.clientX, e.clientY);
     },
     [canEdit, clearEdgeSelection, onPaneClick, onPaneDoubleClick, onNodeSelect, screenToFlowPosition, setNodes],
   );
@@ -531,7 +548,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
           type: "fsiEdge",
           selectable: true,
           focusable: true,
-          data: { canEdit, onDelete: stableEdgeDelete },
+          data: { canEdit, onDelete: stableEdgeDelete, onLabelChange: stableEdgeLabelChange },
         }}
         minZoom={0.08}
         maxZoom={2.5}

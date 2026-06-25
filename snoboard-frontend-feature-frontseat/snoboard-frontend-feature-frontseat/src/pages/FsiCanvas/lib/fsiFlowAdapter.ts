@@ -28,6 +28,7 @@ export function graphToFlow(
     onBodyChange?: (nodeId: string, body: string) => void;
     onPayloadChange?: (nodeId: string, key: string, value: string) => void;
     onEdgeDelete?: (edgeId: string) => void;
+    onEdgeLabelChange?: (edgeId: string, label: string) => void;
     onScreenshotsChange?: (nodeId: string, screenshots: string[]) => void;
   },
 ): { nodes: Node[]; edges: Edge[] } {
@@ -70,7 +71,9 @@ export function graphToFlow(
       focusable: true,
       data: {
         canEdit: options?.canEdit ?? false,
+        labelNote: c.edge_label_note ?? null,
         onDelete: options?.onEdgeDelete,
+        onLabelChange: options?.onEdgeLabelChange,
       },
     }));
 

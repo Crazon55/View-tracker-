@@ -2,7 +2,7 @@ import { useCallback, useRef, useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { OnSelectionChangeFunc } from "@xyflow/react";
-import { ArrowLeft, ChevronDown, ImageIcon, Loader2, MousePointer2, Plus, Redo2, RotateCcw, SquareDashedMousePointer, Trash2, Undo2, Wand2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, Copy, ImageIcon, LayoutTemplate, Loader2, MousePointer2, Plus, Redo2, RotateCcw, SquareDashedMousePointer, Trash2, Undo2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { fsiApi, flushFsiBackendSyncQueue } from "@/services/fsiApi";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -26,6 +26,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import FsiFlowCanvas, { type FsiFlowCanvasHandle } from "./components/FsiFlowCanvas";
+import FsiStudySettingsDialog, { type StudyStatus } from "./components/FsiStudySettingsDialog";
+import NodeTypePicker, { type PickerChoice } from "./components/NodeTypePicker";
 import FsiNodeSuggestionsPanel, {
   type NodeSuggestionPayload,
   type NoteSuggestionPayload,
@@ -46,6 +48,8 @@ import { getSuggestedNodeTypes } from "./lib/fsiStudyTemplates";
 import { clearSavedViewport } from "./lib/fsiViewportStorage";
 import { useFsiCanvasHistory } from "./lib/useFsiCanvasHistory";
 import { layoutFsiTree } from "./lib/fsiTreeLayout";
+import { applyFsiLayoutTemplate } from "./lib/applyFsiLayoutTemplate";
+import { layoutTemplatesForStudy } from "./lib/fsiLayoutTemplates";
 
 function patchGraphNodePositions(
   graph: FsiGraph,
@@ -79,6 +83,12 @@ export default function FsiCanvasWorkspace() {
   const [boxSelectMode, setBoxSelectMode] = useState(false);
   const [fitTrigger, setFitTrigger] = useState(0);
   const [resetOpen, setResetOpen] = useState(false);
+  const [pickerAt, setPickerAt] = useState<{
+    flowX: number;
+    flowY: number;
+    screenX: number;
+    screenY: number;
+  } | null>(null);
   const graphRef = useRef<FsiGraph | null>(null);
   const canvasRef = useRef<FsiFlowCanvasHandle>(null);
   const migratedRef = useRef(false);
@@ -168,6 +178,33 @@ export default function FsiCanvasWorkspace() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const updateStudyMutation = useMutation({
+    mutationFn: (patch: {
+      title: string;
+      study_type: FsiGraph["study"]["study_type"];
+      target_account: string;
+      niche_vertical: string;
+      meta_notes: string;
+      execution_date: string;
+      status: StudyStatus;
+    }) =>
+      fsiApi.updateStudy(studyId!, {
+        title: patch.title,
+        study_type: patch.study_type,
+        target_account: patch.target_account,
+        niche_vertical: patch.niche_vertical,
+        meta_notes: patch.meta_notes || null,
+        execution_date: patch.execution_date,
+        status: patch.status,
+      }),
+    onSuccess: (updatedStudy) => {
+      queryClient.setQueryData<FsiGraph>(["fsi-graph", studyId], (old) =>
+        old ? { ...old, study: { ...old.study, ...updatedStudy } } : old,
+      );
+      queryClient.invalidateQueries({ queryKey: ["fsi-studies"] });
+    },
+  });
+
   const resetMutation = useMutation({
     mutationFn: () => fsiApi.clearStudyGraph(studyId!),
     onSuccess: () => {
@@ -229,6 +266,38 @@ export default function FsiCanvasWorkspace() {
         structured_payload: defaultPayloadForType(nodeType),
       }),
     onSuccess: appendCreatedNode,
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const duplicateNodeMutation = useMutation({
+    mutationFn: (source: FsiNodeRecord) =>
+      fsiApi.createNode(studyId!, {
+        node_type: source.node_type,
+        display_title: source.display_title,
+        canvas_x: source.canvas_x + 48,
+        canvas_y: source.canvas_y + 48,
+        structured_payload: { ...(source.structured_payload ?? {}) },
+        raw_body_text: source.raw_body_text ?? undefined,
+        tags: source.tags ?? [],
+      }),
+    onSuccess: appendCreatedNode,
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const applyTemplateMutation = useMutation({
+    mutationFn: (templateId: string) => {
+      const templates = layoutTemplatesForStudy(graphRef.current!.study.study_type);
+      const template = templates.find((t) => t.id === templateId);
+      if (!template) throw new Error("Layout template not found");
+      return applyFsiLayoutTemplate(studyId!, template, fsiApi);
+    },
+    onSuccess: (nextGraph) => {
+      setGraph(nextGraph);
+      graphRef.current = nextGraph;
+      history.clearHistory();
+      setFitTrigger((n) => n + 1);
+      toast.success("Layout template applied");
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -460,6 +529,29 @@ export default function FsiCanvasWorkspace() {
     [canEdit, deleteConnectionMutation, history],
   );
 
+  const handleEdgeLabelChange = useCallback(
+    (connectionId: string, label: string) => {
+      if (!canEdit || connectionId.startsWith("opt-")) return;
+      const g = graphRef.current;
+      if (!g) return;
+      const existing = g.connections.find((c) => c.id === connectionId);
+      if (!existing) return;
+      const note = label.trim() || null;
+      if ((existing.edge_label_note ?? null) === note) return;
+      setGraph({
+        ...g,
+        connections: g.connections.map((c) =>
+          c.id === connectionId ? { ...c, edge_label_note: note } : c,
+        ),
+      });
+      void fsiApi.updateConnection(connectionId, { edge_label_note: note }).catch((e: Error) => {
+        toast.error(e.message);
+        invalidate();
+      });
+    },
+    [canEdit, setGraph],
+  );
+
   const getCanvasCenter = useCallback(() => {
     return canvasRef.current?.getViewportCenter() ?? { x: 200, y: 200 };
   }, []);
@@ -552,6 +644,52 @@ export default function FsiCanvasWorkspace() {
     [createNoteMutation.mutate, getCanvasCenter, runCreate],
   );
 
+  const handlePaneDoubleClick = useCallback(
+    (flowX: number, flowY: number, screenX: number, screenY: number) => {
+      if (!canEdit) return;
+      setPickerAt({ flowX, flowY, screenX, screenY });
+    },
+    [canEdit],
+  );
+
+  const handlePickerSelect = useCallback(
+    (choice: PickerChoice) => {
+      if (!pickerAt) return;
+      const { flowX, flowY } = pickerAt;
+      setPickerAt(null);
+      if (choice.kind === "node") {
+        runCreate(createTypedNodeMutation.mutate, { nodeType: choice.nodeType, x: flowX, y: flowY });
+      } else if (choice.kind === "note") {
+        runCreate(createNoteMutation.mutate, { noteKey: choice.noteKey, x: flowX, y: flowY });
+      } else {
+        addScreenshot(flowX, flowY);
+      }
+    },
+    [addScreenshot, createNoteMutation.mutate, createTypedNodeMutation.mutate, pickerAt, runCreate],
+  );
+
+  const handleDuplicateNode = useCallback(() => {
+    if (!canEdit || !selectedNode || duplicateNodeMutation.isPending) return;
+    if (!isCanvasNode(selectedNode)) return;
+    duplicateNodeMutation.mutate(selectedNode);
+  }, [canEdit, duplicateNodeMutation, selectedNode]);
+
+  const handleApplyTemplate = useCallback(
+    (templateId: string) => {
+      const count = graphRef.current?.nodes.filter(isCanvasNode).length ?? 0;
+      if (
+        count > 0 &&
+        !window.confirm(
+          "Add this layout template to the canvas? Your existing nodes will stay — new nodes are placed alongside them.",
+        )
+      ) {
+        return;
+      }
+      applyTemplateMutation.mutate(templateId);
+    },
+    [applyTemplateMutation],
+  );
+
   const handleUndo = useCallback(() => {
     void history.undo(graphRef.current, setGraph);
   }, [history, setGraph]);
@@ -581,10 +719,14 @@ export default function FsiCanvasWorkspace() {
         e.preventDefault();
         handleRedo();
       }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        handleDuplicateNode();
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [canEdit, handleUndo, handleRedo]);
+  }, [canEdit, handleUndo, handleRedo, handleDuplicateNode]);
 
   const handleClearSelection = useCallback(() => {
     setSelectedNode(null);
@@ -775,6 +917,7 @@ export default function FsiCanvasWorkspace() {
   const noteCount = canvasNodes.filter(isNoteNode).length;
   const nodeCount = canvasNodes.length - noteCount;
   const nodeTypeOptions = getSuggestedNodeTypes(study.study_type).filter((t) => t !== "Strategist Note");
+  const layoutTemplates = layoutTemplatesForStudy(study.study_type);
 
   return (
     <div className="flex h-screen flex-col bg-zinc-950 text-white">
@@ -786,9 +929,20 @@ export default function FsiCanvasWorkspace() {
         <div className="min-w-0 flex-1">
           <div className="truncate font-semibold">{study.title}</div>
           <div className="truncate text-xs text-zinc-500">
-            {study.study_type} · {study.target_account} · {nodeCount} nodes · {noteCount} notes
+            {study.study_type} · {study.target_account} · {study.status} · {nodeCount} nodes ·{" "}
+            {noteCount} notes
+          </div>
+          <div className="truncate text-[10px] text-zinc-600">
+            {study.owner_id}
+            {study.execution_date ? ` · ${study.execution_date.slice(0, 10)}` : ""}
           </div>
         </div>
+        <FsiStudySettingsDialog
+          study={study}
+          canEdit={canEdit}
+          saving={updateStudyMutation.isPending}
+          onSave={(patch) => updateStudyMutation.mutateAsync(patch)}
+        />
         {canEdit && (
           <>
             <Button
@@ -839,6 +993,45 @@ export default function FsiCanvasWorkspace() {
             <Trash2 className="mr-1 h-4 w-4" />
             Delete {multiSelectedIds.length}
           </Button>
+        )}
+        {canEdit && selectedNode && isCanvasNode(selectedNode) && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={duplicateNodeMutation.isPending}
+            onClick={handleDuplicateNode}
+            title="Duplicate node (Ctrl+D)"
+          >
+            <Copy className="mr-1 h-4 w-4" />
+            Duplicate
+          </Button>
+        )}
+        {canEdit && layoutTemplates.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={applyTemplateMutation.isPending}
+              >
+                <LayoutTemplate className="mr-1 h-4 w-4" />
+                Template
+                <ChevronDown className="ml-1 h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64 bg-zinc-900 border-zinc-700">
+              {layoutTemplates.map((t) => (
+                <DropdownMenuItem
+                  key={t.id}
+                  className="cursor-pointer flex-col items-start text-zinc-200 focus:bg-zinc-800 focus:text-white"
+                  onClick={() => handleApplyTemplate(t.id)}
+                >
+                  <span className="font-medium">{t.label}</span>
+                  <span className="text-[10px] text-zinc-500">{t.description}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
         {canEdit && (
           <Button
@@ -940,11 +1133,12 @@ export default function FsiCanvasWorkspace() {
             onNodeSelect={setSelectedNode}
             onPaneClick={handleClearSelection}
             onSelectionChange={handleSelectionChange}
-            onPaneDoubleClick={(x, y) => addNote("blank", x, y)}
+            onPaneDoubleClick={handlePaneDoubleClick}
             onNodeDragStart={handleNodeDragStart}
             onNodeDragStop={handleNodeDragStop}
             onConnect={handleConnect}
             onEdgeDelete={handleDeleteConnection}
+            onEdgeLabelChange={handleEdgeLabelChange}
             onNodeDelete={handleDeleteNode}
             onSuggestionDrop={handleSuggestionDrop}
             onNoteDrop={handleNoteDrop}
@@ -963,8 +1157,18 @@ export default function FsiCanvasWorkspace() {
 
           {canvasNodes.length === 0 && (
             <div className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2 rounded-lg border border-zinc-700 bg-zinc-950/90 px-4 py-2 text-xs text-zinc-400">
-              Drag study nodes or quick notes from the right · paste screenshots on the canvas · double-click for a blank note
+              Use Template in the toolbar · double-click canvas to add nodes · paste screenshots
             </div>
+          )}
+
+          {pickerAt && (
+            <NodeTypePicker
+              screenX={pickerAt.screenX}
+              screenY={pickerAt.screenY}
+              nodeTypes={nodeTypeOptions}
+              onSelect={handlePickerSelect}
+              onCancel={() => setPickerAt(null)}
+            />
           )}
         </div>
 

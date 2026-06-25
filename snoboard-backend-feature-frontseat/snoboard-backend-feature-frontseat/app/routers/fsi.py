@@ -15,6 +15,7 @@ from app.schemas.fsi import (
     NodeCreate,
     NodeUpdate,
     ConnectionCreate,
+    ConnectionUpdate,
 )
 
 router = APIRouter(tags=["fsi"])
@@ -239,6 +240,25 @@ async def create_connection(study_id: str, req: ConnectionCreate, claims: dict =
         created = verify[0] if verify else row
     client.table("studies").update({"updated_at": _now_iso()}).eq("id", study_id).execute()
     return {"success": True, "data": created}
+
+
+@router.patch("/connections/{connection_id}")
+async def update_connection(
+    connection_id: str, req: ConnectionUpdate, claims: dict = Depends(require_auth)
+):
+    client = get_supabase_client()
+    rows = client.table("connections").select("*").eq("id", connection_id).limit(1).execute().data or []
+    if not rows:
+        raise HTTPException(status_code=404, detail="Connection not found")
+    existing = rows[0]
+    update_data = req.model_dump(exclude_unset=True)
+    if not update_data:
+        return {"success": True, "data": existing}
+    client.table("connections").update(update_data).eq("id", connection_id).execute()
+    study_id = existing["study_id"]
+    client.table("studies").update({"updated_at": _now_iso()}).eq("id", study_id).execute()
+    verify = client.table("connections").select("*").eq("id", connection_id).limit(1).execute().data or []
+    return {"success": True, "data": verify[0] if verify else existing}
 
 
 @router.delete("/connections/{connection_id}")
