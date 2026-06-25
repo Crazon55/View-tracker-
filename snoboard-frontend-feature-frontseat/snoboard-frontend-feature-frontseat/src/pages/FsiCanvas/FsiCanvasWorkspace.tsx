@@ -596,6 +596,10 @@ export default function FsiCanvasWorkspace() {
     [canEdit, createScreenshotMutation],
   );
 
+  const remindPasteImage = useCallback(() => {
+    toast.info("Click the canvas, then paste (Ctrl+V) or drag an image onto it.");
+  }, []);
+
   const addScreenshot = useCallback(
     (x?: number, y?: number) => {
       if (!canEdit) return;
@@ -662,10 +666,10 @@ export default function FsiCanvasWorkspace() {
       } else if (choice.kind === "note") {
         runCreate(createNoteMutation.mutate, { noteKey: choice.noteKey, x: flowX, y: flowY });
       } else {
-        addScreenshot(flowX, flowY);
+        remindPasteImage();
       }
     },
-    [addScreenshot, createNoteMutation.mutate, createTypedNodeMutation.mutate, pickerAt, runCreate],
+    [createNoteMutation.mutate, createTypedNodeMutation.mutate, pickerAt, remindPasteImage, runCreate],
   );
 
   const handleDuplicateNode = useCallback(() => {
@@ -921,7 +925,7 @@ export default function FsiCanvasWorkspace() {
 
   return (
     <div className="flex h-screen flex-col bg-zinc-950 text-white">
-      <header className="flex shrink-0 items-center gap-3 border-b border-zinc-800 px-4 py-2 pt-14">
+      <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-zinc-800 px-4 pb-3 pt-24 pr-44 sm:pr-52">
         <Button variant="ghost" size="sm" onClick={() => navigate("/fsi-canvas")}>
           <ArrowLeft className="mr-1 h-4 w-4" />
           Studies
@@ -1099,21 +1103,52 @@ export default function FsiCanvasWorkspace() {
           </DropdownMenu>
         )}
         {canEdit && (
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={createScreenshotMutation.isPending}
-            onClick={() => addScreenshot()}
-          >
-            <ImageIcon className="mr-1 h-4 w-4" />
-            Screenshot
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="secondary">
+                <ImageIcon className="mr-1 h-4 w-4" />
+                Add images
+                <ChevronDown className="ml-1 h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 bg-zinc-900 border-zinc-700">
+              <DropdownMenuItem
+                className="cursor-pointer text-zinc-200 focus:bg-zinc-800 focus:text-white"
+                onClick={remindPasteImage}
+              >
+                Paste on canvas (Ctrl+V)
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer text-zinc-200 focus:bg-zinc-800 focus:text-white"
+                onClick={() => addScreenshot()}
+                disabled={createScreenshotMutation.isPending}
+              >
+                Upload from file…
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
         {canEdit && (
-          <Button size="sm" variant="secondary" onClick={() => addNote("blank")}>
-            <Plus className="mr-1 h-4 w-4" />
-            Note
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="secondary">
+                <Plus className="mr-1 h-4 w-4" />
+                Note
+                <ChevronDown className="ml-1 h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48 bg-zinc-900 border-zinc-700">
+              {NOTE_TEMPLATES.map((t) => (
+                <DropdownMenuItem
+                  key={t.key}
+                  className="cursor-pointer text-zinc-200 focus:bg-zinc-800 focus:text-white"
+                  onClick={() => handleAddNote(t.key)}
+                >
+                  {t.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </header>
 
@@ -1157,7 +1192,7 @@ export default function FsiCanvasWorkspace() {
 
           {canvasNodes.length === 0 && (
             <div className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2 rounded-lg border border-zinc-700 bg-zinc-950/90 px-4 py-2 text-xs text-zinc-400">
-              Use Template in the toolbar · double-click canvas to add nodes · paste screenshots
+              Use Template in the toolbar · double-click to add nodes · paste images on canvas
             </div>
           )}
 

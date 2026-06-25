@@ -5,7 +5,7 @@ import { NOTE_COLOR, NOTE_TEMPLATES } from "../lib/fsiNoteTemplates";
 export type PickerChoice =
   | { kind: "node"; nodeType: string }
   | { kind: "note"; noteKey: string }
-  | { kind: "screenshot" };
+  | { kind: "image" };
 
 type Props = {
   screenX: number;
@@ -51,11 +51,11 @@ export default function NodeTypePicker({ screenX, screenY, nodeTypes, onSelect, 
         </div>
         <button
           type="button"
-          onClick={() => onSelect({ kind: "screenshot" })}
+          onClick={() => onSelect({ kind: "image" })}
           className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-white hover:bg-zinc-800"
         >
           <ImageIcon className="h-3.5 w-3.5 text-pink-400" />
-          Screenshot
+          Add image (paste)
         </button>
         {NOTE_TEMPLATES.map((t) => (
           <button

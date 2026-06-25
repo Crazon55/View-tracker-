@@ -1,10 +1,9 @@
-import { GripVertical, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Plus, StickyNote, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { FsiNodeRecord, FsiStudy } from "../lib/fsiNodeSchemas";
@@ -36,18 +35,6 @@ type Props = {
   onDeleteSelected?: () => void;
   selectedCount?: number;
 };
-
-function startNodeDrag(e: React.DragEvent, nodeType: string) {
-  const payload: NodeSuggestionPayload = { nodeType };
-  e.dataTransfer.setData(FSI_NODE_SUGGESTION_MIME, JSON.stringify(payload));
-  e.dataTransfer.effectAllowed = "copy";
-}
-
-function startNoteDrag(e: React.DragEvent, noteKey: string) {
-  const payload: NoteSuggestionPayload = { noteKey };
-  e.dataTransfer.setData(FSI_NOTE_SUGGESTION_MIME, JSON.stringify(payload));
-  e.dataTransfer.effectAllowed = "copy";
-}
 
 function notePreview(node: FsiNodeRecord): string {
   const line = (node.raw_body_text || "Note").split("\n")[0];
@@ -82,28 +69,23 @@ export default function FsiNodeSuggestionsPanel({
         <div className="truncate text-xs text-zinc-500">{study.target_account}</div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-5">
-        <section>
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-            Add to canvas
-          </div>
-          {canEdit ? (
+      <div className="flex-1 overflow-y-auto p-3 space-y-4">
+        {canEdit ? (
+          <section className="space-y-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="w-full justify-between border-zinc-700 bg-zinc-900">
                   <span className="flex items-center gap-2">
                     <Plus className="h-4 w-4 text-emerald-400" />
-                    Choose node or note
+                    Study nodes
                   </span>
+                  <ChevronDown className="h-4 w-4 text-zinc-500" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 align="start"
                 className="max-h-80 w-72 overflow-y-auto bg-zinc-900 border-zinc-700"
               >
-                <div className="px-2 py-1.5 text-[10px] font-semibold uppercase text-zinc-500">
-                  Study nodes
-                </div>
                 {suggestions.map((nodeType) => (
                   <DropdownMenuItem
                     key={nodeType}
@@ -117,10 +99,23 @@ export default function FsiNodeSuggestionsPanel({
                     {nodeType}
                   </DropdownMenuItem>
                 ))}
-                <DropdownMenuSeparator className="bg-zinc-800" />
-                <div className="px-2 py-1.5 text-[10px] font-semibold uppercase text-zinc-500">
-                  Quick notes
-                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="w-full justify-between border-zinc-700 bg-zinc-900">
+                  <span className="flex items-center gap-2">
+                    <StickyNote className="h-4 w-4 text-amber-400" />
+                    Quick notes
+                  </span>
+                  <ChevronDown className="h-4 w-4 text-zinc-500" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="start"
+                className="w-72 bg-zinc-900 border-zinc-700"
+              >
                 {NOTE_TEMPLATES.map((t) => (
                   <DropdownMenuItem
                     key={t.key}
@@ -136,64 +131,14 @@ export default function FsiNodeSuggestionsPanel({
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
-          ) : (
-            <p className="text-xs text-zinc-600">View-only access</p>
-          )}
-          <p className="mt-2 text-[10px] text-zinc-600">
-            Or drag types below onto the canvas · double-click canvas for picker
-          </p>
-        </section>
 
-        <section>
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-            Drag shortcuts ({suggestions.length})
-          </div>
-          <div className="space-y-2 max-h-48 overflow-y-auto">
-            {suggestions.slice(0, 8).map((nodeType) => (
-              <div
-                key={nodeType}
-                draggable={canEdit}
-                onDragStart={(e) => canEdit && startNodeDrag(e, nodeType)}
-                className={`flex items-center gap-2 rounded-lg border border-zinc-700/80 bg-zinc-900 px-3 py-2 ${
-                  canEdit
-                    ? "cursor-grab active:cursor-grabbing hover:border-emerald-600/50"
-                    : "opacity-60"
-                }`}
-              >
-                <GripVertical className="h-4 w-4 shrink-0 text-zinc-600" />
-                <span
-                  className="h-2.5 w-2.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: colorForNodeType(nodeType) }}
-                />
-                <span className="min-w-0 flex-1 truncate text-sm text-zinc-200">{nodeType}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section>
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-            Quick note drag ({NOTE_TEMPLATES.length})
-          </div>
-          <div className="space-y-2">
-            {NOTE_TEMPLATES.map((t) => (
-              <div
-                key={t.key}
-                draggable={canEdit}
-                onDragStart={(e) => canEdit && startNoteDrag(e, t.key)}
-                className={`flex items-center gap-2 rounded-lg border border-zinc-700/80 bg-zinc-900 px-3 py-2 ${
-                  canEdit
-                    ? "cursor-grab active:cursor-grabbing hover:border-amber-600/50"
-                    : "opacity-60"
-                }`}
-              >
-                <GripVertical className="h-4 w-4 shrink-0 text-zinc-600" />
-                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: NOTE_COLOR }} />
-                <span className="min-w-0 flex-1 text-sm text-zinc-200">{t.label}</span>
-              </div>
-            ))}
-          </div>
-        </section>
+            <p className="text-[10px] text-zinc-600">
+              Double-click the canvas for the full picker · paste images with Ctrl+V
+            </p>
+          </section>
+        ) : (
+          <p className="text-xs text-zinc-600">View-only access</p>
+        )}
 
         {canvasNodes.length > 0 && (
           <section>
