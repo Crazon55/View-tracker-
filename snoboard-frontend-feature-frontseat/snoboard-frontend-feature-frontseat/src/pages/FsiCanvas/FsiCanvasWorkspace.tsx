@@ -930,8 +930,8 @@ export default function FsiCanvasWorkspace() {
 
   return (
     <div className="flex h-screen flex-col bg-zinc-950 text-white">
-      <header className="shrink-0 border-b border-zinc-800 bg-zinc-950 pt-14">
-        <div className="flex h-8 items-center gap-1.5 px-3 pr-28 sm:pr-36">
+      <header className="shrink-0 border-b border-zinc-800 bg-zinc-950 pt-11">
+        <div className="flex h-7 items-center gap-1.5 px-3 pl-12 pr-28 sm:pr-36">
           <Button
             variant="ghost"
             size="icon"
@@ -952,19 +952,21 @@ export default function FsiCanvasWorkspace() {
               {noteCount > 0 ? ` · ${noteCount} notes` : ""}
             </span>
           </div>
-
-          <FsiStudySettingsDialog
-            study={study}
-            canEdit={canEdit}
-            compact
-            saving={updateStudyMutation.isPending}
-            onSave={(patch) => updateStudyMutation.mutateAsync(patch)}
-          />
         </div>
 
-        {canEdit && (
-          <div className="flex justify-center px-3 py-1 pl-12 pr-28 sm:pr-36">
-            <div className="flex max-w-full items-center gap-0.5 overflow-x-auto">
+        <div className="flex justify-center px-3 py-0.5 pl-12 pr-28 sm:pr-36">
+          <div className="flex max-w-full items-center gap-0.5 overflow-x-auto">
+            <FsiStudySettingsDialog
+              study={study}
+              canEdit={canEdit}
+              compact
+              saving={updateStudyMutation.isPending}
+              onSave={(patch) => updateStudyMutation.mutateAsync(patch)}
+            />
+
+            {canEdit && (
+              <>
+              <div className="mx-0.5 h-4 w-px shrink-0 bg-zinc-800" />
               <Button
                 variant="ghost"
                 size="icon"
@@ -1147,9 +1149,10 @@ export default function FsiCanvasWorkspace() {
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
+              </>
+            )}
             </div>
           </div>
-        )}
       </header>
 
       <div className="flex min-h-0 flex-1">
