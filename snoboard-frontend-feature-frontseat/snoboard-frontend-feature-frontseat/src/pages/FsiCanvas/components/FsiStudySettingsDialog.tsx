@@ -28,6 +28,7 @@ type Props = {
   study: FsiStudy;
   canEdit: boolean;
   saving?: boolean;
+  compact?: boolean;
   onSave: (patch: {
     title: string;
     study_type: FsiStudy["study_type"];
@@ -39,7 +40,7 @@ type Props = {
   }) => Promise<void>;
 };
 
-export default function FsiStudySettingsDialog({ study, canEdit, saving, onSave }: Props) {
+export default function FsiStudySettingsDialog({ study, canEdit, saving, compact, onSave }: Props) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     title: study.title,
@@ -93,10 +94,21 @@ export default function FsiStudySettingsDialog({ study, canEdit, saving, onSave 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="shrink-0">
-          <Settings2 className="mr-1 h-4 w-4" />
-          Study
-        </Button>
+        {compact ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0 text-zinc-400 hover:text-white"
+            title="Study settings"
+          >
+            <Settings2 className="h-4 w-4" />
+          </Button>
+        ) : (
+          <Button variant="outline" size="sm" className="shrink-0">
+            <Settings2 className="mr-1 h-4 w-4" />
+            Study
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="max-w-md bg-zinc-900 border-zinc-700 text-white">
         <DialogHeader>

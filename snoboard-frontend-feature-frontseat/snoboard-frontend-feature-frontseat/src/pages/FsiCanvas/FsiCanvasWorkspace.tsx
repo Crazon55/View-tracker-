@@ -2,7 +2,7 @@ import { useCallback, useRef, useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { OnSelectionChangeFunc } from "@xyflow/react";
-import { ArrowLeft, ChevronDown, Copy, ImageIcon, LayoutTemplate, Loader2, MousePointer2, Plus, Redo2, RotateCcw, SquareDashedMousePointer, Trash2, Undo2, Wand2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, Copy, LayoutTemplate, Loader2, Plus, Redo2, RotateCcw, SquareDashedMousePointer, Trash2, Undo2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { fsiApi, flushFsiBackendSyncQueue } from "@/services/fsiApi";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -12,6 +12,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -925,230 +926,215 @@ export default function FsiCanvasWorkspace() {
 
   return (
     <div className="flex h-screen flex-col bg-zinc-950 text-white">
-      <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-zinc-800 px-4 pb-3 pt-24 pr-44 sm:pr-52">
-        <Button variant="ghost" size="sm" onClick={() => navigate("/fsi-canvas")}>
-          <ArrowLeft className="mr-1 h-4 w-4" />
-          Studies
-        </Button>
-        <div className="min-w-0 flex-1">
-          <div className="truncate font-semibold">{study.title}</div>
-          <div className="truncate text-xs text-zinc-500">
-            {study.study_type} · {study.target_account} · {study.status} · {nodeCount} nodes ·{" "}
-            {noteCount} notes
+      <header className="shrink-0 border-b border-zinc-800 bg-zinc-950 pt-16 pr-28 sm:pr-36">
+        <div className="flex min-w-0 items-center gap-2 border-b border-zinc-800/60 px-3 py-1.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 shrink-0 px-2 text-zinc-400 hover:text-white"
+            onClick={() => navigate("/fsi-canvas")}
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span className="ml-1 hidden sm:inline">Studies</span>
+          </Button>
+          <div className="min-w-0 flex-1 border-l border-zinc-800 pl-3">
+            <h1 className="truncate text-base font-semibold leading-tight text-white" title={study.title}>
+              {study.title}
+            </h1>
+            <p className="truncate text-[11px] text-zinc-500">
+              {study.study_type} · {study.target_account} · {study.status}
+              {nodeCount > 0 ? ` · ${nodeCount} nodes` : ""}
+              {noteCount > 0 ? ` · ${noteCount} notes` : ""}
+            </p>
           </div>
-          <div className="truncate text-[10px] text-zinc-600">
-            {study.owner_id}
-            {study.execution_date ? ` · ${study.execution_date.slice(0, 10)}` : ""}
-          </div>
+          <FsiStudySettingsDialog
+            study={study}
+            canEdit={canEdit}
+            compact
+            saving={updateStudyMutation.isPending}
+            onSave={(patch) => updateStudyMutation.mutateAsync(patch)}
+          />
         </div>
-        <FsiStudySettingsDialog
-          study={study}
-          canEdit={canEdit}
-          saving={updateStudyMutation.isPending}
-          onSave={(patch) => updateStudyMutation.mutateAsync(patch)}
-        />
+
         {canEdit && (
-          <>
+          <div className="flex items-center gap-1 overflow-x-auto px-3 py-1">
             <Button
-              variant="outline"
-              size="sm"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 shrink-0"
               disabled={!history.canUndo}
               onClick={handleUndo}
               title="Undo (Ctrl+Z)"
             >
-              <Undo2 className="mr-1 h-4 w-4" />
-              Undo
+              <Undo2 className="h-3.5 w-3.5" />
             </Button>
             <Button
-              variant="outline"
-              size="sm"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 shrink-0"
               disabled={!history.canRedo}
               onClick={handleRedo}
               title="Redo (Ctrl+Shift+Z)"
             >
-              <Redo2 className="mr-1 h-4 w-4" />
-              Redo
+              <Redo2 className="h-3.5 w-3.5" />
             </Button>
-          </>
-        )}
-        {canEdit && (
-          <Button
-            variant={boxSelectMode ? "default" : "outline"}
-            size="sm"
-            onClick={() => setBoxSelectMode((v) => !v)}
-            title="Draw a box on the canvas to select multiple nodes"
-          >
-            {boxSelectMode ? (
-              <SquareDashedMousePointer className="mr-1 h-4 w-4" />
-            ) : (
-              <MousePointer2 className="mr-1 h-4 w-4" />
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="secondary" className="h-7 shrink-0 px-2.5 text-xs">
+                  <Plus className="mr-1 h-3.5 w-3.5" />
+                  Add
+                  <ChevronDown className="ml-1 h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="start"
+                className="max-h-80 w-64 overflow-y-auto bg-zinc-900 border-zinc-700"
+              >
+                <div className="px-2 py-1.5 text-[10px] font-semibold uppercase text-zinc-500">Nodes</div>
+                {nodeTypeOptions.map((nodeType) => (
+                  <DropdownMenuItem
+                    key={nodeType}
+                    className="cursor-pointer text-zinc-200 focus:bg-zinc-800 focus:text-white"
+                    onClick={() => handleAddSuggestion(nodeType)}
+                  >
+                    <span
+                      className="mr-2 inline-block h-2 w-2 rounded-full"
+                      style={{ backgroundColor: colorForNodeType(nodeType) }}
+                    />
+                    {nodeType}
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator className="bg-zinc-800" />
+                <div className="px-2 py-1.5 text-[10px] font-semibold uppercase text-zinc-500">Notes</div>
+                {NOTE_TEMPLATES.map((t) => (
+                  <DropdownMenuItem
+                    key={t.key}
+                    className="cursor-pointer text-zinc-200 focus:bg-zinc-800 focus:text-white"
+                    onClick={() => handleAddNote(t.key)}
+                  >
+                    {t.label}
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator className="bg-zinc-800" />
+                <div className="px-2 py-1.5 text-[10px] font-semibold uppercase text-zinc-500">Images</div>
+                <DropdownMenuItem
+                  className="cursor-pointer text-zinc-200 focus:bg-zinc-800 focus:text-white"
+                  onClick={remindPasteImage}
+                >
+                  Paste on canvas (Ctrl+V)
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="cursor-pointer text-zinc-200 focus:bg-zinc-800 focus:text-white"
+                  onClick={() => addScreenshot()}
+                  disabled={createScreenshotMutation.isPending}
+                >
+                  Upload from file…
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {layoutTemplates.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-7 shrink-0 px-2.5 text-xs">
+                    <LayoutTemplate className="mr-1 h-3.5 w-3.5" />
+                    Layout
+                    <ChevronDown className="ml-1 h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56 bg-zinc-900 border-zinc-700">
+                  {layoutTemplates.map((t) => (
+                    <DropdownMenuItem
+                      key={t.id}
+                      className="cursor-pointer flex-col items-start text-zinc-200 focus:bg-zinc-800 focus:text-white"
+                      onClick={() => handleApplyTemplate(t.id)}
+                      disabled={applyTemplateMutation.isPending}
+                    >
+                      <span className="font-medium">{t.label}</span>
+                      <span className="text-[10px] text-zinc-500">{t.description}</span>
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuSeparator className="bg-zinc-800" />
+                  <DropdownMenuItem
+                    className="cursor-pointer text-zinc-200 focus:bg-zinc-800 focus:text-white"
+                    onClick={() => prettifyMutation.mutate()}
+                    disabled={prettifyMutation.isPending}
+                  >
+                    <Wand2 className="mr-2 h-3.5 w-3.5" />
+                    Prettify layout
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
-            {boxSelectMode ? "Box select on" : "Box select"}
-          </Button>
-        )}
-        {canEdit && multiSelectedIds.length > 1 && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-red-400 border-red-900/50"
-            disabled={deleteNodesBulkMutation.isPending}
-            onClick={handleDeleteSelected}
-          >
-            <Trash2 className="mr-1 h-4 w-4" />
-            Delete {multiSelectedIds.length}
-          </Button>
-        )}
-        {canEdit && selectedNode && isCanvasNode(selectedNode) && (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={duplicateNodeMutation.isPending}
-            onClick={handleDuplicateNode}
-            title="Duplicate node (Ctrl+D)"
-          >
-            <Copy className="mr-1 h-4 w-4" />
-            Duplicate
-          </Button>
-        )}
-        {canEdit && layoutTemplates.length > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={applyTemplateMutation.isPending}
-              >
-                <LayoutTemplate className="mr-1 h-4 w-4" />
-                Template
-                <ChevronDown className="ml-1 h-3.5 w-3.5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64 bg-zinc-900 border-zinc-700">
-              {layoutTemplates.map((t) => (
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-7 shrink-0 px-2.5 text-xs">
+                  Canvas
+                  <ChevronDown className="ml-1 h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-52 bg-zinc-900 border-zinc-700">
                 <DropdownMenuItem
-                  key={t.id}
-                  className="cursor-pointer flex-col items-start text-zinc-200 focus:bg-zinc-800 focus:text-white"
-                  onClick={() => handleApplyTemplate(t.id)}
-                >
-                  <span className="font-medium">{t.label}</span>
-                  <span className="text-[10px] text-zinc-500">{t.description}</span>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-        {canEdit && (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={prettifyMutation.isPending}
-            onClick={() => prettifyMutation.mutate()}
-          >
-            <Wand2 className="mr-1 h-4 w-4" />
-            Prettify layout
-          </Button>
-        )}
-        {canEdit && (
-          <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
-            <AlertDialogTrigger asChild>
-              <Button variant="outline" size="sm" className="text-red-400 border-red-900/50">
-                <RotateCcw className="mr-1 h-4 w-4" />
-                Reset canvas
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent className="bg-zinc-900 border-zinc-700 text-white">
-              <AlertDialogHeader>
-                <AlertDialogTitle>Reset canvas?</AlertDialogTitle>
-                <AlertDialogDescription className="text-zinc-400">
-                  This deletes all nodes and connections. Study title and metadata are kept.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel className="bg-zinc-800 text-white border-zinc-700">Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  className="bg-red-600 hover:bg-red-700"
-                  onClick={() => resetMutation.mutate()}
-                  disabled={resetMutation.isPending}
-                >
-                  Reset
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        )}
-        {canEdit && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="secondary">
-                <Plus className="mr-1 h-4 w-4" />
-                Node
-                <ChevronDown className="ml-1 h-3.5 w-3.5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="max-h-72 overflow-y-auto bg-zinc-900 border-zinc-700">
-              {nodeTypeOptions.map((nodeType) => (
-                <DropdownMenuItem
-                  key={nodeType}
                   className="cursor-pointer text-zinc-200 focus:bg-zinc-800 focus:text-white"
-                  onClick={() => handleAddSuggestion(nodeType)}
+                  onClick={() => setBoxSelectMode((v) => !v)}
                 >
-                  <span
-                    className="mr-2 inline-block h-2 w-2 rounded-full"
-                    style={{ backgroundColor: colorForNodeType(nodeType) }}
-                  />
-                  {nodeType}
+                  <SquareDashedMousePointer className="mr-2 h-3.5 w-3.5" />
+                  {boxSelectMode ? "Box select on" : "Box select"}
                 </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-        {canEdit && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="secondary">
-                <ImageIcon className="mr-1 h-4 w-4" />
-                Add images
-                <ChevronDown className="ml-1 h-3.5 w-3.5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 bg-zinc-900 border-zinc-700">
-              <DropdownMenuItem
-                className="cursor-pointer text-zinc-200 focus:bg-zinc-800 focus:text-white"
-                onClick={remindPasteImage}
-              >
-                Paste on canvas (Ctrl+V)
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="cursor-pointer text-zinc-200 focus:bg-zinc-800 focus:text-white"
-                onClick={() => addScreenshot()}
-                disabled={createScreenshotMutation.isPending}
-              >
-                Upload from file…
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-        {canEdit && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="secondary">
-                <Plus className="mr-1 h-4 w-4" />
-                Note
-                <ChevronDown className="ml-1 h-3.5 w-3.5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48 bg-zinc-900 border-zinc-700">
-              {NOTE_TEMPLATES.map((t) => (
+                {selectedNode && isCanvasNode(selectedNode) && (
+                  <DropdownMenuItem
+                    className="cursor-pointer text-zinc-200 focus:bg-zinc-800 focus:text-white"
+                    onClick={handleDuplicateNode}
+                    disabled={duplicateNodeMutation.isPending}
+                  >
+                    <Copy className="mr-2 h-3.5 w-3.5" />
+                    Duplicate node
+                  </DropdownMenuItem>
+                )}
+                {multiSelectedIds.length > 1 && (
+                  <DropdownMenuItem
+                    className="cursor-pointer text-red-400 focus:bg-zinc-800 focus:text-red-300"
+                    onClick={handleDeleteSelected}
+                    disabled={deleteNodesBulkMutation.isPending}
+                  >
+                    <Trash2 className="mr-2 h-3.5 w-3.5" />
+                    Delete {multiSelectedIds.length} nodes
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator className="bg-zinc-800" />
                 <DropdownMenuItem
-                  key={t.key}
-                  className="cursor-pointer text-zinc-200 focus:bg-zinc-800 focus:text-white"
-                  onClick={() => handleAddNote(t.key)}
+                  className="cursor-pointer text-red-400 focus:bg-zinc-800 focus:text-red-300"
+                  onClick={() => setResetOpen(true)}
                 >
-                  {t.label}
+                  <RotateCcw className="mr-2 h-3.5 w-3.5" />
+                  Reset canvas
                 </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
+              <AlertDialogContent className="bg-zinc-900 border-zinc-700 text-white">
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Reset canvas?</AlertDialogTitle>
+                  <AlertDialogDescription className="text-zinc-400">
+                    This deletes all nodes and connections. Study title and metadata are kept.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel className="bg-zinc-800 text-white border-zinc-700">Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-red-600 hover:bg-red-700"
+                    onClick={() => resetMutation.mutate()}
+                    disabled={resetMutation.isPending}
+                  >
+                    Reset
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
         )}
       </header>
 
