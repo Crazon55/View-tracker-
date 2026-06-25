@@ -930,8 +930,8 @@ export default function FsiCanvasWorkspace() {
 
   return (
     <div className="flex h-screen flex-col bg-zinc-950 text-white">
-      <header className="shrink-0 border-b border-zinc-800 bg-zinc-950 pt-11">
-        <div className="flex h-7 items-center gap-1.5 px-3 pl-12 pr-28 sm:pr-36">
+      <header className="shrink-0 border-b border-zinc-800 bg-zinc-950 pt-8 pb-0.5">
+        <div className="flex h-6 items-center gap-1.5 px-3 pl-12 pr-28 sm:pr-36">
           <Button
             variant="ghost"
             size="icon"
@@ -954,7 +954,7 @@ export default function FsiCanvasWorkspace() {
           </div>
         </div>
 
-        <div className="flex justify-center px-3 py-0.5 pl-12 pr-28 sm:pr-36">
+        <div className="flex justify-center px-3 pl-12 pr-28 sm:pr-36">
           <div className="flex max-w-full items-center gap-0.5 overflow-x-auto">
             <FsiStudySettingsDialog
               study={study}

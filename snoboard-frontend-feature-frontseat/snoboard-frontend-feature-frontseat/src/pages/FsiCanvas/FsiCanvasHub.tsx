@@ -85,7 +85,7 @@ export default function FsiCanvasHub() {
   });
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white p-6 pt-16 pr-28 sm:pr-36 sm:p-8">
+    <div className="min-h-screen bg-zinc-950 text-white p-6 pt-14 pr-28 sm:pr-36 sm:p-8">
       <div className="mx-auto max-w-4xl">
         <div className="flex items-start justify-between gap-4 mb-8">
           <div>
