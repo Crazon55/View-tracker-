@@ -930,8 +930,8 @@ export default function FsiCanvasWorkspace() {
 
   return (
     <div className="flex h-screen flex-col bg-zinc-950 text-white">
-      <header className="shrink-0 border-b border-zinc-800 bg-zinc-950 pt-14 pr-28 sm:pr-36">
-        <div className="flex h-9 items-center gap-1.5 px-2 sm:px-3">
+      <header className="shrink-0 border-b border-zinc-800 bg-zinc-950 pt-14">
+        <div className="flex h-8 items-center gap-1.5 px-3 pr-28 sm:pr-36">
           <Button
             variant="ghost"
             size="icon"
@@ -960,9 +960,11 @@ export default function FsiCanvasWorkspace() {
             saving={updateStudyMutation.isPending}
             onSave={(patch) => updateStudyMutation.mutateAsync(patch)}
           />
+        </div>
 
-          {canEdit && (
-            <div className="flex shrink-0 items-center gap-0.5 overflow-x-auto pl-1">
+        {canEdit && (
+          <div className="flex justify-center px-3 py-1 pl-12 pr-28 sm:pr-36">
+            <div className="flex max-w-full items-center gap-0.5 overflow-x-auto">
               <Button
                 variant="ghost"
                 size="icon"
@@ -1146,8 +1148,8 @@ export default function FsiCanvasWorkspace() {
                 </AlertDialogContent>
               </AlertDialog>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </header>
 
       <div className="flex min-h-0 flex-1">
