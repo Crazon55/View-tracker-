@@ -42,6 +42,8 @@ function FsiCanvasEdgeComponent({
     targetY,
     sourcePosition,
     targetPosition,
+    borderRadius: 6,
+    offset: 0,
   });
 
   const commitLabel = useCallback(() => {

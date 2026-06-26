@@ -17,13 +17,15 @@ type Props = {
  * Invisible four-side handles — no visible dots. Select a node, drag from its edge to connect.
  */
 export default function FsiNodeHandles({ canStartConnection = false }: Props) {
-  const targetClass =
-    "!z-[5] !h-10 !w-10 !rounded-full !border-0 !bg-transparent !opacity-0 !pointer-events-auto";
+  const hitClass =
+    "!z-[5] !h-5 !w-5 !rounded-full !border-0 !bg-transparent !opacity-0";
 
   const sourceClass = cn(
-    "!z-[5] !h-10 !w-10 !rounded-full !border-0 !bg-transparent !opacity-0",
+    hitClass,
     canStartConnection ? "!pointer-events-auto" : "!pointer-events-none",
   );
+
+  const targetClass = cn(hitClass, "!pointer-events-auto");
 
   return (
     <>
