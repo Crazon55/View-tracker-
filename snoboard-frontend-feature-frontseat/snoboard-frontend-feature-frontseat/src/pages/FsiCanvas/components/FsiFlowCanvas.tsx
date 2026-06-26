@@ -22,6 +22,8 @@ import "@xyflow/react/dist/style.css";
 import FsiCanvasNode from "./FsiCanvasNode";
 import FsiCanvasEdge from "./FsiCanvasEdge";
 import FsiMiroGrid from "./FsiMiroGrid";
+import { paletteForCanvasTheme, type FsiCanvasTheme } from "../lib/fsiCanvasTheme";
+import { cn } from "@/lib/utils";
 import type { FsiConnectionRecord, FsiNodeRecord } from "../lib/fsiNodeSchemas";
 import { graphToFlow, type FsiNodeData } from "../lib/fsiFlowAdapter";
 import { loadSavedViewport, saveViewport } from "../lib/fsiViewportStorage";
@@ -73,6 +75,7 @@ type FlowInnerProps = {
   onBodyChange: (nodeId: string, body: string) => void;
   onPayloadChange: (nodeId: string, key: string, value: string) => void;
   onScreenshotsChange: (nodeId: string, screenshots: string[]) => void;
+  canvasTheme?: FsiCanvasTheme;
 };
 
 const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowInner(
@@ -102,9 +105,11 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     onBodyChange,
     onPayloadChange,
     onScreenshotsChange,
+    canvasTheme = "dark",
   },
   ref,
 ) {
+  const themePalette = paletteForCanvasTheme(canvasTheme);
   const { screenToFlowPosition, fitView, setViewport, getViewport, setCenter } = useReactFlow();
   const paneRef = useRef<HTMLDivElement>(null);
   const dropLockRef = useRef(false);
@@ -565,19 +570,19 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         }}
         minZoom={0.08}
         maxZoom={2.5}
-        className="bg-zinc-950 fsi-flow-canvas"
+        className={cn(themePalette.canvasBgClass, "fsi-flow-canvas")}
       >
-        <FsiMiroGrid />
-        <Controls className="!z-20 !bg-zinc-900 !border-zinc-700 [&>button]:!bg-zinc-800 [&>button]:!border-zinc-700 [&>button]:!text-white" />
+        <FsiMiroGrid theme={canvasTheme} />
+        <Controls className={themePalette.controlsClass} />
         <MiniMap
           pannable
           zoomable
           position="bottom-right"
           nodeColor={miniMapNodeColor}
           nodeStrokeWidth={2}
-          maskColor="rgba(0,0,0,0.55)"
+          maskColor={themePalette.minimapMask}
           style={{ width: 160, height: 120 }}
-          className="!z-20 !rounded-md !border !border-zinc-600 !bg-zinc-900/95 !shadow-lg"
+          className={themePalette.minimapClass}
         />
       </ReactFlow>
     </div>

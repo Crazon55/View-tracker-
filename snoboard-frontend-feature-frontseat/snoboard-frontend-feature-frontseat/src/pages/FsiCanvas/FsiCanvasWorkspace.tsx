@@ -2,7 +2,7 @@ import { useCallback, useRef, useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { OnSelectionChangeFunc } from "@xyflow/react";
-import { ArrowLeft, ChevronDown, Copy, LayoutTemplate, Loader2, Plus, Redo2, RotateCcw, SquareDashedMousePointer, Trash2, Undo2, Wand2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, Copy, LayoutTemplate, Loader2, Moon, Plus, Redo2, RotateCcw, SquareDashedMousePointer, Sun, Trash2, Undo2, Wand2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { fsiApi, flushFsiBackendSyncQueue } from "@/services/fsiApi";
@@ -48,6 +48,12 @@ import { SCREENSHOT_NODE_TYPE, screenshotNodePayload } from "./lib/fsiScreenshot
 import { NOTE_TEMPLATES } from "./lib/fsiNoteTemplates";
 import { getSuggestedNodeTypes } from "./lib/fsiStudyTemplates";
 import { clearSavedViewport } from "./lib/fsiViewportStorage";
+import {
+  loadCanvasTheme,
+  saveCanvasTheme,
+  toggleCanvasTheme,
+  type FsiCanvasTheme,
+} from "./lib/fsiCanvasTheme";
 import { useFsiCanvasHistory } from "./lib/useFsiCanvasHistory";
 import { layoutFsiTree } from "./lib/fsiTreeLayout";
 import { applyFsiLayoutTemplate } from "./lib/applyFsiLayoutTemplate";
@@ -85,6 +91,7 @@ export default function FsiCanvasWorkspace() {
   const [boxSelectMode, setBoxSelectMode] = useState(false);
   const [fitTrigger, setFitTrigger] = useState(0);
   const [resetOpen, setResetOpen] = useState(false);
+  const [canvasTheme, setCanvasTheme] = useState<FsiCanvasTheme>(() => loadCanvasTheme());
   const [pickerAt, setPickerAt] = useState<{
     flowX: number;
     flowY: number;
@@ -924,6 +931,14 @@ export default function FsiCanvasWorkspace() {
     [canEdit, history, setGraph, updateNodeMutation],
   );
 
+  const handleToggleCanvasTheme = useCallback(() => {
+    setCanvasTheme((current) => {
+      const next = toggleCanvasTheme(current);
+      saveCanvasTheme(next);
+      return next;
+    });
+  }, []);
+
   if (!studyId) return null;
 
   if (isLoading) {
@@ -990,6 +1005,21 @@ export default function FsiCanvasWorkspace() {
               saving={updateStudyMutation.isPending}
               onSave={(patch) => updateStudyMutation.mutateAsync(patch)}
             />
+
+            <div className="mx-0.5 h-4 w-px shrink-0 bg-zinc-800" />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 shrink-0"
+              onClick={handleToggleCanvasTheme}
+              title={canvasTheme === "dark" ? "Light canvas" : "Dark canvas"}
+            >
+              {canvasTheme === "dark" ? (
+                <Sun className="h-3.5 w-3.5 text-amber-300" />
+              ) : (
+                <Moon className="h-3.5 w-3.5 text-zinc-400" />
+              )}
+            </Button>
 
             {canEdit && (
               <>
@@ -1212,6 +1242,7 @@ export default function FsiCanvasWorkspace() {
             onBodyChange={handleBodyChange}
             onPayloadChange={handlePayloadChange}
             onScreenshotsChange={handleScreenshotsChange}
+            canvasTheme={canvasTheme}
           />
 
           {boxSelectMode && (
@@ -1221,7 +1252,14 @@ export default function FsiCanvasWorkspace() {
           )}
 
           {canvasNodes.length === 0 && (
-            <div className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2 rounded-lg border border-zinc-700 bg-zinc-950/90 px-4 py-2 text-xs text-zinc-400">
+            <div
+              className={cn(
+                "pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2 rounded-lg border px-4 py-2 text-xs",
+                canvasTheme === "dark"
+                  ? "border-zinc-700 bg-zinc-950/90 text-zinc-400"
+                  : "border-zinc-300 bg-white/90 text-zinc-600",
+              )}
+            >
               Connect: drag from any side dot, or click two dots · double-click to add nodes
             </div>
           )}
