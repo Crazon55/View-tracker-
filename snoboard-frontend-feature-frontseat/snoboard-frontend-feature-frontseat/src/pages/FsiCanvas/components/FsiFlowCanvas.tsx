@@ -114,7 +114,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   ref,
 ) {
   const themePalette = paletteForCanvasTheme(canvasTheme);
-  const { screenToFlowPosition, fitView, setViewport, getViewport, setCenter } = useReactFlow();
+  const { screenToFlowPosition, fitView, setViewport, getViewport, setCenter, getNode } = useReactFlow();
   const paneRef = useRef<HTMLDivElement>(null);
   const dropLockRef = useRef(false);
   const lastPointerRef = useRef({ x: 200, y: 200 });
@@ -391,19 +391,38 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     [canEdit, clearEdgeSelection, onPaneClick, onPaneDoubleClick, onNodeSelect, screenToFlowPosition, setNodes],
   );
 
+  const getAbsoluteFlowPosition = useCallback(
+    (node: Node) => {
+      let x = node.position.x;
+      let y = node.position.y;
+      let parentId = node.parentId;
+      while (parentId) {
+        const parent = getNode(parentId);
+        if (!parent) break;
+        x += parent.position.x;
+        y += parent.position.y;
+        parentId = parent.parentId;
+      }
+      return { x, y };
+    },
+    [getNode],
+  );
+
   const handleNodeDragStart = useCallback(
     (_: React.MouseEvent, node: Node) => {
-      onNodeDragStart(node.id, node.position.x, node.position.y);
+      const abs = getAbsoluteFlowPosition(node);
+      onNodeDragStart(node.id, abs.x, abs.y);
     },
-    [onNodeDragStart],
+    [getAbsoluteFlowPosition, onNodeDragStart],
   );
 
   const handleNodeDragStop = useCallback(
     (_: React.MouseEvent, node: Node) => {
       if (!canEdit) return;
-      onNodeDragStop(node.id, node.position.x, node.position.y);
+      const abs = getAbsoluteFlowPosition(node);
+      onNodeDragStop(node.id, abs.x, abs.y);
     },
-    [canEdit, onNodeDragStop],
+    [canEdit, getAbsoluteFlowPosition, onNodeDragStop],
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {

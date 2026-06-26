@@ -8,6 +8,7 @@ import { FsiLinkifiedText, looksLikeUrl, normalizeLinkHref } from "../lib/fsiLin
 import { uploadFsiNodeScreenshotFiles } from "../lib/fsiNodeMedia";
 import { getScreenshotImageUrl, isScreenshotNode } from "../lib/fsiHierarchy";
 import { clipboardImageFiles } from "../lib/fsiScreenshotNode";
+import { isLinkNode } from "../lib/fsiWhiteboardTypes";
 import FsiNodeHandles from "./FsiNodeHandles";
 
 function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
@@ -76,7 +77,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
   const screenshotUrl = getScreenshotImageUrl(fsiNode);
   const [replacingScreenshot, setReplacingScreenshot] = useState(false);
 
-  const isNiche = nodeData.nodeType === "Niche";
+  const isLink = isLinkNode(fsiNode);
   const noteInputClass =
     "nodrag nopan w-full rounded-sm border border-amber-900/20 bg-amber-50/80 px-2.5 py-2 text-xs text-zinc-900 placeholder:text-zinc-500 focus:border-amber-700 focus:outline-none";
   const nicheFieldClass =
@@ -212,11 +213,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
           void replaceScreenshot(files);
         }}
       >
-        <FsiNodeHandles
-          borderClassName="!border-pink-300"
-          visible={showHandles}
-          connecting={connectionDragging}
-        />
+        <FsiNodeHandles visible={showHandles} connecting={connectionDragging} />
         <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-pink-200/90">
           Visual
         </div>
@@ -250,11 +247,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
         }`}
         style={{ borderColor: nodeData.color, backgroundColor: nodeData.color }}
       >
-        <FsiNodeHandles
-          borderClassName="!border-emerald-900"
-          visible={showHandles}
-          connecting={connectionDragging}
-        />
+        <FsiNodeHandles visible={showHandles} connecting={connectionDragging} />
         {editing ? (
           <input
             value={title}
@@ -275,6 +268,63 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
     );
   }
 
+  if (isLink) {
+    const url = fieldValues.url ?? "";
+    const showUrl = editing || Boolean(url.trim());
+    return (
+      <div
+        className={`min-w-[160px] max-w-[280px] rounded-md border-2 px-4 py-2.5 shadow-lg ${
+          selected ? "ring-2 ring-white/50" : ""
+        }`}
+        style={{ borderColor: nodeData.color, backgroundColor: nodeData.color }}
+      >
+        <FsiNodeHandles visible={showHandles} connecting={connectionDragging} />
+        {editing ? (
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onBlur={(e) => commitTitle(e.target.value)}
+            className="nodrag nopan mb-1 w-full bg-transparent text-center text-sm font-semibold text-emerald-950 placeholder:text-emerald-900/40 focus:outline-none"
+            placeholder="Link name"
+          />
+        ) : (
+          <div className="text-center text-sm font-semibold leading-tight text-emerald-950">
+            {title || "Link"}
+          </div>
+        )}
+        <div className="text-center text-[9px] font-medium uppercase tracking-wide text-emerald-950/70">
+          Link
+        </div>
+        {showUrl && (
+          <div className="mt-2 border-t border-emerald-900/25 px-1 pt-2">
+            {editing ? (
+              <input
+                type="text"
+                value={url}
+                onChange={(e) => setFieldValues((prev) => ({ ...prev, url: e.target.value }))}
+                onBlur={(e) => commitField("url", e.target.value)}
+                placeholder="https://…"
+                className={`${inputClass} text-center`}
+              />
+            ) : (
+              <a
+                href={normalizeLinkHref(url)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`${inputClass} block truncate text-center underline`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {url}
+              </a>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const isNiche = nodeData.nodeType === "Niche";
+
   return (
     <div
       className={`min-w-[200px] max-w-[300px] rounded-md border-2 shadow-lg ${
@@ -285,11 +335,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
         backgroundColor: isNote ? "#fef08a" : nodeData.color,
       }}
     >
-      <FsiNodeHandles
-        borderClassName={isNote ? "!border-amber-800" : "!border-emerald-900"}
-        visible={showHandles}
-        connecting={connectionDragging}
-      />
+      <FsiNodeHandles visible={showHandles} connecting={connectionDragging} />
 
       {isNote ? (
         <>

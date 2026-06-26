@@ -92,6 +92,7 @@ export default function FsiCanvasWorkspace() {
   const creatingRef = useRef(false);
   const deletingConnectionRef = useRef<Set<string>>(new Set());
   const dragOriginRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const frameWrapChildIdsRef = useRef<string[]>([]);
 
   const history = useFsiCanvasHistory(studyId);
 
@@ -565,6 +566,28 @@ export default function FsiCanvasWorkspace() {
     [canEdit, getCanvasCenter, handleScreenshotDrop],
   );
 
+  const attachNodesToFrame = useCallback(
+    async (frameId: string, childIds: string[]) => {
+      const g = graphRef.current;
+      if (!g || childIds.length === 0) return;
+      try {
+        await Promise.all(
+          childIds.map((id) => fsiApi.updateNode(id, { parent_node_id: frameId })),
+        );
+        setGraph({
+          ...g,
+          nodes: g.nodes.map((n) =>
+            childIds.includes(n.id) ? { ...n, parent_node_id: frameId } : n,
+          ),
+        });
+        toast.success(`Framed ${childIds.length} node${childIds.length === 1 ? "" : "s"}`);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Could not attach nodes to frame");
+      }
+    },
+    [setGraph],
+  );
+
   const handleAddWhiteboardTool = useCallback(
     (type: WhiteboardNodeType) => {
       if (type === "Visual") {
@@ -589,6 +612,8 @@ export default function FsiCanvasWorkspace() {
           if (bounds && wrapTargets.length > 0) {
             if (creatingRef.current || createWhiteboardNodeMutation.isPending) return;
             const frameCount = g.nodes.filter(isFrameNode).length;
+            const childIds = wrapTargets.map((n) => n.id);
+            frameWrapChildIdsRef.current = childIds;
             creatingRef.current = true;
             createWhiteboardNodeMutation.mutate(
               {
@@ -605,8 +630,12 @@ export default function FsiCanvasWorkspace() {
                 },
               },
               {
+                onSuccess: (frameNode) => {
+                  void attachNodesToFrame(frameNode.id, childIds);
+                },
                 onSettled: () => {
                   creatingRef.current = false;
+                  frameWrapChildIdsRef.current = [];
                 },
               },
             );
@@ -620,6 +649,7 @@ export default function FsiCanvasWorkspace() {
     },
     [
       addScreenshot,
+      attachNodesToFrame,
       createWhiteboardNodeMutation,
       getCanvasCenter,
       multiSelectedIds,
@@ -861,20 +891,58 @@ export default function FsiCanvasWorkspace() {
   }, []);
 
   const handleNodeDragStop = useCallback(
-    (nodeId: string, x: number, y: number) => {
+    (nodeId: string, absX: number, absY: number) => {
       if (!canEdit || !graphRef.current) return;
-      const from = dragOriginRef.current.get(nodeId);
+      const g = graphRef.current;
+      const node = g.nodes.find((n) => n.id === nodeId);
+      if (!node) return;
+
+      const from = dragOriginRef.current.get(nodeId) ?? {
+        x: node.canvas_x ?? 0,
+        y: node.canvas_y ?? 0,
+      };
       dragOriginRef.current.delete(nodeId);
-      if (from && (from.x !== x || from.y !== y) && !history.isApplying.current) {
+
+      const prevX = node.canvas_x ?? 0;
+      const prevY = node.canvas_y ?? 0;
+      const dx = absX - prevX;
+      const dy = absY - prevY;
+
+      let updates: Array<{ id: string; x: number; y: number }>;
+
+      if (isFrameNode(node) && (dx !== 0 || dy !== 0)) {
+        updates = [{ id: nodeId, x: absX, y: absY }];
+        for (const child of g.nodes.filter((n) => n.parent_node_id === nodeId)) {
+          updates.push({
+            id: child.id,
+            x: (child.canvas_x ?? 0) + dx,
+            y: (child.canvas_y ?? 0) + dy,
+          });
+        }
+      } else {
+        updates = [{ id: nodeId, x: absX, y: absY }];
+      }
+
+      const moved = updates.some((u) => {
+        const n = g.nodes.find((x) => x.id === u.id);
+        return n && (n.canvas_x !== u.x || n.canvas_y !== u.y);
+      });
+
+      if (moved && !history.isApplying.current && updates.length === 1) {
         history.pushEntry({
           type: "node_move",
           nodeId,
           before: from,
-          after: { x, y },
+          after: { x: absX, y: absY },
         });
       }
-      setGraph(patchGraphNodePositions(graphRef.current, [{ id: nodeId, x, y }]));
-      updateNodeMutation.mutate({ id: nodeId, patch: { canvas_x: x, canvas_y: y } });
+
+      if (moved) {
+        setGraph(patchGraphNodePositions(g, updates));
+        for (const u of updates) {
+          updateNodeMutation.mutate({ id: u.id, patch: { canvas_x: u.x, canvas_y: u.y } });
+        }
+      }
     },
     [canEdit, history, setGraph, updateNodeMutation],
   );

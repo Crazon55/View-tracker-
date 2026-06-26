@@ -4,7 +4,8 @@ import { colorForNodeType } from "./fsiNodeSchemas";
 import { getFieldDefs } from "./fsiNodeFieldDefs";
 import { isCanvasNode, isNoteNode, isScreenshotNode } from "./fsiHierarchy";
 import { resolveConnectionHandles } from "./fsiConnectionHandles";
-import { displayNodeType, isFrameNode, isCompactLabelNode } from "./fsiWhiteboardTypes";
+import { displayNodeType, isFrameNode, isSimpleLabelNode } from "./fsiWhiteboardTypes";
+import { toFlowPosition } from "./fsiNodePositions";
 
 const STICKY_COLOR = "#fef08a";
 
@@ -38,6 +39,7 @@ export function graphToFlow(
   },
 ): { nodes: Node[]; edges: Edge[] } {
   const visible = nodes.filter(isCanvasNode);
+  const nodesById = new Map(visible.map((n) => [n.id, n]));
 
   const flowNodes: Node[] = visible.map((n) => {
     const isScreenshot = isScreenshotNode(n);
@@ -81,7 +83,7 @@ export function graphToFlow(
     const flowNode: Node = {
       id: n.id,
       type: "fsiNode",
-      position: { x: n.canvas_x ?? 0, y: n.canvas_y ?? 0 },
+      position: toFlowPosition(n, nodesById),
       draggable: true,
       data: {
         fsiNode: n,
@@ -94,8 +96,8 @@ export function graphToFlow(
             : customColor ?? colorForNodeType(uiType),
         canEdit: options?.canEdit ?? false,
         isNote,
-        isCompact: isCompactLabelNode(n),
-        fieldDefs: isScreenshot || isNote ? [] : getFieldDefs(n.node_type),
+        isCompact: isSimpleLabelNode(n),
+        fieldDefs: isScreenshot || isNote || isSimpleLabelNode(n) ? [] : getFieldDefs(n.node_type),
         onTitleChange: options?.onTitleChange,
         onBodyChange: options?.onBodyChange,
         onPayloadChange: options?.onPayloadChange,
@@ -111,8 +113,14 @@ export function graphToFlow(
     return flowNode;
   });
 
+  flowNodes.sort((a, b) => {
+    if (a.parentId && !b.parentId) return 1;
+    if (!a.parentId && b.parentId) return -1;
+    return 0;
+  });
+
   const visibleIds = new Set(visible.map((n) => n.id));
-  const nodeById = new Map(visible.map((n) => [n.id, n]));
+  const nodeById = nodesById;
   const flowEdges: Edge[] = connections
     .filter((c) => visibleIds.has(c.source_node_id) && visibleIds.has(c.target_node_id))
     .map((c) => {

@@ -1,6 +1,6 @@
 import { isNoteNode, isScreenshotNode } from "./fsiHierarchy";
 import type { FsiNodeRecord } from "./fsiNodeSchemas";
-import { isCompactLabelNode, isFrameNode } from "./fsiWhiteboardTypes";
+import { isCompactLabelNode, isFrameNode, isSimpleLabelNode } from "./fsiWhiteboardTypes";
 
 const FRAME_PADDING = 40;
 const FRAME_HEADER = 40;
@@ -15,7 +15,7 @@ export function estimateNodeSize(node: FsiNodeRecord): { width: number; height: 
   }
   if (isScreenshotNode(node)) return { width: 280, height: 200 };
   if (isNoteNode(node)) return { width: 200, height: 96 };
-  if (isCompactLabelNode(node)) return { width: 160, height: 56 };
+  if (isCompactLabelNode(node) || isSimpleLabelNode(node)) return { width: 160, height: 56 };
   return { width: 260, height: 132 };
 }
 

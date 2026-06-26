@@ -17,12 +17,8 @@ export const NODE_FIELD_DEFS: Record<string, FieldDef[]> = {
   "Content Bucket": [],
   Visual: [],
   "Visual Pattern": [],
-  "Visual Hook": [
-    { key: "hook_text", label: "Visual hook", rows: 3, inputType: "textarea" },
-  ],
-  "Written Hook": [
-    { key: "hook_text", label: "Written hook", rows: 3, inputType: "textarea" },
-  ],
+  "Visual Hook": [],
+  "Written Hook": [],
   Performance: [
     { key: "views", label: "Views", inputType: "number" },
     { key: "likes", label: "Likes", inputType: "number" },
@@ -37,17 +33,10 @@ export const NODE_FIELD_DEFS: Record<string, FieldDef[]> = {
     { key: "comments", label: "Comments", inputType: "number" },
     { key: "followers_gained", label: "Followers gained", inputType: "number" },
   ],
-  Link: [
-    { key: "url", label: "URL", linkify: true },
-    { key: "label", label: "Label" },
-  ],
+  Link: [{ key: "url", label: "URL", linkify: true }],
   Frame: [],
-  "Hook Pattern": [
-    { key: "hook_text", label: "Visual hook", rows: 3, inputType: "textarea" },
-  ],
-  "Hook Example": [
-    { key: "hook_text", label: "Written hook", rows: 3, inputType: "textarea" },
-  ],
+  "Hook Pattern": [],
+  "Hook Example": [],
   "Post Example": [
     { key: "views", label: "Views", inputType: "number" },
     { key: "likes", label: "Likes", inputType: "number" },

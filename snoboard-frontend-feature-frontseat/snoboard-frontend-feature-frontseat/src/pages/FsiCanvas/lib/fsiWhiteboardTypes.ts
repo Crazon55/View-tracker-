@@ -73,6 +73,19 @@ export function isCompactLabelNode(node: FsiNodeRecord): boolean {
   return node.node_type === "Content Pillar" || node.node_type === "Content Bucket";
 }
 
+/** Title-only cards — hook/page names live in display_title, no extra fields. */
+export function isSimpleLabelNode(node: FsiNodeRecord): boolean {
+  return (
+    isCompactLabelNode(node) ||
+    node.node_type === "Page Name" ||
+    node.node_type === "Page" ||
+    node.node_type === "Visual Hook" ||
+    node.node_type === "Written Hook" ||
+    node.node_type === "Hook Pattern" ||
+    node.node_type === "Hook Example"
+  );
+}
+
 /** Resolve toolbar / UI label for any stored node. */
 export function displayNodeType(node: FsiNodeRecord): string {
   if (isFrameNode(node)) return "Frame";
@@ -114,13 +127,13 @@ export function specForWhiteboardType(type: WhiteboardNodeType): CreateNodeSpec 
       return {
         node_type: "Visual Hook",
         display_title: "Visual Hook",
-        structured_payload: { hook_text: "" },
+        structured_payload: {},
       };
     case "Written Hook":
       return {
         node_type: "Written Hook",
         display_title: "Written Hook",
-        structured_payload: { hook_text: "" },
+        structured_payload: {},
       };
     case "Performance":
       return {
@@ -138,7 +151,7 @@ export function specForWhiteboardType(type: WhiteboardNodeType): CreateNodeSpec 
       return {
         node_type: "Link",
         display_title: "Link",
-        structured_payload: { url: "", label: "" },
+        structured_payload: { url: "" },
       };
     case "Sticky Note":
       return {

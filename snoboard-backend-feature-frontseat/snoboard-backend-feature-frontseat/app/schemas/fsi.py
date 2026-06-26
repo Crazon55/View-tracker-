@@ -93,6 +93,7 @@ class NodeCreate(BaseModel):
 
 
 class NodeUpdate(BaseModel):
+    parent_node_id: str | None = None
     node_type: str | None = None
     display_title: str | None = Field(None, max_length=255)
     canvas_x: float | None = None
