@@ -45,6 +45,7 @@ import {
   type WhiteboardNodeType,
 } from "./lib/fsiWhiteboardTypes";
 import { boundsForNodes } from "./lib/fsiNodeBounds";
+import { connectionEndpointsKey, isSameConnectionEndpoints } from "./lib/fsiConnectionUtils";
 import { useFsiCanvasHistory } from "./lib/useFsiCanvasHistory";
 
 function patchGraphNodePositions(
@@ -377,14 +378,20 @@ export default function FsiCanvasWorkspace() {
     onMutate: ({ source, target, sourceHandle, targetHandle }) => {
       const g = graphRef.current;
       if (!g) return;
+      const endpoints = { source, target, sourceHandle, targetHandle };
       if (
-        g.connections.some(
-          (c) => c.source_node_id === source && c.target_node_id === target,
+        g.connections.some((c) =>
+          isSameConnectionEndpoints(endpoints, {
+            source: c.source_node_id,
+            target: c.target_node_id,
+            sourceHandle: c.source_handle,
+            targetHandle: c.target_handle,
+          }),
         )
       ) {
         return { skipped: true as const };
       }
-      const tempId = `opt-${source}-${target}`;
+      const tempId = `opt-${connectionEndpointsKey(endpoints)}`;
       const optimistic = {
         id: tempId,
         study_id: studyId!,
@@ -403,8 +410,16 @@ export default function FsiCanvasWorkspace() {
       if (ctx?.skipped) return;
       const g = graphRef.current;
       if (!g) return;
+      const endpoints = { source, target, sourceHandle, targetHandle };
       const stillWanted = g.connections.some(
-        (c) => c.source_node_id === source && c.target_node_id === target,
+        (c) =>
+          c.id === ctx?.tempId ||
+          isSameConnectionEndpoints(endpoints, {
+            source: c.source_node_id,
+            target: c.target_node_id,
+            sourceHandle: c.source_handle,
+            targetHandle: c.target_handle,
+          }),
       );
       if (!stillWanted) {
         void fsiApi.deleteConnection(connection.id, studyId!);
@@ -421,7 +436,15 @@ export default function FsiCanvasWorkspace() {
           ...g.connections.filter(
             (c) =>
               c.id !== ctx?.tempId &&
-              !(c.source_node_id === source && c.target_node_id === target && c.id.startsWith("opt-")),
+              !(
+                c.id.startsWith("opt-") &&
+                isSameConnectionEndpoints(endpoints, {
+                  source: c.source_node_id,
+                  target: c.target_node_id,
+                  sourceHandle: c.source_handle,
+                  targetHandle: c.target_handle,
+                })
+              ),
           ),
           withHandles,
         ],
@@ -463,9 +486,15 @@ export default function FsiCanvasWorkspace() {
     ) => {
       const g = graphRef.current;
       if (!g) return;
+      const endpoints = { source, target, sourceHandle, targetHandle };
       if (
-        g.connections.some(
-          (c) => c.source_node_id === source && c.target_node_id === target,
+        g.connections.some((c) =>
+          isSameConnectionEndpoints(endpoints, {
+            source: c.source_node_id,
+            target: c.target_node_id,
+            sourceHandle: c.source_handle,
+            targetHandle: c.target_handle,
+          }),
         )
       ) {
         return;

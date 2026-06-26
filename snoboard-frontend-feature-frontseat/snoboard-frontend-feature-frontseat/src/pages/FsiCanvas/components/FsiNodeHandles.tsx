@@ -1,4 +1,4 @@
-import { Handle, Position } from "@xyflow/react";
+import { Handle, Position, type CSSProperties } from "@xyflow/react";
 import { cn } from "@/lib/utils";
 
 const SIDES = [
@@ -15,21 +15,55 @@ type Props = {
   largeHitZone?: boolean;
 };
 
+function edgeHandleStyle(position: Position, large: boolean): CSSProperties {
+  const thickness = large ? 18 : 14;
+  switch (position) {
+    case Position.Top:
+      return {
+        left: "4%",
+        width: "92%",
+        height: thickness,
+        top: 0,
+        transform: "translateY(-50%)",
+      };
+    case Position.Bottom:
+      return {
+        left: "4%",
+        width: "92%",
+        height: thickness,
+        bottom: 0,
+        transform: "translateY(50%)",
+      };
+    case Position.Left:
+      return {
+        top: "4%",
+        height: "92%",
+        width: thickness,
+        left: 0,
+        transform: "translateX(-50%)",
+      };
+    case Position.Right:
+      return {
+        top: "4%",
+        height: "92%",
+        width: thickness,
+        right: 0,
+        transform: "translateX(50%)",
+      };
+    default:
+      return {};
+  }
+}
+
+const handleClass = cn(
+  "!z-[40] !border-0 !bg-transparent !opacity-0 !rounded-none",
+);
+
 /**
- * Invisible four-side handles — no visible dots. Drag from a node edge to connect.
+ * Invisible four-side handles — no visible dots. Drag from any node edge to connect.
  */
 export default function FsiNodeHandles({ canStartConnection = false, largeHitZone = false }: Props) {
-  const hitClass = cn(
-    "!absolute !z-[30] !rounded-full !border-0 !bg-transparent !opacity-0",
-    largeHitZone ? "!h-8 !w-8" : "!h-6 !w-6",
-  );
-
-  const sourceClass = cn(
-    hitClass,
-    canStartConnection ? "!pointer-events-auto" : "!pointer-events-none",
-  );
-
-  const targetClass = cn(hitClass, "!pointer-events-auto");
+  const sourcePointer = canStartConnection ? "!pointer-events-auto" : "!pointer-events-none";
 
   return (
     <>
@@ -39,8 +73,10 @@ export default function FsiNodeHandles({ canStartConnection = false, largeHitZon
           type="target"
           position={position}
           id={`${id}-in`}
-          className={targetClass}
+          className={cn(handleClass, "!pointer-events-auto")}
+          style={edgeHandleStyle(position, largeHitZone)}
           isConnectable
+          isConnectableEnd
         />
       ))}
       {SIDES.map(({ position, id }) => (
@@ -49,10 +85,10 @@ export default function FsiNodeHandles({ canStartConnection = false, largeHitZon
           type="source"
           position={position}
           id={`${id}-out`}
-          className={sourceClass}
+          className={cn(handleClass, sourcePointer)}
+          style={edgeHandleStyle(position, largeHitZone)}
           isConnectable={canStartConnection}
           isConnectableStart={canStartConnection}
-          isConnectableEnd={canStartConnection}
         />
       ))}
     </>

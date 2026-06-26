@@ -391,3 +391,18 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 .fsi-flow-canvas .react-flow__node {
   overflow: visible;
 }
+
+.fsi-flow-canvas .react-flow__handle {
+  opacity: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  min-width: 0;
+  min-height: 0;
+}
+
+.fsi-flow-canvas .react-flow__handle.connecting,
+.fsi-flow-canvas .react-flow__handle.valid,
+.fsi-flow-canvas .react-flow__handle:hover {
+  opacity: 0 !important;
+  background: transparent !important;
+}

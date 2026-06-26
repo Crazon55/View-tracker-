@@ -36,6 +36,8 @@ import {
   type NoteSuggestionPayload,
 } from "./FsiNodeSuggestionsPanel";
 import { clipboardImageFiles } from "../lib/fsiScreenshotNode";
+import { isFrameNode } from "../lib/fsiWhiteboardTypes";
+import { connectionEndpointsKey, isSameConnectionEndpoints } from "../lib/fsiConnectionUtils";
 
 const nodeTypes = { fsiNode: FsiCanvasNode, fsiFrame: FsiFrameNode };
 const edgeTypes = { fsiEdge: FsiCanvasEdge };
@@ -337,8 +339,15 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   const handleConnect = useCallback(
     (params: Connection) => {
       if (!canEdit || !params.source || !params.target) return;
+      if (params.source === params.target) return;
+      const endpoints = {
+        source: params.source,
+        target: params.target,
+        sourceHandle: params.sourceHandle,
+        targetHandle: params.targetHandle,
+      };
       setEdges((eds) => {
-        if (eds.some((e) => e.source === params.source && e.target === params.target)) {
+        if (eds.some((e) => isSameConnectionEndpoints(endpoints, e))) {
           return eds;
         }
         return addEdge(
@@ -355,6 +364,20 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
       onConnect(params.source, params.target, params.sourceHandle, params.targetHandle);
     },
     [canEdit, onConnect, setEdges, stableEdgeDelete, stableEdgeLabelChange],
+  );
+
+  const isValidConnection = useCallback(
+    (connection: Connection | Edge) => {
+      if (!canEdit) return false;
+      if (!connection.source || !connection.target) return false;
+      if (connection.source === connection.target) return false;
+      const sourceNode = dbNodes.find((n) => n.id === connection.source);
+      const targetNode = dbNodes.find((n) => n.id === connection.target);
+      if (sourceNode && isFrameNode(sourceNode)) return false;
+      if (targetNode && isFrameNode(targetNode)) return false;
+      return true;
+    },
+    [canEdit, dbNodes],
   );
 
   const clearEdgeSelection = useCallback(() => {
@@ -582,9 +605,10 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         onNodesChange={onNodesChange}
         onEdgesChange={handleEdgesChange}
         onConnect={handleConnect}
+        isValidConnection={isValidConnection}
         connectionMode={ConnectionMode.Loose}
         connectOnClick={false}
-        connectionRadius={72}
+        connectionRadius={120}
         nodesConnectable={canEdit}
         elementsSelectable={canEdit}
         onNodeClick={handleNodeClick}

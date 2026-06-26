@@ -71,7 +71,6 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
     "nodrag nopan w-full rounded border border-emerald-900/40 bg-emerald-950/30 px-2 py-1 text-xs text-emerald-950 placeholder:text-emerald-900/40 focus:border-emerald-700 focus:outline-none";
 
   const editing = selected && canEdit;
-  const showHandles = selected;
   const isScreenshot = isScreenshotNode(fsiNode);
   const screenshotUrl = getScreenshotImageUrl(fsiNode);
   const [replacingScreenshot, setReplacingScreenshot] = useState(false);
@@ -201,7 +200,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
 
     return (
       <div
-        className={`relative overflow-visible max-w-[320px] rounded-md border-2 border-pink-500/80 bg-zinc-950 shadow-lg ${
+        className={`relative w-[280px] overflow-visible rounded-md border-2 border-pink-500/80 bg-zinc-950 shadow-lg ${
           selected ? "ring-2 ring-white/50" : ""
         }`}
         onPaste={(e) => {
@@ -263,7 +262,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
         <div className="mt-0.5 text-center text-[9px] font-medium uppercase tracking-wide text-emerald-950/70">
           {nodeData.nodeType}
         </div>
-        <FsiNodeHandles canStartConnection={showHandles} />
+        <FsiNodeHandles canStartConnection={canEdit} />
       </div>
     );
   }
@@ -318,7 +317,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
             )}
           </div>
         )}
-        <FsiNodeHandles canStartConnection={showHandles} />
+        <FsiNodeHandles canStartConnection={canEdit} />
       </div>
     );
   }
@@ -396,7 +395,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
         </>
       )}
 
-      <FsiNodeHandles canStartConnection={showHandles} />
+      <FsiNodeHandles canStartConnection={canEdit} />
     </div>
   );
 }
