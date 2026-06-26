@@ -311,6 +311,8 @@ export function createFsiApi() {
       source_node_id: string;
       target_node_id: string;
       edge_label_note?: string;
+      source_handle?: string;
+      target_handle?: string;
     }) => {
       if (data.source_node_id === data.target_node_id) {
         throw new Error("Self-loops are not allowed");
@@ -325,12 +327,14 @@ export function createFsiApi() {
         edge_label_note: data.edge_label_note ?? null,
         created_by: email,
       };
-      const backendBody = {
+      const backendBody: Record<string, unknown> = {
         id,
         source_node_id: row.source_node_id,
         target_node_id: row.target_node_id,
         edge_label_note: row.edge_label_note ?? undefined,
       };
+      if (data.source_handle) backendBody.source_handle = data.source_handle;
+      if (data.target_handle) backendBody.target_handle = data.target_handle;
       return fsiDualMutate({
         supabase: async () => {
           const { data: created, error } = await _sb.from("connections").insert(row).select().single();

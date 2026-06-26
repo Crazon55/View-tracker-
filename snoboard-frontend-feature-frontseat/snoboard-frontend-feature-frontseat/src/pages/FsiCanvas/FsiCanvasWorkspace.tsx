@@ -418,9 +418,24 @@ export default function FsiCanvasWorkspace() {
   });
 
   const createConnectionMutation = useMutation({
-    mutationFn: ({ source, target }: { source: string; target: string }) =>
-      fsiApi.createConnection(studyId!, { source_node_id: source, target_node_id: target }),
-    onMutate: ({ source, target }) => {
+    mutationFn: ({
+      source,
+      target,
+      sourceHandle,
+      targetHandle,
+    }: {
+      source: string;
+      target: string;
+      sourceHandle?: string | null;
+      targetHandle?: string | null;
+    }) =>
+      fsiApi.createConnection(studyId!, {
+        source_node_id: source,
+        target_node_id: target,
+        source_handle: sourceHandle ?? undefined,
+        target_handle: targetHandle ?? undefined,
+      }),
+    onMutate: ({ source, target, sourceHandle, targetHandle }) => {
       const g = graphRef.current;
       if (!g) return;
       if (
@@ -437,13 +452,15 @@ export default function FsiCanvasWorkspace() {
         source_node_id: source,
         target_node_id: target,
         edge_label_note: null as string | null,
+        source_handle: sourceHandle ?? null,
+        target_handle: targetHandle ?? null,
         created_by: "",
       };
       const previous = g;
       setGraph({ ...g, connections: [...g.connections, optimistic] });
       return { previous, tempId, skipped: false as const };
     },
-    onSuccess: (connection, { source, target }, ctx) => {
+    onSuccess: (connection, { source, target, sourceHandle, targetHandle }, ctx) => {
       if (ctx?.skipped) return;
       const g = graphRef.current;
       if (!g) return;
@@ -454,6 +471,11 @@ export default function FsiCanvasWorkspace() {
         void fsiApi.deleteConnection(connection.id, studyId!);
         return;
       }
+      const withHandles = {
+        ...connection,
+        source_handle: connection.source_handle ?? sourceHandle ?? null,
+        target_handle: connection.target_handle ?? targetHandle ?? null,
+      };
       setGraph({
         ...g,
         connections: [
@@ -462,11 +484,11 @@ export default function FsiCanvasWorkspace() {
               c.id !== ctx?.tempId &&
               !(c.source_node_id === source && c.target_node_id === target && c.id.startsWith("opt-")),
           ),
-          connection,
+          withHandles,
         ],
       });
       if (!history.isApplying.current) {
-        history.pushEntry({ type: "connection_add", connection });
+        history.pushEntry({ type: "connection_add", connection: withHandles });
       }
     },
     onError: (e: Error, _vars, ctx) => {
@@ -494,7 +516,12 @@ export default function FsiCanvasWorkspace() {
   });
 
   const handleConnect = useCallback(
-    (source: string, target: string) => {
+    (
+      source: string,
+      target: string,
+      sourceHandle?: string | null,
+      targetHandle?: string | null,
+    ) => {
       const g = graphRef.current;
       if (!g) return;
       if (
@@ -504,7 +531,7 @@ export default function FsiCanvasWorkspace() {
       ) {
         return;
       }
-      createConnectionMutation.mutate({ source, target });
+      createConnectionMutation.mutate({ source, target, sourceHandle, targetHandle });
     },
     [createConnectionMutation],
   );

@@ -98,6 +98,8 @@ class ConnectionCreate(BaseModel):
     source_node_id: str
     target_node_id: str
     edge_label_note: str | None = None
+    source_handle: str | None = Field(None, max_length=32)
+    target_handle: str | None = Field(None, max_length=32)
 
 
 class ConnectionUpdate(BaseModel):

@@ -74,6 +74,8 @@ export type FsiConnectionRecord = {
   source_node_id: string;
   target_node_id: string;
   edge_label_note?: string | null;
+  source_handle?: string | null;
+  target_handle?: string | null;
   created_by: string;
 };
 

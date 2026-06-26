@@ -219,6 +219,8 @@ async def create_connection(study_id: str, req: ConnectionCreate, claims: dict =
         "source_node_id": req.source_node_id,
         "target_node_id": req.target_node_id,
         "edge_label_note": req.edge_label_note,
+        "source_handle": req.source_handle,
+        "target_handle": req.target_handle,
         "created_by": _email(claims),
     }
     if req.id:

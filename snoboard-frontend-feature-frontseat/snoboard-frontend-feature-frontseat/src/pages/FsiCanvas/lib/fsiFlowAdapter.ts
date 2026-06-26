@@ -4,6 +4,7 @@ import { colorForNodeType } from "./fsiNodeSchemas";
 import { getFieldDefs } from "./fsiNodeFieldDefs";
 import { isCanvasNode, isNoteNode, isScreenshotNode } from "./fsiHierarchy";
 import { NOTE_COLOR } from "./fsiNoteTemplates";
+import { resolveConnectionHandles } from "./fsiConnectionHandles";
 
 export type FsiNodeData = {
   fsiNode: FsiNodeRecord;
@@ -59,23 +60,31 @@ export function graphToFlow(
   });
 
   const visibleIds = new Set(visible.map((n) => n.id));
+  const nodeById = new Map(visible.map((n) => [n.id, n]));
   const flowEdges: Edge[] = connections
     .filter((c) => visibleIds.has(c.source_node_id) && visibleIds.has(c.target_node_id))
-    .map((c) => ({
-      id: c.id,
-      source: c.source_node_id,
-      target: c.target_node_id,
-      label: c.edge_label_note || undefined,
-      type: "fsiEdge",
-      selectable: true,
-      focusable: true,
-      data: {
-        canEdit: options?.canEdit ?? false,
-        labelNote: c.edge_label_note ?? null,
-        onDelete: options?.onEdgeDelete,
-        onLabelChange: options?.onEdgeLabelChange,
-      },
-    }));
+    .map((c) => {
+      const sourceNode = nodeById.get(c.source_node_id)!;
+      const targetNode = nodeById.get(c.target_node_id)!;
+      const { sourceHandle, targetHandle } = resolveConnectionHandles(c, sourceNode, targetNode);
+      return {
+        id: c.id,
+        source: c.source_node_id,
+        target: c.target_node_id,
+        sourceHandle,
+        targetHandle,
+        label: c.edge_label_note || undefined,
+        type: "fsiEdge",
+        selectable: true,
+        focusable: true,
+        data: {
+          canEdit: options?.canEdit ?? false,
+          labelNote: c.edge_label_note ?? null,
+          onDelete: options?.onEdgeDelete,
+          onLabelChange: options?.onEdgeLabelChange,
+        },
+      };
+    });
 
   return { nodes: flowNodes, edges: flowEdges };
 }

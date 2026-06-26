@@ -58,7 +58,12 @@ type FlowInnerProps = {
   onPaneDoubleClick: (flowX: number, flowY: number, screenX: number, screenY: number) => void;
   onNodeDragStart: (nodeId: string, x: number, y: number) => void;
   onNodeDragStop: (nodeId: string, x: number, y: number) => void;
-  onConnect: (source: string, target: string) => void;
+  onConnect: (
+    source: string,
+    target: string,
+    sourceHandle?: string | null,
+    targetHandle?: string | null,
+  ) => void;
   onEdgeDelete: (edgeId: string) => void;
   onEdgeLabelChange: (edgeId: string, label: string) => void;
   onNodeDelete: (nodeId: string) => void;
@@ -223,6 +228,8 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
           s: c.source_node_id,
           t: c.target_node_id,
           l: c.edge_label_note,
+          sh: c.source_handle,
+          th: c.target_handle,
         })),
       }),
     [dbNodes, connections],
@@ -236,7 +243,10 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   const connectionSignature = useMemo(
     () =>
       connections
-        .map((c) => `${c.id}:${c.source_node_id}:${c.target_node_id}:${c.edge_label_note ?? ""}`)
+        .map(
+          (c) =>
+            `${c.id}:${c.source_node_id}:${c.target_node_id}:${c.edge_label_note ?? ""}:${c.source_handle ?? ""}:${c.target_handle ?? ""}`,
+        )
         .join("|"),
     [connections],
   );
@@ -297,7 +307,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         return next;
       });
     });
-  }, [connectionSignature, flowEdges, setEdges]);
+  }, [connectionSignature, positionSignature, flowEdges, setEdges]);
 
   useEffect(() => {
     if (fitTrigger > 0) {
@@ -334,9 +344,9 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
           eds,
         );
       });
-      onConnect(params.source, params.target);
+      onConnect(params.source, params.target, params.sourceHandle, params.targetHandle);
     },
-    [canEdit, onConnect, setEdges, stableEdgeDelete],
+    [canEdit, onConnect, setEdges, stableEdgeDelete, stableEdgeLabelChange],
   );
 
   const clearEdgeSelection = useCallback(() => {
