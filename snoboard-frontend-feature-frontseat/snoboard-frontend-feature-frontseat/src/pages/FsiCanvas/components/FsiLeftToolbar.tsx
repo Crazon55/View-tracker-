@@ -71,7 +71,7 @@ function ToolButton({
       draggable={canEdit}
       onDragStart={onDragStart}
       onClick={() => onAddTool(type)}
-      title={type}
+      title={type === "Frame" ? "Wrap selection in frame" : type}
       className={cn(
         "h-9 w-9 shrink-0 rounded-lg",
         canvasTheme === "light"

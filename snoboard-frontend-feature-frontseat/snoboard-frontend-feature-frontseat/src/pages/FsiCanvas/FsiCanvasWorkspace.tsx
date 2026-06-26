@@ -39,9 +39,12 @@ import {
 } from "./lib/fsiCanvasTheme";
 import {
   specForWhiteboardType,
+  isFrameNode,
   WHITEBOARD_NODE_TYPES,
+  type CreateNodeSpec,
   type WhiteboardNodeType,
 } from "./lib/fsiWhiteboardTypes";
+import { boundsForNodes } from "./lib/fsiNodeBounds";
 import { useFsiCanvasHistory } from "./lib/useFsiCanvasHistory";
 
 function patchGraphNodePositions(
@@ -197,8 +200,19 @@ export default function FsiCanvasWorkspace() {
   );
 
   const createWhiteboardNodeMutation = useMutation({
-    mutationFn: ({ type, x, y }: { type: WhiteboardNodeType; x: number; y: number }) => {
-      const spec = specForWhiteboardType(type);
+    mutationFn: ({
+      type,
+      x,
+      y,
+      overrides,
+    }: {
+      type: WhiteboardNodeType;
+      x: number;
+      y: number;
+      overrides?: Partial<CreateNodeSpec>;
+    }) => {
+      const base = specForWhiteboardType(type);
+      const spec = { ...base, ...overrides, structured_payload: overrides?.structured_payload ?? base.structured_payload };
       return fsiApi.createNode(studyId!, {
         node_type: spec.node_type,
         display_title: spec.display_title,
@@ -553,14 +567,65 @@ export default function FsiCanvasWorkspace() {
 
   const handleAddWhiteboardTool = useCallback(
     (type: WhiteboardNodeType) => {
-      const pos = getCanvasCenter();
       if (type === "Visual") {
+        const pos = getCanvasCenter();
         addScreenshot(pos.x, pos.y);
         return;
       }
+
+      if (type === "Frame") {
+        const g = graphRef.current;
+        const ids =
+          multiSelectedIds.length > 0
+            ? multiSelectedIds
+            : selectedNode
+              ? [selectedNode.id]
+              : [];
+        if (g && ids.length > 0) {
+          const wrapTargets = g.nodes.filter(
+            (n) => ids.includes(n.id) && isCanvasNode(n) && !isFrameNode(n),
+          );
+          const bounds = boundsForNodes(wrapTargets);
+          if (bounds && wrapTargets.length > 0) {
+            if (creatingRef.current || createWhiteboardNodeMutation.isPending) return;
+            const frameCount = g.nodes.filter(isFrameNode).length;
+            creatingRef.current = true;
+            createWhiteboardNodeMutation.mutate(
+              {
+                type: "Frame",
+                x: bounds.x,
+                y: bounds.y,
+                overrides: {
+                  display_title: `Frame ${frameCount + 1}`,
+                  structured_payload: {
+                    is_frame: true,
+                    frame_width: Math.round(bounds.width),
+                    frame_height: Math.round(bounds.height),
+                  },
+                },
+              },
+              {
+                onSettled: () => {
+                  creatingRef.current = false;
+                },
+              },
+            );
+            return;
+          }
+        }
+      }
+
+      const pos = getCanvasCenter();
       runCreateWhiteboard(type, pos.x, pos.y);
     },
-    [addScreenshot, getCanvasCenter, runCreateWhiteboard],
+    [
+      addScreenshot,
+      createWhiteboardNodeMutation,
+      getCanvasCenter,
+      multiSelectedIds,
+      runCreateWhiteboard,
+      selectedNode,
+    ],
   );
 
   const handleWhiteboardDrop = useCallback(

@@ -10,42 +10,32 @@ const SIDES = [
 
 type Props = {
   borderClassName?: string;
-  /** Miro-style: dots only visible when node is selected or connecting. */
+  /** Miro-style: dots visible when node is selected or while dragging a connection. */
   visible?: boolean;
+  connecting?: boolean;
 };
 
 /**
- * Four-sided connection handles — hidden until node is selected (Miro-style).
+ * Four-sided handles — visual dots when selected; targets always accept connections.
  */
 export default function FsiNodeHandles({
   borderClassName = "!border-emerald-900",
   visible = false,
+  connecting = false,
 }: Props) {
-  const visibleClass = cn(
-    "!z-10 !h-3.5 !w-3.5 !rounded-full !border-2 !bg-white shadow-sm",
-    "!transition-all duration-150",
-    visible ? "!scale-100 !opacity-100" : "!scale-75 !opacity-0 !pointer-events-none",
-    borderClassName,
-  );
-  const hitClass = cn(
-    "!z-[5] !h-6 !w-6 !rounded-full !border-0 !bg-transparent",
-    visible
-      ? "!opacity-0 hover:!opacity-100 hover:!bg-white/20"
-      : "!opacity-0 !pointer-events-none",
-  );
+  const showDots = visible || connecting;
+  const sourceActive = visible;
 
   return (
     <>
       {SIDES.map(({ position, id }) => (
         <Handle
-          key={`${id}-hit`}
+          key={`${id}-in`}
           type="target"
           position={position}
           id={`${id}-in`}
-          className={hitClass}
-          isConnectable={visible}
-          isConnectableStart={visible}
-          isConnectableEnd={visible}
+          className="!z-[5] !h-7 !w-7 !rounded-full !border-0 !bg-transparent !pointer-events-auto !opacity-0"
+          isConnectable
         />
       ))}
       {SIDES.map(({ position, id }) => (
@@ -54,10 +44,16 @@ export default function FsiNodeHandles({
           type="source"
           position={position}
           id={`${id}-out`}
-          className={visibleClass}
-          isConnectable={visible}
-          isConnectableStart={visible}
-          isConnectableEnd={visible}
+          className={cn(
+            "!z-10 !h-7 !w-7 !rounded-full !border-2 !bg-white shadow-sm",
+            "!transition-all duration-150",
+            showDots ? "!scale-100 !opacity-100" : "!scale-75 !opacity-0",
+            sourceActive ? "!pointer-events-auto" : "!pointer-events-none",
+            borderClassName,
+          )}
+          isConnectable={sourceActive}
+          isConnectableStart={sourceActive}
+          isConnectableEnd={sourceActive}
         />
       ))}
     </>

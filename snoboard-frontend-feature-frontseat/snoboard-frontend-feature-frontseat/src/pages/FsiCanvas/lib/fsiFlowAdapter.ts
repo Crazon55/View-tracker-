@@ -16,6 +16,7 @@ export type FsiNodeData = {
   canEdit: boolean;
   isNote: boolean;
   isCompact: boolean;
+  connectionDragging?: boolean;
   fieldDefs: ReturnType<typeof getFieldDefs>;
   onTitleChange?: (nodeId: string, title: string) => void;
   onBodyChange?: (nodeId: string, body: string) => void;

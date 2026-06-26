@@ -5,10 +5,9 @@ import { toast } from "sonner";
 import type { FsiNodeData } from "../lib/fsiFlowAdapter";
 import { PERFORMANCE_LABELS } from "../lib/fsiNodeSchemas";
 import { FsiLinkifiedText, looksLikeUrl, normalizeLinkHref } from "../lib/fsiLinkText";
-import { parseNodeScreenshots, uploadFsiNodeScreenshotFiles } from "../lib/fsiNodeMedia";
+import { uploadFsiNodeScreenshotFiles } from "../lib/fsiNodeMedia";
 import { getScreenshotImageUrl, isScreenshotNode } from "../lib/fsiHierarchy";
 import { clipboardImageFiles } from "../lib/fsiScreenshotNode";
-import { FsiNodeContentBlock, FsiNodeScreenshotsBlock } from "./FsiNodeContentBlocks";
 import FsiNodeHandles from "./FsiNodeHandles";
 
 function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
@@ -22,13 +21,12 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
     onTitleChange,
     onBodyChange,
     onPayloadChange,
-    onScreenshotsChange,
+    connectionDragging,
   } = nodeData;
 
   const [title, setTitle] = useState(fsiNode.display_title);
   const [body, setBody] = useState(fsiNode.raw_body_text ?? "");
   const payload = fsiNode.structured_payload ?? {};
-  const [screenshots, setScreenshots] = useState<string[]>(() => parseNodeScreenshots(payload));
   const [fieldValues, setFieldValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(fieldDefs.map((def) => [def.key, String(payload[def.key] ?? "")])),
   );
@@ -37,10 +35,6 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
     setTitle(fsiNode.display_title);
     setBody(fsiNode.raw_body_text ?? "");
   }, [fsiNode.display_title, fsiNode.raw_body_text]);
-
-  useEffect(() => {
-    setScreenshots(parseNodeScreenshots(fsiNode.structured_payload));
-  }, [fsiNode.id, fsiNode.structured_payload]);
 
   useEffect(() => {
     setFieldValues(
@@ -73,33 +67,6 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
     [fsiNode.id, onPayloadChange],
   );
 
-  const commitScreenshots = useCallback(
-    (next: string[]) => {
-      setScreenshots(next);
-      onScreenshotsChange?.(fsiNode.id, next);
-    },
-    [fsiNode.id, onScreenshotsChange],
-  );
-
-  const appendScreenshotFiles = useCallback(
-    async (files: File[]) => {
-      if (!canEdit || files.length === 0) return;
-      try {
-        const urls = await uploadFsiNodeScreenshotFiles({
-          studyId: fsiNode.study_id,
-          nodeId: fsiNode.id,
-          files,
-        });
-        if (urls.length === 0) return;
-        commitScreenshots([...screenshots, ...urls]);
-        toast.success(`Uploaded ${urls.length} screenshot${urls.length === 1 ? "" : "s"}`);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Screenshot upload failed");
-      }
-    },
-    [canEdit, commitScreenshots, fsiNode.id, fsiNode.study_id, screenshots],
-  );
-
   const inputClass =
     "nodrag nopan w-full rounded border border-emerald-900/40 bg-emerald-950/30 px-2 py-1 text-xs text-emerald-950 placeholder:text-emerald-900/40 focus:border-emerald-700 focus:outline-none";
 
@@ -109,17 +76,6 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
   const screenshotUrl = getScreenshotImageUrl(fsiNode);
   const [replacingScreenshot, setReplacingScreenshot] = useState(false);
 
-  const handleFieldPaste = useCallback(
-    (e: React.ClipboardEvent) => {
-      if (!editing || !canEdit) return;
-      const files = clipboardImageFiles(e.clipboardData);
-      if (files.length === 0) return;
-      e.preventDefault();
-      e.stopPropagation();
-      void appendScreenshotFiles(files);
-    },
-    [appendScreenshotFiles, canEdit, editing],
-  );
   const isNiche = nodeData.nodeType === "Niche";
   const noteInputClass =
     "nodrag nopan w-full rounded-sm border border-amber-900/20 bg-amber-50/80 px-2.5 py-2 text-xs text-zinc-900 placeholder:text-zinc-500 focus:border-amber-700 focus:outline-none";
@@ -161,7 +117,6 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
           value={val}
           onChange={(e) => setFieldValues((prev) => ({ ...prev, [def.key]: e.target.value }))}
           onBlur={(e) => commitField(def.key, e.target.value)}
-          onPaste={handleFieldPaste}
           className={`${fieldInputClass} resize-none`}
         />
       ) : (
@@ -194,7 +149,6 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
         value={val}
         onChange={(e) => setFieldValues((prev) => ({ ...prev, [def.key]: e.target.value }))}
         onBlur={(e) => commitField(def.key, e.target.value)}
-        onPaste={handleFieldPaste}
         className={fieldInputClass}
       />
     ) : (
@@ -222,35 +176,6 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
             </div>
           );
         })}
-      </div>
-    );
-  };
-
-  const renderContentAndScreenshots = (fieldClass: string) => {
-    const showSection = Boolean(body) || screenshots.length > 0 || editing;
-    if (!showSection) return null;
-
-    return (
-      <div className={`space-y-2 border-t ${borderClass} px-3 pb-3 pt-2`}>
-        <FsiNodeContentBlock
-          value={body}
-          canEdit={canEdit}
-          editing={editing}
-          placeholder="Notes, links, context…"
-          inputClass={fieldClass}
-          onChange={setBody}
-          onCommit={commitBody}
-          onImagePaste={appendScreenshotFiles}
-        />
-        <FsiNodeScreenshotsBlock
-          studyId={fsiNode.study_id}
-          nodeId={fsiNode.id}
-          screenshots={screenshots}
-          canEdit={canEdit}
-          editing={editing}
-          inputClass={fieldClass}
-          onChange={commitScreenshots}
-        />
       </div>
     );
   };
@@ -287,7 +212,11 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
           void replaceScreenshot(files);
         }}
       >
-        <FsiNodeHandles borderClassName="!border-pink-300" visible={showHandles} />
+        <FsiNodeHandles
+          borderClassName="!border-pink-300"
+          visible={showHandles}
+          connecting={connectionDragging}
+        />
         <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-pink-200/90">
           Visual
         </div>
@@ -321,7 +250,11 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
         }`}
         style={{ borderColor: nodeData.color, backgroundColor: nodeData.color }}
       >
-        <FsiNodeHandles borderClassName="!border-emerald-900" visible={showHandles} />
+        <FsiNodeHandles
+          borderClassName="!border-emerald-900"
+          visible={showHandles}
+          connecting={connectionDragging}
+        />
         {editing ? (
           <input
             value={title}
@@ -355,6 +288,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
       <FsiNodeHandles
         borderClassName={isNote ? "!border-amber-800" : "!border-emerald-900"}
         visible={showHandles}
+        connecting={connectionDragging}
       />
 
       {isNote ? (
@@ -371,7 +305,6 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 onBlur={(e) => commitBody(e.target.value)}
-                onPaste={handleFieldPaste}
                 placeholder="post_id, views, url…"
                 className={`${noteInputClass} resize-none`}
               />
@@ -381,19 +314,6 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
               </div>
             )}
           </div>
-          {(screenshots.length > 0 || editing) && (
-            <div className="space-y-2 border-t border-amber-950/30 px-3 pb-3 pt-2">
-              <FsiNodeScreenshotsBlock
-                studyId={fsiNode.study_id}
-                nodeId={fsiNode.id}
-                screenshots={screenshots}
-                canEdit={canEdit}
-                editing={editing}
-                inputClass={noteInputClass}
-                onChange={commitScreenshots}
-              />
-            </div>
-          )}
         </>
       ) : isNiche ? (
         <>
@@ -412,7 +332,6 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
             <div className="text-[10px] font-medium uppercase tracking-wide text-emerald-950/70">Niche</div>
           </div>
           {renderFields()}
-          {renderContentAndScreenshots(nicheFieldClass)}
         </>
       ) : (
         <>
@@ -432,7 +351,6 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
             </div>
           </div>
           {renderFields()}
-          {renderContentAndScreenshots(inputClass)}
         </>
       )}
 
