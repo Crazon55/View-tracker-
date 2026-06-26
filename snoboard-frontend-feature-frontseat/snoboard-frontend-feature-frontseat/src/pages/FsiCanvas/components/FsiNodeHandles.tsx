@@ -11,14 +11,18 @@ const SIDES = [
 type Props = {
   /** When true, this node can start a connection (invisible edge hit zones). */
   canStartConnection?: boolean;
+  /** Wider invisible hit zones (e.g. image cards). */
+  largeHitZone?: boolean;
 };
 
 /**
- * Invisible four-side handles — no visible dots. Select a node, drag from its edge to connect.
+ * Invisible four-side handles — no visible dots. Drag from a node edge to connect.
  */
-export default function FsiNodeHandles({ canStartConnection = false }: Props) {
-  const hitClass =
-    "!z-[5] !h-5 !w-5 !rounded-full !border-0 !bg-transparent !opacity-0";
+export default function FsiNodeHandles({ canStartConnection = false, largeHitZone = false }: Props) {
+  const hitClass = cn(
+    "!absolute !z-[30] !rounded-full !border-0 !bg-transparent !opacity-0",
+    largeHitZone ? "!h-8 !w-8" : "!h-6 !w-6",
+  );
 
   const sourceClass = cn(
     hitClass,

@@ -201,7 +201,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
 
     return (
       <div
-        className={`max-w-[320px] rounded-md border-2 border-pink-500/80 bg-zinc-950 shadow-lg ${
+        className={`relative overflow-visible max-w-[320px] rounded-md border-2 border-pink-500/80 bg-zinc-950 shadow-lg ${
           selected ? "ring-2 ring-white/50" : ""
         }`}
         onPaste={(e) => {
@@ -213,7 +213,6 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
           void replaceScreenshot(files);
         }}
       >
-        <FsiNodeHandles canStartConnection={showHandles} />
         <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-pink-200/90">
           Visual
         </div>
@@ -221,7 +220,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
           <img
             src={screenshotUrl}
             alt="Canvas screenshot"
-            className="block max-h-72 w-full object-contain bg-black/40"
+            className="pointer-events-none block max-h-72 w-full object-contain bg-black/40"
             draggable={false}
           />
         ) : (
@@ -235,6 +234,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
             {replacingScreenshot && <Loader2 className="h-3.5 w-3.5 animate-spin text-pink-200" />}
           </div>
         )}
+        <FsiNodeHandles canStartConnection={canEdit} largeHitZone />
       </div>
     );
   }
@@ -242,12 +242,11 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
   if (isCompact) {
     return (
       <div
-        className={`min-w-[120px] max-w-[280px] rounded-md border-2 px-4 py-2.5 shadow-lg ${
+        className={`relative overflow-visible min-w-[120px] max-w-[280px] rounded-md border-2 px-4 py-2.5 shadow-lg ${
           selected ? "ring-2 ring-white/50" : ""
         }`}
         style={{ borderColor: nodeData.color, backgroundColor: nodeData.color }}
       >
-        <FsiNodeHandles canStartConnection={showHandles} />
         {editing ? (
           <input
             value={title}
@@ -264,6 +263,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
         <div className="mt-0.5 text-center text-[9px] font-medium uppercase tracking-wide text-emerald-950/70">
           {nodeData.nodeType}
         </div>
+        <FsiNodeHandles canStartConnection={showHandles} />
       </div>
     );
   }
@@ -273,12 +273,11 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
     const showUrl = editing || Boolean(url.trim());
     return (
       <div
-        className={`min-w-[160px] max-w-[280px] rounded-md border-2 px-4 py-2.5 shadow-lg ${
+        className={`relative overflow-visible min-w-[160px] max-w-[280px] rounded-md border-2 px-4 py-2.5 shadow-lg ${
           selected ? "ring-2 ring-white/50" : ""
         }`}
         style={{ borderColor: nodeData.color, backgroundColor: nodeData.color }}
       >
-        <FsiNodeHandles canStartConnection={showHandles} />
         {editing ? (
           <input
             value={title}
@@ -319,13 +318,14 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
             )}
           </div>
         )}
+        <FsiNodeHandles canStartConnection={showHandles} />
       </div>
     );
   }
 
   return (
     <div
-      className={`min-w-[200px] max-w-[300px] rounded-md border-2 shadow-lg ${
+      className={`relative overflow-visible min-w-[200px] max-w-[300px] rounded-md border-2 shadow-lg ${
         selected ? "ring-2 ring-white/50" : ""
       }`}
       style={{
@@ -333,8 +333,6 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
         backgroundColor: isNote ? "#fef08a" : nodeData.color,
       }}
     >
-      <FsiNodeHandles canStartConnection={showHandles} />
-
       {isNote ? (
         <>
           <div className="px-3 py-2">
@@ -398,6 +396,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
         </>
       )}
 
+      <FsiNodeHandles canStartConnection={showHandles} />
     </div>
   );
 }

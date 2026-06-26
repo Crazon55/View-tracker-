@@ -386,3 +386,8 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   ::-webkit-scrollbar       { width: 14px; height: 14px; }
   ::-webkit-scrollbar-thumb { border-width: 3px; }
 }
+
+/* FSI Canvas — keep connection handles on node edges, not clipped */
+.fsi-flow-canvas .react-flow__node {
+  overflow: visible;
+}
