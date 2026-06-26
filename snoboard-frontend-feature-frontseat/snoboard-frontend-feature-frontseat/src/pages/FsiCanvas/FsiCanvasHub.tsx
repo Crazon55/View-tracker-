@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -19,7 +18,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { STUDY_TYPES, type FsiStudy } from "./lib/fsiNodeSchemas";
+import type { FsiStudy } from "./lib/fsiNodeSchemas";
 
 export default function FsiCanvasHub() {
   const navigate = useNavigate();
@@ -35,9 +34,7 @@ export default function FsiCanvasHub() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     title: "",
-    study_type: STUDY_TYPES[0],
     target_account: "",
-    niche_vertical: "",
     meta_notes: "",
     execution_date: new Date().toISOString().slice(0, 10),
   });
@@ -51,9 +48,9 @@ export default function FsiCanvasHub() {
     mutationFn: () =>
       fsiApi.createStudy({
         title: form.title,
-        study_type: form.study_type,
-        target_account: form.target_account,
-        niche_vertical: form.niche_vertical,
+        study_type: "Whiteboard",
+        target_account: form.target_account || form.title,
+        niche_vertical: "",
         owner_id: user?.email || "",
         meta_notes: form.meta_notes || undefined,
         execution_date: form.execution_date,
@@ -63,9 +60,7 @@ export default function FsiCanvasHub() {
       setOpen(false);
       setForm({
         title: "",
-        study_type: STUDY_TYPES[0],
         target_account: "",
-        niche_vertical: "",
         meta_notes: "",
         execution_date: new Date().toISOString().slice(0, 10),
       });
@@ -122,33 +117,11 @@ export default function FsiCanvasHub() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-zinc-400">Study type</Label>
-                    <Select value={form.study_type} onValueChange={(v) => setForm({ ...form, study_type: v as typeof form.study_type })}>
-                      <SelectTrigger className="bg-zinc-950 border-zinc-700">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {STUDY_TYPES.map((t) => (
-                          <SelectItem key={t} value={t}>{t}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-zinc-400">Target benchmark handle</Label>
+                    <Label className="text-zinc-400">Account / page (optional)</Label>
                     <Input
                       value={form.target_account}
                       onChange={(e) => setForm({ ...form, target_account: e.target.value })}
                       placeholder="@101xfounders"
-                      className="bg-zinc-950 border-zinc-700"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-zinc-400">Primary niche / vertical</Label>
-                    <Input
-                      value={form.niche_vertical}
-                      onChange={(e) => setForm({ ...form, niche_vertical: e.target.value })}
-                      placeholder="Indian startup founders"
                       className="bg-zinc-950 border-zinc-700"
                     />
                   </div>
@@ -172,7 +145,7 @@ export default function FsiCanvasHub() {
                   </div>
                   <Button
                     className="w-full mt-2"
-                    disabled={!form.title.trim() || !form.target_account.trim() || !form.niche_vertical.trim() || createMutation.isPending}
+                    disabled={!form.title.trim() || createMutation.isPending}
                     onClick={() => createMutation.mutate()}
                   >
                     {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create & Open Canvas"}

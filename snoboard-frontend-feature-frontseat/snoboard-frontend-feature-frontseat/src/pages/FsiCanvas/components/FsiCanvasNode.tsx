@@ -17,6 +17,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
     fsiNode,
     canEdit,
     isNote,
+    isCompact,
     fieldDefs,
     onTitleChange,
     onBodyChange,
@@ -103,6 +104,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
     "nodrag nopan w-full rounded border border-emerald-900/40 bg-emerald-950/30 px-2 py-1 text-xs text-emerald-950 placeholder:text-emerald-900/40 focus:border-emerald-700 focus:outline-none";
 
   const editing = selected && canEdit;
+  const showHandles = selected;
   const isScreenshot = isScreenshotNode(fsiNode);
   const screenshotUrl = getScreenshotImageUrl(fsiNode);
   const [replacingScreenshot, setReplacingScreenshot] = useState(false);
@@ -120,7 +122,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
   );
   const isNiche = nodeData.nodeType === "Niche";
   const noteInputClass =
-    "nodrag nopan w-full rounded-md border border-amber-900/30 bg-amber-950/25 px-2.5 py-2 text-xs text-emerald-950 placeholder:text-emerald-900/40 focus:border-amber-800 focus:outline-none";
+    "nodrag nopan w-full rounded-sm border border-amber-900/20 bg-amber-50/80 px-2.5 py-2 text-xs text-zinc-900 placeholder:text-zinc-500 focus:border-amber-700 focus:outline-none";
   const nicheFieldClass =
     "nodrag nopan w-full rounded border border-amber-950/45 bg-amber-950/35 px-2 py-1.5 text-xs text-emerald-950 placeholder:text-emerald-900/35 focus:border-amber-900 focus:outline-none";
   const fieldInputClass = isNiche ? nicheFieldClass : inputClass;
@@ -285,9 +287,9 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
           void replaceScreenshot(files);
         }}
       >
-        <FsiNodeHandles borderClassName="!border-pink-300" />
+        <FsiNodeHandles borderClassName="!border-pink-300" visible={showHandles} />
         <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-pink-200/90">
-          Screenshot
+          Visual
         </div>
         {screenshotUrl ? (
           <img
@@ -307,7 +309,32 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
             {replacingScreenshot && <Loader2 className="h-3.5 w-3.5 animate-spin text-pink-200" />}
           </div>
         )}
-        <FsiNodeHandles borderClassName="!border-pink-300" />
+      </div>
+    );
+  }
+
+  if (isCompact) {
+    return (
+      <div
+        className={`min-w-[120px] max-w-[280px] rounded-sm bg-black px-4 py-2.5 shadow-lg ${
+          selected ? "ring-2 ring-white/40" : ""
+        }`}
+      >
+        <FsiNodeHandles borderClassName="!border-zinc-400" visible={showHandles} />
+        {editing ? (
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onBlur={(e) => commitTitle(e.target.value)}
+            className="nodrag nopan w-full bg-transparent text-center text-sm font-semibold text-white placeholder:text-zinc-500 focus:outline-none"
+            placeholder={nodeData.nodeType}
+          />
+        ) : (
+          <div className="text-center text-sm font-semibold text-white">{title || nodeData.nodeType}</div>
+        )}
+        <div className="mt-0.5 text-center text-[9px] font-medium uppercase tracking-wide text-zinc-400">
+          {nodeData.nodeType}
+        </div>
       </div>
     );
   }
@@ -317,14 +344,22 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
       className={`min-w-[200px] max-w-[300px] rounded-md border-2 shadow-lg ${
         selected ? "ring-2 ring-white/50" : ""
       }`}
-      style={{ borderColor: nodeData.color, backgroundColor: nodeData.color }}
+      style={{
+        borderColor: isNote ? "#eab308" : nodeData.color,
+        backgroundColor: isNote ? "#fef08a" : nodeData.color,
+      }}
     >
-      <FsiNodeHandles borderClassName="!border-emerald-900" />
+      <FsiNodeHandles
+        borderClassName={isNote ? "!border-amber-800" : "!border-emerald-900"}
+        visible={showHandles}
+      />
 
       {isNote ? (
         <>
           <div className="px-3 py-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-emerald-950">Note</div>
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-amber-900/80">
+              Sticky Note
+            </div>
           </div>
           <div className="px-3 pb-3">
             {editing ? (

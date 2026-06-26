@@ -2,20 +2,13 @@ import { useCallback, useRef, useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { OnSelectionChangeFunc } from "@xyflow/react";
-import { ArrowLeft, ChevronDown, Copy, LayoutTemplate, Loader2, Moon, Plus, Redo2, RotateCcw, SquareDashedMousePointer, Sun, Trash2, Undo2, Wand2 } from "lucide-react";
+import { ArrowLeft, Copy, Loader2, Moon, RotateCcw, SquareDashedMousePointer, Sun, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { fsiApi, flushFsiBackendSyncQueue } from "@/services/fsiApi";
 import { usePermissions } from "@/hooks/usePermissions";
 import { canEditFsiCanvas } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,25 +21,15 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import FsiFlowCanvas, { type FsiFlowCanvasHandle } from "./components/FsiFlowCanvas";
+import FsiLeftToolbar from "./components/FsiLeftToolbar";
 import FsiStudySettingsDialog, { type StudyStatus } from "./components/FsiStudySettingsDialog";
 import NodeTypePicker, { type PickerChoice } from "./components/NodeTypePicker";
-import FsiNodeSuggestionsPanel, {
-  type NodeSuggestionPayload,
-  type NoteSuggestionPayload,
-} from "./components/FsiNodeSuggestionsPanel";
+import type { NodeSuggestionPayload, NoteSuggestionPayload } from "./components/FsiNodeSuggestionsPanel";
 import type { FsiGraph, FsiNodeRecord } from "./lib/fsiNodeSchemas";
-import {
-  appendGraphNode,
-  colorForNodeType,
-  defaultPayloadForType,
-  defaultTitleForType,
-  notePayload,
-} from "./lib/fsiNodeSchemas";
+import { appendGraphNode } from "./lib/fsiNodeSchemas";
 import { isCanvasNode, migrateLegacyFieldNodes } from "./lib/fsiLegacyMigrate";
 import { isNoteNode } from "./lib/fsiHierarchy";
-import { SCREENSHOT_NODE_TYPE, screenshotNodePayload } from "./lib/fsiScreenshotNode";
-import { NOTE_TEMPLATES } from "./lib/fsiNoteTemplates";
-import { getSuggestedNodeTypes } from "./lib/fsiStudyTemplates";
+import { screenshotNodePayload } from "./lib/fsiScreenshotNode";
 import { clearSavedViewport } from "./lib/fsiViewportStorage";
 import {
   loadCanvasTheme,
@@ -54,10 +37,12 @@ import {
   toggleCanvasTheme,
   type FsiCanvasTheme,
 } from "./lib/fsiCanvasTheme";
+import {
+  specForWhiteboardType,
+  WHITEBOARD_NODE_TYPES,
+  type WhiteboardNodeType,
+} from "./lib/fsiWhiteboardTypes";
 import { useFsiCanvasHistory } from "./lib/useFsiCanvasHistory";
-import { layoutFsiTree } from "./lib/fsiTreeLayout";
-import { applyFsiLayoutTemplate } from "./lib/applyFsiLayoutTemplate";
-import { layoutTemplatesForStudy } from "./lib/fsiLayoutTemplates";
 
 function patchGraphNodePositions(
   graph: FsiGraph,
@@ -149,44 +134,6 @@ export default function FsiCanvasWorkspace() {
     [queryClient, studyId],
   );
 
-  const applyPrettifyLayout = useCallback(
-    async (sourceGraph: FsiGraph) => {
-      const canvasNodes = sourceGraph.nodes.filter(isCanvasNode);
-      const positions = layoutFsiTree(canvasNodes, sourceGraph.connections);
-      const updates = [...positions.entries()].map(([id, pos]) => ({ id, x: pos.x, y: pos.y }));
-
-      const moves = updates
-        .map(({ id, x, y }) => {
-          const node = sourceGraph.nodes.find((n) => n.id === id);
-          if (!node) return null;
-          const before = { x: node.canvas_x, y: node.canvas_y };
-          const after = { x, y };
-          if (before.x === after.x && before.y === after.y) return null;
-          return { nodeId: id, before, after };
-        })
-        .filter((m): m is NonNullable<typeof m> => m !== null);
-
-      if (moves.length > 0 && !history.isApplying.current) {
-        history.pushEntry({ type: "batch_move", moves });
-      }
-
-      setGraph(patchGraphNodePositions(sourceGraph, updates));
-
-      await Promise.all(
-        updates.map(({ id, x, y }) => fsiApi.updateNode(id, { canvas_x: x, canvas_y: y })),
-      );
-
-      setFitTrigger((n) => n + 1);
-    },
-    [history, setGraph],
-  );
-
-  const prettifyMutation = useMutation({
-    mutationFn: () => applyPrettifyLayout(graphRef.current!),
-    onSuccess: () => toast.success("Canvas tidied into tree layout"),
-    onError: (e: Error) => toast.error(e.message),
-  });
-
   const updateStudyMutation = useMutation({
     mutationFn: (patch: {
       title: string;
@@ -249,31 +196,18 @@ export default function FsiCanvasWorkspace() {
     [history, setGraph],
   );
 
-  const createNoteMutation = useMutation({
-    mutationFn: ({ noteKey, x, y }: { noteKey: string; x: number; y: number }) => {
-      const template = NOTE_TEMPLATES.find((t) => t.key === noteKey) ?? NOTE_TEMPLATES[NOTE_TEMPLATES.length - 1];
+  const createWhiteboardNodeMutation = useMutation({
+    mutationFn: ({ type, x, y }: { type: WhiteboardNodeType; x: number; y: number }) => {
+      const spec = specForWhiteboardType(type);
       return fsiApi.createNode(studyId!, {
-        node_type: "Strategist Note",
-        display_title: "Note",
+        node_type: spec.node_type,
+        display_title: spec.display_title,
         canvas_x: x,
         canvas_y: y,
-        raw_body_text: template.body,
-        structured_payload: notePayload(template.key),
+        structured_payload: spec.structured_payload,
+        raw_body_text: spec.raw_body_text,
       });
     },
-    onSuccess: appendCreatedNode,
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const createTypedNodeMutation = useMutation({
-    mutationFn: ({ nodeType, x, y }: { nodeType: string; x: number; y: number }) =>
-      fsiApi.createNode(studyId!, {
-        node_type: nodeType,
-        display_title: defaultTitleForType(nodeType),
-        canvas_x: x,
-        canvas_y: y,
-        structured_payload: defaultPayloadForType(nodeType),
-      }),
     onSuccess: appendCreatedNode,
     onError: (e: Error) => toast.error(e.message),
   });
@@ -293,31 +227,14 @@ export default function FsiCanvasWorkspace() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const applyTemplateMutation = useMutation({
-    mutationFn: (templateId: string) => {
-      const templates = layoutTemplatesForStudy(graphRef.current!.study.study_type);
-      const template = templates.find((t) => t.id === templateId);
-      if (!template) throw new Error("Layout template not found");
-      return applyFsiLayoutTemplate(studyId!, template, fsiApi);
-    },
-    onSuccess: (nextGraph) => {
-      setGraph(nextGraph);
-      graphRef.current = nextGraph;
-      history.clearHistory();
-      setFitTrigger((n) => n + 1);
-      toast.success("Layout template applied");
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
   const createScreenshotMutation = useMutation({
     mutationFn: async ({ files, x, y }: { files: File[]; x: number; y: number }) => {
       const created: FsiNodeRecord[] = [];
       for (let i = 0; i < files.length; i++) {
         const file = files[i]!;
         const node = (await fsiApi.createNode(studyId!, {
-          node_type: SCREENSHOT_NODE_TYPE,
-          display_title: "Screenshot",
+          node_type: "Visual",
+          display_title: "Visual",
           canvas_x: x + i * 28,
           canvas_y: y + i * 28,
           structured_payload: screenshotNodePayload(""),
@@ -592,36 +509,20 @@ export default function FsiCanvasWorkspace() {
     return canvasRef.current?.getViewportCenter() ?? { x: 200, y: 200 };
   }, []);
 
-  const runCreate = useCallback(
-    (
-      mutate: typeof createTypedNodeMutation.mutate,
-      vars: { nodeType: string; x: number; y: number } | { noteKey: string; x: number; y: number },
-    ) => {
-      if (
-        !canEdit ||
-        creatingRef.current ||
-        createTypedNodeMutation.isPending ||
-        createNoteMutation.isPending
-      ) {
-        return;
-      }
+  const runCreateWhiteboard = useCallback(
+    (type: WhiteboardNodeType, x: number, y: number) => {
+      if (!canEdit || creatingRef.current || createWhiteboardNodeMutation.isPending) return;
       creatingRef.current = true;
-      mutate(vars as never, {
-        onSettled: () => {
-          creatingRef.current = false;
+      createWhiteboardNodeMutation.mutate(
+        { type, x, y },
+        {
+          onSettled: () => {
+            creatingRef.current = false;
+          },
         },
-      });
+      );
     },
-    [canEdit, createNoteMutation.isPending, createTypedNodeMutation.isPending],
-  );
-
-  const addNote = useCallback(
-    (noteKey: string, x?: number, y?: number) => {
-      if (!canEdit) return;
-      const pos = x !== undefined && y !== undefined ? { x, y } : getCanvasCenter();
-      runCreate(createNoteMutation.mutate, { noteKey, x: pos.x, y: pos.y });
-    },
-    [canEdit, createNoteMutation.mutate, getCanvasCenter, runCreate],
+    [canEdit, createWhiteboardNodeMutation],
   );
 
   const handleScreenshotDrop = useCallback(
@@ -631,10 +532,6 @@ export default function FsiCanvasWorkspace() {
     },
     [canEdit, createScreenshotMutation],
   );
-
-  const remindPasteImage = useCallback(() => {
-    toast.info("Click the canvas, then paste (Ctrl+V) or drag an image onto it.");
-  }, []);
 
   const addScreenshot = useCallback(
     (x?: number, y?: number) => {
@@ -654,34 +551,41 @@ export default function FsiCanvasWorkspace() {
     [canEdit, getCanvasCenter, handleScreenshotDrop],
   );
 
+  const handleAddWhiteboardTool = useCallback(
+    (type: WhiteboardNodeType) => {
+      const pos = getCanvasCenter();
+      if (type === "Visual") {
+        addScreenshot(pos.x, pos.y);
+        return;
+      }
+      runCreateWhiteboard(type, pos.x, pos.y);
+    },
+    [addScreenshot, getCanvasCenter, runCreateWhiteboard],
+  );
+
+  const handleWhiteboardDrop = useCallback(
+    (nodeType: string, x: number, y: number) => {
+      if (nodeType === "Visual") {
+        addScreenshot(x, y);
+        return;
+      }
+      runCreateWhiteboard(nodeType as WhiteboardNodeType, x, y);
+    },
+    [addScreenshot, runCreateWhiteboard],
+  );
+
   const handleSuggestionDrop = useCallback(
     (payload: NodeSuggestionPayload, x: number, y: number) => {
-      runCreate(createTypedNodeMutation.mutate, { nodeType: payload.nodeType, x, y });
+      runCreateWhiteboard(payload.nodeType as WhiteboardNodeType, x, y);
     },
-    [createTypedNodeMutation.mutate, runCreate],
+    [runCreateWhiteboard],
   );
 
   const handleNoteDrop = useCallback(
-    (payload: NoteSuggestionPayload, x: number, y: number) => {
-      runCreate(createNoteMutation.mutate, { noteKey: payload.noteKey, x, y });
+    (_payload: NoteSuggestionPayload, x: number, y: number) => {
+      runCreateWhiteboard("Sticky Note", x, y);
     },
-    [createNoteMutation.mutate, runCreate],
-  );
-
-  const handleAddSuggestion = useCallback(
-    (nodeType: string) => {
-      const pos = getCanvasCenter();
-      runCreate(createTypedNodeMutation.mutate, { nodeType, x: pos.x, y: pos.y });
-    },
-    [createTypedNodeMutation.mutate, getCanvasCenter, runCreate],
-  );
-
-  const handleAddNote = useCallback(
-    (noteKey: string) => {
-      const pos = getCanvasCenter();
-      runCreate(createNoteMutation.mutate, { noteKey, x: pos.x, y: pos.y });
-    },
-    [createNoteMutation.mutate, getCanvasCenter, runCreate],
+    [runCreateWhiteboard],
   );
 
   const handlePaneDoubleClick = useCallback(
@@ -698,14 +602,14 @@ export default function FsiCanvasWorkspace() {
       const { flowX, flowY } = pickerAt;
       setPickerAt(null);
       if (choice.kind === "node") {
-        runCreate(createTypedNodeMutation.mutate, { nodeType: choice.nodeType, x: flowX, y: flowY });
+        runCreateWhiteboard(choice.nodeType as WhiteboardNodeType, flowX, flowY);
       } else if (choice.kind === "note") {
-        runCreate(createNoteMutation.mutate, { noteKey: choice.noteKey, x: flowX, y: flowY });
+        runCreateWhiteboard("Sticky Note", flowX, flowY);
       } else {
-        remindPasteImage();
+        addScreenshot(flowX, flowY);
       }
     },
-    [createNoteMutation.mutate, createTypedNodeMutation.mutate, pickerAt, remindPasteImage, runCreate],
+    [addScreenshot, pickerAt, runCreateWhiteboard],
   );
 
   const handleDuplicateNode = useCallback(() => {
@@ -713,22 +617,6 @@ export default function FsiCanvasWorkspace() {
     if (!isCanvasNode(selectedNode)) return;
     duplicateNodeMutation.mutate(selectedNode);
   }, [canEdit, duplicateNodeMutation, selectedNode]);
-
-  const handleApplyTemplate = useCallback(
-    (templateId: string) => {
-      const count = graphRef.current?.nodes.filter(isCanvasNode).length ?? 0;
-      if (
-        count > 0 &&
-        !window.confirm(
-          "Add this layout template to the canvas? Your existing nodes will stay — new nodes are placed alongside them.",
-        )
-      ) {
-        return;
-      }
-      applyTemplateMutation.mutate(templateId);
-    },
-    [applyTemplateMutation],
-  );
 
   const handleUndo = useCallback(() => {
     void history.undo(graphRef.current, setGraph);
@@ -771,11 +659,6 @@ export default function FsiCanvasWorkspace() {
   const handleClearSelection = useCallback(() => {
     setSelectedNode(null);
     setMultiSelectedIds([]);
-  }, []);
-
-  const handleFocusNode = useCallback((node: FsiNodeRecord) => {
-    setSelectedNode(node);
-    requestAnimationFrame(() => canvasRef.current?.focusNode(node.id));
   }, []);
 
   const handleSelectionChange: OnSelectionChangeFunc = useCallback(({ nodes: selected, edges: selectedEdges }) => {
@@ -964,8 +847,6 @@ export default function FsiCanvasWorkspace() {
   const canvasNodes = nodes.filter(isCanvasNode);
   const noteCount = canvasNodes.filter(isNoteNode).length;
   const nodeCount = canvasNodes.length - noteCount;
-  const nodeTypeOptions = getSuggestedNodeTypes(study.study_type).filter((t) => t !== "Strategist Note");
-  const layoutTemplates = layoutTemplatesForStudy(study.study_type);
   const selectionCount = multiSelectedIds.length;
   const canDuplicate =
     !!selectedNode && isCanvasNode(selectedNode) && selectionCount <= 1 && !duplicateNodeMutation.isPending;
@@ -989,7 +870,7 @@ export default function FsiCanvasWorkspace() {
               {study.title}
             </h1>
             <span className="hidden truncate text-[10px] text-zinc-500 lg:inline">
-              {study.study_type} · {study.target_account} · {study.status}
+              {study.target_account || "Whiteboard"}
               {nodeCount > 0 ? ` · ${nodeCount} nodes` : ""}
               {noteCount > 0 ? ` · ${noteCount} notes` : ""}
             </span>
@@ -1023,28 +904,6 @@ export default function FsiCanvasWorkspace() {
 
             {canEdit && (
               <>
-                <div className="mx-0.5 h-4 w-px shrink-0 bg-zinc-800" />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  disabled={!history.canUndo}
-                  onClick={handleUndo}
-                  title="Undo (Ctrl+Z)"
-                >
-                  <Undo2 className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  disabled={!history.canRedo}
-                  onClick={handleRedo}
-                  title="Redo (Ctrl+Shift+Z)"
-                >
-                  <Redo2 className="h-3.5 w-3.5" />
-                </Button>
-
                 <div className="mx-0.5 h-4 w-px shrink-0 bg-zinc-800" />
 
                 <Button
@@ -1081,99 +940,6 @@ export default function FsiCanvasWorkspace() {
                   }
                 >
                   <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-
-                <div className="mx-0.5 h-4 w-px shrink-0 bg-zinc-800" />
-
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button size="sm" variant="secondary" className="h-7 shrink-0 px-2 text-xs">
-                      <Plus className="h-3.5 w-3.5" />
-                      <span className="ml-1 hidden sm:inline">Add</span>
-                      <ChevronDown className="ml-0.5 h-3 w-3" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="end"
-                    className="max-h-80 w-64 overflow-y-auto bg-zinc-900 border-zinc-700"
-                  >
-                    <div className="px-2 py-1.5 text-[10px] font-semibold uppercase text-zinc-500">Nodes</div>
-                    {nodeTypeOptions.map((nodeType) => (
-                      <DropdownMenuItem
-                        key={nodeType}
-                        className="cursor-pointer text-zinc-200 focus:bg-zinc-800 focus:text-white"
-                        onClick={() => handleAddSuggestion(nodeType)}
-                      >
-                        <span
-                          className="mr-2 inline-block h-2 w-2 rounded-full"
-                          style={{ backgroundColor: colorForNodeType(nodeType) }}
-                        />
-                        {nodeType}
-                      </DropdownMenuItem>
-                    ))}
-                    <DropdownMenuSeparator className="bg-zinc-800" />
-                    <div className="px-2 py-1.5 text-[10px] font-semibold uppercase text-zinc-500">Notes</div>
-                    {NOTE_TEMPLATES.map((t) => (
-                      <DropdownMenuItem
-                        key={t.key}
-                        className="cursor-pointer text-zinc-200 focus:bg-zinc-800 focus:text-white"
-                        onClick={() => handleAddNote(t.key)}
-                      >
-                        {t.label}
-                      </DropdownMenuItem>
-                    ))}
-                    <DropdownMenuSeparator className="bg-zinc-800" />
-                    <div className="px-2 py-1.5 text-[10px] font-semibold uppercase text-zinc-500">Images</div>
-                    <DropdownMenuItem
-                      className="cursor-pointer text-zinc-200 focus:bg-zinc-800 focus:text-white"
-                      onClick={remindPasteImage}
-                    >
-                      Paste on canvas (Ctrl+V)
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className="cursor-pointer text-zinc-200 focus:bg-zinc-800 focus:text-white"
-                      onClick={() => addScreenshot()}
-                      disabled={createScreenshotMutation.isPending}
-                    >
-                      Upload from file…
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-
-                {layoutTemplates.length > 0 && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" className="h-7 shrink-0 px-2 text-xs">
-                        <LayoutTemplate className="h-3.5 w-3.5" />
-                        <span className="ml-1 hidden sm:inline">Layout</span>
-                        <ChevronDown className="ml-0.5 h-3 w-3" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56 bg-zinc-900 border-zinc-700">
-                      {layoutTemplates.map((t) => (
-                        <DropdownMenuItem
-                          key={t.id}
-                          className="cursor-pointer flex-col items-start text-zinc-200 focus:bg-zinc-800 focus:text-white"
-                          onClick={() => handleApplyTemplate(t.id)}
-                          disabled={applyTemplateMutation.isPending}
-                        >
-                          <span className="font-medium">{t.label}</span>
-                          <span className="text-[10px] text-zinc-500">{t.description}</span>
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  disabled={prettifyMutation.isPending}
-                  onClick={() => prettifyMutation.mutate()}
-                  title="Prettify layout"
-                >
-                  <Wand2 className="h-3.5 w-3.5" />
                 </Button>
 
                 <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
@@ -1213,6 +979,16 @@ export default function FsiCanvasWorkspace() {
       </header>
 
       <div className="flex min-h-0 flex-1">
+        <FsiLeftToolbar
+          canEdit={canEdit}
+          canvasTheme={canvasTheme}
+          canUndo={history.canUndo}
+          canRedo={history.canRedo}
+          onAddTool={handleAddWhiteboardTool}
+          onUploadImage={() => addScreenshot()}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+        />
         <div className="relative min-h-0 min-w-0 flex-1">
           <FsiFlowCanvas
             key={studyId}
@@ -1238,6 +1014,7 @@ export default function FsiCanvasWorkspace() {
             onSuggestionDrop={handleSuggestionDrop}
             onNoteDrop={handleNoteDrop}
             onScreenshotDrop={handleScreenshotDrop}
+            onWhiteboardDrop={handleWhiteboardDrop}
             onTitleChange={handleTitleChange}
             onBodyChange={handleBodyChange}
             onPayloadChange={handlePayloadChange}
@@ -1260,7 +1037,7 @@ export default function FsiCanvasWorkspace() {
                   : "border-zinc-300 bg-white/90 text-zinc-600",
               )}
             >
-              Connect: drag from any side dot, or click two dots · double-click to add nodes
+              Drag tools from the left · select a node to connect · double-click to add
             </div>
           )}
 
@@ -1268,25 +1045,12 @@ export default function FsiCanvasWorkspace() {
             <NodeTypePicker
               screenX={pickerAt.screenX}
               screenY={pickerAt.screenY}
-              nodeTypes={nodeTypeOptions}
+              nodeTypes={WHITEBOARD_NODE_TYPES}
               onSelect={handlePickerSelect}
               onCancel={() => setPickerAt(null)}
             />
           )}
         </div>
-
-        <FsiNodeSuggestionsPanel
-          study={study}
-          canvasNodes={canvasNodes}
-          focusedNodeId={selectedNode?.id ?? null}
-          canEdit={canEdit}
-          onAddSuggestion={handleAddSuggestion}
-          onAddNote={handleAddNote}
-          onFocusNode={handleFocusNode}
-          onDeleteNode={handleDeleteNode}
-          onDeleteSelected={handleDeleteSelected}
-          selectedCount={multiSelectedIds.length}
-        />
       </div>
     </div>
   );

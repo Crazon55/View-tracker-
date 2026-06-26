@@ -22,6 +22,8 @@ import "@xyflow/react/dist/style.css";
 import FsiCanvasNode from "./FsiCanvasNode";
 import FsiCanvasEdge from "./FsiCanvasEdge";
 import FsiMiroGrid from "./FsiMiroGrid";
+import FsiFrameNode from "./FsiFrameNode";
+import { FSI_WHITEBOARD_TOOL_MIME, type WhiteboardToolPayload } from "./FsiLeftToolbar";
 import { paletteForCanvasTheme, type FsiCanvasTheme } from "../lib/fsiCanvasTheme";
 import { cn } from "@/lib/utils";
 import type { FsiConnectionRecord, FsiNodeRecord } from "../lib/fsiNodeSchemas";
@@ -35,7 +37,7 @@ import {
 } from "./FsiNodeSuggestionsPanel";
 import { clipboardImageFiles } from "../lib/fsiScreenshotNode";
 
-const nodeTypes = { fsiNode: FsiCanvasNode };
+const nodeTypes = { fsiNode: FsiCanvasNode, fsiFrame: FsiFrameNode };
 const edgeTypes = { fsiEdge: FsiCanvasEdge };
 
 export type FsiFlowCanvasHandle = {
@@ -71,6 +73,7 @@ type FlowInnerProps = {
   onSuggestionDrop: (payload: NodeSuggestionPayload, x: number, y: number) => void;
   onNoteDrop: (payload: NoteSuggestionPayload, x: number, y: number) => void;
   onScreenshotDrop: (files: File[], x: number, y: number) => void;
+  onWhiteboardDrop?: (nodeType: string, x: number, y: number) => void;
   onTitleChange: (nodeId: string, title: string) => void;
   onBodyChange: (nodeId: string, body: string) => void;
   onPayloadChange: (nodeId: string, key: string, value: string) => void;
@@ -101,6 +104,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     onSuggestionDrop,
     onNoteDrop,
     onScreenshotDrop,
+    onWhiteboardDrop,
     onTitleChange,
     onBodyChange,
     onPayloadChange,
@@ -405,6 +409,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     if (
       e.dataTransfer.types.includes(FSI_NODE_SUGGESTION_MIME) ||
       e.dataTransfer.types.includes(FSI_NOTE_SUGGESTION_MIME) ||
+      e.dataTransfer.types.includes(FSI_WHITEBOARD_TOOL_MIME) ||
       Array.from(e.dataTransfer.types).includes("Files")
     ) {
       e.preventDefault();
@@ -470,19 +475,35 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
       }
 
       const raw = e.dataTransfer.getData(FSI_NODE_SUGGESTION_MIME);
-      if (!raw) return;
-      try {
-        const payload = JSON.parse(raw) as NodeSuggestionPayload;
-        dropLockRef.current = true;
-        onSuggestionDrop(payload, pos.x, pos.y);
-        window.setTimeout(() => {
-          dropLockRef.current = false;
-        }, 600);
-      } catch {
-        /* ignore */
+      if (raw) {
+        try {
+          const payload = JSON.parse(raw) as NodeSuggestionPayload;
+          dropLockRef.current = true;
+          onSuggestionDrop(payload, pos.x, pos.y);
+          window.setTimeout(() => {
+            dropLockRef.current = false;
+          }, 600);
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+
+      const toolRaw = e.dataTransfer.getData(FSI_WHITEBOARD_TOOL_MIME);
+      if (toolRaw && onWhiteboardDrop) {
+        try {
+          const payload = JSON.parse(toolRaw) as WhiteboardToolPayload;
+          dropLockRef.current = true;
+          onWhiteboardDrop(payload.nodeType, pos.x, pos.y);
+          window.setTimeout(() => {
+            dropLockRef.current = false;
+          }, 600);
+        } catch {
+          /* ignore */
+        }
       }
     },
-    [canEdit, onNoteDrop, onScreenshotDrop, onSuggestionDrop, screenToFlowPosition],
+    [canEdit, onNoteDrop, onScreenshotDrop, onSuggestionDrop, onWhiteboardDrop, screenToFlowPosition],
   );
 
   const handleEdgeClick = useCallback(

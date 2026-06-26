@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 
 STUDY_TYPES = [
+    "Whiteboard",
     "Page Study",
     "Carousel Study",
     "Hook Study",
@@ -17,13 +18,21 @@ STUDY_TYPES = [
 ]
 
 NODE_TYPES = [
+    "Page Name",
+    "Content Pillar",
+    "Content Bucket",
+    "Visual",
+    "Visual Hook",
+    "Written Hook",
+    "Performance",
+    "Link",
+    "Sticky Note",
+    "Frame",
     "Page",
     "Niche",
     "Post Example",
     "Carousel Example",
     "Reel Example",
-    "Content Pillar",
-    "Content Bucket",
     "Hook Pattern",
     "Hook Example",
     "Visual Pattern",

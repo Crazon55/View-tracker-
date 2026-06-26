@@ -1,14 +1,18 @@
 import type { FsiNodeRecord } from "./fsiNodeSchemas";
 
-/** DB enum value used for standalone screenshot cards on the canvas. */
-export const SCREENSHOT_NODE_TYPE = "Visual Pattern";
+/** DB enum value used for standalone visual/screenshot cards on the canvas. */
+export const SCREENSHOT_NODE_TYPE = "Visual";
 
 export function screenshotNodePayload(imageUrl: string) {
   return { is_screenshot: true, image_url: imageUrl };
 }
 
 export function isScreenshotNode(node: FsiNodeRecord): boolean {
-  return node.structured_payload?.is_screenshot === true;
+  return (
+    node.structured_payload?.is_screenshot === true ||
+    node.node_type === "Visual" ||
+    ["Post Example", "Carousel Example", "Reel Example"].includes(node.node_type)
+  );
 }
 
 export function getScreenshotImageUrl(node: FsiNodeRecord): string {

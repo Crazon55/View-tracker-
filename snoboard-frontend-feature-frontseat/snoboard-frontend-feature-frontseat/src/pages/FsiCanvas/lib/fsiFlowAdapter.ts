@@ -3,8 +3,10 @@ import type { FsiConnectionRecord, FsiNodeRecord } from "./fsiNodeSchemas";
 import { colorForNodeType } from "./fsiNodeSchemas";
 import { getFieldDefs } from "./fsiNodeFieldDefs";
 import { isCanvasNode, isNoteNode, isScreenshotNode } from "./fsiHierarchy";
-import { NOTE_COLOR } from "./fsiNoteTemplates";
 import { resolveConnectionHandles } from "./fsiConnectionHandles";
+import { displayNodeType, isFrameNode, isCompactLabelNode } from "./fsiWhiteboardTypes";
+
+const STICKY_COLOR = "#fef08a";
 
 export type FsiNodeData = {
   fsiNode: FsiNodeRecord;
@@ -13,6 +15,7 @@ export type FsiNodeData = {
   color: string;
   canEdit: boolean;
   isNote: boolean;
+  isCompact: boolean;
   fieldDefs: ReturnType<typeof getFieldDefs>;
   onTitleChange?: (nodeId: string, title: string) => void;
   onBodyChange?: (nodeId: string, body: string) => void;
@@ -38,18 +41,51 @@ export function graphToFlow(
   const flowNodes: Node[] = visible.map((n) => {
     const isScreenshot = isScreenshotNode(n);
     const isNote = isNoteNode(n);
-    return {
+    const isFrame = isFrameNode(n);
+    const uiType = displayNodeType(n);
+    const payload = n.structured_payload ?? {};
+
+    if (isFrame) {
+      const w = Number(payload.frame_width) || 520;
+      const h = Number(payload.frame_height) || 360;
+      return {
+        id: n.id,
+        type: "fsiFrame",
+        position: { x: n.canvas_x ?? 0, y: n.canvas_y ?? 0 },
+        style: { width: w, height: h },
+        zIndex: -1,
+        draggable: true,
+        selectable: true,
+        data: {
+          fsiNode: n,
+          label: n.display_title,
+          nodeType: "Frame",
+          color: colorForNodeType("Frame"),
+          canEdit: options?.canEdit ?? false,
+          isNote: false,
+          isCompact: false,
+          fieldDefs: [],
+          onTitleChange: options?.onTitleChange,
+          onBodyChange: options?.onBodyChange,
+          onPayloadChange: options?.onPayloadChange,
+          onScreenshotsChange: options?.onScreenshotsChange,
+        } satisfies FsiNodeData,
+      };
+    }
+
+    const flowNode: Node = {
       id: n.id,
       type: "fsiNode",
       position: { x: n.canvas_x ?? 0, y: n.canvas_y ?? 0 },
       draggable: true,
       data: {
         fsiNode: n,
-        label: isScreenshot ? "Screenshot" : isNote ? "Note" : n.display_title,
-        nodeType: isScreenshot ? "Screenshot" : isNote ? "Note" : n.node_type,
-        color: isScreenshot ? "#ec4899" : isNote ? NOTE_COLOR : colorForNodeType(n.node_type),
+        label: isScreenshot ? "Visual" : isNote ? "Sticky Note" : n.display_title,
+        nodeType: isScreenshot ? "Visual" : isNote ? "Sticky Note" : uiType,
+        color: isScreenshot ? "#ec4899" : isNote ? STICKY_COLOR : colorForNodeType(uiType),
         canEdit: options?.canEdit ?? false,
         isNote,
+        isCompact: isCompactLabelNode(n),
         fieldDefs: isScreenshot || isNote ? [] : getFieldDefs(n.node_type),
         onTitleChange: options?.onTitleChange,
         onBodyChange: options?.onBodyChange,
@@ -57,6 +93,13 @@ export function graphToFlow(
         onScreenshotsChange: options?.onScreenshotsChange,
       } satisfies FsiNodeData,
     };
+
+    if (n.parent_node_id) {
+      flowNode.parentId = n.parent_node_id;
+      flowNode.extent = "parent";
+    }
+
+    return flowNode;
   });
 
   const visibleIds = new Set(visible.map((n) => n.id));
@@ -66,6 +109,7 @@ export function graphToFlow(
     .map((c) => {
       const sourceNode = nodeById.get(c.source_node_id)!;
       const targetNode = nodeById.get(c.target_node_id)!;
+      if (isFrameNode(sourceNode) || isFrameNode(targetNode)) return null;
       const { sourceHandle, targetHandle } = resolveConnectionHandles(c, sourceNode, targetNode);
       return {
         id: c.id,
@@ -84,7 +128,8 @@ export function graphToFlow(
           onLabelChange: options?.onEdgeLabelChange,
         },
       };
-    });
+    })
+    .filter((e): e is NonNullable<typeof e> => e !== null);
 
   return { nodes: flowNodes, edges: flowEdges };
 }
@@ -93,5 +138,5 @@ export function previewLines(node: FsiNodeRecord): string[] {
   if (isNoteNode(node)) {
     return node.raw_body_text ? [node.raw_body_text.slice(0, 60)] : [];
   }
-  return [node.node_type];
+  return [displayNodeType(node)];
 }

@@ -15,7 +15,13 @@ export function isCanvasNode(node: FsiNodeRecord): boolean {
 
 export function isNoteNode(node: FsiNodeRecord): boolean {
   if (node.structured_payload?.is_screenshot === true) return false;
-  return node.structured_payload?.is_note === true || node.structured_payload?.freeform === true;
+  if (node.structured_payload?.is_frame === true) return false;
+  return (
+    node.structured_payload?.is_sticky === true ||
+    node.node_type === "Sticky Note" ||
+    node.structured_payload?.is_note === true ||
+    node.structured_payload?.freeform === true
+  );
 }
 
 /** @deprecated use isNoteNode */

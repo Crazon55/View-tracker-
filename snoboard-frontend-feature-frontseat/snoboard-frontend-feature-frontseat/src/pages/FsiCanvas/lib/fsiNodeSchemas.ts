@@ -1,4 +1,5 @@
 export const STUDY_TYPES = [
+  "Whiteboard",
   "Page Study",
   "Carousel Study",
   "Hook Study",
@@ -149,16 +150,25 @@ export type StrategistNotePayload = {
 };
 
 export const NODE_TYPE_COLORS: Record<string, string> = {
+  "Page Name": "#6366f1",
   Page: "#6366f1",
-  Niche: "#d97706",
+  Niche: "#6366f1",
+  "Content Pillar": "#84cc16",
+  "Content Bucket": "#22c55e",
+  Visual: "#ec4899",
+  "Visual Pattern": "#ec4899",
+  "Visual Hook": "#a855f7",
+  "Written Hook": "#c084fc",
+  Performance: "#64748b",
+  "Performance Insight": "#64748b",
+  Link: "#3b82f6",
+  "Sticky Note": "#eab308",
+  Frame: "#71717a",
   "Post Example": "#3b82f6",
   "Carousel Example": "#06b6d4",
   "Reel Example": "#14b8a6",
-  "Content Pillar": "#84cc16",
-  "Content Bucket": "#22c55e",
   "Hook Pattern": "#a855f7",
   "Hook Example": "#c084fc",
-  "Visual Pattern": "#ec4899",
   "Topic Pattern": "#f472b6",
   "Audience Insight": "#f97316",
   "Strategy Rule": "#eab308",
@@ -166,7 +176,6 @@ export const NODE_TYPE_COLORS: Record<string, string> = {
   "Repeatable Formula": "#10b981",
   "Client Narrative Angle": "#8b5cf6",
   "Strategist Note": "#f59e0b",
-  "Performance Insight": "#64748b",
 };
 
 export function colorForNodeType(nodeType: string): string {
@@ -175,20 +184,28 @@ export function colorForNodeType(nodeType: string): string {
 
 export function defaultPayloadForType(nodeType: string): Record<string, unknown> {
   switch (nodeType) {
-    case "Post Example":
-    case "Carousel Example":
-    case "Reel Example":
-    case "Hook Example":
+    case "Visual":
+      return { is_screenshot: true, image_url: "" };
+    case "Visual Hook":
+    case "Written Hook":
+      return { hook_text: "" };
+    case "Performance":
     case "Performance Insight":
-      return { performance_label: "Average" };
-    case "Strategist Note":
-      return { observation: "" };
+      return { views: "", likes: "", shares: "", comments: "", followers_gained: "" };
+    case "Link":
+      return { url: "", label: "" };
+    case "Sticky Note":
+      return { is_sticky: true, is_note: true };
+    case "Frame":
+      return { is_frame: true, frame_width: 520, frame_height: 360 };
     default:
       return {};
   }
 }
 
 export function defaultTitleForType(nodeType: string): string {
+  if (nodeType === "Sticky Note") return "Note";
+  if (nodeType === "Frame") return "Frame 1";
   return nodeType;
 }
 
