@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, forwardRef, useState } from "react";
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, forwardRef } from "react";
 import {
   ReactFlow,
   Controls,
@@ -286,7 +286,6 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   );
 
   const multiSet = useMemo(() => new Set(multiSelectedIds), [multiSelectedIds]);
-  const [connectionDragging, setConnectionDragging] = useState(false);
 
   useEffect(() => {
     setNodes((current) => {
@@ -556,12 +555,9 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         ...n,
         selected: n.id === selectedNodeId || multiSet.has(n.id),
         connectable: canEdit,
-        data: {
-          ...(n.data as FsiNodeData),
-          connectionDragging,
-        },
+        data: n.data as FsiNodeData,
       })),
-    [nodes, selectedNodeId, multiSet, canEdit, connectionDragging],
+    [nodes, selectedNodeId, multiSet, canEdit],
   );
 
   const miniMapNodeColor = useCallback((n: Node) => {
@@ -586,12 +582,11 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         onNodesChange={onNodesChange}
         onEdgesChange={handleEdgesChange}
         onConnect={handleConnect}
-        onConnectStart={() => setConnectionDragging(true)}
-        onConnectEnd={() => setConnectionDragging(false)}
         connectionMode={ConnectionMode.Loose}
         connectOnClick={false}
-        connectionRadius={56}
+        connectionRadius={72}
         nodesConnectable={canEdit}
+        elementsSelectable={canEdit}
         onNodeClick={handleNodeClick}
         onEdgeClick={handleEdgeClick}
         onPaneClick={handlePaneClick}

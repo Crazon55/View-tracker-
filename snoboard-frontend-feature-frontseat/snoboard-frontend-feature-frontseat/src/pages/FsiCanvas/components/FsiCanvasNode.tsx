@@ -22,7 +22,6 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
     onTitleChange,
     onBodyChange,
     onPayloadChange,
-    connectionDragging,
   } = nodeData;
 
   const [title, setTitle] = useState(fsiNode.display_title);
@@ -214,7 +213,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
           void replaceScreenshot(files);
         }}
       >
-        <FsiNodeHandles visible={showHandles} connecting={connectionDragging} />
+        <FsiNodeHandles canStartConnection={showHandles} />
         <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-pink-200/90">
           Visual
         </div>
@@ -248,7 +247,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
         }`}
         style={{ borderColor: nodeData.color, backgroundColor: nodeData.color }}
       >
-        <FsiNodeHandles visible={showHandles} connecting={connectionDragging} />
+        <FsiNodeHandles canStartConnection={showHandles} />
         {editing ? (
           <input
             value={title}
@@ -279,7 +278,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
         }`}
         style={{ borderColor: nodeData.color, backgroundColor: nodeData.color }}
       >
-        <FsiNodeHandles visible={showHandles} connecting={connectionDragging} />
+        <FsiNodeHandles canStartConnection={showHandles} />
         {editing ? (
           <input
             value={title}
@@ -334,7 +333,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
         backgroundColor: isNote ? "#fef08a" : nodeData.color,
       }}
     >
-      <FsiNodeHandles visible={showHandles} connecting={connectionDragging} />
+      <FsiNodeHandles canStartConnection={showHandles} />
 
       {isNote ? (
         <>
