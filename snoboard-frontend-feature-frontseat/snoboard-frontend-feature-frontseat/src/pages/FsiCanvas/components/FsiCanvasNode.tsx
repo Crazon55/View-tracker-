@@ -78,6 +78,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
   const [replacingScreenshot, setReplacingScreenshot] = useState(false);
 
   const isLink = isLinkNode(fsiNode);
+  const isNiche = nodeData.nodeType === "Niche";
   const noteInputClass =
     "nodrag nopan w-full rounded-sm border border-amber-900/20 bg-amber-50/80 px-2.5 py-2 text-xs text-zinc-900 placeholder:text-zinc-500 focus:border-amber-700 focus:outline-none";
   const nicheFieldClass =
@@ -322,8 +323,6 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
       </div>
     );
   }
-
-  const isNiche = nodeData.nodeType === "Niche";
 
   return (
     <div
