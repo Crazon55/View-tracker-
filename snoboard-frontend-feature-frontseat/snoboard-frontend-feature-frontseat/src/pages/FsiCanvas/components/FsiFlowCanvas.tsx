@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, forwardRef } from "react";
 import {
   ReactFlow,
-  Background,
-  BackgroundVariant,
   Controls,
   MiniMap,
   SelectionMode,
@@ -23,6 +21,7 @@ import "@xyflow/react/dist/style.css";
 
 import FsiCanvasNode from "./FsiCanvasNode";
 import FsiCanvasEdge from "./FsiCanvasEdge";
+import FsiMiroGrid from "./FsiMiroGrid";
 import type { FsiConnectionRecord, FsiNodeRecord } from "../lib/fsiNodeSchemas";
 import { graphToFlow, type FsiNodeData } from "../lib/fsiFlowAdapter";
 import { loadSavedViewport, saveViewport } from "../lib/fsiViewportStorage";
@@ -568,8 +567,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         maxZoom={2.5}
         className="bg-zinc-950 fsi-flow-canvas"
       >
-        <Background id="fsi-grid-coarse" variant={BackgroundVariant.Dots} gap={48} size={3} color="#3f3f46" />
-        <Background id="fsi-grid-fine" variant={BackgroundVariant.Dots} gap={24} size={2} color="#52525b" />
+        <FsiMiroGrid />
         <Controls className="!z-20 !bg-zinc-900 !border-zinc-700 [&>button]:!bg-zinc-800 [&>button]:!border-zinc-700 [&>button]:!text-white" />
         <MiniMap
           pannable
