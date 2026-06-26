@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useState } from "react";
-import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { type NodeProps } from "@xyflow/react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { FsiNodeData } from "../lib/fsiFlowAdapter";
@@ -9,6 +9,7 @@ import { parseNodeScreenshots, uploadFsiNodeScreenshotFiles } from "../lib/fsiNo
 import { getScreenshotImageUrl, isScreenshotNode } from "../lib/fsiHierarchy";
 import { clipboardImageFiles } from "../lib/fsiScreenshotNode";
 import { FsiNodeContentBlock, FsiNodeScreenshotsBlock } from "./FsiNodeContentBlocks";
+import FsiNodeHandles from "./FsiNodeHandles";
 
 function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
   const nodeData = data as FsiNodeData;
@@ -284,7 +285,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
           void replaceScreenshot(files);
         }}
       >
-        <Handle type="target" position={Position.Top} className="!h-2.5 !w-2.5 !border-2 !border-pink-300 !bg-white" />
+        <FsiNodeHandles borderClassName="!border-pink-300" />
         <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-pink-200/90">
           Screenshot
         </div>
@@ -306,7 +307,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
             {replacingScreenshot && <Loader2 className="h-3.5 w-3.5 animate-spin text-pink-200" />}
           </div>
         )}
-        <Handle type="source" position={Position.Bottom} className="!h-2.5 !w-2.5 !border-2 !border-pink-300 !bg-white" />
+        <FsiNodeHandles borderClassName="!border-pink-300" />
       </div>
     );
   }
@@ -318,7 +319,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
       }`}
       style={{ borderColor: nodeData.color, backgroundColor: nodeData.color }}
     >
-      <Handle type="target" position={Position.Top} className="!h-2.5 !w-2.5 !border-2 !border-emerald-900 !bg-white" />
+      <FsiNodeHandles borderClassName="!border-emerald-900" />
 
       {isNote ? (
         <>
@@ -397,7 +398,6 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
         </>
       )}
 
-      <Handle type="source" position={Position.Bottom} className="!h-2.5 !w-2.5 !border-2 !border-emerald-900 !bg-white" />
     </div>
   );
 }

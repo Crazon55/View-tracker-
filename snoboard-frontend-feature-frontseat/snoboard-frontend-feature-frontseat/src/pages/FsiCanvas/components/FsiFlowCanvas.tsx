@@ -6,6 +6,7 @@ import {
   Controls,
   MiniMap,
   SelectionMode,
+  ConnectionMode,
   addEdge,
   useNodesState,
   useEdgesState,
@@ -526,6 +527,9 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         onNodesChange={onNodesChange}
         onEdgesChange={handleEdgesChange}
         onConnect={handleConnect}
+        connectionMode={ConnectionMode.Loose}
+        connectOnClick={canEdit}
+        connectionRadius={44}
         onNodeClick={handleNodeClick}
         onEdgeClick={handleEdgeClick}
         onPaneClick={handlePaneClick}
