@@ -37,7 +37,7 @@ import {
 } from "./FsiNodeSuggestionsPanel";
 import { clipboardImageFiles } from "../lib/fsiScreenshotNode";
 import { isFrameNode } from "../lib/fsiWhiteboardTypes";
-import { connectionEndpointsKey, isSameConnectionEndpoints } from "../lib/fsiConnectionUtils";
+import { isSameConnectionEndpoints } from "../lib/fsiConnectionUtils";
 
 const nodeTypes = { fsiNode: FsiCanvasNode, fsiFrame: FsiFrameNode };
 const edgeTypes = { fsiEdge: FsiCanvasEdge };
@@ -606,9 +606,9 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         onEdgesChange={handleEdgesChange}
         onConnect={handleConnect}
         isValidConnection={isValidConnection}
-        connectionMode={ConnectionMode.Loose}
+        connectionMode={ConnectionMode.Strict}
         connectOnClick={false}
-        connectionRadius={120}
+        connectionRadius={20}
         nodesConnectable={canEdit}
         elementsSelectable={canEdit}
         onNodeClick={handleNodeClick}

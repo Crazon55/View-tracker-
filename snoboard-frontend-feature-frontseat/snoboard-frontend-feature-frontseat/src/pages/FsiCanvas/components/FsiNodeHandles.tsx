@@ -1,96 +1,144 @@
 import { Handle, Position, type CSSProperties } from "@xyflow/react";
 import { cn } from "@/lib/utils";
+import {
+  type AnchorSide,
+  formatAnchorHandle,
+  parseAnchorHandle,
+} from "../lib/fsiConnectionAnchors";
+import { normalizeToAnchorHandle } from "../lib/fsiConnectionHandles";
 
-const SIDES = [
-  { position: Position.Top, id: "top" },
-  { position: Position.Right, id: "right" },
-  { position: Position.Bottom, id: "bottom" },
-  { position: Position.Left, id: "left" },
-] as const;
+/** Anchor spacing along each edge (percent). Visual cards use finer steps. */
+function anchorPcts(fine: boolean): number[] {
+  const step = fine ? 5 : 10;
+  const count = 100 / step;
+  return Array.from({ length: count + 1 }, (_, i) => i * step);
+}
 
-type Props = {
-  /** When true, this node can start a connection (invisible edge hit zones). */
-  canStartConnection?: boolean;
-  /** Wider invisible hit zones (e.g. image cards). */
-  largeHitZone?: boolean;
+const SIDES: AnchorSide[] = ["top", "right", "bottom", "left"];
+
+const SIDE_POSITION: Record<AnchorSide, Position> = {
+  top: Position.Top,
+  right: Position.Right,
+  bottom: Position.Bottom,
+  left: Position.Left,
 };
 
-function edgeHandleStyle(position: Position, large: boolean): CSSProperties {
-  const thickness = large ? 18 : 14;
-  switch (position) {
-    case Position.Top:
+type Props = {
+  /** When true, full perimeter grid is interactive for starting connections. */
+  canStartConnection?: boolean;
+  /** Slightly larger hit targets (visual / image cards). */
+  largeHitZone?: boolean;
+  /** Anchor handle ids required for existing edges (always rendered). */
+  requiredAnchors?: string[];
+};
+
+function anchorHitSize(large: boolean): number {
+  return large ? 14 : 12;
+}
+
+function anchorHandleStyle(side: AnchorSide, pct: number, large: boolean): CSSProperties {
+  const size = anchorHitSize(large);
+  switch (side) {
+    case "top":
       return {
-        left: "4%",
-        width: "92%",
-        height: thickness,
+        left: `${pct}%`,
         top: 0,
-        transform: "translateY(-50%)",
+        width: size,
+        height: size,
+        transform: "translate(-50%, -50%)",
       };
-    case Position.Bottom:
+    case "bottom":
       return {
-        left: "4%",
-        width: "92%",
-        height: thickness,
+        left: `${pct}%`,
         bottom: 0,
-        transform: "translateY(50%)",
+        width: size,
+        height: size,
+        transform: "translate(-50%, 50%)",
       };
-    case Position.Left:
+    case "left":
       return {
-        top: "4%",
-        height: "92%",
-        width: thickness,
+        top: `${pct}%`,
         left: 0,
-        transform: "translateX(-50%)",
+        width: size,
+        height: size,
+        transform: "translate(-50%, -50%)",
       };
-    case Position.Right:
+    case "right":
       return {
-        top: "4%",
-        height: "92%",
-        width: thickness,
+        top: `${pct}%`,
         right: 0,
-        transform: "translateX(50%)",
+        width: size,
+        height: size,
+        transform: "translate(50%, -50%)",
       };
     default:
       return {};
   }
 }
 
+function anchorsToRender(required: string[], showFullGrid: boolean, fine: boolean): Set<string> {
+  const set = new Set<string>();
+  for (const raw of required) {
+    const id = normalizeToAnchorHandle(raw);
+    if (id) set.add(id);
+  }
+  if (showFullGrid) {
+    const pcts = anchorPcts(fine);
+    for (const side of SIDES) {
+      for (const pct of pcts) {
+        set.add(formatAnchorHandle(side, "in", pct));
+        set.add(formatAnchorHandle(side, "out", pct));
+      }
+    }
+  }
+  return set;
+}
+
 const handleClass = cn(
-  "!z-[40] !border-0 !bg-transparent !opacity-0 !rounded-none",
+  "!z-[40] !border-0 !bg-transparent !opacity-0 !rounded-full",
 );
 
 /**
- * Invisible four-side handles — no visible dots. Drag from any node edge to connect.
+ * Invisible perimeter anchors — connect from the exact point you drag, Miro-style.
  */
-export default function FsiNodeHandles({ canStartConnection = false, largeHitZone = false }: Props) {
-  const sourcePointer = canStartConnection ? "!pointer-events-auto" : "!pointer-events-none";
+export default function FsiNodeHandles({
+  canStartConnection = false,
+  largeHitZone = false,
+  requiredAnchors = [],
+}: Props) {
+  const showFullGrid = canStartConnection;
+  const ids = anchorsToRender(requiredAnchors, showFullGrid, largeHitZone);
+
+  const rendered: { id: string; kind: "in" | "out"; side: AnchorSide; pct: number }[] = [];
+  for (const id of ids) {
+    const parsed = parseAnchorHandle(id);
+    if (!parsed) continue;
+    rendered.push({ id, kind: parsed.kind, side: parsed.side, pct: parsed.pct });
+  }
 
   return (
     <>
-      {SIDES.map(({ position, id }) => (
-        <Handle
-          key={`${id}-in`}
-          type="target"
-          position={position}
-          id={`${id}-in`}
-          className={cn(handleClass, "!pointer-events-auto")}
-          style={edgeHandleStyle(position, largeHitZone)}
-          isConnectable
-          isConnectableEnd
-        />
-      ))}
-      {SIDES.map(({ position, id }) => (
-        <Handle
-          key={`${id}-out`}
-          type="source"
-          position={position}
-          id={`${id}-out`}
-          className={cn(handleClass, sourcePointer)}
-          style={edgeHandleStyle(position, largeHitZone)}
-          isConnectable={canStartConnection}
-          isConnectableStart={canStartConnection}
-        />
-      ))}
+      {rendered.map(({ id, kind, side, pct }) => {
+        const isSource = kind === "out";
+        const canUse =
+          isSource ? canStartConnection : true;
+        return (
+          <Handle
+            key={id}
+            type={isSource ? "source" : "target"}
+            position={SIDE_POSITION[side]}
+            id={id}
+            className={cn(
+              handleClass,
+              canUse ? "!pointer-events-auto" : "!pointer-events-none",
+            )}
+            style={anchorHandleStyle(side, pct, largeHitZone)}
+            isConnectable={canUse}
+            isConnectableStart={isSource ? canStartConnection : false}
+            isConnectableEnd={!isSource}
+          />
+        );
+      })}
     </>
   );
 }

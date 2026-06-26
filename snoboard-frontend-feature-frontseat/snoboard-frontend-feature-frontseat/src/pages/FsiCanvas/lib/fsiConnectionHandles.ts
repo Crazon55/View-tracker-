@@ -1,5 +1,5 @@
 import type { FsiConnectionRecord, FsiNodeRecord } from "./fsiNodeSchemas";
-import { inferAnchorHandles, isAnchorHandle, parseAnchorHandle } from "./fsiConnectionAnchors";
+import { formatAnchorHandle, inferAnchorHandles, isAnchorHandle, parseAnchorHandle } from "./fsiConnectionAnchors";
 
 export type FsiSourceHandleId = `${"top" | "right" | "bottom" | "left"}-out` | string;
 export type FsiTargetHandleId = `${"top" | "right" | "bottom" | "left"}-in` | string;
@@ -7,15 +7,24 @@ export type FsiTargetHandleId = `${"top" | "right" | "bottom" | "left"}-in` | st
 const LEGACY_SOURCE = new Set(["top-out", "right-out", "bottom-out", "left-out"]);
 const LEGACY_TARGET = new Set(["top-in", "right-in", "bottom-in", "left-in"]);
 
-/** Map anchor handles (right-out-50) to nearest legacy center handle for rendering. */
-export function toFlowHandleId(id: string | null | undefined, kind: "source" | "target"): string | undefined {
+/** Legacy center handles → midpoint anchor so edges stay on the chosen side. */
+export function normalizeToAnchorHandle(id: string | null | undefined): string | undefined {
   if (!id) return undefined;
-  if (LEGACY_SOURCE.has(id) || LEGACY_TARGET.has(id)) return id;
-  const parsed = parseAnchorHandle(id);
-  if (parsed) {
-    return `${parsed.side}-${parsed.kind === "out" ? "out" : "in"}`;
+  if (isAnchorHandle(id)) return id;
+  if (LEGACY_SOURCE.has(id)) {
+    const side = id.replace("-out", "") as "top" | "right" | "bottom" | "left";
+    return formatAnchorHandle(side, "out", 50);
+  }
+  if (LEGACY_TARGET.has(id)) {
+    const side = id.replace("-in", "") as "top" | "right" | "bottom" | "left";
+    return formatAnchorHandle(side, "in", 50);
   }
   return id;
+}
+
+/** Pass anchor ids through unchanged — do not collapse to side center. */
+export function toFlowHandleId(id: string | null | undefined): string | undefined {
+  return normalizeToAnchorHandle(id);
 }
 
 export function resolveConnectionHandles(
@@ -27,21 +36,37 @@ export function resolveConnectionHandles(
   const targetHandle = connection.target_handle;
 
   if (sourceHandle && targetHandle) {
-    const sh = toFlowHandleId(sourceHandle, "source") ?? sourceHandle;
-    const th = toFlowHandleId(targetHandle, "target") ?? targetHandle;
-    if (
-      (LEGACY_SOURCE.has(sh) || isAnchorHandle(sh)) &&
-      (LEGACY_TARGET.has(th) || isAnchorHandle(th))
-    ) {
-      return { sourceHandle: sh, targetHandle: th };
-    }
+    return {
+      sourceHandle: normalizeToAnchorHandle(sourceHandle) ?? sourceHandle,
+      targetHandle: normalizeToAnchorHandle(targetHandle) ?? targetHandle,
+    };
   }
 
   const inferred = inferAnchorHandles(source, target);
   return {
-    sourceHandle: toFlowHandleId(inferred.sourceHandle, "source") ?? inferred.sourceHandle,
-    targetHandle: toFlowHandleId(inferred.targetHandle, "target") ?? inferred.targetHandle,
+    sourceHandle: normalizeToAnchorHandle(inferred.sourceHandle) ?? inferred.sourceHandle,
+    targetHandle: normalizeToAnchorHandle(inferred.targetHandle) ?? inferred.targetHandle,
   };
+}
+
+export function anchorIdsForNode(
+  nodeId: string,
+  connections: FsiConnectionRecord[],
+): string[] {
+  const ids = new Set<string>();
+  for (const c of connections) {
+    if (c.source_node_id === nodeId && c.source_handle) {
+      ids.add(normalizeToAnchorHandle(c.source_handle) ?? c.source_handle);
+    }
+    if (c.target_node_id === nodeId && c.target_handle) {
+      ids.add(normalizeToAnchorHandle(c.target_handle) ?? c.target_handle);
+    }
+  }
+  return [...ids];
+}
+
+export function isLegacyOrAnchorHandle(id: string): boolean {
+  return LEGACY_SOURCE.has(id) || LEGACY_TARGET.has(id) || isAnchorHandle(id);
 }
 
 export const inferConnectionHandles = inferAnchorHandles;
