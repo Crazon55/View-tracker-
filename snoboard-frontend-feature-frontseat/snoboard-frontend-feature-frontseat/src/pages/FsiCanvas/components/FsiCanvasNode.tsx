@@ -316,23 +316,26 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
   if (isCompact) {
     return (
       <div
-        className={`min-w-[120px] max-w-[280px] rounded-sm bg-black px-4 py-2.5 shadow-lg ${
-          selected ? "ring-2 ring-white/40" : ""
+        className={`min-w-[120px] max-w-[280px] rounded-md border-2 px-4 py-2.5 shadow-lg ${
+          selected ? "ring-2 ring-white/50" : ""
         }`}
+        style={{ borderColor: nodeData.color, backgroundColor: nodeData.color }}
       >
-        <FsiNodeHandles borderClassName="!border-zinc-400" visible={showHandles} />
+        <FsiNodeHandles borderClassName="!border-emerald-900" visible={showHandles} />
         {editing ? (
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onBlur={(e) => commitTitle(e.target.value)}
-            className="nodrag nopan w-full bg-transparent text-center text-sm font-semibold text-white placeholder:text-zinc-500 focus:outline-none"
+            className="nodrag nopan w-full bg-transparent text-center text-sm font-semibold text-emerald-950 placeholder:text-emerald-900/40 focus:outline-none"
             placeholder={nodeData.nodeType}
           />
         ) : (
-          <div className="text-center text-sm font-semibold text-white">{title || nodeData.nodeType}</div>
+          <div className="text-center text-sm font-semibold leading-tight text-emerald-950">
+            {title || nodeData.nodeType}
+          </div>
         )}
-        <div className="mt-0.5 text-center text-[9px] font-medium uppercase tracking-wide text-zinc-400">
+        <div className="mt-0.5 text-center text-[9px] font-medium uppercase tracking-wide text-emerald-950/70">
           {nodeData.nodeType}
         </div>
       </div>

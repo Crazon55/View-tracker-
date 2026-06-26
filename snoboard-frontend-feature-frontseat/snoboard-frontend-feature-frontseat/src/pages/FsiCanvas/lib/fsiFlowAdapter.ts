@@ -44,6 +44,10 @@ export function graphToFlow(
     const isFrame = isFrameNode(n);
     const uiType = displayNodeType(n);
     const payload = n.structured_payload ?? {};
+    const customColor =
+      typeof payload.card_color === "string" && payload.card_color.trim()
+        ? payload.card_color.trim()
+        : null;
 
     if (isFrame) {
       const w = Number(payload.frame_width) || 520;
@@ -82,7 +86,11 @@ export function graphToFlow(
         fsiNode: n,
         label: isScreenshot ? "Visual" : isNote ? "Sticky Note" : n.display_title,
         nodeType: isScreenshot ? "Visual" : isNote ? "Sticky Note" : uiType,
-        color: isScreenshot ? "#ec4899" : isNote ? STICKY_COLOR : colorForNodeType(uiType),
+        color: isScreenshot
+          ? "#ec4899"
+          : isNote
+            ? STICKY_COLOR
+            : customColor ?? colorForNodeType(uiType),
         canEdit: options?.canEdit ?? false,
         isNote,
         isCompact: isCompactLabelNode(n),
