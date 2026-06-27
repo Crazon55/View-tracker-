@@ -7,13 +7,6 @@ import {
 } from "../lib/fsiConnectionAnchors";
 import { normalizeToAnchorHandle } from "../lib/fsiConnectionHandles";
 
-/** Anchor spacing along each edge (percent). Visual cards use finer steps. */
-function anchorPcts(fine: boolean): number[] {
-  const step = fine ? 5 : 10;
-  const count = 100 / step;
-  return Array.from({ length: count + 1 }, (_, i) => i * step);
-}
-
 const SIDES: AnchorSide[] = ["top", "right", "bottom", "left"];
 
 const SIDE_POSITION: Record<AnchorSide, Position> = {
@@ -24,20 +17,55 @@ const SIDE_POSITION: Record<AnchorSide, Position> = {
 };
 
 type Props = {
-  /** When true, full perimeter grid is interactive for starting connections. */
   canStartConnection?: boolean;
-  /** Slightly larger hit targets (visual / image cards). */
   largeHitZone?: boolean;
-  /** Anchor handle ids required for existing edges (always rendered). */
+  /** Anchor ids used by saved edges — rendered at exact positions. */
   requiredAnchors?: string[];
 };
 
-function anchorHitSize(large: boolean): number {
-  return large ? 14 : 12;
+/** Wide invisible strips along each edge — easy to grab. Pointer refines exact anchor on connect. */
+function edgeStripStyle(side: AnchorSide, large: boolean): CSSProperties {
+  const thickness = large ? 22 : 18;
+  switch (side) {
+    case "top":
+      return {
+        left: "2%",
+        width: "96%",
+        height: thickness,
+        top: 0,
+        transform: "translateY(-50%)",
+      };
+    case "bottom":
+      return {
+        left: "2%",
+        width: "96%",
+        height: thickness,
+        bottom: 0,
+        transform: "translateY(50%)",
+      };
+    case "left":
+      return {
+        top: "2%",
+        height: "96%",
+        width: thickness,
+        left: 0,
+        transform: "translateX(-50%)",
+      };
+    case "right":
+      return {
+        top: "2%",
+        height: "96%",
+        width: thickness,
+        right: 0,
+        transform: "translateX(50%)",
+      };
+    default:
+      return {};
+  }
 }
 
-function anchorHandleStyle(side: AnchorSide, pct: number, large: boolean): CSSProperties {
-  const size = anchorHitSize(large);
+function pointAnchorStyle(side: AnchorSide, pct: number, large: boolean): CSSProperties {
+  const size = large ? 16 : 14;
   switch (side) {
     case "top":
       return {
@@ -76,52 +104,69 @@ function anchorHandleStyle(side: AnchorSide, pct: number, large: boolean): CSSPr
   }
 }
 
-function anchorsToRender(required: string[], showFullGrid: boolean, fine: boolean): Set<string> {
-  const set = new Set<string>();
-  for (const raw of required) {
-    const id = normalizeToAnchorHandle(raw);
-    if (id) set.add(id);
-  }
-  if (showFullGrid) {
-    const pcts = anchorPcts(fine);
-    for (const side of SIDES) {
-      for (const pct of pcts) {
-        set.add(formatAnchorHandle(side, "in", pct));
-        set.add(formatAnchorHandle(side, "out", pct));
-      }
-    }
-  }
-  return set;
-}
+const stripClass = cn(
+  "!z-[35] !border-0 !bg-transparent !opacity-0 !rounded-none",
+);
 
-const handleClass = cn(
+const pointClass = cn(
   "!z-[40] !border-0 !bg-transparent !opacity-0 !rounded-full",
 );
 
 /**
- * Invisible perimeter anchors — connect from the exact point you drag, Miro-style.
+ * Edge strips for reliable drag-to-connect + point anchors for saved edge positions.
  */
 export default function FsiNodeHandles({
   canStartConnection = false,
   largeHitZone = false,
   requiredAnchors = [],
 }: Props) {
-  const showFullGrid = canStartConnection;
-  const ids = anchorsToRender(requiredAnchors, showFullGrid, largeHitZone);
+  const sourcePointer = canStartConnection ? "!pointer-events-auto" : "!pointer-events-none";
 
-  const rendered: { id: string; kind: "in" | "out"; side: AnchorSide; pct: number }[] = [];
-  for (const id of ids) {
+  const pointAnchors: { id: string; kind: "in" | "out"; side: AnchorSide; pct: number }[] = [];
+  const stripIds = new Set<string>();
+
+  for (const side of SIDES) {
+    stripIds.add(`${side}-in`);
+    stripIds.add(`${side}-out`);
+  }
+
+  for (const raw of requiredAnchors) {
+    const id = normalizeToAnchorHandle(raw);
+    if (!id) continue;
     const parsed = parseAnchorHandle(id);
     if (!parsed) continue;
-    rendered.push({ id, kind: parsed.kind, side: parsed.side, pct: parsed.pct });
+    if (stripIds.has(id)) continue;
+    pointAnchors.push({ id, kind: parsed.kind, side: parsed.side, pct: parsed.pct });
   }
 
   return (
     <>
-      {rendered.map(({ id, kind, side, pct }) => {
+      {SIDES.map((side) => (
+        <Handle
+          key={`${side}-in-strip`}
+          type="target"
+          position={SIDE_POSITION[side]}
+          id={`${side}-in`}
+          className={cn(stripClass, "!pointer-events-auto")}
+          style={edgeStripStyle(side, largeHitZone)}
+          isConnectable
+          isConnectableEnd
+        />
+      ))}
+      {SIDES.map((side) => (
+        <Handle
+          key={`${side}-out-strip`}
+          type="source"
+          position={SIDE_POSITION[side]}
+          id={`${side}-out`}
+          className={cn(stripClass, sourcePointer)}
+          style={edgeStripStyle(side, largeHitZone)}
+          isConnectable={canStartConnection}
+          isConnectableStart={canStartConnection}
+        />
+      ))}
+      {pointAnchors.map(({ id, kind, side, pct }) => {
         const isSource = kind === "out";
-        const canUse =
-          isSource ? canStartConnection : true;
         return (
           <Handle
             key={id}
@@ -129,11 +174,11 @@ export default function FsiNodeHandles({
             position={SIDE_POSITION[side]}
             id={id}
             className={cn(
-              handleClass,
-              canUse ? "!pointer-events-auto" : "!pointer-events-none",
+              pointClass,
+              isSource ? sourcePointer : "!pointer-events-auto",
             )}
-            style={anchorHandleStyle(side, pct, largeHitZone)}
-            isConnectable={canUse}
+            style={pointAnchorStyle(side, pct, largeHitZone)}
+            isConnectable={isSource ? canStartConnection : true}
             isConnectableStart={isSource ? canStartConnection : false}
             isConnectableEnd={!isSource}
           />

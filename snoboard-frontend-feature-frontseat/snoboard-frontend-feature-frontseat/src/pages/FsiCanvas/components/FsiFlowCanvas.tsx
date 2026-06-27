@@ -16,6 +16,7 @@ import {
   type Viewport,
   ReactFlowProvider,
   useReactFlow,
+  type XYPosition,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -38,6 +39,10 @@ import {
 import { clipboardImageFiles } from "../lib/fsiScreenshotNode";
 import { isFrameNode } from "../lib/fsiWhiteboardTypes";
 import { isSameConnectionEndpoints } from "../lib/fsiConnectionUtils";
+import {
+  clientPointFromConnectEvent,
+  refineConnectionHandlesFromPointers,
+} from "../lib/fsiConnectPointer";
 
 const nodeTypes = { fsiNode: FsiCanvasNode, fsiFrame: FsiFrameNode };
 const edgeTypes = { fsiEdge: FsiCanvasEdge };
@@ -122,6 +127,10 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   const lastPointerRef = useRef({ x: 200, y: 200 });
   const viewportReadyRef = useRef(false);
   const saveViewportTimer = useRef<number | null>(null);
+  const connectPointerRef = useRef<{ start: XYPosition | null; end: XYPosition | null }>({
+    start: null,
+    end: null,
+  });
 
   const persistViewport = useCallback(
     (viewport: Viewport) => {
@@ -336,15 +345,58 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     [schedulePersistViewport],
   );
 
+  const getAbsoluteFlowPosition = useCallback(
+    (node: Node) => {
+      let x = node.position.x;
+      let y = node.position.y;
+      let parentId = node.parentId;
+      while (parentId) {
+        const parent = getNode(parentId);
+        if (!parent) break;
+        x += parent.position.x;
+        y += parent.position.y;
+        parentId = parent.parentId;
+      }
+      return { x, y };
+    },
+    [getNode],
+  );
+
   const handleConnect = useCallback(
     (params: Connection) => {
       if (!canEdit || !params.source || !params.target) return;
       if (params.source === params.target) return;
+
+      const sourceDb = dbNodes.find((n) => n.id === params.source);
+      const targetDb = dbNodes.find((n) => n.id === params.target);
+      if (!sourceDb || !targetDb) return;
+
+      const sourceRf = getNode(params.source);
+      const targetRf = getNode(params.target);
+      const sourceAbs = sourceRf
+        ? getAbsoluteFlowPosition(sourceRf)
+        : { x: sourceDb.canvas_x ?? 0, y: sourceDb.canvas_y ?? 0 };
+      const targetAbs = targetRf
+        ? getAbsoluteFlowPosition(targetRf)
+        : { x: targetDb.canvas_x ?? 0, y: targetDb.canvas_y ?? 0 };
+
+      const { sourceHandle, targetHandle } = refineConnectionHandlesFromPointers({
+        sourceDb,
+        targetDb,
+        sourceAbs,
+        targetAbs,
+        startPointer: connectPointerRef.current.start,
+        endPointer: connectPointerRef.current.end,
+        fallbackSource: params.sourceHandle,
+        fallbackTarget: params.targetHandle,
+      });
+      connectPointerRef.current = { start: null, end: null };
+
       const endpoints = {
         source: params.source,
         target: params.target,
-        sourceHandle: params.sourceHandle,
-        targetHandle: params.targetHandle,
+        sourceHandle,
+        targetHandle,
       };
       setEdges((eds) => {
         if (eds.some((e) => isSameConnectionEndpoints(endpoints, e))) {
@@ -353,6 +405,8 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         return addEdge(
           {
             ...params,
+            sourceHandle,
+            targetHandle,
             type: "fsiEdge",
             selectable: true,
             focusable: true,
@@ -361,9 +415,28 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
           eds,
         );
       });
-      onConnect(params.source, params.target, params.sourceHandle, params.targetHandle);
+      onConnect(params.source, params.target, sourceHandle, targetHandle);
     },
-    [canEdit, onConnect, setEdges, stableEdgeDelete, stableEdgeLabelChange],
+    [canEdit, dbNodes, getAbsoluteFlowPosition, getNode, onConnect, setEdges, stableEdgeDelete, stableEdgeLabelChange],
+  );
+
+  const handleConnectStart = useCallback(
+    (event: MouseEvent | TouchEvent) => {
+      const pt = clientPointFromConnectEvent(event);
+      connectPointerRef.current = {
+        start: screenToFlowPosition(pt),
+        end: null,
+      };
+    },
+    [screenToFlowPosition],
+  );
+
+  const handleConnectEnd = useCallback(
+    (event: MouseEvent | TouchEvent) => {
+      const pt = clientPointFromConnectEvent(event);
+      connectPointerRef.current.end = screenToFlowPosition(pt);
+    },
+    [screenToFlowPosition],
   );
 
   const isValidConnection = useCallback(
@@ -411,23 +484,6 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
       onPaneDoubleClick(pos.x, pos.y, e.clientX, e.clientY);
     },
     [canEdit, clearEdgeSelection, onPaneClick, onPaneDoubleClick, onNodeSelect, screenToFlowPosition, setNodes],
-  );
-
-  const getAbsoluteFlowPosition = useCallback(
-    (node: Node) => {
-      let x = node.position.x;
-      let y = node.position.y;
-      let parentId = node.parentId;
-      while (parentId) {
-        const parent = getNode(parentId);
-        if (!parent) break;
-        x += parent.position.x;
-        y += parent.position.y;
-        parentId = parent.parentId;
-      }
-      return { x, y };
-    },
-    [getNode],
   );
 
   const handleNodeDragStart = useCallback(
@@ -605,10 +661,12 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         onNodesChange={onNodesChange}
         onEdgesChange={handleEdgesChange}
         onConnect={handleConnect}
+        onConnectStart={handleConnectStart}
+        onConnectEnd={handleConnectEnd}
         isValidConnection={isValidConnection}
-        connectionMode={ConnectionMode.Strict}
+        connectionMode={ConnectionMode.Loose}
         connectOnClick={false}
-        connectionRadius={20}
+        connectionRadius={48}
         nodesConnectable={canEdit}
         elementsSelectable={canEdit}
         onNodeClick={handleNodeClick}
