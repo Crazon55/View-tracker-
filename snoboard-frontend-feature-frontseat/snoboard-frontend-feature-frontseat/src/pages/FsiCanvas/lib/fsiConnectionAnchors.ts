@@ -99,12 +99,12 @@ export function inferAnchorHandles(
 
   if (Math.abs(dx) >= Math.abs(dy)) {
     if (dx >= 0) {
-      return { sourceHandle: "right-out", targetHandle: "left-in" };
+      return { sourceHandle: "right-out-50", targetHandle: "left-in-50" };
     }
-    return { sourceHandle: "left-out", targetHandle: "right-in" };
+    return { sourceHandle: "left-out-50", targetHandle: "right-in-50" };
   }
   if (dy >= 0) {
-    return { sourceHandle: "bottom-out", targetHandle: "top-in" };
+    return { sourceHandle: "bottom-out-50", targetHandle: "top-in-50" };
   }
-  return { sourceHandle: "top-out", targetHandle: "bottom-in" };
+  return { sourceHandle: "top-out-50", targetHandle: "bottom-in-50" };
 }

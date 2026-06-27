@@ -12,7 +12,8 @@ import {
 const FSI_API_BASE = import.meta.env.VITE_API_URL || "";
 
 const FSI_BACKEND_BASE = "/api/v1/fsi";
-const FSI_BACKEND_RETRY_KEY = "fsi-backend-sync-queue";
+const FSI_BACKEND_RETRY_KEY = "fsi-backend-sync-queue-v2";
+const FSI_BACKEND_RETRY_LEGACY_KEY = "fsi-backend-sync-queue";
 
 export type FsiCloudinarySignedUpload = {
   cloud_name: string;
@@ -101,9 +102,14 @@ async function fsiBackendRequestImmediate(path: string, method: string, body?: u
   await fsiWithRetry(() => fsiBackendRequest(path, method, body), 3);
 }
 
-/** Drain queued backend mirrors (runs on FSI page load only). */
+/** Drain queued backend mirrors (runs on FSI page load only). Skips DELETE — Supabase is canonical. */
 export async function flushFsiBackendSyncQueue(): Promise<void> {
   if (!getAccessToken()) return;
+  try {
+    localStorage.removeItem(FSI_BACKEND_RETRY_LEGACY_KEY);
+  } catch {
+    /* ignore */
+  }
   let q: FsiBackendRetry[] = [];
   try {
     q = JSON.parse(localStorage.getItem(FSI_BACKEND_RETRY_KEY) || "[]");
@@ -114,6 +120,7 @@ export async function flushFsiBackendSyncQueue(): Promise<void> {
 
   const remaining: FsiBackendRetry[] = [];
   for (const item of q) {
+    if (item.method === "DELETE") continue;
     try {
       await fsiBackendRequest(item.path, item.method, item.body);
     } catch {
@@ -320,27 +327,21 @@ export function createFsiApi() {
       });
     },
     deleteNode: async (nodeId: string, studyId?: string) => {
-      await fsiDualMutate({
-        supabase: async () => {
-          const { data: existing } = await _sb
-            .from("nodes")
-            .select("study_id")
-            .eq("id", nodeId)
-            .maybeSingle();
+      const { data: existing } = await _sb
+        .from("nodes")
+        .select("study_id")
+        .eq("id", nodeId)
+        .maybeSingle();
 
-          await _sb.from("connections").delete().or(`source_node_id.eq.${nodeId},target_node_id.eq.${nodeId}`);
+      await _sb.from("connections").delete().or(`source_node_id.eq.${nodeId},target_node_id.eq.${nodeId}`);
 
-          const { error } = await _sb.from("nodes").delete().eq("id", nodeId);
-          if (error) throw new Error(error.message);
+      const { error } = await _sb.from("nodes").delete().eq("id", nodeId);
+      if (error) throw new Error(error.message);
 
-          const sid = existing?.study_id ?? studyId;
-          if (sid) {
-            await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", sid);
-          }
-          return { id: nodeId };
-        },
-        backend: { path: `${FSI_BACKEND_BASE}/nodes/${nodeId}`, method: "DELETE" },
-      });
+      const sid = existing?.study_id ?? studyId;
+      if (sid) {
+        await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", sid);
+      }
       return { id: nodeId };
     },
     createConnection: async (studyId: string, data: {
@@ -454,23 +455,17 @@ export function createFsiApi() {
       if (connectionId.startsWith("opt-")) {
         return { id: connectionId };
       }
-      await fsiDualMutate({
-        supabase: async () => {
-          const { data: existing } = await _sb
-            .from("connections")
-            .select("study_id")
-            .eq("id", connectionId)
-            .maybeSingle();
-          const { error } = await _sb.from("connections").delete().eq("id", connectionId);
-          if (error) throw new Error(error.message);
-          const sid = existing?.study_id ?? studyId;
-          if (sid) {
-            await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", sid);
-          }
-          return { id: connectionId };
-        },
-        backend: { path: `${FSI_BACKEND_BASE}/connections/${connectionId}`, method: "DELETE" },
-      });
+      const { data: existing } = await _sb
+        .from("connections")
+        .select("study_id")
+        .eq("id", connectionId)
+        .maybeSingle();
+      const { error } = await _sb.from("connections").delete().eq("id", connectionId);
+      if (error) throw new Error(error.message);
+      const sid = existing?.study_id ?? studyId;
+      if (sid) {
+        await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", sid);
+      }
       return { id: connectionId };
     },
     signNodeCloudinaryUpload: async (studyId: string, nodeId: string, uploader?: string) => {

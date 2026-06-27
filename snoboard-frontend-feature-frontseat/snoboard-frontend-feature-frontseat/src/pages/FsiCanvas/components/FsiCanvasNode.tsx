@@ -21,6 +21,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
     isNote,
     isCompact,
     fieldDefs,
+    connectionAnchors = [],
     onTitleChange,
     onBodyChange,
     onPayloadChange,
@@ -246,7 +247,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
             {replacingScreenshot && <Loader2 className="h-3.5 w-3.5 animate-spin text-pink-200" />}
           </div>
         )}
-        <FsiNodeHandles canStartConnection={canEdit} largeHitZone />
+        <FsiNodeHandles canStartConnection={canEdit} largeHitZone requiredAnchors={connectionAnchors} />
       </div>
     );
   }
@@ -276,7 +277,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
         <div className="mt-0.5 text-center text-[9px] font-medium uppercase tracking-wide text-emerald-950/70">
           {nodeData.nodeType}
         </div>
-        <FsiNodeHandles canStartConnection={canEdit} />
+        <FsiNodeHandles canStartConnection={canEdit} requiredAnchors={connectionAnchors} />
       </div>
     );
   }
@@ -332,7 +333,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
             )}
           </div>
         )}
-        <FsiNodeHandles canStartConnection={canEdit} />
+        <FsiNodeHandles canStartConnection={canEdit} requiredAnchors={connectionAnchors} />
       </div>
     );
   }
@@ -411,7 +412,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
         </>
       )}
 
-      <FsiNodeHandles canStartConnection={canEdit} />
+      <FsiNodeHandles canStartConnection={canEdit} requiredAnchors={connectionAnchors} />
     </div>
   );
 }

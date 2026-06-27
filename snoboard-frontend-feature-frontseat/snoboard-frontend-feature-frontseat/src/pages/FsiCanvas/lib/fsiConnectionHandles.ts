@@ -1,25 +1,43 @@
 import type { FsiConnectionRecord, FsiNodeRecord } from "./fsiNodeSchemas";
-import { inferAnchorHandles, parseAnchorHandle } from "./fsiConnectionAnchors";
+import {
+  inferAnchorHandles,
+  parseAnchorHandle,
+  sideFromHandleId,
+} from "./fsiConnectionAnchors";
 import { parseEmbeddedHandles } from "./fsiConnectionHandleMeta";
 
-export type FsiSourceHandleId = `${"top" | "right" | "bottom" | "left"}-out` | string;
-export type FsiTargetHandleId = `${"top" | "right" | "bottom" | "left"}-in` | string;
+export type FsiSourceHandleId = string;
+export type FsiTargetHandleId = string;
 
-const LEGACY_SOURCE = new Set(["top-out", "right-out", "bottom-out", "left-out"]);
-const LEGACY_TARGET = new Set(["top-in", "right-in", "bottom-in", "left-in"]);
-
-/** Map any stored handle id to the strip handle React Flow renders (`right-out`, `left-in`, …). */
-export function toFlowStripHandle(id: string | null | undefined): string | undefined {
+/** Normalize stored id to a React Flow anchor handle (`right-out-35`, not bare `right-out`). */
+export function toFlowAnchorHandle(id: string | null | undefined): string | undefined {
   if (!id) return undefined;
   const trimmed = id.trim();
-  if (LEGACY_SOURCE.has(trimmed) || LEGACY_TARGET.has(trimmed)) return trimmed;
-  const parsed = parseAnchorHandle(trimmed);
-  if (parsed) {
-    return `${parsed.side}-${parsed.kind === "out" ? "out" : "in"}`;
+  if (parseAnchorHandle(trimmed)) return trimmed;
+  const sideMeta = sideFromHandleId(trimmed);
+  if (sideMeta) {
+    return `${sideMeta.side}-${sideMeta.kind}-${50}`;
   }
-  const strip = /^(top|right|bottom|left)-(in|out)/.exec(trimmed);
-  if (strip) return `${strip[1]}-${strip[2]}`;
   return undefined;
+}
+
+/** Collect every anchor handle id a node must render for its edges. */
+export function anchorIdsForNode(
+  nodeId: string,
+  connections: FsiConnectionRecord[],
+): string[] {
+  const ids = new Set<string>();
+  for (const c of connections) {
+    if (c.source_node_id === nodeId) {
+      const h = toFlowAnchorHandle(c.source_handle) ?? parseEmbeddedHandles(c.edge_label_note).sourceHandle;
+      if (h) ids.add(toFlowAnchorHandle(h) ?? h);
+    }
+    if (c.target_node_id === nodeId) {
+      const h = toFlowAnchorHandle(c.target_handle) ?? parseEmbeddedHandles(c.edge_label_note).targetHandle;
+      if (h) ids.add(toFlowAnchorHandle(h) ?? h);
+    }
+  }
+  return Array.from(ids);
 }
 
 export function resolveConnectionHandles(
@@ -31,14 +49,17 @@ export function resolveConnectionHandles(
   const inferred = inferAnchorHandles(source, target);
   return {
     sourceHandle:
-      toFlowStripHandle(connection.source_handle) ??
-      toFlowStripHandle(fromNote.sourceHandle) ??
+      toFlowAnchorHandle(connection.source_handle) ??
+      toFlowAnchorHandle(fromNote.sourceHandle) ??
       inferred.sourceHandle,
     targetHandle:
-      toFlowStripHandle(connection.target_handle) ??
-      toFlowStripHandle(fromNote.targetHandle) ??
+      toFlowAnchorHandle(connection.target_handle) ??
+      toFlowAnchorHandle(fromNote.targetHandle) ??
       inferred.targetHandle,
   };
 }
 
 export const inferConnectionHandles = inferAnchorHandles;
+
+/** @deprecated use toFlowAnchorHandle */
+export const toFlowStripHandle = toFlowAnchorHandle;

@@ -17,6 +17,7 @@ import {
   ReactFlowProvider,
   useReactFlow,
   useUpdateNodeInternals,
+  type XYPosition,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -39,7 +40,10 @@ import {
 import { clipboardImageFiles } from "../lib/fsiScreenshotNode";
 import { isFrameNode } from "../lib/fsiWhiteboardTypes";
 import { isSameConnectionEndpoints } from "../lib/fsiConnectionUtils";
-import { stripHandlesFromConnection } from "../lib/fsiConnectPointer";
+import {
+  anchorHandlesFromConnection,
+  clientPointFromConnectEvent,
+} from "../lib/fsiConnectPointer";
 
 const nodeTypes = { fsiNode: FsiCanvasNode, fsiFrame: FsiFrameNode };
 const edgeTypes = { fsiEdge: FsiCanvasEdge };
@@ -125,7 +129,12 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   const lastPointerRef = useRef({ x: 200, y: 200 });
   const viewportReadyRef = useRef(false);
   const saveViewportTimer = useRef<number | null>(null);
-  const connectPointerRef = useRef<{ sourceHandleId: string | null }>({ sourceHandleId: null });
+  const connectPointerRef = useRef<{
+    sourceHandleId: string | null;
+    startPointer: XYPosition | null;
+    endPointer: XYPosition | null;
+  }>({ sourceHandleId: null, startPointer: null, endPointer: null });
+  const connectingRef = useRef(false);
 
   const persistViewport = useCallback(
     (viewport: Viewport) => {
@@ -369,11 +378,27 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
       if (params.source === params.target) return;
       if (!params.targetHandle) return;
 
-      const { sourceHandle, targetHandle } = stripHandlesFromConnection({
-        sourceHandleId: params.sourceHandle ?? connectPointerRef.current.sourceHandleId,
+      const sourceNode = getNode(params.source);
+      const targetNode = getNode(params.target);
+      if (!sourceNode || !targetNode) return;
+
+      const sourceAbs = getAbsoluteFlowPosition(sourceNode);
+      const targetAbs = getAbsoluteFlowPosition(targetNode);
+      const ptr = connectPointerRef.current;
+
+      const { sourceHandle, targetHandle } = anchorHandlesFromConnection({
+        sourceNode,
+        targetNode,
+        sourceAbs,
+        targetAbs,
+        sourceHandleId: params.sourceHandle ?? ptr.sourceHandleId,
         targetHandleId: params.targetHandle,
+        sourcePointer: ptr.startPointer,
+        targetPointer: ptr.endPointer ?? lastPointerRef.current,
       });
-      connectPointerRef.current.sourceHandleId = null;
+
+      connectPointerRef.current = { sourceHandleId: null, startPointer: null, endPointer: null };
+      connectingRef.current = false;
 
       const endpoints = {
         source: params.source,
@@ -399,22 +424,47 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         );
       });
       onConnect(params.source, params.target, sourceHandle, targetHandle);
+      requestAnimationFrame(() => {
+        updateNodeInternals(params.source!);
+        updateNodeInternals(params.target!);
+      });
     },
-    [canEdit, onConnect, setEdges, stableEdgeDelete, stableEdgeLabelChange],
+    [
+      canEdit,
+      getAbsoluteFlowPosition,
+      getNode,
+      onConnect,
+      setEdges,
+      stableEdgeDelete,
+      stableEdgeLabelChange,
+      updateNodeInternals,
+    ],
   );
 
   const handleConnectStart = useCallback(
-    (_event: MouseEvent | TouchEvent, params: { handleId?: string | null }) => {
-      connectPointerRef.current.sourceHandleId = params.handleId ?? null;
+    (event: MouseEvent | TouchEvent, params: { handleId?: string | null }) => {
+      connectingRef.current = true;
+      const pt = screenToFlowPosition(clientPointFromConnectEvent(event));
+      connectPointerRef.current = {
+        sourceHandleId: params.handleId ?? null,
+        startPointer: pt,
+        endPointer: null,
+      };
     },
-    [],
+    [screenToFlowPosition],
   );
 
-  const handleConnectEnd = useCallback(() => {
-    window.setTimeout(() => {
-      connectPointerRef.current.sourceHandleId = null;
-    }, 0);
-  }, []);
+  const handleConnectEnd = useCallback(
+    (event: MouseEvent | TouchEvent) => {
+      connectPointerRef.current.endPointer = screenToFlowPosition(clientPointFromConnectEvent(event));
+      window.setTimeout(() => {
+        if (!connectingRef.current) return;
+        connectPointerRef.current = { sourceHandleId: null, startPointer: null, endPointer: null };
+        connectingRef.current = false;
+      }, 100);
+    },
+    [screenToFlowPosition],
+  );
 
   const isValidConnection = useCallback(
     (connection: Connection | Edge) => {
@@ -494,7 +544,11 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
 
   const handlePaneMouseMove = useCallback(
     (e: React.MouseEvent) => {
-      lastPointerRef.current = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      const pt = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      lastPointerRef.current = pt;
+      if (connectingRef.current) {
+        connectPointerRef.current.endPointer = pt;
+      }
     },
     [screenToFlowPosition],
   );
