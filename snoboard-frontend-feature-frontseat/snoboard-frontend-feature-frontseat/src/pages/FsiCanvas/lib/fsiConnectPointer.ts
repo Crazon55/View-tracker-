@@ -2,6 +2,7 @@ import type { Node as FlowNode, XYPosition } from "@xyflow/react";
 import {
   anchorOnSide,
   parseAnchorHandle,
+  pointerToAnchorHandle,
   sideFromHandleId,
   type AnchorKind,
   type AnchorSide,
@@ -75,6 +76,17 @@ export function anchorHandlesFromConnection(params: {
       params.targetNode,
       params.targetAbs,
       params.targetPointer,
+    );
+  } else if (params.targetPointer) {
+    const box = nodeBox(params.targetNode, params.targetAbs);
+    targetHandle = pointerToAnchorHandle(
+      box.x,
+      box.y,
+      box.w,
+      box.h,
+      params.targetPointer.x,
+      params.targetPointer.y,
+      "in",
     );
   }
 

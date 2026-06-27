@@ -40,6 +40,7 @@ import {
 import { clipboardImageFiles } from "../lib/fsiScreenshotNode";
 import { isFrameNode } from "../lib/fsiWhiteboardTypes";
 import { isSameConnectionEndpoints } from "../lib/fsiConnectionUtils";
+import { findConnectTargetAtPointer } from "../lib/fsiConnectHitTest";
 import {
   anchorHandlesFromConnection,
   clientPointFromConnectEvent,
@@ -122,7 +123,8 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   ref,
 ) {
   const themePalette = paletteForCanvasTheme(canvasTheme);
-  const { screenToFlowPosition, fitView, setViewport, getViewport, setCenter, getNode } = useReactFlow();
+  const { screenToFlowPosition, fitView, setViewport, getViewport, setCenter, getNode, getNodes } =
+    useReactFlow();
   const updateNodeInternals = useUpdateNodeInternals();
   const paneRef = useRef<HTMLDivElement>(null);
   const dropLockRef = useRef(false);
@@ -135,6 +137,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     endPointer: XYPosition | null;
   }>({ sourceHandleId: null, startPointer: null, endPointer: null });
   const connectingRef = useRef(false);
+  const connectCompletedRef = useRef(false);
 
   const persistViewport = useCallback(
     (viewport: Viewport) => {
@@ -372,14 +375,27 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     [getNode],
   );
 
-  const handleConnect = useCallback(
-    (params: Connection) => {
-      if (!canEdit || !params.source || !params.target) return;
-      if (params.source === params.target) return;
-      if (!params.targetHandle) return;
+  const isValidConnection = useCallback(
+    (connection: Connection | Edge) => {
+      if (!canEdit) return false;
+      if (!connection.source || !connection.target) return false;
+      if (connection.source === connection.target) return false;
+      const sourceNode = dbNodes.find((n) => n.id === connection.source);
+      const targetNode = dbNodes.find((n) => n.id === connection.target);
+      if (sourceNode && isFrameNode(sourceNode)) return false;
+      if (targetNode && isFrameNode(targetNode)) return false;
+      return true;
+    },
+    [canEdit, dbNodes],
+  );
 
-      const sourceNode = getNode(params.source);
-      const targetNode = getNode(params.target);
+  const finalizeConnection = useCallback(
+    (sourceId: string, targetId: string, sourceHandleId: string | null, targetHandleId: string | null) => {
+      if (!canEdit || !sourceId || !targetId || sourceId === targetId) return;
+      if (!sourceHandleId) return;
+
+      const sourceNode = getNode(sourceId);
+      const targetNode = getNode(targetId);
       if (!sourceNode || !targetNode) return;
 
       const sourceAbs = getAbsoluteFlowPosition(sourceNode);
@@ -391,8 +407,8 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         targetNode,
         sourceAbs,
         targetAbs,
-        sourceHandleId: params.sourceHandle ?? ptr.sourceHandleId,
-        targetHandleId: params.targetHandle,
+        sourceHandleId,
+        targetHandleId,
         sourcePointer: ptr.startPointer,
         targetPointer: ptr.endPointer ?? lastPointerRef.current,
       });
@@ -400,19 +416,13 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
       connectPointerRef.current = { sourceHandleId: null, startPointer: null, endPointer: null };
       connectingRef.current = false;
 
-      const endpoints = {
-        source: params.source,
-        target: params.target,
-        sourceHandle,
-        targetHandle,
-      };
+      const endpoints = { source: sourceId, target: targetId, sourceHandle, targetHandle };
       setEdges((eds) => {
-        if (eds.some((e) => isSameConnectionEndpoints(endpoints, e))) {
-          return eds;
-        }
+        if (eds.some((e) => isSameConnectionEndpoints(endpoints, e))) return eds;
         return addEdge(
           {
-            ...params,
+            source: sourceId,
+            target: targetId,
             sourceHandle,
             targetHandle,
             type: "fsiEdge",
@@ -423,10 +433,10 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
           eds,
         );
       });
-      onConnect(params.source, params.target, sourceHandle, targetHandle);
+      onConnect(sourceId, targetId, sourceHandle, targetHandle);
       requestAnimationFrame(() => {
-        updateNodeInternals(params.source!);
-        updateNodeInternals(params.target!);
+        updateNodeInternals(sourceId);
+        updateNodeInternals(targetId);
       });
     },
     [
@@ -441,8 +451,22 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     ],
   );
 
+  const handleConnect = useCallback(
+    (params: Connection) => {
+      connectCompletedRef.current = true;
+      finalizeConnection(
+        params.source,
+        params.target,
+        params.sourceHandle ?? connectPointerRef.current.sourceHandleId,
+        params.targetHandle,
+      );
+    },
+    [finalizeConnection],
+  );
+
   const handleConnectStart = useCallback(
     (event: MouseEvent | TouchEvent, params: { handleId?: string | null }) => {
+      connectCompletedRef.current = false;
       connectingRef.current = true;
       const pt = screenToFlowPosition(clientPointFromConnectEvent(event));
       connectPointerRef.current = {
@@ -455,29 +479,66 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   );
 
   const handleConnectEnd = useCallback(
-    (event: MouseEvent | TouchEvent) => {
-      connectPointerRef.current.endPointer = screenToFlowPosition(clientPointFromConnectEvent(event));
-      window.setTimeout(() => {
-        if (!connectingRef.current) return;
-        connectPointerRef.current = { sourceHandleId: null, startPointer: null, endPointer: null };
-        connectingRef.current = false;
-      }, 100);
-    },
-    [screenToFlowPosition],
-  );
+    (
+      event: MouseEvent | TouchEvent,
+      state: {
+        fromNode?: Node | null;
+        fromHandle?: { id?: string | null } | null;
+        toNode?: Node | null;
+        toHandle?: { id?: string | null } | null;
+      },
+    ) => {
+      const endPointer = screenToFlowPosition(clientPointFromConnectEvent(event));
+      connectPointerRef.current.endPointer = endPointer;
 
-  const isValidConnection = useCallback(
-    (connection: Connection | Edge) => {
-      if (!canEdit) return false;
-      if (!connection.source || !connection.target) return false;
-      if (connection.source === connection.target) return false;
-      const sourceNode = dbNodes.find((n) => n.id === connection.source);
-      const targetNode = dbNodes.find((n) => n.id === connection.target);
-      if (sourceNode && isFrameNode(sourceNode)) return false;
-      if (targetNode && isFrameNode(targetNode)) return false;
-      return true;
+      if (connectCompletedRef.current) {
+        connectCompletedRef.current = false;
+        return;
+      }
+
+      if (!canEdit || !connectingRef.current) return;
+
+      const sourceId = state.fromNode?.id;
+      const sourceHandleId = state.fromHandle?.id ?? connectPointerRef.current.sourceHandleId;
+      if (!sourceId || !sourceHandleId) {
+        connectingRef.current = false;
+        connectPointerRef.current = { sourceHandleId: null, startPointer: null, endPointer: null };
+        return;
+      }
+
+      let targetNode = state.toNode && state.toNode.id !== sourceId ? state.toNode : null;
+      if (!targetNode) {
+        const hit = findConnectTargetAtPointer(
+          getNodes(),
+          getAbsoluteFlowPosition,
+          endPointer,
+          sourceId,
+        );
+        if (hit) targetNode = hit.node;
+      }
+
+      if (!targetNode || targetNode.type === "fsiFrame") {
+        connectingRef.current = false;
+        connectPointerRef.current = { sourceHandleId: null, startPointer: null, endPointer: null };
+        return;
+      }
+
+      const candidate = {
+        source: sourceId,
+        target: targetNode.id,
+        sourceHandle: sourceHandleId,
+        targetHandle: state.toHandle?.id ?? null,
+      };
+      if (!isValidConnection(candidate)) {
+        connectingRef.current = false;
+        connectPointerRef.current = { sourceHandleId: null, startPointer: null, endPointer: null };
+        return;
+      }
+
+      connectCompletedRef.current = true;
+      finalizeConnection(sourceId, targetNode.id, sourceHandleId, state.toHandle?.id ?? null);
     },
-    [canEdit, dbNodes],
+    [canEdit, finalizeConnection, getAbsoluteFlowPosition, getNodes, isValidConnection, screenToFlowPosition],
   );
 
   const clearEdgeSelection = useCallback(() => {
@@ -697,7 +758,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         isValidConnection={isValidConnection}
         connectionMode={ConnectionMode.Strict}
         connectOnClick={false}
-        connectionRadius={36}
+        connectionRadius={100}
         nodeDragThreshold={2}
         nodesConnectable={canEdit}
         elementsSelectable={canEdit}

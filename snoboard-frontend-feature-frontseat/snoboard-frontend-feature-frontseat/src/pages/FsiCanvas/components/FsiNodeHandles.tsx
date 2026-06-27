@@ -41,7 +41,7 @@ function anchorPointStyle(side: AnchorSide, pct: number): CSSProperties {
 }
 
 function edgeStripStyle(side: AnchorSide, large: boolean): CSSProperties {
-  const thickness = large ? 32 : 24;
+  const thickness = large ? 72 : 56;
   switch (side) {
     case "top":
       return { left: "0%", width: "100%", height: thickness, top: 0, transform: "translateY(-50%)" };
@@ -57,7 +57,7 @@ function edgeStripStyle(side: AnchorSide, large: boolean): CSSProperties {
 }
 
 const stripClass = cn(
-  "!z-[40] !border-0 !bg-transparent !opacity-0 !rounded-none nodrag nopan",
+  "!z-[50] !border-0 !bg-transparent !opacity-0 !rounded-none nodrag nopan",
 );
 const pointClass = cn(
   "!z-[30] !h-1 !w-1 !min-h-0 !min-w-0 !border-0 !bg-transparent !opacity-0 !pointer-events-none nodrag nopan",
