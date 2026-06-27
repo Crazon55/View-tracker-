@@ -5,6 +5,8 @@
 import { supabase as _sb } from "@/lib/supabase";
 import { fetchApi, getAccessToken } from "./api";
 
+const FSI_API_BASE = import.meta.env.VITE_API_URL || "";
+
 const FSI_BACKEND_BASE = "/api/v1/fsi";
 const FSI_BACKEND_RETRY_KEY = "fsi-backend-sync-queue";
 
@@ -325,6 +327,8 @@ export function createFsiApi() {
         source_node_id: data.source_node_id,
         target_node_id: data.target_node_id,
         edge_label_note: data.edge_label_note ?? null,
+        source_handle: data.source_handle ?? null,
+        target_handle: data.target_handle ?? null,
         created_by: email,
       };
       const backendBody: Record<string, unknown> = {
@@ -444,6 +448,23 @@ export function createFsiApi() {
         urls.push(url);
       }
       return urls;
+    },
+    generateStudySummary: async (studyId: string) => {
+      return fetchApi<Record<string, string | string[]>>(
+        `${FSI_BACKEND_BASE}/studies/${studyId}/generate-summary`,
+        { method: "POST" },
+      );
+    },
+    getLatestStudySummary: async (studyId: string) => {
+      const res = await fetch(`${FSI_API_BASE}${FSI_BACKEND_BASE}/studies/${studyId}/summary`, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : {}),
+        },
+      });
+      if (!res.ok) return null;
+      const json = (await res.json()) as { data?: Record<string, string | string[]> | null };
+      return json.data ?? null;
     },
   };
 }

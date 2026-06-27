@@ -56,7 +56,7 @@ export function graphToFlow(
         ? payload.card_color.trim()
         : null;
 
-    const connectionAnchors = anchorIdsForNode(n.id, visibleConnections);
+    const connectionAnchors = anchorIdsForNode(n.id, visibleConnections, nodesById);
 
     if (isFrame) {
       const w = Number(payload.frame_width) || 520;

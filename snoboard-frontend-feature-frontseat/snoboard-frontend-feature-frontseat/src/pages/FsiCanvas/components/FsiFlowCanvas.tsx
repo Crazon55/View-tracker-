@@ -16,6 +16,7 @@ import {
   type Viewport,
   ReactFlowProvider,
   useReactFlow,
+  useUpdateNodeInternals,
   type XYPosition,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -122,6 +123,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
 ) {
   const themePalette = paletteForCanvasTheme(canvasTheme);
   const { screenToFlowPosition, fitView, setViewport, getViewport, setCenter, getNode } = useReactFlow();
+  const updateNodeInternals = useUpdateNodeInternals();
   const paneRef = useRef<HTMLDivElement>(null);
   const dropLockRef = useRef(false);
   const lastPointerRef = useRef({ x: 200, y: 200 });
@@ -338,6 +340,12 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     }
   }, [fitTrigger, fitView, getViewport, persistViewport]);
 
+  useEffect(() => {
+    for (const n of flowGraph.nodes) {
+      updateNodeInternals(n.id);
+    }
+  }, [connectionSignature, structureSignature, flowGraph.nodes, updateNodeInternals]);
+
   const handleMoveEnd = useCallback(
     (_: unknown, viewport: Viewport) => {
       schedulePersistViewport(viewport);
@@ -386,7 +394,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         sourceAbs,
         targetAbs,
         startPointer: connectPointerRef.current.start,
-        endPointer: connectPointerRef.current.end,
+        endPointer: connectPointerRef.current.end ?? lastPointerRef.current,
         fallbackSource: params.sourceHandle,
         fallbackTarget: params.targetHandle,
       });

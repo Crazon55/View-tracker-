@@ -35,10 +35,11 @@ export function resolveConnectionHandles(
   const sourceHandle = connection.source_handle;
   const targetHandle = connection.target_handle;
 
-  if (sourceHandle && targetHandle) {
+  if (sourceHandle || targetHandle) {
+    const inferred = inferAnchorHandles(source, target);
     return {
-      sourceHandle: normalizeToAnchorHandle(sourceHandle) ?? sourceHandle,
-      targetHandle: normalizeToAnchorHandle(targetHandle) ?? targetHandle,
+      sourceHandle: normalizeToAnchorHandle(sourceHandle) ?? inferred.sourceHandle,
+      targetHandle: normalizeToAnchorHandle(targetHandle) ?? inferred.targetHandle,
     };
   }
 
@@ -52,15 +53,16 @@ export function resolveConnectionHandles(
 export function anchorIdsForNode(
   nodeId: string,
   connections: FsiConnectionRecord[],
+  nodesById: Map<string, FsiNodeRecord>,
 ): string[] {
   const ids = new Set<string>();
   for (const c of connections) {
-    if (c.source_node_id === nodeId && c.source_handle) {
-      ids.add(normalizeToAnchorHandle(c.source_handle) ?? c.source_handle);
-    }
-    if (c.target_node_id === nodeId && c.target_handle) {
-      ids.add(normalizeToAnchorHandle(c.target_handle) ?? c.target_handle);
-    }
+    const source = nodesById.get(c.source_node_id);
+    const target = nodesById.get(c.target_node_id);
+    if (!source || !target) continue;
+    const { sourceHandle, targetHandle } = resolveConnectionHandles(c, source, target);
+    if (c.source_node_id === nodeId) ids.add(sourceHandle);
+    if (c.target_node_id === nodeId) ids.add(targetHandle);
   }
   return [...ids];
 }

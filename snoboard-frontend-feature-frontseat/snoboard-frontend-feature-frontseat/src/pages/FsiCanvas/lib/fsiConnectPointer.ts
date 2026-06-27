@@ -4,6 +4,7 @@ import { estimateNodeSize } from "./fsiNodeBounds";
 import { isScreenshotNode } from "./fsiHierarchy";
 import {
   formatAnchorHandle,
+  inferAnchorHandles,
   parseAnchorHandle,
   pointerToAnchorHandle,
 } from "./fsiConnectionAnchors";
@@ -53,10 +54,12 @@ export function refineConnectionHandlesFromPointers(opts: {
   const sourceFine = isScreenshotNode(opts.sourceDb);
   const targetFine = isScreenshotNode(opts.targetDb);
 
+  const inferred = inferAnchorHandles(opts.sourceDb, opts.targetDb);
+
   let sourceHandle =
-    normalizeToAnchorHandle(opts.fallbackSource) ?? formatAnchorHandle("right", "out", 50);
+    normalizeToAnchorHandle(opts.fallbackSource) ?? inferred.sourceHandle;
   let targetHandle =
-    normalizeToAnchorHandle(opts.fallbackTarget) ?? formatAnchorHandle("left", "in", 50);
+    normalizeToAnchorHandle(opts.fallbackTarget) ?? inferred.targetHandle;
 
   if (opts.startPointer) {
     sourceHandle = pointerToSnappedAnchor(

@@ -312,3 +312,49 @@ async def fsi_node_cloudinary_sign(
 
     signed = build_signed_upload(folder=folder, tags=tags, context=context, expires_days=30)
     return {"success": True, "data": signed}
+
+
+@router.post("/studies/{study_id}/generate-summary")
+async def generate_study_summary_route(study_id: str, claims: dict = Depends(require_auth)):
+    """Generate an AI strategy summary from the study graph (Claude)."""
+    from app.services.fsi_summary_service import generate_study_summary
+
+    client = get_supabase_client()
+    study = _get_study(client, study_id)
+    nodes = client.table("nodes").select("*").eq("study_id", study_id).execute().data or []
+    connections = client.table("connections").select("*").eq("study_id", study_id).execute().data or []
+
+    try:
+        summary_json = await generate_study_summary(study, nodes, connections)
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Summary generation failed: {e}") from e
+
+    client.table("study_summaries").insert({
+        "study_id": study_id,
+        "summary_json": summary_json,
+        "created_by": _email(claims),
+    }).execute()
+    client.table("studies").update({"updated_at": _now_iso()}).eq("id", study_id).execute()
+    return {"success": True, "data": summary_json}
+
+
+@router.get("/studies/{study_id}/summary")
+async def get_study_summary(study_id: str, claims: dict = Depends(require_auth)):
+    """Latest saved AI summary for a study, or null."""
+    client = get_supabase_client()
+    _get_study(client, study_id)
+    rows = (
+        client.table("study_summaries")
+        .select("summary_json, created_at")
+        .eq("study_id", study_id)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    if not rows:
+        return {"success": True, "data": None}
+    return {"success": True, "data": rows[0]["summary_json"]}

@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import FsiFlowCanvas, { type FsiFlowCanvasHandle } from "./components/FsiFlowCanvas";
 import FsiLeftToolbar from "./components/FsiLeftToolbar";
+import SummaryPanel from "./components/SummaryPanel";
 import FsiStudySettingsDialog, { type StudyStatus } from "./components/FsiStudySettingsDialog";
 import NodeTypePicker, { type PickerChoice } from "./components/NodeTypePicker";
 import type { NodeSuggestionPayload, NoteSuggestionPayload } from "./components/FsiNodeSuggestionsPanel";
@@ -87,6 +88,7 @@ export default function FsiCanvasWorkspace() {
     screenX: number;
     screenY: number;
   } | null>(null);
+  const [summary, setSummary] = useState<Record<string, string | string[]> | null>(null);
   const graphRef = useRef<FsiGraph | null>(null);
   const canvasRef = useRef<FsiFlowCanvasHandle>(null);
   const migratedRef = useRef(false);
@@ -108,6 +110,30 @@ export default function FsiCanvasWorkspace() {
   });
 
   graphRef.current = graph ?? null;
+
+  useEffect(() => {
+    if (!studyId) return;
+    void fsiApi.getLatestStudySummary(studyId).then((data) => {
+      if (data && Object.keys(data).length > 0) setSummary(data);
+    }).catch(() => {
+      /* no saved summary yet */
+    });
+  }, [studyId]);
+
+  const generateSummaryMutation = useMutation({
+    mutationFn: () => fsiApi.generateStudySummary(studyId!),
+    onSuccess: (data) => {
+      setSummary(data);
+      toast.success("Summary generated");
+    },
+    onError: (e: Error) => {
+      toast.error(e.message);
+    },
+  });
+
+  const handleGenerateSummary = useCallback(async () => {
+    return generateSummaryMutation.mutateAsync();
+  }, [generateSummaryMutation]);
 
   useEffect(() => {
     if (!graph || !studyId || migratedRef.current) return;
@@ -1212,6 +1238,13 @@ export default function FsiCanvasWorkspace() {
               onCancel={() => setPickerAt(null)}
             />
           )}
+        </div>
+        <div className="hidden w-80 shrink-0 lg:block">
+          <SummaryPanel
+            onGenerate={handleGenerateSummary}
+            loading={generateSummaryMutation.isPending}
+            summary={summary}
+          />
         </div>
       </div>
     </div>
