@@ -1,5 +1,5 @@
-import { memo, useCallback, useEffect, useState } from "react";
-import { type NodeProps } from "@xyflow/react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { type NodeProps, useUpdateNodeInternals } from "@xyflow/react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { FsiNodeData } from "../lib/fsiFlowAdapter";
@@ -11,15 +11,16 @@ import { clipboardImageFiles } from "../lib/fsiScreenshotNode";
 import { isLinkNode } from "../lib/fsiWhiteboardTypes";
 import FsiNodeHandles from "./FsiNodeHandles";
 
-function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
+function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as FsiNodeData;
+  const updateNodeInternals = useUpdateNodeInternals();
+  const rootRef = useRef<HTMLDivElement>(null);
   const {
     fsiNode,
     canEdit,
     isNote,
     isCompact,
     fieldDefs,
-    connectionAnchors = [],
     onTitleChange,
     onBodyChange,
     onPayloadChange,
@@ -75,6 +76,15 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
   const isScreenshot = isScreenshotNode(fsiNode);
   const screenshotUrl = getScreenshotImageUrl(fsiNode);
   const [replacingScreenshot, setReplacingScreenshot] = useState(false);
+
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    updateNodeInternals(id);
+    const ro = new ResizeObserver(() => updateNodeInternals(id));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [id, updateNodeInternals, isScreenshot, screenshotUrl, fieldDefs.length, title, body]);
 
   const isLink = isLinkNode(fsiNode);
   const isNiche = nodeData.nodeType === "Niche";
@@ -201,6 +211,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
 
     return (
       <div
+        ref={rootRef}
         className={`relative w-[280px] overflow-visible rounded-md border-2 border-pink-500/80 bg-zinc-950 shadow-lg ${
           selected ? "ring-2 ring-white/50" : ""
         }`}
@@ -222,6 +233,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
             alt="Canvas screenshot"
             className="pointer-events-none block max-h-72 w-full object-contain bg-black/40"
             draggable={false}
+            onLoad={() => updateNodeInternals(id)}
           />
         ) : (
           <div className="flex min-h-[120px] items-center justify-center px-3 text-xs text-zinc-400">
@@ -234,11 +246,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
             {replacingScreenshot && <Loader2 className="h-3.5 w-3.5 animate-spin text-pink-200" />}
           </div>
         )}
-        <FsiNodeHandles
-          canStartConnection={canEdit}
-          largeHitZone
-          requiredAnchors={connectionAnchors}
-        />
+        <FsiNodeHandles canStartConnection={canEdit} largeHitZone />
       </div>
     );
   }
@@ -246,6 +254,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
   if (isCompact) {
     return (
       <div
+        ref={rootRef}
         className={`relative overflow-visible min-w-[120px] max-w-[280px] rounded-md border-2 px-4 py-2.5 shadow-lg ${
           selected ? "ring-2 ring-white/50" : ""
         }`}
@@ -267,10 +276,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
         <div className="mt-0.5 text-center text-[9px] font-medium uppercase tracking-wide text-emerald-950/70">
           {nodeData.nodeType}
         </div>
-        <FsiNodeHandles
-          canStartConnection={canEdit}
-          requiredAnchors={connectionAnchors}
-        />
+        <FsiNodeHandles canStartConnection={canEdit} />
       </div>
     );
   }
@@ -280,6 +286,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
     const showUrl = editing || Boolean(url.trim());
     return (
       <div
+        ref={rootRef}
         className={`relative overflow-visible min-w-[160px] max-w-[280px] rounded-md border-2 px-4 py-2.5 shadow-lg ${
           selected ? "ring-2 ring-white/50" : ""
         }`}
@@ -325,16 +332,14 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
             )}
           </div>
         )}
-        <FsiNodeHandles
-          canStartConnection={canEdit}
-          requiredAnchors={connectionAnchors}
-        />
+        <FsiNodeHandles canStartConnection={canEdit} />
       </div>
     );
   }
 
   return (
     <div
+      ref={rootRef}
       className={`relative overflow-visible min-w-[200px] max-w-[300px] rounded-md border-2 shadow-lg ${
         selected ? "ring-2 ring-white/50" : ""
       }`}
@@ -406,7 +411,7 @@ function FsiCanvasNodeComponent({ data, selected }: NodeProps) {
         </>
       )}
 
-      <FsiNodeHandles canStartConnection={canEdit} requiredAnchors={connectionAnchors} />
+      <FsiNodeHandles canStartConnection={canEdit} />
     </div>
   );
 }

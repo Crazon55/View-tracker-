@@ -3,7 +3,7 @@ import type { FsiConnectionRecord, FsiNodeRecord } from "./fsiNodeSchemas";
 import { colorForNodeType } from "./fsiNodeSchemas";
 import { getFieldDefs } from "./fsiNodeFieldDefs";
 import { isCanvasNode, isNoteNode, isScreenshotNode } from "./fsiHierarchy";
-import { resolveConnectionHandles, anchorIdsForNode } from "./fsiConnectionHandles";
+import { resolveConnectionHandles } from "./fsiConnectionHandles";
 import { displayNodeType, isFrameNode, isSimpleLabelNode } from "./fsiWhiteboardTypes";
 import { toFlowPosition } from "./fsiNodePositions";
 
@@ -18,7 +18,6 @@ export type FsiNodeData = {
   isNote: boolean;
   isCompact: boolean;
   fieldDefs: ReturnType<typeof getFieldDefs>;
-  connectionAnchors?: string[];
   onTitleChange?: (nodeId: string, title: string) => void;
   onBodyChange?: (nodeId: string, body: string) => void;
   onPayloadChange?: (nodeId: string, key: string, value: string) => void;
@@ -40,10 +39,6 @@ export function graphToFlow(
 ): { nodes: Node[]; edges: Edge[] } {
   const visible = nodes.filter(isCanvasNode);
   const nodesById = new Map(visible.map((n) => [n.id, n]));
-  const visibleConnections = connections.filter((c) => {
-    const ids = new Set(visible.map((n) => n.id));
-    return ids.has(c.source_node_id) && ids.has(c.target_node_id);
-  });
 
   const flowNodes: Node[] = visible.map((n) => {
     const isScreenshot = isScreenshotNode(n);
@@ -55,8 +50,6 @@ export function graphToFlow(
       typeof payload.card_color === "string" && payload.card_color.trim()
         ? payload.card_color.trim()
         : null;
-
-    const connectionAnchors = anchorIdsForNode(n.id, visibleConnections, nodesById);
 
     if (isFrame) {
       const w = Number(payload.frame_width) || 520;
@@ -82,7 +75,6 @@ export function graphToFlow(
           onBodyChange: options?.onBodyChange,
           onPayloadChange: options?.onPayloadChange,
           onScreenshotsChange: options?.onScreenshotsChange,
-          connectionAnchors,
         } satisfies FsiNodeData,
       };
     }
@@ -109,7 +101,6 @@ export function graphToFlow(
         onBodyChange: options?.onBodyChange,
         onPayloadChange: options?.onPayloadChange,
         onScreenshotsChange: options?.onScreenshotsChange,
-        connectionAnchors,
       } satisfies FsiNodeData,
     };
 
