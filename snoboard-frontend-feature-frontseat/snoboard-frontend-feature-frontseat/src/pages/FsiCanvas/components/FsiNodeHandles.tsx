@@ -23,38 +23,38 @@ type Props = {
   requiredAnchors?: string[];
 };
 
-/** Wide invisible strips along each edge — easy to grab. Pointer refines exact anchor on connect. */
+/** Wide invisible strips along each edge — grab the side you want, no auto-snap. */
 function edgeStripStyle(side: AnchorSide, large: boolean): CSSProperties {
-  const thickness = large ? 22 : 18;
+  const thickness = large ? 16 : 12;
   switch (side) {
     case "top":
       return {
-        left: "2%",
-        width: "96%",
+        left: "10%",
+        width: "80%",
         height: thickness,
         top: 0,
         transform: "translateY(-50%)",
       };
     case "bottom":
       return {
-        left: "2%",
-        width: "96%",
+        left: "10%",
+        width: "80%",
         height: thickness,
         bottom: 0,
         transform: "translateY(50%)",
       };
     case "left":
       return {
-        top: "2%",
-        height: "96%",
+        top: "10%",
+        height: "80%",
         width: thickness,
         left: 0,
         transform: "translateX(-50%)",
       };
     case "right":
       return {
-        top: "2%",
-        height: "96%",
+        top: "10%",
+        height: "80%",
         width: thickness,
         right: 0,
         transform: "translateX(50%)",

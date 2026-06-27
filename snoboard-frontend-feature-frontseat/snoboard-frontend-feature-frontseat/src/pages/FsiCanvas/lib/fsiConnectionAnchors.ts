@@ -22,6 +22,40 @@ export function isAnchorHandle(id: string | null | undefined): boolean {
   return !!id && SIDE_RE.test(id);
 }
 
+export function anchorOnSide(
+  side: AnchorSide,
+  kind: AnchorKind,
+  nodeX: number,
+  nodeY: number,
+  width: number,
+  height: number,
+  pointerX: number,
+  pointerY: number,
+  snapStep = 10,
+): string {
+  let pct = 50;
+  if (side === "top" || side === "bottom") {
+    pct = width > 0 ? ((pointerX - nodeX) / width) * 100 : 50;
+  } else {
+    pct = height > 0 ? ((pointerY - nodeY) / height) * 100 : 50;
+  }
+  const step = snapStep;
+  const snapped = Math.max(0, Math.min(100, Math.round(pct / step) * step));
+  return formatAnchorHandle(side, kind, snapped);
+}
+
+/** Parse strip (`right-out`) or anchor (`right-out-50`) handle ids. */
+export function sideFromHandleId(
+  id: string | null | undefined,
+): { side: AnchorSide; kind: AnchorKind } | null {
+  if (!id) return null;
+  const parsed = parseAnchorHandle(id);
+  if (parsed) return { side: parsed.side, kind: parsed.kind };
+  const m = /^(top|right|bottom|left)-(in|out)$/.exec(id);
+  if (m) return { side: m[1] as AnchorSide, kind: m[2] as AnchorKind };
+  return null;
+}
+
 /** Snap pointer (flow coords) to nearest point on the node rectangle perimeter. */
 export function pointerToAnchorHandle(
   nodeX: number,

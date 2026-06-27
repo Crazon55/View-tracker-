@@ -129,9 +129,14 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   const lastPointerRef = useRef({ x: 200, y: 200 });
   const viewportReadyRef = useRef(false);
   const saveViewportTimer = useRef<number | null>(null);
-  const connectPointerRef = useRef<{ start: XYPosition | null; end: XYPosition | null }>({
+  const connectPointerRef = useRef<{
+    start: XYPosition | null;
+    end: XYPosition | null;
+    sourceHandleId: string | null;
+  }>({
     start: null,
     end: null,
+    sourceHandleId: null,
   });
 
   const persistViewport = useCallback(
@@ -395,10 +400,10 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         targetAbs,
         startPointer: connectPointerRef.current.start,
         endPointer: connectPointerRef.current.end ?? lastPointerRef.current,
-        fallbackSource: params.sourceHandle,
-        fallbackTarget: params.targetHandle,
+        sourceHandleId: connectPointerRef.current.sourceHandleId ?? params.sourceHandle,
+        targetHandleId: params.targetHandle,
       });
-      connectPointerRef.current = { start: null, end: null };
+      connectPointerRef.current = { start: null, end: null, sourceHandleId: null };
 
       const endpoints = {
         source: params.source,
@@ -429,11 +434,12 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   );
 
   const handleConnectStart = useCallback(
-    (event: MouseEvent | TouchEvent) => {
+    (event: MouseEvent | TouchEvent, params: { handleId?: string | null }) => {
       const pt = clientPointFromConnectEvent(event);
       connectPointerRef.current = {
         start: screenToFlowPosition(pt),
         end: null,
+        sourceHandleId: params.handleId ?? null,
       };
     },
     [screenToFlowPosition],
@@ -672,9 +678,9 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         onConnectStart={handleConnectStart}
         onConnectEnd={handleConnectEnd}
         isValidConnection={isValidConnection}
-        connectionMode={ConnectionMode.Loose}
+        connectionMode={ConnectionMode.Strict}
         connectOnClick={false}
-        connectionRadius={48}
+        connectionRadius={12}
         nodesConnectable={canEdit}
         elementsSelectable={canEdit}
         onNodeClick={handleNodeClick}
