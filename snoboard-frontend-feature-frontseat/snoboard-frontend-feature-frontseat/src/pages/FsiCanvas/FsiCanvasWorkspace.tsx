@@ -22,7 +22,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import FsiFlowCanvas, { type FsiFlowCanvasHandle } from "./components/FsiFlowCanvas";
 import FsiLeftToolbar from "./components/FsiLeftToolbar";
-import SummaryPanel from "./components/SummaryPanel";
+import FsiAiAssistant from "./components/FsiAiAssistant";
+import type { FsiChatMessage } from "./lib/fsiAiChat";
 import FsiStudySettingsDialog, { type StudyStatus } from "./components/FsiStudySettingsDialog";
 import NodeTypePicker, { type PickerChoice } from "./components/NodeTypePicker";
 import type { NodeSuggestionPayload, NoteSuggestionPayload } from "./components/FsiNodeSuggestionsPanel";
@@ -88,7 +89,7 @@ export default function FsiCanvasWorkspace() {
     screenX: number;
     screenY: number;
   } | null>(null);
-  const [summary, setSummary] = useState<Record<string, string | string[]> | null>(null);
+  const [aiOpen, setAiOpen] = useState(false);
   const graphRef = useRef<FsiGraph | null>(null);
   const canvasRef = useRef<FsiFlowCanvasHandle>(null);
   const migratedRef = useRef(false);
@@ -111,21 +112,8 @@ export default function FsiCanvasWorkspace() {
 
   graphRef.current = graph ?? null;
 
-  useEffect(() => {
-    if (!studyId) return;
-    void fsiApi.getLatestStudySummary(studyId).then((data) => {
-      if (data && Object.keys(data).length > 0) setSummary(data);
-    }).catch(() => {
-      /* no saved summary yet */
-    });
-  }, [studyId]);
-
   const generateSummaryMutation = useMutation({
     mutationFn: () => fsiApi.generateStudySummary(studyId!),
-    onSuccess: (data) => {
-      setSummary(data);
-      toast.success("Summary generated");
-    },
     onError: (e: Error) => {
       toast.error(e.message);
     },
@@ -134,6 +122,22 @@ export default function FsiCanvasWorkspace() {
   const handleGenerateSummary = useCallback(async () => {
     return generateSummaryMutation.mutateAsync();
   }, [generateSummaryMutation]);
+
+  const chatMutation = useMutation({
+    mutationFn: ({ message, history }: { message: string; history: FsiChatMessage[] }) =>
+      fsiApi.chatStudy(
+        studyId!,
+        message,
+        history.map((m) => ({ role: m.role, content: m.content })),
+      ),
+  });
+
+  const handleSendChat = useCallback(
+    async (message: string, history: FsiChatMessage[]) => {
+      return chatMutation.mutateAsync({ message, history });
+    },
+    [chatMutation],
+  );
 
   useEffect(() => {
     if (!graph || !studyId || migratedRef.current) return;
@@ -1238,12 +1242,15 @@ export default function FsiCanvasWorkspace() {
               onCancel={() => setPickerAt(null)}
             />
           )}
-        </div>
-        <div className="hidden w-80 shrink-0 lg:block">
-          <SummaryPanel
-            onGenerate={handleGenerateSummary}
-            loading={generateSummaryMutation.isPending}
-            summary={summary}
+
+          <FsiAiAssistant
+            studyId={studyId!}
+            open={aiOpen}
+            onOpenChange={setAiOpen}
+            onGenerateSummary={handleGenerateSummary}
+            onSendMessage={handleSendChat}
+            summaryLoading={generateSummaryMutation.isPending}
+            chatLoading={chatMutation.isPending}
           />
         </div>
       </div>

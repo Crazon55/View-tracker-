@@ -18,6 +18,7 @@ from app.schemas.fsi import (
     NodeUpdate,
     ConnectionCreate,
     ConnectionUpdate,
+    FsiChatRequest,
 )
 
 router = APIRouter(tags=["fsi"])
@@ -412,3 +413,29 @@ async def get_study_summary(study_id: str, claims: dict = Depends(require_auth))
     if not rows:
         return {"success": True, "data": None}
     return {"success": True, "data": rows[0]["summary_json"]}
+
+
+@router.post("/studies/{study_id}/chat")
+async def chat_study(study_id: str, req: FsiChatRequest, claims: dict = Depends(require_auth)):
+    """Ask FSI about the current study graph (Claude)."""
+    from app.services.fsi_chat_service import chat_about_study
+
+    client = get_supabase_client()
+    study = _get_study(client, study_id)
+    nodes = client.table("nodes").select("*").eq("study_id", study_id).execute().data or []
+    connections = client.table("connections").select("*").eq("study_id", study_id).execute().data or []
+
+    try:
+        reply = await chat_about_study(
+            study,
+            nodes,
+            connections,
+            req.message,
+            [m.model_dump() for m in req.history],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Chat failed: {e}") from e
+
+    return {"success": True, "data": {"reply": reply}}

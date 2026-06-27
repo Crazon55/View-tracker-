@@ -1,7 +1,7 @@
 """Pydantic schemas for FSI Canvas Lite."""
 
 from datetime import date
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -114,3 +114,13 @@ class ConnectionCreate(BaseModel):
 
 class ConnectionUpdate(BaseModel):
     edge_label_note: str | None = None
+
+
+class FsiChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=12000)
+
+
+class FsiChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=8000)
+    history: list[FsiChatMessage] = Field(default_factory=list, max_length=32)

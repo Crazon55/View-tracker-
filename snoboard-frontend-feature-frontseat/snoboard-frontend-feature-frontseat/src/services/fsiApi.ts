@@ -514,6 +514,28 @@ export function createFsiApi() {
       }
       return urls;
     },
+    chatStudy: async (
+      studyId: string,
+      message: string,
+      history: Array<{ role: "user" | "assistant"; content: string }>,
+    ) => {
+      const res = await fetch(`${FSI_API_BASE}${FSI_BACKEND_BASE}/studies/${studyId}/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : {}),
+        },
+        body: JSON.stringify({ message, history }),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => null);
+        const detail = errBody?.detail;
+        throw new Error(typeof detail === "string" ? detail : `Chat failed (${res.status})`);
+      }
+      const json = (await res.json()) as { data?: { reply?: string } };
+      if (!json.data?.reply) throw new Error("Chat returned no reply");
+      return json.data.reply;
+    },
     generateStudySummary: async (studyId: string) => {
       const res = await fetch(`${FSI_API_BASE}${FSI_BACKEND_BASE}/studies/${studyId}/generate-summary`, {
         method: "POST",
