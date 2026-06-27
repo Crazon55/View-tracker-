@@ -4,6 +4,7 @@ import { colorForNodeType } from "./fsiNodeSchemas";
 import { getFieldDefs } from "./fsiNodeFieldDefs";
 import { isCanvasNode, isNoteNode, isScreenshotNode } from "./fsiHierarchy";
 import { resolveConnectionHandles } from "./fsiConnectionHandles";
+import { userVisibleEdgeLabel } from "./fsiConnectionHandleMeta";
 import { displayNodeType, isFrameNode, isSimpleLabelNode } from "./fsiWhiteboardTypes";
 import { toFlowPosition } from "./fsiNodePositions";
 
@@ -133,13 +134,13 @@ export function graphToFlow(
         target: c.target_node_id,
         sourceHandle,
         targetHandle,
-        label: c.edge_label_note || undefined,
+        label: userVisibleEdgeLabel(c.edge_label_note) || undefined,
         type: "fsiEdge",
         selectable: true,
         focusable: true,
         data: {
           canEdit: options?.canEdit ?? false,
-          labelNote: c.edge_label_note ?? null,
+          labelNote: userVisibleEdgeLabel(c.edge_label_note) ?? null,
           onDelete: options?.onEdgeDelete,
           onLabelChange: options?.onEdgeLabelChange,
         },

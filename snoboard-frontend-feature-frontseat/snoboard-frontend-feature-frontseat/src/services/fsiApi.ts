@@ -3,7 +3,11 @@
  * Dual-writes to Supabase (canonical) + backend mirror. Does not affect other site APIs.
  */
 import { supabase as _sb } from "@/lib/supabase";
-import { fetchApi, getAccessToken } from "./api";
+import { getAccessToken } from "./api";
+import {
+  embedHandlesInEdgeLabelNote,
+  parseEmbeddedHandles,
+} from "@/pages/FsiCanvas/lib/fsiConnectionHandleMeta";
 
 const FSI_API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -53,14 +57,44 @@ function enqueueFsiBackendRetry(path: string, method: string, body?: unknown) {
   }
 }
 
+function isMissingHandleColumnError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("source_handle") ||
+    lower.includes("target_handle") ||
+    lower.includes("pgrst204") ||
+    lower.includes("schema cache")
+  );
+}
+
 async function fsiBackendRequest(path: string, method: string, body?: unknown): Promise<void> {
   if (!getAccessToken()) {
     throw new Error("Missing auth token — sign in again");
   }
-  await fetchApi(path, {
+  const res = await fetch(`${FSI_API_BASE}${path}`, {
     method,
+    headers: {
+      "Content-Type": "application/json",
+      "ngrok-skip-browser-warning": "true",
+      Authorization: `Bearer ${getAccessToken()}`,
+    },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
+  if (res.ok) return;
+  if (method === "DELETE" && res.status === 404) return;
+  const errBody = await res.json().catch(() => null);
+  const detail = errBody?.detail;
+  const msg =
+    typeof detail === "string"
+      ? detail
+      : Array.isArray(detail)
+        ? detail.map((d: { msg?: string }) => d.msg).filter(Boolean).join("; ")
+        : errBody?.message
+          ? String(errBody.message)
+          : res.status === 502 || res.status === 504
+            ? "Backend unavailable — redeploy the API on EC2"
+            : `Request failed (${res.status})`;
+  throw new Error(msg);
 }
 
 async function fsiBackendRequestImmediate(path: string, method: string, body?: unknown): Promise<void> {
@@ -341,7 +375,26 @@ export function createFsiApi() {
       if (data.target_handle) backendBody.target_handle = data.target_handle;
       return fsiDualMutate({
         supabase: async () => {
-          const { data: created, error } = await _sb.from("connections").insert(row).select().single();
+          let { data: created, error } = await _sb.from("connections").insert(row).select().single();
+          if (error && isMissingHandleColumnError(error.message)) {
+            const legacyRow = {
+              id: row.id,
+              study_id: row.study_id,
+              source_node_id: row.source_node_id,
+              target_node_id: row.target_node_id,
+              edge_label_note: embedHandlesInEdgeLabelNote(
+                row.edge_label_note,
+                row.source_handle,
+                row.target_handle,
+              ),
+              created_by: row.created_by,
+            };
+            ({ data: created, error } = await _sb
+              .from("connections")
+              .insert(legacyRow)
+              .select()
+              .single());
+          }
           if (error) throw new Error(error.message);
           await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", studyId);
           return created;
@@ -356,7 +409,22 @@ export function createFsiApi() {
     updateConnection: async (connectionId: string, data: { edge_label_note?: string | null }) => {
       const patch: Record<string, unknown> = {};
       if ("edge_label_note" in data) {
-        patch.edge_label_note = data.edge_label_note ?? null;
+        const { data: existing, error: fetchErr } = await _sb
+          .from("connections")
+          .select("edge_label_note, source_handle, target_handle")
+          .eq("id", connectionId)
+          .maybeSingle();
+        if (fetchErr) throw new Error(fetchErr.message);
+        if (existing?.source_handle || existing?.target_handle) {
+          patch.edge_label_note = data.edge_label_note ?? null;
+        } else {
+          const embedded = parseEmbeddedHandles(existing?.edge_label_note);
+          patch.edge_label_note = embedHandlesInEdgeLabelNote(
+            data.edge_label_note ?? null,
+            embedded.sourceHandle ?? existing?.source_handle,
+            embedded.targetHandle ?? existing?.target_handle,
+          );
+        }
       }
       return fsiDualMutate({
         supabase: async () => {
@@ -407,10 +475,18 @@ export function createFsiApi() {
     },
     signNodeCloudinaryUpload: async (studyId: string, nodeId: string, uploader?: string) => {
       const actor = (uploader ?? (await fsiActorEmail())).trim();
-      return fetchApi<FsiCloudinarySignedUpload>(
-        `${FSI_BACKEND_BASE}/studies/${studyId}/nodes/${nodeId}/cloudinary-sign`,
-        { method: "POST", body: JSON.stringify({ uploader: actor || undefined }) },
-      );
+      const res = await fetch(`${FSI_API_BASE}${FSI_BACKEND_BASE}/studies/${studyId}/nodes/${nodeId}/cloudinary-sign`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : {}),
+        },
+        body: JSON.stringify({ uploader: actor || undefined }),
+      });
+      if (!res.ok) throw new Error(`Cloudinary sign failed (${res.status})`);
+      const json = (await res.json()) as { data?: FsiCloudinarySignedUpload };
+      if (!json.data) throw new Error("Cloudinary sign returned no data");
+      return json.data;
     },
     uploadNodeScreenshotFiles: async (
       studyId: string,
@@ -419,13 +495,7 @@ export function createFsiApi() {
       uploader?: string,
     ) => {
       if (!files.length) return [] as string[];
-      const signed = await fetchApi<FsiCloudinarySignedUpload>(
-        `${FSI_BACKEND_BASE}/studies/${studyId}/nodes/${nodeId}/cloudinary-sign`,
-        {
-          method: "POST",
-          body: JSON.stringify({ uploader: (uploader ?? (await fsiActorEmail())).trim() || undefined }),
-        },
-      );
+      const signed = await fsiApi.signNodeCloudinaryUpload(studyId, nodeId, uploader);
       const urls: string[] = [];
       for (const file of files) {
         if (!file.type.startsWith("image/")) continue;
@@ -450,10 +520,17 @@ export function createFsiApi() {
       return urls;
     },
     generateStudySummary: async (studyId: string) => {
-      return fetchApi<Record<string, string | string[]>>(
-        `${FSI_BACKEND_BASE}/studies/${studyId}/generate-summary`,
-        { method: "POST" },
-      );
+      const res = await fetch(`${FSI_API_BASE}${FSI_BACKEND_BASE}/studies/${studyId}/generate-summary`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : {}),
+        },
+      });
+      if (!res.ok) throw new Error(`Summary generation failed (${res.status})`);
+      const json = (await res.json()) as { data?: Record<string, string | string[]> };
+      if (!json.data) throw new Error("Summary generation returned no data");
+      return json.data;
     },
     getLatestStudySummary: async (studyId: string) => {
       const res = await fetch(`${FSI_API_BASE}${FSI_BACKEND_BASE}/studies/${studyId}/summary`, {

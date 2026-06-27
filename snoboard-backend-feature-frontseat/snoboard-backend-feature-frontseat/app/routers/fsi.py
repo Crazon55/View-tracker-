@@ -1,5 +1,7 @@
 """FSI Canvas Lite API routes."""
 
+import json
+import re
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -19,6 +21,53 @@ from app.schemas.fsi import (
 )
 
 router = APIRouter(tags=["fsi"])
+
+FSI_HANDLE_META_RE = re.compile(r"^\[\[fsi:(\{.*?\})\]\](?:\n(.*))?$", re.DOTALL)
+
+
+def _embed_handles_in_note(
+    note: str | None, source_handle: str | None, target_handle: str | None
+) -> str | None:
+    if not source_handle and not target_handle:
+        return note.strip() if note and note.strip() else None
+    user_label = _user_visible_edge_label(note)
+    meta = json.dumps({"sh": source_handle, "th": target_handle}, separators=(",", ":"))
+    return f"[[fsi:{meta}]]\n{user_label}" if user_label else f"[[fsi:{meta}]]"
+
+
+def _user_visible_edge_label(note: str | None) -> str | None:
+    if not note or not note.strip():
+        return None
+    m = FSI_HANDLE_META_RE.match(note.strip())
+    if m:
+        tail = (m.group(2) or "").strip()
+        return tail or None
+    return note.strip()
+
+
+def _missing_handle_columns(err: Exception) -> bool:
+    s = str(err).lower()
+    return "source_handle" in s or "target_handle" in s or "pgrst204" in s or "schema cache" in s
+
+
+def _write_connection_row(client, row: dict, *, upsert: bool = False) -> None:
+    try:
+        if upsert:
+            client.table("connections").upsert(row).execute()
+        else:
+            client.table("connections").insert(row).execute()
+    except Exception as exc:
+        if not _missing_handle_columns(exc):
+            raise
+        source_handle = row.pop("source_handle", None)
+        target_handle = row.pop("target_handle", None)
+        row["edge_label_note"] = _embed_handles_in_note(
+            row.get("edge_label_note"), source_handle, target_handle
+        )
+        if upsert:
+            client.table("connections").upsert(row).execute()
+        else:
+            client.table("connections").insert(row).execute()
 
 
 def _email(claims: dict) -> str:
@@ -197,8 +246,13 @@ async def update_node(node_id: str, req: NodeUpdate, claims: dict = Depends(requ
 @router.delete("/nodes/{node_id}")
 async def delete_node(node_id: str, claims: dict = Depends(require_auth)):
     client = get_supabase_client()
-    existing = _get_node(client, node_id)
-    study_id = existing["study_id"]
+    rows = client.table("nodes").select("study_id").eq("id", node_id).limit(1).execute().data or []
+    if not rows:
+        return {"success": True, "data": {"id": node_id}}
+    study_id = rows[0]["study_id"]
+    client.table("connections").delete().or_(
+        f"source_node_id.eq.{node_id},target_node_id.eq.{node_id}"
+    ).execute()
     client.table("nodes").delete().eq("id", node_id).execute()
     client.table("studies").update({"updated_at": _now_iso()}).eq("id", study_id).execute()
     return {"success": True, "data": {"id": node_id}}
@@ -225,11 +279,11 @@ async def create_connection(study_id: str, req: ConnectionCreate, claims: dict =
     }
     if req.id:
         row["id"] = req.id.strip()
-        client.table("connections").upsert(row).execute()
+        _write_connection_row(client, row, upsert=True)
         rows = client.table("connections").select("*").eq("id", req.id.strip()).limit(1).execute().data or []
         created = rows[0] if rows else row
     else:
-        client.table("connections").insert(row).execute()
+        _write_connection_row(client, row, upsert=False)
         verify = (
             client.table("connections")
             .select("*")
@@ -266,9 +320,9 @@ async def update_connection(
 @router.delete("/connections/{connection_id}")
 async def delete_connection(connection_id: str, claims: dict = Depends(require_auth)):
     client = get_supabase_client()
-    rows = client.table("connections").select("*").eq("id", connection_id).limit(1).execute().data or []
+    rows = client.table("connections").select("study_id").eq("id", connection_id).limit(1).execute().data or []
     if not rows:
-        raise HTTPException(status_code=404, detail="Connection not found")
+        return {"success": True, "data": {"id": connection_id}}
     study_id = rows[0]["study_id"]
     client.table("connections").delete().eq("id", connection_id).execute()
     client.table("studies").update({"updated_at": _now_iso()}).eq("id", study_id).execute()

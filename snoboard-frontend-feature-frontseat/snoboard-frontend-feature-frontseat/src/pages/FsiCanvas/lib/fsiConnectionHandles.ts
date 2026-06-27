@@ -1,5 +1,6 @@
 import type { FsiConnectionRecord, FsiNodeRecord } from "./fsiNodeSchemas";
 import { inferAnchorHandles, parseAnchorHandle } from "./fsiConnectionAnchors";
+import { parseEmbeddedHandles } from "./fsiConnectionHandleMeta";
 
 export type FsiSourceHandleId = `${"top" | "right" | "bottom" | "left"}-out` | string;
 export type FsiTargetHandleId = `${"top" | "right" | "bottom" | "left"}-in` | string;
@@ -26,10 +27,17 @@ export function resolveConnectionHandles(
   source: FsiNodeRecord,
   target: FsiNodeRecord,
 ): { sourceHandle: string; targetHandle: string } {
+  const fromNote = parseEmbeddedHandles(connection.edge_label_note);
   const inferred = inferAnchorHandles(source, target);
   return {
-    sourceHandle: toFlowStripHandle(connection.source_handle) ?? inferred.sourceHandle,
-    targetHandle: toFlowStripHandle(connection.target_handle) ?? inferred.targetHandle,
+    sourceHandle:
+      toFlowStripHandle(connection.source_handle) ??
+      toFlowStripHandle(fromNote.sourceHandle) ??
+      inferred.sourceHandle,
+    targetHandle:
+      toFlowStripHandle(connection.target_handle) ??
+      toFlowStripHandle(fromNote.targetHandle) ??
+      inferred.targetHandle,
   };
 }
 
