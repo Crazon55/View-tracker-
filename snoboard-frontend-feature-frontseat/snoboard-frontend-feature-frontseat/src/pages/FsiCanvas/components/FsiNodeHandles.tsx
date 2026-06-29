@@ -21,6 +21,8 @@ const ANCHOR_PCTS = Array.from({ length: 21 }, (_, i) => i * 5);
 type Props = {
   canStartConnection?: boolean;
   largeHitZone?: boolean;
+  /** When true, target edge strips accept an in-flight connection line. */
+  canAcceptConnection?: boolean;
   /** Extra anchor ids from saved edges (any pct) so lines reload on the correct spot. */
   requiredAnchors?: string[];
 };
@@ -41,7 +43,8 @@ function anchorPointStyle(side: AnchorSide, pct: number): CSSProperties {
 }
 
 function edgeStripStyle(side: AnchorSide, large: boolean): CSSProperties {
-  const thickness = large ? 72 : 56;
+  /** Thin edge band only — wide strips blocked node drag and allowed mid-node connects. */
+  const thickness = large ? 18 : 12;
   switch (side) {
     case "top":
       return { left: "0%", width: "100%", height: thickness, top: 0, transform: "translateY(-50%)" };
@@ -88,9 +91,11 @@ function anchorMeta(id: string): { side: AnchorSide; kind: AnchorKind; pct: numb
 export default function FsiNodeHandles({
   canStartConnection = false,
   largeHitZone = false,
+  canAcceptConnection = false,
   requiredAnchors = [],
 }: Props) {
   const sourcePointer = canStartConnection ? "!pointer-events-auto" : "!pointer-events-none";
+  const targetPointer = canAcceptConnection ? "!pointer-events-auto" : "!pointer-events-none";
   const anchorIds = collectAnchorIds(requiredAnchors);
 
   return (
@@ -119,7 +124,7 @@ export default function FsiNodeHandles({
           type="target"
           position={SIDE_POSITION[side]}
           id={`${side}-in`}
-          className={cn(stripClass, "!pointer-events-auto")}
+          className={cn(stripClass, targetPointer)}
           style={edgeStripStyle(side, largeHitZone)}
           isConnectable
           isConnectableEnd

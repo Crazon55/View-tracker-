@@ -30,7 +30,7 @@ export function findConnectTargetAtPointer(
   absPos: (node: FlowNode) => XYPosition,
   pointer: XYPosition,
   excludeId: string,
-  margin = 56,
+  margin = 32,
 ): { node: FlowNode; abs: XYPosition } | null {
   let best: { node: FlowNode; abs: XYPosition; dist: number } | null = null;
 

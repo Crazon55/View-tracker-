@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, forwardRef } from "react";
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from "react";
 import {
   ReactFlow,
   Controls,
@@ -137,6 +137,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     endPointer: XYPosition | null;
   }>({ sourceHandleId: null, startPointer: null, endPointer: null });
   const connectingRef = useRef(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const connectCompletedRef = useRef(false);
 
   const persistViewport = useCallback(
@@ -417,6 +418,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
 
       connectPointerRef.current = { sourceHandleId: null, startPointer: null, endPointer: null };
       connectingRef.current = false;
+      setIsConnecting(false);
 
       const endpoints = { source: sourceId, target: targetId, sourceHandle, targetHandle };
       setEdges((eds) => {
@@ -466,10 +468,17 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     [finalizeConnection],
   );
 
+  const stopConnecting = useCallback(() => {
+    connectingRef.current = false;
+    setIsConnecting(false);
+    connectPointerRef.current = { sourceHandleId: null, startPointer: null, endPointer: null };
+  }, []);
+
   const handleConnectStart = useCallback(
     (event: MouseEvent | TouchEvent, params: { handleId?: string | null }) => {
       connectCompletedRef.current = false;
       connectingRef.current = true;
+      setIsConnecting(true);
       const pt = screenToFlowPosition(clientPointFromConnectEvent(event));
       connectPointerRef.current = {
         sourceHandleId: params.handleId ?? null,
@@ -495,16 +504,19 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
 
       if (connectCompletedRef.current) {
         connectCompletedRef.current = false;
+        stopConnecting();
         return;
       }
 
-      if (!canEdit || !connectingRef.current) return;
+      if (!canEdit || !connectingRef.current) {
+        stopConnecting();
+        return;
+      }
 
       const sourceId = state.fromNode?.id;
       const sourceHandleId = state.fromHandle?.id ?? connectPointerRef.current.sourceHandleId;
       if (!sourceId || !sourceHandleId) {
-        connectingRef.current = false;
-        connectPointerRef.current = { sourceHandleId: null, startPointer: null, endPointer: null };
+        stopConnecting();
         return;
       }
 
@@ -520,8 +532,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
       }
 
       if (!targetNode || targetNode.type === "fsiFrame") {
-        connectingRef.current = false;
-        connectPointerRef.current = { sourceHandleId: null, startPointer: null, endPointer: null };
+        stopConnecting();
         return;
       }
 
@@ -532,15 +543,14 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         targetHandle: state.toHandle?.id ?? null,
       };
       if (!isValidConnection(candidate)) {
-        connectingRef.current = false;
-        connectPointerRef.current = { sourceHandleId: null, startPointer: null, endPointer: null };
+        stopConnecting();
         return;
       }
 
       connectCompletedRef.current = true;
       finalizeConnection(sourceId, targetNode.id, sourceHandleId, state.toHandle?.id ?? null);
     },
-    [canEdit, finalizeConnection, getAbsoluteFlowPosition, getNodes, isValidConnection, screenToFlowPosition],
+    [canEdit, finalizeConnection, getAbsoluteFlowPosition, getNodes, isValidConnection, screenToFlowPosition, stopConnecting],
   );
 
   const clearEdgeSelection = useCallback(() => {
@@ -728,9 +738,10 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         ...n,
         selected: n.id === selectedNodeId || multiSet.has(n.id),
         connectable: canEdit,
-        data: n.data as FsiNodeData,
+        draggable: canEdit,
+        data: { ...(n.data as FsiNodeData), isConnecting },
       })),
-    [nodes, selectedNodeId, multiSet, canEdit],
+    [nodes, selectedNodeId, multiSet, canEdit, isConnecting],
   );
 
   const miniMapNodeColor = useCallback((n: Node) => {
@@ -760,8 +771,9 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         isValidConnection={isValidConnection}
         connectionMode={ConnectionMode.Strict}
         connectOnClick={false}
-        connectionRadius={100}
+        connectionRadius={48}
         nodeDragThreshold={2}
+        nodesDraggable={canEdit}
         nodesConnectable={canEdit}
         elementsSelectable={canEdit}
         onNodeClick={handleNodeClick}
@@ -779,7 +791,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         edgeTypes={edgeTypes}
         edgesFocusable
         selectionOnDrag={boxSelectMode}
-        panOnDrag={boxSelectMode ? [1, 2] : true}
+        panOnDrag={[1, 2]}
         selectionMode={SelectionMode.Partial}
         deleteKeyCode={canEdit ? ["Backspace", "Delete"] : null}
         defaultEdgeOptions={{

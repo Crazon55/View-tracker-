@@ -24,6 +24,8 @@ export type FsiNodeData = {
   onPayloadChange?: (nodeId: string, key: string, value: string) => void;
   onScreenshotsChange?: (nodeId: string, screenshots: string[]) => void;
   connectionAnchors?: string[];
+  /** True while user is dragging a new connection line. */
+  isConnecting?: boolean;
 };
 
 export function graphToFlow(
