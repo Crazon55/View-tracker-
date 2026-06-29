@@ -97,8 +97,6 @@ export default function FsiCanvasWorkspace() {
   const creatingRef = useRef(false);
   const deletingConnectionRef = useRef<Set<string>>(new Set());
   const dragOriginRef = useRef<Map<string, { x: number; y: number }>>(new Map());
-  const frameWrapChildIdsRef = useRef<string[]>([]);
-
   const history = useFsiCanvasHistory(studyId);
 
   useEffect(() => {
@@ -238,6 +236,41 @@ export default function FsiCanvasWorkspace() {
     [history, setGraph],
   );
 
+  /** Add frame and parent selected nodes immediately; persist parent_node_id in background. */
+  const applyFrameWrap = useCallback(
+    (frameNode: FsiNodeRecord, childIds: string[]) => {
+      const g = graphRef.current;
+      if (!g) {
+        appendCreatedNode(frameNode);
+        return;
+      }
+
+      const childSet = new Set(childIds);
+      const hasFrame = g.nodes.some((n) => n.id === frameNode.id);
+      const nextNodes = [
+        ...(hasFrame ? g.nodes : [...g.nodes, frameNode]).map((n) =>
+          childSet.has(n.id) ? { ...n, parent_node_id: frameNode.id } : n,
+        ),
+      ];
+
+      if (!history.isApplying.current) {
+        history.pushEntry({ type: "node_add", node: frameNode });
+      }
+      setSelectedNode(frameNode);
+      setMultiSelectedIds([]);
+      setGraph({ ...g, nodes: nextNodes });
+
+      void Promise.all(
+        childIds.map((id) => fsiApi.updateNode(id, { parent_node_id: frameNode.id })),
+      ).catch((e) => {
+        toast.error(e instanceof Error ? e.message : "Could not save frame parentage");
+      });
+
+      toast.success(`Framed ${childIds.length} node${childIds.length === 1 ? "" : "s"}`);
+    },
+    [appendCreatedNode, history, setGraph],
+  );
+
   const createWhiteboardNodeMutation = useMutation({
     mutationFn: ({
       type,
@@ -249,6 +282,7 @@ export default function FsiCanvasWorkspace() {
       x: number;
       y: number;
       overrides?: Partial<CreateNodeSpec>;
+      wrapChildIds?: string[];
     }) => {
       const base = specForWhiteboardType(type);
       const spec = { ...base, ...overrides, structured_payload: overrides?.structured_payload ?? base.structured_payload };
@@ -261,7 +295,13 @@ export default function FsiCanvasWorkspace() {
         raw_body_text: spec.raw_body_text,
       });
     },
-    onSuccess: appendCreatedNode,
+    onSuccess: (node, variables) => {
+      if (variables.wrapChildIds?.length) {
+        applyFrameWrap(node as FsiNodeRecord, variables.wrapChildIds);
+      } else {
+        appendCreatedNode(node as FsiNodeRecord);
+      }
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -632,28 +672,6 @@ export default function FsiCanvasWorkspace() {
     [canEdit, getCanvasCenter, handleScreenshotDrop],
   );
 
-  const attachNodesToFrame = useCallback(
-    async (frameId: string, childIds: string[]) => {
-      const g = graphRef.current;
-      if (!g || childIds.length === 0) return;
-      try {
-        await Promise.all(
-          childIds.map((id) => fsiApi.updateNode(id, { parent_node_id: frameId })),
-        );
-        setGraph({
-          ...g,
-          nodes: g.nodes.map((n) =>
-            childIds.includes(n.id) ? { ...n, parent_node_id: frameId } : n,
-          ),
-        });
-        toast.success(`Framed ${childIds.length} node${childIds.length === 1 ? "" : "s"}`);
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Could not attach nodes to frame");
-      }
-    },
-    [setGraph],
-  );
-
   const handleAddWhiteboardTool = useCallback(
     (type: WhiteboardNodeType) => {
       if (type === "Visual") {
@@ -679,13 +697,13 @@ export default function FsiCanvasWorkspace() {
             if (creatingRef.current || createWhiteboardNodeMutation.isPending) return;
             const frameCount = g.nodes.filter(isFrameNode).length;
             const childIds = wrapTargets.map((n) => n.id);
-            frameWrapChildIdsRef.current = childIds;
             creatingRef.current = true;
             createWhiteboardNodeMutation.mutate(
               {
                 type: "Frame",
                 x: bounds.x,
                 y: bounds.y,
+                wrapChildIds: childIds,
                 overrides: {
                   display_title: `Frame ${frameCount + 1}`,
                   structured_payload: {
@@ -696,12 +714,8 @@ export default function FsiCanvasWorkspace() {
                 },
               },
               {
-                onSuccess: (frameNode) => {
-                  void attachNodesToFrame(frameNode.id, childIds);
-                },
                 onSettled: () => {
                   creatingRef.current = false;
-                  frameWrapChildIdsRef.current = [];
                 },
               },
             );
@@ -715,7 +729,6 @@ export default function FsiCanvasWorkspace() {
     },
     [
       addScreenshot,
-      attachNodesToFrame,
       createWhiteboardNodeMutation,
       getCanvasCenter,
       multiSelectedIds,

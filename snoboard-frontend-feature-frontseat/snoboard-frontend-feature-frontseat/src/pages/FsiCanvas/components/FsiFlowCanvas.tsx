@@ -246,6 +246,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
           id: n.id,
           t: n.display_title,
           type: n.node_type,
+          parent: n.parent_node_id,
           p: n.structured_payload,
           b: n.raw_body_text,
         })),
@@ -315,7 +316,8 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
           cur &&
           cur.position.x === next.position.x &&
           cur.position.y === next.position.y &&
-          cur.type === next.type
+          cur.type === next.type &&
+          cur.parentId === next.parentId
         ) {
           return { ...cur, data: next.data, selected: cur.selected };
         }
