@@ -19,12 +19,14 @@ type Props = {
   onSendMessage: (message: string, history: FsiChatMessage[]) => Promise<string>;
   summaryLoading: boolean;
   chatLoading: boolean;
+  canvasNodeCount: number;
+  connectionCount: number;
 };
 
 const QUICK_PROMPTS = [
   "Generate strategy summary",
+  "What's on my canvas?",
   "What hooks should I test next?",
-  "Summarize performance patterns",
 ];
 
 function renderMarkdownLite(text: string) {
@@ -74,6 +76,8 @@ export default function FsiAiAssistant({
   onSendMessage,
   summaryLoading,
   chatLoading,
+  canvasNodeCount,
+  connectionCount,
 }: Props) {
   const [messages, setMessages] = useState<FsiChatMessage[]>(() => {
     const saved = loadChatHistory(studyId);
@@ -184,7 +188,9 @@ export default function FsiAiAssistant({
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold text-white">FSI Assistant</div>
-            <div className="truncate text-xs text-zinc-500">Context-aware canvas intelligence</div>
+            <div className="truncate text-xs text-zinc-500">
+              {canvasNodeCount} nodes · {connectionCount} connections on canvas
+            </div>
           </div>
           <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => onOpenChange(false)}>
             <X className="h-4 w-4" />

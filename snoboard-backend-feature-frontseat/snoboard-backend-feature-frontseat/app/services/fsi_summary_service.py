@@ -40,36 +40,7 @@ Respond with ONLY valid JSON matching this exact structure:
 Be specific, actionable, and grounded in the provided node data. Use markdown inside string values where helpful."""
 
 
-def build_graph_context(study: dict, nodes: list[dict], connections: list[dict]) -> dict[str, Any]:
-    node_by_id = {n["id"]: n for n in nodes}
-    enriched_connections = []
-    for c in connections:
-        src = node_by_id.get(c["source_node_id"], {})
-        tgt = node_by_id.get(c["target_node_id"], {})
-        enriched_connections.append({
-            "source_node_id": c["source_node_id"],
-            "source_type": src.get("node_type"),
-            "source_title": src.get("display_title"),
-            "target_node_id": c["target_node_id"],
-            "target_type": tgt.get("node_type"),
-            "target_title": tgt.get("display_title"),
-            "edge_label_note": c.get("edge_label_note"),
-        })
-    return {
-        "study": study,
-        "nodes": [
-            {
-                "id": n["id"],
-                "node_type": n["node_type"],
-                "display_title": n["display_title"],
-                "structured_payload": n.get("structured_payload") or {},
-                "raw_body_text": n.get("raw_body_text"),
-                "tags": n.get("tags") or [],
-            }
-            for n in nodes
-        ],
-        "connections": enriched_connections,
-    }
+from app.services.fsi_graph_context import build_graph_context, graph_context_json
 
 
 def _parse_json_response(raw_text: str) -> dict[str, Any]:
@@ -91,7 +62,7 @@ async def generate_study_summary(study: dict, nodes: list[dict], connections: li
     graph = build_graph_context(study, nodes, connections)
     user_content = (
         "Generate the FSI strategy blueprint JSON for this study graph:\n\n"
-        + json.dumps(graph, indent=2, default=str)
+        + graph_context_json(study, nodes, connections)
     )
 
     client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)

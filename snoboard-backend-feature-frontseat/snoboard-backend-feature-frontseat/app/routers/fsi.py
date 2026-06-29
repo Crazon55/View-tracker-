@@ -19,6 +19,8 @@ from app.schemas.fsi import (
     ConnectionCreate,
     ConnectionUpdate,
     FsiChatRequest,
+    FsiGraphSnapshot,
+    FsiSummaryRequest,
 )
 
 router = APIRouter(tags=["fsi"])
@@ -369,15 +371,32 @@ async def fsi_node_cloudinary_sign(
     return {"success": True, "data": signed}
 
 
+def _resolve_study_graph(
+    client,
+    study_id: str,
+    snapshot: FsiGraphSnapshot | None,
+) -> tuple[dict, list[dict], list[dict]]:
+    """Prefer live canvas snapshot from client; fall back to Supabase."""
+    study = _get_study(client, study_id)
+    if snapshot and snapshot.nodes:
+        return study if not snapshot.study else {**study, **snapshot.study}, snapshot.nodes, snapshot.connections
+    nodes = client.table("nodes").select("*").eq("study_id", study_id).execute().data or []
+    connections = client.table("connections").select("*").eq("study_id", study_id).execute().data or []
+    return study, nodes, connections
+
+
 @router.post("/studies/{study_id}/generate-summary")
-async def generate_study_summary_route(study_id: str, claims: dict = Depends(require_auth)):
+async def generate_study_summary_route(
+    study_id: str,
+    req: FsiSummaryRequest = FsiSummaryRequest(),
+    claims: dict = Depends(require_auth),
+):
     """Generate an AI strategy summary from the study graph (Claude)."""
     from app.services.fsi_summary_service import generate_study_summary
 
     client = get_supabase_client()
-    study = _get_study(client, study_id)
-    nodes = client.table("nodes").select("*").eq("study_id", study_id).execute().data or []
-    connections = client.table("connections").select("*").eq("study_id", study_id).execute().data or []
+    snapshot = req.graph_snapshot
+    study, nodes, connections = _resolve_study_graph(client, study_id, snapshot)
 
     try:
         summary_json = await generate_study_summary(study, nodes, connections)
@@ -421,9 +440,7 @@ async def chat_study(study_id: str, req: FsiChatRequest, claims: dict = Depends(
     from app.services.fsi_chat_service import chat_about_study
 
     client = get_supabase_client()
-    study = _get_study(client, study_id)
-    nodes = client.table("nodes").select("*").eq("study_id", study_id).execute().data or []
-    connections = client.table("connections").select("*").eq("study_id", study_id).execute().data or []
+    study, nodes, connections = _resolve_study_graph(client, study_id, req.graph_snapshot)
 
     try:
         reply = await chat_about_study(
@@ -438,4 +455,13 @@ async def chat_study(study_id: str, req: FsiChatRequest, claims: dict = Depends(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Chat failed: {e}") from e
 
-    return {"success": True, "data": {"reply": reply}}
+    return {
+        "success": True,
+        "data": {
+            "reply": reply,
+            "context_stats": {
+                "node_count": len(nodes),
+                "connection_count": len(connections),
+            },
+        },
+    }

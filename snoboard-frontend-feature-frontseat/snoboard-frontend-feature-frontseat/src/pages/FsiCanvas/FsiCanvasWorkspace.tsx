@@ -24,6 +24,7 @@ import FsiFlowCanvas, { type FsiFlowCanvasHandle } from "./components/FsiFlowCan
 import FsiLeftToolbar from "./components/FsiLeftToolbar";
 import FsiAiAssistant from "./components/FsiAiAssistant";
 import type { FsiChatMessage } from "./lib/fsiAiChat";
+import { buildGraphSnapshot } from "./lib/fsiGraphSnapshot";
 import FsiStudySettingsDialog, { type StudyStatus } from "./components/FsiStudySettingsDialog";
 import NodeTypePicker, { type PickerChoice } from "./components/NodeTypePicker";
 import type { NodeSuggestionPayload, NoteSuggestionPayload } from "./components/FsiNodeSuggestionsPanel";
@@ -113,7 +114,10 @@ export default function FsiCanvasWorkspace() {
   graphRef.current = graph ?? null;
 
   const generateSummaryMutation = useMutation({
-    mutationFn: () => fsiApi.generateStudySummary(studyId!),
+    mutationFn: () => {
+      const snapshot = buildGraphSnapshot(graphRef.current ?? undefined);
+      return fsiApi.generateStudySummary(studyId!, snapshot);
+    },
     onError: (e: Error) => {
       toast.error(e.message);
     },
@@ -124,12 +128,15 @@ export default function FsiCanvasWorkspace() {
   }, [generateSummaryMutation]);
 
   const chatMutation = useMutation({
-    mutationFn: ({ message, history }: { message: string; history: FsiChatMessage[] }) =>
-      fsiApi.chatStudy(
+    mutationFn: ({ message, history }: { message: string; history: FsiChatMessage[] }) => {
+      const snapshot = buildGraphSnapshot(graphRef.current ?? undefined);
+      return fsiApi.chatStudy(
         studyId!,
         message,
         history.map((m) => ({ role: m.role, content: m.content })),
-      ),
+        snapshot,
+      );
+    },
   });
 
   const handleSendChat = useCallback(
@@ -1251,6 +1258,8 @@ export default function FsiCanvasWorkspace() {
             onSendMessage={handleSendChat}
             summaryLoading={generateSummaryMutation.isPending}
             chatLoading={chatMutation.isPending}
+            canvasNodeCount={canvasNodes.length}
+            connectionCount={connections.length}
           />
         </div>
       </div>

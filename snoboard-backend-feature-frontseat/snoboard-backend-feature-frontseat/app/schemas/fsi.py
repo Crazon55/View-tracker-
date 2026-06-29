@@ -116,6 +116,14 @@ class ConnectionUpdate(BaseModel):
     edge_label_note: str | None = None
 
 
+class FsiGraphSnapshot(BaseModel):
+    """Live canvas graph from the client — preferred over DB when provided."""
+
+    study: dict[str, Any] | None = None
+    nodes: list[dict[str, Any]] = Field(default_factory=list)
+    connections: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class FsiChatMessage(BaseModel):
     role: Literal["user", "assistant"]
     content: str = Field(min_length=1, max_length=12000)
@@ -124,3 +132,8 @@ class FsiChatMessage(BaseModel):
 class FsiChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=8000)
     history: list[FsiChatMessage] = Field(default_factory=list, max_length=32)
+    graph_snapshot: FsiGraphSnapshot | None = None
+
+
+class FsiSummaryRequest(BaseModel):
+    graph_snapshot: FsiGraphSnapshot | None = None

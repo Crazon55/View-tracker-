@@ -4,10 +4,7 @@
  */
 import { supabase as _sb } from "@/lib/supabase";
 import { getAccessToken } from "./api";
-import {
-  embedHandlesInEdgeLabelNote,
-  parseEmbeddedHandles,
-} from "@/pages/FsiCanvas/lib/fsiConnectionHandleMeta";
+import type { FsiGraphSnapshot } from "@/pages/FsiCanvas/lib/fsiGraphSnapshot";
 
 const FSI_API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -518,6 +515,7 @@ export function createFsiApi() {
       studyId: string,
       message: string,
       history: Array<{ role: "user" | "assistant"; content: string }>,
+      graphSnapshot?: FsiGraphSnapshot,
     ) => {
       const res = await fetch(`${FSI_API_BASE}${FSI_BACKEND_BASE}/studies/${studyId}/chat`, {
         method: "POST",
@@ -525,7 +523,11 @@ export function createFsiApi() {
           "Content-Type": "application/json",
           ...(getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : {}),
         },
-        body: JSON.stringify({ message, history }),
+        body: JSON.stringify({
+          message,
+          history,
+          graph_snapshot: graphSnapshot ?? undefined,
+        }),
       });
       if (!res.ok) {
         const errBody = await res.json().catch(() => null);
@@ -536,15 +538,20 @@ export function createFsiApi() {
       if (!json.data?.reply) throw new Error("Chat returned no reply");
       return json.data.reply;
     },
-    generateStudySummary: async (studyId: string) => {
+    generateStudySummary: async (studyId: string, graphSnapshot?: FsiGraphSnapshot) => {
       const res = await fetch(`${FSI_API_BASE}${FSI_BACKEND_BASE}/studies/${studyId}/generate-summary`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...(getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : {}),
         },
+        body: JSON.stringify({ graph_snapshot: graphSnapshot ?? undefined }),
       });
-      if (!res.ok) throw new Error(`Summary generation failed (${res.status})`);
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => null);
+        const detail = errBody?.detail;
+        throw new Error(typeof detail === "string" ? detail : `Summary generation failed (${res.status})`);
+      }
       const json = (await res.json()) as { data?: Record<string, string | string[]> };
       if (!json.data) throw new Error("Summary generation returned no data");
       return json.data;

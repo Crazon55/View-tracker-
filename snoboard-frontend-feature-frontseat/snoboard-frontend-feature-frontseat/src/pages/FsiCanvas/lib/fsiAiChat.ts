@@ -47,5 +47,5 @@ export const FSI_CHAT_WELCOME: FsiChatMessage = {
   id: "welcome",
   role: "assistant",
   content:
-    "I'm your FSI research assistant. I read your canvas graph — nodes, connections, and notes — to help with strategy.\n\nTry **Generate strategy summary** or ask anything about hooks, visuals, or performance patterns.",
+    "I'm your FSI research assistant. Every message I receive includes a **full snapshot** of your canvas — all nodes, payloads, connections, and study metadata.\n\nTry **What's on my canvas?** or **Generate strategy summary**.",
 };
