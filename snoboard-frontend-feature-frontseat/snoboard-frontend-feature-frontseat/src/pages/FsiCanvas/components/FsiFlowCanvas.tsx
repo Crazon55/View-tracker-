@@ -12,6 +12,7 @@ import {
   type Node,
   type Edge,
   type EdgeChange,
+  type NodeChange,
   type OnSelectionChangeFunc,
   type Viewport,
   ReactFlowProvider,
@@ -128,7 +129,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   ref,
 ) {
   const themePalette = paletteForCanvasTheme(canvasTheme);
-  const { screenToFlowPosition, fitView, setViewport, getViewport, setCenter, getNode, getNodes } =
+  const { screenToFlowPosition, fitView, setViewport, getViewport, setCenter, getNode, getNodes, getEdges } =
     useReactFlow();
   const updateNodeInternals = useUpdateNodeInternals();
   const paneRef = useRef<HTMLDivElement>(null);
@@ -285,14 +286,27 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   const [nodes, setNodes, onNodesChange] = useNodesState(flowGraph.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(flowEdges);
 
+  const handleNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      onNodesChange(changes);
+      if (!changes.some((change) => change.type === "select")) return;
+      queueMicrotask(() => {
+        const selectedNodes = getNodes().filter(
+          (node) => node.selected && node.type !== "fsiFrame",
+        );
+        const selectedEdges = getEdges().filter((edge) => edge.selected);
+        onSelectionChange({ nodes: selectedNodes, edges: selectedEdges });
+      });
+    },
+    [getEdges, getNodes, onNodesChange, onSelectionChange],
+  );
+
   const handleEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
       onEdgesChange(changes.filter((c) => c.type !== "remove"));
     },
     [onEdgesChange],
   );
-
-  const multiSet = useMemo(() => new Set(multiSelectedIds), [multiSelectedIds]);
 
   useEffect(() => {
     setNodes((current) => {
@@ -413,6 +427,10 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         return boundsFromExtents(minX, minY, maxX, maxY);
       },
       getSelectedNodeIds: () => {
+        const fromFlow = getNodes()
+          .filter((node) => node.selected && node.type !== "fsiFrame")
+          .map((node) => node.id);
+        if (fromFlow.length > 0) return fromFlow;
         if (multiSelectedIds.length > 0) {
           return multiSelectedIds.filter((id) => {
             const dbNode = dbNodes.find((n) => n.id === id);
@@ -423,9 +441,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
           const dbNode = dbNodes.find((n) => n.id === selectedNodeId);
           if (dbNode && !isFrameNode(dbNode)) return [selectedNodeId];
         }
-        return getNodes()
-          .filter((n) => n.selected && n.type !== "fsiFrame")
-          .map((n) => n.id);
+        return [];
       },
     }),
     [
@@ -800,12 +816,11 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     () =>
       nodes.map((n) => ({
         ...n,
-        selected: n.id === selectedNodeId || multiSet.has(n.id),
         connectable: canEdit,
         draggable: canEdit,
         data: { ...(n.data as FsiNodeData), isConnecting },
       })),
-    [nodes, selectedNodeId, multiSet, canEdit, isConnecting],
+    [nodes, canEdit, isConnecting],
   );
 
   const miniMapNodeColor = useCallback((n: Node) => {
@@ -827,7 +842,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         nodes={styledNodes}
         edges={edges}
         defaultViewport={savedViewport ?? { x: 0, y: 0, zoom: 1 }}
-        onNodesChange={onNodesChange}
+        onNodesChange={handleNodesChange}
         onEdgesChange={handleEdgesChange}
         onConnect={handleConnect}
         onConnectStart={handleConnectStart}

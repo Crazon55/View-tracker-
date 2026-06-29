@@ -122,8 +122,7 @@ export default function FsiLeftToolbar({
           onAddTool={onAddTool}
           onPointerDownCapture={
             type === "Frame" && onCaptureFrameSelection
-              ? (e) => {
-                  e.preventDefault();
+              ? () => {
                   onCaptureFrameSelection();
                 }
               : undefined
