@@ -39,7 +39,7 @@ import {
 } from "./FsiNodeSuggestionsPanel";
 import { clipboardImageFiles } from "../lib/fsiScreenshotNode";
 import { isFrameNode } from "../lib/fsiWhiteboardTypes";
-import { boundsFromExtents } from "../lib/fsiNodeBounds";
+import { boundsFromExtents, estimateNodeSize } from "../lib/fsiNodeBounds";
 import { isSameConnectionEndpoints } from "../lib/fsiConnectionUtils";
 import { findConnectTargetAtPointer } from "../lib/fsiConnectHitTest";
 import {
@@ -56,6 +56,8 @@ export type FsiFlowCanvasHandle = {
   fitAll: () => void;
   /** Bounding box that covers all listed nodes using measured canvas sizes. */
   getBoundsForNodeIds: (nodeIds: string[]) => ReturnType<typeof boundsFromExtents> | null;
+  /** Node ids currently selected on the canvas (live React Flow state). */
+  getSelectedNodeIds: () => string[];
 };
 
 type FlowInnerProps = {
@@ -382,18 +384,24 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         });
       },
       getBoundsForNodeIds: (nodeIds: string[]) => {
-        const idSet = new Set(nodeIds);
+        if (nodeIds.length === 0) return null;
+        const dbById = new Map(dbNodes.map((n) => [n.id, n]));
         let minX = Infinity;
         let minY = Infinity;
         let maxX = -Infinity;
         let maxY = -Infinity;
         let count = 0;
 
-        for (const node of getNodes()) {
-          if (!idSet.has(node.id) || node.type === "fsiFrame") continue;
-          const abs = getAbsoluteFlowPosition(node);
-          const w = node.measured?.width ?? node.width ?? 200;
-          const h = node.measured?.height ?? node.height ?? 80;
+        for (const id of nodeIds) {
+          const dbNode = dbById.get(id);
+          if (!dbNode || isFrameNode(dbNode)) continue;
+          const flowNode = getNodes().find((n) => n.id === id);
+          const abs = flowNode
+            ? getAbsoluteFlowPosition(flowNode)
+            : { x: dbNode.canvas_x ?? 0, y: dbNode.canvas_y ?? 0 };
+          const estimated = estimateNodeSize(dbNode);
+          const w = flowNode?.measured?.width ?? flowNode?.width ?? estimated.width;
+          const h = flowNode?.measured?.height ?? flowNode?.height ?? estimated.height;
           minX = Math.min(minX, abs.x);
           minY = Math.min(minY, abs.y);
           maxX = Math.max(maxX, abs.x + w);
@@ -404,6 +412,21 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         if (count === 0) return null;
         return boundsFromExtents(minX, minY, maxX, maxY);
       },
+      getSelectedNodeIds: () => {
+        if (multiSelectedIds.length > 0) {
+          return multiSelectedIds.filter((id) => {
+            const dbNode = dbNodes.find((n) => n.id === id);
+            return dbNode && !isFrameNode(dbNode);
+          });
+        }
+        if (selectedNodeId) {
+          const dbNode = dbNodes.find((n) => n.id === selectedNodeId);
+          if (dbNode && !isFrameNode(dbNode)) return [selectedNodeId];
+        }
+        return getNodes()
+          .filter((n) => n.selected && n.type !== "fsiFrame")
+          .map((n) => n.id);
+      },
     }),
     [
       dbNodes,
@@ -412,7 +435,9 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
       getAbsoluteFlowPosition,
       getNodes,
       getViewport,
+      multiSelectedIds,
       persistViewport,
+      selectedNodeId,
       setCenter,
     ],
   );

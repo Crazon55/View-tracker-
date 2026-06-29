@@ -40,6 +40,8 @@ type Props = {
   canUndo: boolean;
   canRedo: boolean;
   onAddTool: (type: WhiteboardNodeType) => void;
+  /** Capture canvas selection before toolbar click clears it (Frame wrap). */
+  onCaptureFrameSelection?: () => void;
   onUploadImage: () => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -50,11 +52,13 @@ function ToolButton({
   canEdit,
   canvasTheme,
   onAddTool,
+  onPointerDownCapture,
 }: {
   type: WhiteboardNodeType;
   canEdit: boolean;
   canvasTheme: "dark" | "light";
   onAddTool: (type: WhiteboardNodeType) => void;
+  onPointerDownCapture?: (e: React.PointerEvent) => void;
 }) {
   const onDragStart = (e: React.DragEvent) => {
     if (!canEdit) return;
@@ -70,6 +74,7 @@ function ToolButton({
       disabled={!canEdit}
       draggable={canEdit}
       onDragStart={onDragStart}
+      onPointerDownCapture={onPointerDownCapture}
       onClick={() => onAddTool(type)}
       title={type === "Frame" ? "Wrap selection in frame" : type}
       className={cn(
@@ -91,6 +96,7 @@ export default function FsiLeftToolbar({
   canUndo,
   canRedo,
   onAddTool,
+  onCaptureFrameSelection,
   onUploadImage,
   onUndo,
   onRedo,
@@ -114,6 +120,14 @@ export default function FsiLeftToolbar({
           canEdit={canEdit}
           canvasTheme={canvasTheme}
           onAddTool={onAddTool}
+          onPointerDownCapture={
+            type === "Frame" && onCaptureFrameSelection
+              ? (e) => {
+                  e.preventDefault();
+                  onCaptureFrameSelection();
+                }
+              : undefined
+          }
         />
       ))}
 

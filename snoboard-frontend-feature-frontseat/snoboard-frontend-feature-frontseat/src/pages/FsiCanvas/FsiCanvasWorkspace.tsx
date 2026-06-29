@@ -93,6 +93,9 @@ export default function FsiCanvasWorkspace() {
   const [aiOpen, setAiOpen] = useState(false);
   const graphRef = useRef<FsiGraph | null>(null);
   const canvasRef = useRef<FsiFlowCanvasHandle>(null);
+  /** Snapshot selection on Frame pointer-down before toolbar click clears highlights. */
+  const frameSelectionRef = useRef<string[]>([]);
+  const selectionSnapshotRef = useRef<string[]>([]);
   const migratedRef = useRef(false);
   const creatingRef = useRef(false);
   const deletingConnectionRef = useRef<Set<string>>(new Set());
@@ -654,6 +657,36 @@ export default function FsiCanvasWorkspace() {
     [canEdit, createScreenshotMutation],
   );
 
+  const captureFrameSelection = useCallback(() => {
+    const live = canvasRef.current?.getSelectedNodeIds() ?? [];
+    const snapshot = selectionSnapshotRef.current;
+    frameSelectionRef.current =
+      live.length > 0
+        ? live
+        : snapshot.length > 0
+          ? snapshot
+          : multiSelectedIds.length > 0
+            ? multiSelectedIds
+            : selectedNode
+              ? [selectedNode.id]
+              : [];
+  }, [multiSelectedIds, selectedNode]);
+
+  const resolveFrameTargetIds = useCallback(() => {
+    const live = canvasRef.current?.getSelectedNodeIds() ?? [];
+    const captured = frameSelectionRef.current;
+    const merged = [
+      ...new Set([
+        ...captured,
+        ...live,
+        ...selectionSnapshotRef.current,
+        ...multiSelectedIds,
+        ...(selectedNode ? [selectedNode.id] : []),
+      ]),
+    ];
+    return merged.length > 0 ? merged : captured;
+  }, [multiSelectedIds, selectedNode]);
+
   const addScreenshot = useCallback(
     (x?: number, y?: number) => {
       if (!canEdit) return;
@@ -682,9 +715,7 @@ export default function FsiCanvasWorkspace() {
 
       if (type === "Frame") {
         const g = graphRef.current;
-        const ids = [...new Set([
-          ...(multiSelectedIds.length > 0 ? multiSelectedIds : selectedNode ? [selectedNode.id] : []),
-        ])];
+        const ids = resolveFrameTargetIds();
         if (g && ids.length > 0) {
           const wrapTargets = g.nodes.filter(
             (n) => ids.includes(n.id) && isCanvasNode(n) && !isFrameNode(n),
@@ -693,6 +724,7 @@ export default function FsiCanvasWorkspace() {
           const bounds =
             canvasRef.current?.getBoundsForNodeIds(childIds) ?? boundsForNodes(wrapTargets);
           if (bounds && wrapTargets.length > 0) {
+            frameSelectionRef.current = [];
             if (creatingRef.current || createWhiteboardNodeMutation.isPending) return;
             const frameCount = g.nodes.filter(isFrameNode).length;
             creatingRef.current = true;
@@ -720,6 +752,8 @@ export default function FsiCanvasWorkspace() {
             return;
           }
         }
+        toast.message("Select nodes on the canvas first, then click Frame to wrap them.");
+        return;
       }
 
       const pos = getCanvasCenter();
@@ -729,9 +763,8 @@ export default function FsiCanvasWorkspace() {
       addScreenshot,
       createWhiteboardNodeMutation,
       getCanvasCenter,
-      multiSelectedIds,
+      resolveFrameTargetIds,
       runCreateWhiteboard,
-      selectedNode,
     ],
   );
 
@@ -835,11 +868,14 @@ export default function FsiCanvasWorkspace() {
 
   const handleSelectionChange: OnSelectionChangeFunc = useCallback(({ nodes: selected, edges: selectedEdges }) => {
     if (selectedEdges.length > 0) {
+      selectionSnapshotRef.current = [];
       setMultiSelectedIds([]);
       setSelectedNode(null);
       return;
     }
-    setMultiSelectedIds(selected.map((n) => n.id));
+    const ids = selected.map((n) => n.id);
+    selectionSnapshotRef.current = ids;
+    setMultiSelectedIds(ids);
     if (selected.length === 0) {
       setSelectedNode(null);
     } else if (selected.length === 1) {
@@ -1195,6 +1231,7 @@ export default function FsiCanvasWorkspace() {
           canUndo={history.canUndo}
           canRedo={history.canRedo}
           onAddTool={handleAddWhiteboardTool}
+          onCaptureFrameSelection={captureFrameSelection}
           onUploadImage={() => addScreenshot()}
           onUndo={handleUndo}
           onRedo={handleRedo}
