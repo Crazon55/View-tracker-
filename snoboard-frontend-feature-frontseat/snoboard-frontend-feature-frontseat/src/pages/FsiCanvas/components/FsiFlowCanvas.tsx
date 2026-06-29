@@ -39,6 +39,7 @@ import {
 } from "./FsiNodeSuggestionsPanel";
 import { clipboardImageFiles } from "../lib/fsiScreenshotNode";
 import { isFrameNode } from "../lib/fsiWhiteboardTypes";
+import { boundsFromExtents } from "../lib/fsiNodeBounds";
 import { isSameConnectionEndpoints } from "../lib/fsiConnectionUtils";
 import { findConnectTargetAtPointer } from "../lib/fsiConnectHitTest";
 import {
@@ -53,6 +54,8 @@ export type FsiFlowCanvasHandle = {
   getViewportCenter: () => { x: number; y: number };
   focusNode: (nodeId: string) => void;
   fitAll: () => void;
+  /** Bounding box that covers all listed nodes using measured canvas sizes. */
+  getBoundsForNodeIds: (nodeIds: string[]) => ReturnType<typeof boundsFromExtents> | null;
 };
 
 type FlowInnerProps = {
@@ -167,24 +170,6 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
       y: (rect.height / 2 - y) / zoom,
     };
   }, [getViewport]);
-
-  useImperativeHandle(ref, () => ({
-    getViewportCenter: () => flowCenterFromViewport(),
-    focusNode: (nodeId: string) => {
-      const target = dbNodes.find((n) => n.id === nodeId);
-      if (!target) return;
-      const cx = (target.canvas_x ?? 0) + 120;
-      const cy = (target.canvas_y ?? 0) + 50;
-      void setCenter(cx, cy, { zoom: getViewport().zoom, duration: 280 });
-    },
-    fitAll: () => {
-      requestAnimationFrame(() => {
-        void fitView({ padding: 0.25, duration: 300 }).then(() => {
-          persistViewport(getViewport());
-        });
-      });
-    },
-  }));
 
   const savedViewport = useMemo(() => loadSavedViewport(studyId), [studyId]);
 
@@ -376,6 +361,60 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
       return { x, y };
     },
     [getNode],
+  );
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      getViewportCenter: () => flowCenterFromViewport(),
+      focusNode: (nodeId: string) => {
+        const target = dbNodes.find((n) => n.id === nodeId);
+        if (!target) return;
+        const cx = (target.canvas_x ?? 0) + 120;
+        const cy = (target.canvas_y ?? 0) + 50;
+        void setCenter(cx, cy, { zoom: getViewport().zoom, duration: 280 });
+      },
+      fitAll: () => {
+        requestAnimationFrame(() => {
+          void fitView({ padding: 0.25, duration: 300 }).then(() => {
+            persistViewport(getViewport());
+          });
+        });
+      },
+      getBoundsForNodeIds: (nodeIds: string[]) => {
+        const idSet = new Set(nodeIds);
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        let count = 0;
+
+        for (const node of getNodes()) {
+          if (!idSet.has(node.id) || node.type === "fsiFrame") continue;
+          const abs = getAbsoluteFlowPosition(node);
+          const w = node.measured?.width ?? node.width ?? 200;
+          const h = node.measured?.height ?? node.height ?? 80;
+          minX = Math.min(minX, abs.x);
+          minY = Math.min(minY, abs.y);
+          maxX = Math.max(maxX, abs.x + w);
+          maxY = Math.max(maxY, abs.y + h);
+          count++;
+        }
+
+        if (count === 0) return null;
+        return boundsFromExtents(minX, minY, maxX, maxY);
+      },
+    }),
+    [
+      dbNodes,
+      fitView,
+      flowCenterFromViewport,
+      getAbsoluteFlowPosition,
+      getNodes,
+      getViewport,
+      persistViewport,
+      setCenter,
+    ],
   );
 
   const isValidConnection = useCallback(

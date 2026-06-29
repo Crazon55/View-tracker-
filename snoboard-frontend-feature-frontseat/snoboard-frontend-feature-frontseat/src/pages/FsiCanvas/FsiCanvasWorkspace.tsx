@@ -682,21 +682,19 @@ export default function FsiCanvasWorkspace() {
 
       if (type === "Frame") {
         const g = graphRef.current;
-        const ids =
-          multiSelectedIds.length > 0
-            ? multiSelectedIds
-            : selectedNode
-              ? [selectedNode.id]
-              : [];
+        const ids = [...new Set([
+          ...(multiSelectedIds.length > 0 ? multiSelectedIds : selectedNode ? [selectedNode.id] : []),
+        ])];
         if (g && ids.length > 0) {
           const wrapTargets = g.nodes.filter(
             (n) => ids.includes(n.id) && isCanvasNode(n) && !isFrameNode(n),
           );
-          const bounds = boundsForNodes(wrapTargets);
+          const childIds = wrapTargets.map((n) => n.id);
+          const bounds =
+            canvasRef.current?.getBoundsForNodeIds(childIds) ?? boundsForNodes(wrapTargets);
           if (bounds && wrapTargets.length > 0) {
             if (creatingRef.current || createWhiteboardNodeMutation.isPending) return;
             const frameCount = g.nodes.filter(isFrameNode).length;
-            const childIds = wrapTargets.map((n) => n.id);
             creatingRef.current = true;
             createWhiteboardNodeMutation.mutate(
               {
