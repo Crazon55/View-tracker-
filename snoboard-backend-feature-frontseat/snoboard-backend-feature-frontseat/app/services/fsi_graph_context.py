@@ -6,6 +6,19 @@ import json
 from typing import Any
 
 
+def _is_frame_node(node: dict) -> bool:
+    payload = node.get("structured_payload") or {}
+    return payload.get("is_frame") is True or node.get("node_type") == "Frame"
+
+
+def _child_summary(node: dict) -> dict[str, Any]:
+    return {
+        "id": node.get("id"),
+        "node_type": node.get("node_type"),
+        "display_title": node.get("display_title"),
+    }
+
+
 def _study_meta(study: dict) -> dict[str, Any]:
     keys = (
         "id",
@@ -22,8 +35,29 @@ def _study_meta(study: dict) -> dict[str, Any]:
 
 
 def build_graph_context(study: dict, nodes: list[dict], connections: list[dict]) -> dict[str, Any]:
-    """Full canvas graph for Claude — every node field, connection handles, layout hints."""
+    """Full canvas graph for Claude — nodes, connections, and explicit frame groupings."""
     node_by_id = {n["id"]: n for n in nodes if n.get("id")}
+    frame_ids = {nid for nid, n in node_by_id.items() if _is_frame_node(n)}
+
+    frames: list[dict[str, Any]] = []
+    for n in nodes:
+        if not _is_frame_node(n):
+            continue
+        nid = n.get("id")
+        payload = n.get("structured_payload") or {}
+        child_nodes = [c for c in nodes if c.get("parent_node_id") == nid]
+        frames.append(
+            {
+                "id": nid,
+                "display_title": n.get("display_title"),
+                "canvas_x": n.get("canvas_x"),
+                "canvas_y": n.get("canvas_y"),
+                "frame_width": payload.get("frame_width"),
+                "frame_height": payload.get("frame_height"),
+                "child_count": len(child_nodes),
+                "children": [_child_summary(c) for c in child_nodes],
+            }
+        )
 
     enriched_connections: list[dict[str, Any]] = []
     for c in connections:
@@ -46,19 +80,31 @@ def build_graph_context(study: dict, nodes: list[dict], connections: list[dict])
 
     serialized_nodes: list[dict[str, Any]] = []
     for n in nodes:
-        serialized_nodes.append(
-            {
-                "id": n.get("id"),
-                "node_type": n.get("node_type"),
-                "display_title": n.get("display_title"),
-                "canvas_x": n.get("canvas_x"),
-                "canvas_y": n.get("canvas_y"),
-                "parent_node_id": n.get("parent_node_id"),
-                "structured_payload": n.get("structured_payload") or {},
-                "raw_body_text": n.get("raw_body_text"),
-                "tags": n.get("tags") or [],
+        parent_id = n.get("parent_node_id")
+        inside_frame: dict[str, Any] | None = None
+        if parent_id and parent_id in frame_ids:
+            parent = node_by_id.get(parent_id, {})
+            inside_frame = {
+                "frame_id": parent_id,
+                "frame_title": parent.get("display_title"),
             }
-        )
+
+        entry: dict[str, Any] = {
+            "id": n.get("id"),
+            "node_type": n.get("node_type"),
+            "display_title": n.get("display_title"),
+            "canvas_x": n.get("canvas_x"),
+            "canvas_y": n.get("canvas_y"),
+            "parent_node_id": parent_id,
+            "structured_payload": n.get("structured_payload") or {},
+            "raw_body_text": n.get("raw_body_text"),
+            "tags": n.get("tags") or [],
+        }
+        if inside_frame:
+            entry["inside_frame"] = inside_frame
+        if _is_frame_node(n):
+            entry["is_frame"] = True
+        serialized_nodes.append(entry)
 
     type_counts: dict[str, int] = {}
     for n in nodes:
@@ -70,8 +116,10 @@ def build_graph_context(study: dict, nodes: list[dict], connections: list[dict])
         "stats": {
             "node_count": len(nodes),
             "connection_count": len(connections),
+            "frame_count": len(frames),
             "nodes_by_type": type_counts,
         },
+        "frames": frames,
         "nodes": serialized_nodes,
         "connections": enriched_connections,
     }
