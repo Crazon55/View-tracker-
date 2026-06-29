@@ -40,6 +40,7 @@ export type Permission =
   | 'ops_playbook_tech'
   | 'view_fsi_canvas'
   | 'edit_fsi_canvas'
+  | 'view_pintu'              // external Pintu batch editor (nav link)
 
 // ── Reusable permission sets ──────────────────────────────────────────────────
 
@@ -137,7 +138,13 @@ const COLLABORATOR_PERMISSIONS: Permission[] = [
   'view_assigned_ideas',
   'comment_on_idea',
   'attach_file_to_idea',
+  'view_pintu',
 ]
+
+/** Explicit Pintu nav access (in addition to view_pintu role permission). */
+const PINTU_NAV_EMAILS = new Set([
+  'nitesh.gunupudi@owledmedia.com',
+])
 
 // ── Role → permissions map ────────────────────────────────────────────────────
 
@@ -240,6 +247,12 @@ export function hasFullNav(role: string | null): boolean {
     const allowed = ROLE_NAV[r]
     return !allowed || allowed === '*'
   })
+}
+
+export function canAccessPintu(role: string | null, email?: string | null): boolean {
+  if (email && PINTU_NAV_EMAILS.has(email.trim().toLowerCase())) return true
+  if (hasFullNav(role)) return true
+  return hasPermission(role, 'view_pintu')
 }
 
 // ── Helper functions ──────────────────────────────────────────────────────────

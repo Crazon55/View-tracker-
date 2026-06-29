@@ -7,7 +7,7 @@ import { getDeadlines, getSixDayConfig, getSixDayDeadlines, getTickets } from "@
 import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate, Navigate } from "react-router-dom";
 import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, BarChart3, Scissors, ClipboardList, Trophy, LayoutGrid, Ticket, Newspaper, Waves, Bell, Sparkles, ShieldCheck, FlaskConical } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
-import { isRouteAllowed, hasFullNav } from "@/lib/permissions";
+import { isRouteAllowed, canAccessPintu } from "@/lib/permissions";
 import { PLAYBOOK_CONFIGS } from "@/lib/playbookExperimentConfig";
 import { useNotifications } from "@/hooks/useNotifications";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -333,7 +333,7 @@ function HamburgerMenu() {
   const { user, signOut } = useAuth();
   const { can, role } = usePermissions();
   const allowedNavItems = navItems.filter((item) =>
-    item.external ? hasFullNav(role) : isRouteAllowed(role, item.to)
+    item.external ? canAccessPintu(role, user?.email) : isRouteAllowed(role, item.to)
   );
 
   const { data: assignedTickets = [] } = useQuery<any[]>({
@@ -422,7 +422,7 @@ function AppLayout() {
   const { user, signOut } = useAuth();
   const { role: layoutRole } = usePermissions();
   const sidebarNavItems = navItems.filter((item) =>
-    item.external ? hasFullNav(layoutRole) : isRouteAllowed(layoutRole, item.to)
+    item.external ? canAccessPintu(layoutRole, user?.email) : isRouteAllowed(layoutRole, item.to)
   );
 
   const { data: assignedTicketsSidebar = [] } = useQuery<any[]>({
