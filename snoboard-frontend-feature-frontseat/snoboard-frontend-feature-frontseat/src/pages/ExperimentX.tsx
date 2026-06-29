@@ -49,7 +49,7 @@ function expIdeaUpdateMutationOpts(
       const patch = updated?.id ? updated : data;
       mergeExpIdeaInCaches(qc, playbookId, id, patch);
       hooks?.onDetail?.(id, patch);
-      if ("views" in data || "page_views" in data || "page_test_results" in data || "status" in data || "page_handle" in data) {
+      if ("views" in data || "page_views" in data || "page_test_results" in data || "status" in data) {
         qc.invalidateQueries({ queryKey: expQk(playbookId, "working-ideas") });
       }
     },
@@ -469,16 +469,6 @@ function opsCardBaselineTag(idea: any) {
     if (r && (TEST_RESULT_RANK[r] || 0) > (TEST_RESULT_RANK[best] || 0)) best = r;
   }
   return TEST_RESULTS.find(t => t.value === best);
-}
-
-/** Per-page test result badge for Frontseat columns (matches Idea Bank testing cards). */
-function frontseatPageTestCfg(idea: any, page?: string) {
-  if ((idea.status || "") !== "testing") return null;
-  if (page) {
-    const pgResult = ((idea.page_test_results || {}) as Record<string, string>)[page];
-    if (pgResult) return TEST_RESULTS.find(r => r.value === pgResult) || null;
-  }
-  return opsCardBaselineTag(idea) || TEST_RESULTS.find(r => r.value === idea.test_result) || null;
 }
 
 /** Content Ops — prominent Today / Yesterday badge. */
@@ -3027,28 +3017,18 @@ function FrontseatPoolCard({ idea, letter, onDragStart, onClick, onDelete, readO
 // ---------------------------------------------------------------------------
 // Frontseat — page column card (clickable, status colour-coded)
 // ---------------------------------------------------------------------------
-function FrontseatPageCard({ idea, letter, page, onClick, onRemoveFromPage }: {
-  idea: any; letter: string; page?: string; onClick: () => void; onRemoveFromPage?: () => void;
+function FrontseatPageCard({ idea, letter, onClick, onRemoveFromPage }: {
+  idea: any; letter: string; onClick: () => void; onRemoveFromPage?: () => void;
 }) {
-  const { pageColors } = usePlaybook();
   const stage = idea.status || "new";
   const ss = STATUS_STYLE[stage] || STATUS_STYLE.new;
-  const isTesting = stage === "testing";
-  const testCfg = frontseatPageTestCfg(idea, page);
-  const pages = ideaPages(idea);
-  const pageViews = page
-    ? ((idea.page_views || {}) as Record<string, number>)[page] || 0
-    : 0;
-  const viewCount = page && pages.length > 1 ? pageViews : (idea.views || 0);
-  const borderColor = isTesting && testCfg ? testCfg.color : ss.text;
-  const cardBg = isTesting && testCfg ? testCfg.bg : "#18181b";
   return (
     <div
       onClick={onClick}
       style={{
-        background: cardBg, borderRadius: 8, position: "relative",
-        border: `1.5px solid ${borderColor}`,
-        borderLeft: isTesting && testCfg ? `4px solid ${testCfg.color}` : `3px solid ${borderColor}`,
+        background: "#18181b", borderRadius: 8, position: "relative",
+        borderTop: "1.5px solid #27272a", borderRight: "1.5px solid #27272a",
+        borderBottom: "1.5px solid #27272a", borderLeft: `3px solid ${ss.text}`,
         padding: "8px 10px", cursor: "pointer", marginBottom: 6, transition: "opacity 0.12s",
       }}
       onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
@@ -3080,31 +3060,9 @@ function FrontseatPageCard({ idea, letter, page, onClick, onRemoveFromPage }: {
         overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
         {idea.topic || <em style={{ color: "#52525b" }}>Untitled</em>}
       </p>
-      {isTesting && pages.length > 0 && (
-        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 6 }}>
-          {pages.map((pg: string) => {
-            const pgc = pageColors[pg] || "#a1a1aa";
-            return (
-              <span key={pg} style={{ fontSize: 9, fontWeight: 700, color: pgc, background: pgc + "22", borderRadius: 4, padding: "1px 6px" }}>
-                {pg}
-              </span>
-            );
-          })}
-        </div>
+      {idea.video_format && (
+        <p style={{ margin: "4px 0 0", fontSize: 10, color: "#50E0B0", fontWeight: 600 }}>{idea.video_format}</p>
       )}
-      <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap", alignItems: "center" }}>
-        {idea.video_format && (
-          <span style={{ fontSize: 10, color: "#50E0B0", fontWeight: 600 }}>{idea.video_format}</span>
-        )}
-        {viewCount > 0 && (
-          <span style={{ fontSize: 10, fontWeight: 700, color: "#50E0B0" }}>{fmt(viewCount)}</span>
-        )}
-        {testCfg && (
-          <span style={{ fontSize: 9, fontWeight: 700, color: testCfg.color, background: testCfg.bg, borderRadius: 4, padding: "1px 6px" }}>
-            {testCfg.label}
-          </span>
-        )}
-      </div>
       <div style={{ display: "flex", gap: 5, marginTop: 6, flexWrap: "wrap", alignItems: "center" }}>
         <DeployedFromBadge idea={idea} />
         <DeployToPlaybookButton idea={idea} />
@@ -3157,13 +3115,6 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
     ? [...(todayIdeasRaw as any[]), ...(yesterdayIdeasRaw as any[])]
     : (todayIdeasRaw as any[]);
   const isLoading = opsOnly ? loadingToday || loadingYesterday : loadingToday;
-
-  // Testing ideas from Idea Bank (any week/day) — show in page columns when pages are tagged
-  const { data: allIdeasRaw = [] } = useQuery({
-    queryKey: expQk(playbookId, "idea-bank-all"),
-    queryFn: () => api.getIdeaBank({ enrich_cross: false }),
-    staleTime: EXP_STALE_MS,
-  });
 
   const createMut = useMutation({
     mutationFn: api.createIdea,
@@ -3235,16 +3186,6 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
     [todayIdeas],
   );
 
-  // Page columns: today's assignments + any Idea Bank testing idea with tagged pages (cross-day/week).
-  const pageColumnIdeas = useMemo(() => {
-    const byId = new Map<string, any>();
-    todayIdeas.filter((i: any) => !i.frontseat_pool).forEach((i: any) => byId.set(i.id, i));
-    (allIdeasRaw as any[])
-      .filter((i: any) => i.status === "testing" && !i.frontseat_pool && ideaPages(i).length > 0)
-      .forEach((i: any) => byId.set(i.id, i));
-    return [...byId.values()];
-  }, [todayIdeas, allIdeasRaw]);
-
   // Pool = permanent ideas added via Frontseat "+ New".
   // After migration: frontseat_pool === true. Before migration runs (column is null): fall back to status === "new".
   const poolIdeas = useMemo(() =>
@@ -3271,15 +3212,12 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
   const ideasByPage = useMemo(() => {
     const result: Record<string, any[]> = {};
     playbookPages.forEach(p => { result[p] = []; });
-    pageColumnIdeas.forEach((idea: any) => {
-      const pages = ideaPages(idea);
+    todayIdeas.filter((i: any) => !i.frontseat_pool).forEach((idea: any) => {
+      const pages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
       pages.forEach((p: string) => { if (result[p]) result[p].push(idea); });
     });
     playbookPages.forEach(p => {
       result[p].sort((a: any, b: any) => {
-        const aTesting = (a.status || "") === "testing" ? 0 : 1;
-        const bTesting = (b.status || "") === "testing" ? 0 : 1;
-        if (aTesting !== bTesting) return aTesting - bTesting;
         const da = (a.day_date || "").slice(0, 10);
         const db = (b.day_date || "").slice(0, 10);
         if (da !== db) return opsOnly ? db.localeCompare(da) : da.localeCompare(db);
@@ -3287,7 +3225,7 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
       });
     });
     return result;
-  }, [pageColumnIdeas, playbookPages, opsOnly]);
+  }, [todayIdeas, playbookPages, opsOnly]);
 
   const handleDrop = (page: string, e: React.DragEvent) => {
     if (readOnly) return;
@@ -3522,12 +3460,11 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
                   })
                 ) : colIdeas.map((idea: any) => (
                   <FrontseatPageCard
-                    key={`${page}-${idea.id}`}
+                    key={idea.id}
                     idea={idea}
-                    page={page}
                     letter={ideaLetterMap[idea.source_pool_id] || "?"}
                     onClick={() => setDetailIdea(idea)}
-                    onRemoveFromPage={dragDisabled || !idea.source_pool_id ? undefined : () => {
+                    onRemoveFromPage={dragDisabled ? undefined : () => {
                       // Delete the copy
                       deleteMut.mutate(idea.id);
                       // Remove page from pool idea's chip tracking
