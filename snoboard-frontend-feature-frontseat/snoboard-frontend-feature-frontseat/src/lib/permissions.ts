@@ -249,10 +249,39 @@ export function hasFullNav(role: string | null): boolean {
   })
 }
 
-export function canAccessPintu(role: string | null, email?: string | null): boolean {
-  if (email && PINTU_NAV_EMAILS.has(email.trim().toLowerCase())) return true
+export function canAccessPintu(
+  role: string | null,
+  email?: string | null,
+  options?: { rolePreviewActive?: boolean },
+): boolean {
+  if (!options?.rolePreviewActive && email && PINTU_NAV_EMAILS.has(email.trim().toLowerCase())) return true
   if (hasFullNav(role)) return true
   return hasPermission(role, 'view_pintu')
+}
+
+/** First route this role can open — used when previewing a role on a forbidden page. */
+export function getFallbackRouteForRole(role: string | null): string {
+  if (!role) return '/'
+  const candidates = [
+    '/',
+    '/fsi-canvas',
+    '/content-tracker',
+    '/post-tracker',
+    '/experiment-bpb',
+    '/experiment-xf',
+    '/experiment-tech',
+    '/six-day-tracker',
+    '/growth',
+  ]
+  for (const path of candidates) {
+    if (isRouteAllowed(role, path)) return path
+  }
+  for (const r of parseRoles(role)) {
+    const allowed = ROLE_NAV[r]
+    if (allowed === '*') return '/'
+    if (Array.isArray(allowed) && allowed.length > 0) return allowed[0]
+  }
+  return '/'
 }
 
 // ── Helper functions ──────────────────────────────────────────────────────────

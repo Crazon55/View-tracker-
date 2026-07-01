@@ -4,7 +4,15 @@ import { hasPermission, canEditIdea, canDeleteIdea } from '@/lib/permissions'
 import type { Permission } from '@/lib/permissions'
 
 export function usePermissions() {
-  const { role, user } = useAuth()
+  const {
+    role,
+    actualRole,
+    user,
+    isRolePreviewActive,
+    canUseRolePreview,
+    setRolePreview,
+    clearRolePreview,
+  } = useAuth()
   const userName =
     user?.user_metadata?.full_name ||
     user?.user_metadata?.name ||
@@ -29,5 +37,16 @@ export function usePermissions() {
     [role, userName]
   )
 
-  return { can, canEditThisIdea, canDeleteThisIdea, role, userName }
+  return {
+    can,
+    canEditThisIdea,
+    canDeleteThisIdea,
+    role,
+    actualRole,
+    isRolePreviewActive,
+    canUseRolePreview,
+    setRolePreview,
+    clearRolePreview,
+    userName,
+  }
 }

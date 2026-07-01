@@ -5,7 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { getDeadlines, getSixDayConfig, getSixDayDeadlines, getTickets } from "@/services/api";
 import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate, Navigate } from "react-router-dom";
-import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, BarChart3, Scissors, ClipboardList, Trophy, LayoutGrid, Ticket, Newspaper, Waves, Bell, Sparkles, ShieldCheck, FlaskConical } from "lucide-react";
+import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, BarChart3, Scissors, ClipboardList, Trophy, LayoutGrid, Ticket, Newspaper, Waves, Bell, Sparkles, ShieldCheck, FlaskConical, Eye } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { isRouteAllowed, canAccessPintu } from "@/lib/permissions";
 import { PLAYBOOK_CONFIGS } from "@/lib/playbookExperimentConfig";
@@ -46,6 +46,15 @@ import FsiCanvasWorkspace from "./pages/FsiCanvas/FsiCanvasWorkspace";
 import NotFound from "./pages/NotFound";
 import { MonthlyWrapRoot, MonthlyWrapOpenButton } from "./components/MonthlyWrapHost";
 import { stashWrapMonthFromUrl } from "@/lib/monthlyWrap";
+import { RolePreviewBanner } from "./components/RolePreviewBanner";
+import { RolePreviewRouteGuard } from "./components/RolePreviewRouteGuard";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const queryClient = new QueryClient();
 
@@ -296,6 +305,8 @@ const navItems: NavItem[] = [
 
 function FsiCanvasMenuButton({ onNavigate }: { onNavigate?: () => void }) {
   const navigate = useNavigate();
+  const { role } = usePermissions();
+  if (!isRouteAllowed(role, "/fsi-canvas")) return null;
   return (
     <button
       type="button"
@@ -314,7 +325,9 @@ function FsiCanvasMenuButton({ onNavigate }: { onNavigate?: () => void }) {
 function FsiCanvasQuickLink() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { role } = usePermissions();
   if (location.pathname.startsWith("/fsi-canvas")) return null;
+  if (!isRouteAllowed(role, "/fsi-canvas")) return null;
   return (
     <button
       type="button"
@@ -330,10 +343,12 @@ function FsiCanvasQuickLink() {
 function HamburgerMenu() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
-  const { user, signOut } = useAuth();
-  const { can, role } = usePermissions();
+  const { user, signOut, ROLES, canUseRolePreview } = useAuth();
+  const { can, role, isRolePreviewActive, setRolePreview } = usePermissions();
   const allowedNavItems = navItems.filter((item) =>
-    item.external ? canAccessPintu(role, user?.email) : isRouteAllowed(role, item.to)
+    item.external
+      ? canAccessPintu(role, user?.email, { rolePreviewActive: isRolePreviewActive })
+      : isRouteAllowed(role, item.to)
   );
 
   const { data: assignedTickets = [] } = useQuery<any[]>({
@@ -346,7 +361,7 @@ function HamburgerMenu() {
   const ticketsBadgeCount = assignedTickets.filter((t: any) => (t?.status || "") !== "resolved").length;
 
   return (
-    <div className="fixed top-5 left-5 z-50">
+    <div className={`fixed left-5 z-50 ${isRolePreviewActive ? "top-14" : "top-5"}`}>
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
           <Button
@@ -394,6 +409,26 @@ function HamburgerMenu() {
           </nav>
           <div className="px-3 py-4 border-t border-zinc-800">
             <p className="px-3 text-xs text-zinc-600 truncate mb-2">{user?.email}</p>
+            {canUseRolePreview && !isRolePreviewActive && (
+              <div className="px-3 mb-3 space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 flex items-center gap-1.5">
+                  <Eye className="h-3 w-3" />
+                  Preview role view
+                </p>
+                <Select onValueChange={setRolePreview}>
+                  <SelectTrigger className="h-9 border-zinc-700 bg-zinc-900 text-xs text-zinc-200">
+                    <SelectValue placeholder="Select role to preview…" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-zinc-950 border-zinc-800">
+                    {ROLES.map(({ value, label }) => (
+                      <SelectItem key={value} value={value} className="text-sm">
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             {can('manage_team') && (
               <button
                 onClick={() => { navigate("/team-roles"); setOpen(false); }}
@@ -419,10 +454,12 @@ function HamburgerMenu() {
 
 function AppLayout() {
   const location = useLocation();
-  const { user, signOut } = useAuth();
+  const { user, signOut, isRolePreviewActive } = useAuth();
   const { role: layoutRole } = usePermissions();
   const sidebarNavItems = navItems.filter((item) =>
-    item.external ? canAccessPintu(layoutRole, user?.email) : isRouteAllowed(layoutRole, item.to)
+    item.external
+      ? canAccessPintu(layoutRole, user?.email, { rolePreviewActive: isRolePreviewActive })
+      : isRouteAllowed(layoutRole, item.to)
   );
 
   const { data: assignedTicketsSidebar = [] } = useQuery<any[]>({
@@ -459,10 +496,12 @@ function AppLayout() {
 
   return (
     <>
+      <RolePreviewRouteGuard />
+      <RolePreviewBanner />
       {isFullScreen ? (
-        <div className="relative">
+        <div className={`relative ${isRolePreviewActive ? "pt-11" : ""}`}>
           <HamburgerMenu />
-          <div className="fixed top-5 right-5 z-[60] flex items-center gap-2 sm:gap-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl px-3 sm:px-4 py-2 shadow-lg max-w-[min(100vw-1rem,480px)] flex-wrap justify-end">
+          <div className={`fixed right-5 z-[60] flex items-center gap-2 sm:gap-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl px-3 sm:px-4 py-2 shadow-lg max-w-[min(100vw-1rem,480px)] flex-wrap justify-end ${isRolePreviewActive ? "top-14" : "top-5"}`}>
             <MonthlyWrapOpenButton />
             <AnimalPicker userId={user?.id} />
             <p className="text-sm text-zinc-400">
@@ -513,7 +552,7 @@ function AppLayout() {
           </Routes>
         </div>
       ) : (
-        <div className="flex min-h-screen bg-zinc-950">
+        <div className={`flex min-h-screen bg-zinc-950 ${isRolePreviewActive ? "pt-11" : ""}`}>
           {/* Sidebar */}
           <aside className="w-60 shrink-0 border-r border-zinc-800 bg-zinc-950 flex flex-col">
             <div className="px-5 py-5 border-b border-zinc-800">
