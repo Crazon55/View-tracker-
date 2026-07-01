@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, useEffect } from "react";
+import { useCallback, useRef, useState, useEffect, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { OnSelectionChangeFunc } from "@xyflow/react";
@@ -817,11 +817,57 @@ export default function FsiCanvasWorkspace() {
     [addScreenshot, pickerAt, runCreateWhiteboard],
   );
 
-  const handleDuplicateNode = useCallback(() => {
-    if (!canEdit || !selectedNode || duplicateNodeMutation.isPending) return;
-    if (!isCanvasNode(selectedNode)) return;
-    duplicateNodeMutation.mutate(selectedNode);
-  }, [canEdit, duplicateNodeMutation, selectedNode]);
+  const handleDuplicateSelection = useCallback(async () => {
+    if (!canEdit || duplicateNodeMutation.isPending) return;
+    const g = graphRef.current;
+    if (!g) return;
+
+    const live = canvasRef.current?.getSelectedNodeIds() ?? [];
+    const ids =
+      live.length > 0
+        ? live
+        : multiSelectedIds.length > 0
+          ? multiSelectedIds
+          : selectedNode
+            ? [selectedNode.id]
+            : [];
+    const sources = g.nodes.filter((n) => ids.includes(n.id) && isCanvasNode(n));
+    if (sources.length === 0) return;
+
+    for (const source of sources) {
+      await duplicateNodeMutation.mutateAsync(source);
+    }
+    if (sources.length > 1) {
+      toast.success(`Duplicated ${sources.length} nodes`);
+    }
+  }, [canEdit, duplicateNodeMutation, multiSelectedIds, selectedNode]);
+
+  const handleDeleteSelection = useCallback(() => {
+    if (!canEdit) return;
+    const g = graphRef.current;
+    if (!g) return;
+
+    const live = canvasRef.current?.getSelectedNodeIds() ?? [];
+    const ids = (
+      live.length > 0
+        ? live
+        : multiSelectedIds.length > 0
+          ? multiSelectedIds
+          : selectedNode
+            ? [selectedNode.id]
+            : []
+    ).filter((id) => {
+      const node = g.nodes.find((n) => n.id === id);
+      return node && isCanvasNode(node);
+    });
+
+    if (ids.length === 0) return;
+    if (ids.length === 1) {
+      handleDeleteNode(ids[0]!);
+      return;
+    }
+    deleteNodesBulkMutation.mutate(ids);
+  }, [canEdit, deleteNodesBulkMutation, handleDeleteNode, multiSelectedIds, selectedNode]);
 
   const handleUndo = useCallback(() => {
     void history.undo(graphRef.current, setGraph);
@@ -847,19 +893,27 @@ export default function FsiCanvasWorkspace() {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !e.shiftKey) {
         e.preventDefault();
         handleUndo();
+        return;
       }
       if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === "y" || (e.key.toLowerCase() === "z" && e.shiftKey))) {
         e.preventDefault();
         handleRedo();
+        return;
       }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d") {
+      const key = e.key.toLowerCase();
+      if (((e.ctrlKey || e.metaKey) && key === "d") || (e.shiftKey && key === "d" && !e.ctrlKey && !e.metaKey)) {
         e.preventDefault();
-        handleDuplicateNode();
+        void handleDuplicateSelection();
+        return;
+      }
+      if (key === "backspace" || key === "delete") {
+        e.preventDefault();
+        handleDeleteSelection();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [canEdit, handleUndo, handleRedo, handleDuplicateNode]);
+  }, [canEdit, handleUndo, handleRedo, handleDuplicateSelection, handleDeleteSelection]);
 
   const handleClearSelection = useCallback(() => {
     setSelectedNode(null);
@@ -876,6 +930,9 @@ export default function FsiCanvasWorkspace() {
     const ids = selected.map((n) => n.id);
     selectionSnapshotRef.current = ids;
     setMultiSelectedIds(ids);
+    if (selected.length > 0) {
+      canvasRef.current?.focusCanvas();
+    }
     if (selected.length === 0) {
       setSelectedNode(null);
     } else if (selected.length === 1) {
@@ -886,10 +943,7 @@ export default function FsiCanvasWorkspace() {
     }
   }, []);
 
-  const handleDeleteSelected = useCallback(() => {
-    if (!canEdit || multiSelectedIds.length === 0) return;
-    deleteNodesBulkMutation.mutate(multiSelectedIds);
-  }, [canEdit, multiSelectedIds, deleteNodesBulkMutation]);
+  const handleDeleteSelected = handleDeleteSelection;
 
   const handleTitleChange = useCallback(
     (nodeId: string, title: string) => {
@@ -1094,8 +1148,17 @@ export default function FsiCanvasWorkspace() {
   const noteCount = canvasNodes.filter(isNoteNode).length;
   const nodeCount = canvasNodes.length - noteCount;
   const selectionCount = multiSelectedIds.length;
-  const canDuplicate =
-    !!selectedNode && isCanvasNode(selectedNode) && selectionCount <= 1 && !duplicateNodeMutation.isPending;
+  const hasCanvasSelection = useMemo(() => {
+    if (multiSelectedIds.length > 0) {
+      return multiSelectedIds.some((id) => {
+        const n = nodes.find((x) => x.id === id);
+        return n && isCanvasNode(n);
+      });
+    }
+    return !!selectedNode && isCanvasNode(selectedNode);
+  }, [multiSelectedIds, nodes, selectedNode]);
+  const canDuplicate = hasCanvasSelection && !duplicateNodeMutation.isPending;
+  const canDeleteSelection = hasCanvasSelection && !deleteNodesBulkMutation.isPending;
 
   return (
     <div className="flex h-screen flex-col bg-zinc-950 text-white">
@@ -1166,22 +1229,22 @@ export default function FsiCanvasWorkspace() {
                   size="icon"
                   className="h-7 w-7"
                   disabled={!canDuplicate}
-                  onClick={handleDuplicateNode}
-                  title="Duplicate node (Ctrl+D)"
+                  onClick={() => void handleDuplicateSelection()}
+                  title="Duplicate selection (Ctrl+D or Shift+D)"
                 >
                   <Copy className="h-3.5 w-3.5" />
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className={cn("h-7 w-7", selectionCount > 0 && "text-red-400 hover:text-red-300")}
-                  disabled={selectionCount === 0 || deleteNodesBulkMutation.isPending}
+                  className={cn("h-7 w-7", hasCanvasSelection && "text-red-400 hover:text-red-300")}
+                  disabled={!canDeleteSelection}
                   onClick={handleDeleteSelected}
                   title={
                     selectionCount > 1
-                      ? `Delete ${selectionCount} nodes`
-                      : selectionCount === 1
-                        ? "Delete node"
+                      ? `Delete ${selectionCount} nodes (Backspace)`
+                      : hasCanvasSelection
+                        ? "Delete node (Backspace)"
                         : "Delete selected"
                   }
                 >

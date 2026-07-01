@@ -55,6 +55,8 @@ export type FsiFlowCanvasHandle = {
   getViewportCenter: () => { x: number; y: number };
   focusNode: (nodeId: string) => void;
   fitAll: () => void;
+  /** Move keyboard focus to the canvas pane (Backspace/Delete shortcuts). */
+  focusCanvas: () => void;
   /** Bounding box that covers all listed nodes using measured canvas sizes. */
   getBoundsForNodeIds: (nodeIds: string[]) => ReturnType<typeof boundsFromExtents> | null;
   /** Node ids currently selected on the canvas (live React Flow state). */
@@ -397,6 +399,9 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
           });
         });
       },
+      focusCanvas: () => {
+        paneRef.current?.focus();
+      },
       getBoundsForNodeIds: (nodeIds: string[]) => {
         if (nodeIds.length === 0) return null;
         const dbById = new Map(dbNodes.map((n) => [n.id, n]));
@@ -640,6 +645,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
       clearEdgeSelection();
+      paneRef.current?.focus();
       const data = node.data as FsiNodeData;
       onNodeSelect(data.fsiNode);
     },
@@ -866,13 +872,14 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         onEdgesDelete={handleEdgesDelete}
         onNodesDelete={handleNodesDelete}
         onSelectionChange={onSelectionChange}
+        nodesDeletable={canEdit}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         edgesFocusable
         selectionOnDrag={boxSelectMode}
         panOnDrag={[1, 2]}
         selectionMode={SelectionMode.Partial}
-        deleteKeyCode={canEdit ? ["Backspace", "Delete"] : null}
+        deleteKeyCode={null}
         defaultEdgeOptions={{
           type: "fsiEdge",
           selectable: true,
