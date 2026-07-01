@@ -50,6 +50,17 @@ export const ROLLOUT_TIMEZONE = "Asia/Kolkata" as const;
 export const WRAP_FEATURE_LIVE_AT_MS = +new Date("2026-05-01T17:00:00+05:30");
 
 /**
+ * Report months (`YYYY-MM`) with no official wrap — e.g. no tracker activity that month.
+ * Suppresses banner, nav chip, autoload, and `/wrap?month=…` for these months.
+ */
+export const SKIPPED_WRAP_MONTHS: readonly string[] = ["2026-06"];
+
+export function isWrapMonthSkipped(reportMonth: string | null | undefined): boolean {
+  if (!reportMonth) return false;
+  return SKIPPED_WRAP_MONTHS.includes(reportMonth);
+}
+
+/**
  * In-app copy: rollout window and nav chip. Shown on intro + outro.
  * (1st 5pm IST through 3rd; chip 3 days after first open; repeats monthly after go-live.)
  */
@@ -115,7 +126,8 @@ export function getActiveReportMonth(now: Date = new Date()): string | null {
     pr = 12;
     py -= 1;
   }
-  return `${py}-${pad2(pr)}`;
+  const ym = `${py}-${pad2(pr)}`;
+  return isWrapMonthSkipped(ym) ? null : ym;
 }
 
 /**
@@ -128,13 +140,18 @@ function resolveWrapParam(w: string): string | null {
   if (w === "1" || w === "true") {
     const d = new Date();
     d.setDate(0);
-    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
+    const ym = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
+    return isWrapMonthSkipped(ym) ? null : ym;
   }
   if (w === "now" || w === "current") {
     const { y, m } = getZonedRolloutCalendarParts();
-    return `${y}-${pad2(m)}`;
+    const ym = `${y}-${pad2(m)}`;
+    return isWrapMonthSkipped(ym) ? null : ym;
   }
-  if (/^\d{4}-\d{2}$/.test(w)) return w;
+  if (/^\d{4}-\d{2}$/.test(w)) {
+    const ym = w;
+    return isWrapMonthSkipped(ym) ? null : ym;
+  }
   return null;
 }
 
@@ -205,10 +222,11 @@ export function getCurrentCalendarMonth(now: Date = new Date()): string {
 }
 
 /** Default month for banner/chip: official month in the 1st–3rd window, else live preview of this month. */
-export function getDefaultWrapMonth(now: Date = new Date()): string {
+export function getDefaultWrapMonth(now: Date = new Date()): string | null {
   const official = getActiveReportMonth(now);
   if (official) return official;
-  return getCurrentCalendarMonth(now);
+  const current = getCurrentCalendarMonth(now);
+  return isWrapMonthSkipped(current) ? null : current;
 }
 
 /** Human hint for the next official drop (for preview banner copy). */
