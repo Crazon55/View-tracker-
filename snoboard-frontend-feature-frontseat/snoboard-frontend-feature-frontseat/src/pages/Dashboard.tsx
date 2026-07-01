@@ -381,19 +381,37 @@ export default function Dashboard() {
     "indianfoundersco", "indianbusinesscom", "indianfoundersdaily",
   ];
 
+  /** TECH Playbook + 6-day tech roster — must appear on Dashboard like other team IPs. */
+  const TECH_PLAYBOOK_HANDLES = [
+    "101xtechnology",
+    "indiantechdaily",
+    "ai.cracked",
+  ];
+
   const dashHandleToNicheId = useMemo(() => {
     const m = new Map<string, string>();
     for (const n of (trackerNiches as any[]) || []) {
       const nm = String(n?.name || "").toLowerCase();
-      const isTeam = nm.includes("garfields") || nm.includes("goofies") || nm.includes("sheru") || nm.includes("experiment");
+      const isTeam =
+        nm.includes("garfields") ||
+        nm.includes("goofies") ||
+        nm.includes("sheru") ||
+        nm.includes("experiment") ||
+        nm.includes("tech");
       if (!isTeam) continue;
       // Map pages stored in DB niche record
       for (const h of n?.pages || []) {
         if (h) m.set(String(h).replace(/^@/, "").trim().toLowerCase(), n.id);
       }
       // Always map hardcoded experiment X handles so the filter works even if DB pages array is empty
-      if (nm.includes("experiment")) {
+      if (nm.includes("experiment") && !nm.includes("tech")) {
         for (const h of EXP_X_HANDLES) {
+          m.set(h, n.id);
+        }
+      }
+      // TECH Playbook + legacy Tech niche
+      if (nm.includes("tech")) {
+        for (const h of TECH_PLAYBOOK_HANDLES) {
           m.set(h, n.id);
         }
       }
@@ -401,12 +419,21 @@ export default function Dashboard() {
     return m;
   }, [trackerNiches]);
 
-  /** Team filters only — hide legacy Tech/Marketing niches from the Dashboard toolbar. */
+  /** Team filters — hide legacy lowercase "tech"/"marketing" pills; keep "FBS - TECH Playbook". */
   const dashboardNicheFilters = useMemo(() => {
     const hidden = new Set(["tech", "marketing"]);
-    return ((trackerNiches as any[]) || []).filter(
-      (n) => !hidden.has(String(n?.name || "").trim().toLowerCase()),
-    );
+    return ((trackerNiches as any[]) || []).filter((n) => {
+      const name = String(n?.name || "").trim().toLowerCase();
+      if (hidden.has(name)) return false;
+      const nm = name;
+      return (
+        nm.includes("garfields") ||
+        nm.includes("goofies") ||
+        nm.includes("sheru") ||
+        nm.includes("experiment") ||
+        nm.includes("tech playbook")
+      );
+    });
   }, [trackerNiches]);
 
   // Fetch growth data for the growth chart

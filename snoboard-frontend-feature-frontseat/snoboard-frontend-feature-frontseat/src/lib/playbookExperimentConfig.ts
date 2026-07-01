@@ -66,14 +66,16 @@ export const PLAYBOOK_CONFIGS: Record<PlaybookId, PlaybookExperimentConfig> = {
     label: "TECH Playbook",
     emoji: "💻",
     route: "/experiment-tech",
-    pages: ["101xtechnology", "indiantechdaily"],
+    pages: ["101xtechnology", "indiantechdaily", "ai.cracked"],
     pageColors: {
       "101xtechnology": "#7BB0FF",
       indiantechdaily: "#F0C060",
+      "ai.cracked": "#50E0B0",
     },
     pageShort: {
       "101xtechnology": "101xTech",
       indiantechdaily: "ITDaily",
+      "ai.cracked": "AICracked",
     },
   },
 };

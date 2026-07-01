@@ -22,6 +22,7 @@ PLAYBOOK_PAGES: dict[str, list[str]] = {
     "tech": [
         "101xtechnology",
         "indiantechdaily",
+        "ai.cracked",
     ],
 }
 
