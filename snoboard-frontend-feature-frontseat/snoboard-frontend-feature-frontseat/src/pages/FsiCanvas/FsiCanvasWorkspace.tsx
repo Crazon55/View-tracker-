@@ -1122,6 +1122,20 @@ export default function FsiCanvasWorkspace() {
     });
   }, []);
 
+  const hasCanvasSelection = useMemo(() => {
+    const nodeList = graph?.nodes ?? [];
+    if (multiSelectedIds.length > 0) {
+      return multiSelectedIds.some((id) => {
+        const n = nodeList.find((x) => x.id === id);
+        return n && isCanvasNode(n);
+      });
+    }
+    return !!selectedNode && isCanvasNode(selectedNode);
+  }, [multiSelectedIds, graph?.nodes, selectedNode]);
+
+  const canDuplicate = hasCanvasSelection && !duplicateNodeMutation.isPending;
+  const canDeleteSelection = hasCanvasSelection && !deleteNodesBulkMutation.isPending;
+
   if (!studyId) return null;
 
   if (isLoading) {
@@ -1148,17 +1162,6 @@ export default function FsiCanvasWorkspace() {
   const noteCount = canvasNodes.filter(isNoteNode).length;
   const nodeCount = canvasNodes.length - noteCount;
   const selectionCount = multiSelectedIds.length;
-  const hasCanvasSelection = useMemo(() => {
-    if (multiSelectedIds.length > 0) {
-      return multiSelectedIds.some((id) => {
-        const n = nodes.find((x) => x.id === id);
-        return n && isCanvasNode(n);
-      });
-    }
-    return !!selectedNode && isCanvasNode(selectedNode);
-  }, [multiSelectedIds, nodes, selectedNode]);
-  const canDuplicate = hasCanvasSelection && !duplicateNodeMutation.isPending;
-  const canDeleteSelection = hasCanvasSelection && !deleteNodesBulkMutation.isPending;
 
   return (
     <div className="flex h-screen flex-col bg-zinc-950 text-white">

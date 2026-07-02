@@ -547,7 +547,14 @@ function AppLayout() {
             <Route path="/experiment-tech" element={<ExperimentX playbookId="tech" />} />
             <Route path="/experiment-x" element={<Navigate to="/experiment-bpb" replace />} />
             <Route path="/fsi-canvas" element={<FsiCanvasHub />} />
-            <Route path="/fsi-canvas/:studyId" element={<FsiCanvasWorkspace />} />
+            <Route
+              path="/fsi-canvas/:studyId"
+              element={
+                <ErrorBoundary title="FSI Canvas crashed">
+                  <FsiCanvasWorkspace />
+                </ErrorBoundary>
+              }
+            />
             <Route path="/canvas" element={<Navigate to="/fsi-canvas" replace />} />
           </Routes>
         </div>
