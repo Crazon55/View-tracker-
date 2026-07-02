@@ -5,7 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { getDeadlines, getSixDayConfig, getSixDayDeadlines, getTickets } from "@/services/api";
 import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate, Navigate } from "react-router-dom";
-import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, BarChart3, Scissors, ClipboardList, Trophy, LayoutGrid, Ticket, Newspaper, Waves, Bell, Sparkles, ShieldCheck, FlaskConical, Eye } from "lucide-react";
+import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, Scissors, ClipboardList, Trophy, Ticket, Newspaper, Sparkles, ShieldCheck, FlaskConical, Eye } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { isRouteAllowed, canAccessPintu } from "@/lib/permissions";
 import { PLAYBOOK_CONFIGS } from "@/lib/playbookExperimentConfig";
@@ -27,17 +27,13 @@ import IdeaEngine from "./pages/IdeaEngine";
 import CompetitorIdeas from "./pages/CompetitorIdeas";
 import PostIPsView from "./pages/PostIPsView";
 import PipelineView from "./pages/PipelineView";
-import Stage1Tracker from "./pages/Stage1Tracker";
 import ContentTracker from "./pages/ContentTracker";
 import PostTracker from "./pages/PostTracker";
 import SixDayTracker from "./pages/SixDayTracker";
 import TeamPerformance from "./pages/TeamPerformance";
 import ErrorBoundary from "./components/ErrorBoundary";
-import WeeklyWorkboard from "./pages/WeeklyWorkboard";
 import Tickets from "./pages/Tickets";
 import NewsFeed from "./pages/NewsFeed";
-import BlueOceanIdeas from "./pages/BlueOceanIdeas";
-import PodcastAlerts from "./pages/PodcastAlerts";
 import RoleSelect from "./pages/RoleSelect";
 import TeamRolesPage from "./pages/TeamRolesPage";
 import ExperimentX from "./pages/ExperimentX";
@@ -290,14 +286,10 @@ const navItems: NavItem[] = [
   ...playbookNavItems,
   { to: "/post-tracker", label: "Post Tracker", icon: Image },
   { to: "/post-ips", label: "Post IPs", icon: Image },
-  { to: "/stage1-tracker", label: "Stage 1 Tracker", icon: BarChart3 },
   { to: "/six-day-tracker", label: "6-Day Tracker", icon: Radio },
   { to: "/team-performance", label: "Teams", icon: Trophy },
-  { to: "/workboard", label: "Bandwidth tracker workboard", icon: LayoutGrid },
   { to: "/tickets", label: "Tickets", icon: Ticket },
   { to: "/news", label: "News Feed", icon: Newspaper },
-  { to: "/blue-ocean", label: "Blue Ocean Ideas", icon: Waves },
-  { to: "/podcast-alerts", label: "Podcast Alerts", icon: Bell },
   { to: "/growth", label: "Growth", icon: TrendingUp },
   { to: "/pages", label: "IP's", icon: Users },
   { to: "http://16.112.125.207:5173/", label: "Pintu", icon: Scissors, external: true },
@@ -478,14 +470,10 @@ function AppLayout() {
     location.pathname === "/post-tracker" ||
     location.pathname === "/post-ips" ||
     location.pathname === "/pipeline" ||
-    location.pathname === "/stage1-tracker" ||
     location.pathname === "/six-day-tracker" ||
     location.pathname === "/team-performance" ||
-    location.pathname === "/workboard" ||
     location.pathname === "/tickets" ||
     location.pathname === "/news" ||
-    location.pathname === "/blue-ocean" ||
-    location.pathname === "/podcast-alerts" ||
     location.pathname.startsWith("/post-ips/") ||
     location.pathname.startsWith("/page/") ||
     location.pathname === "/team-roles" ||
@@ -524,7 +512,6 @@ function AppLayout() {
             <Route path="/post-ips/:pageId" element={<PageDetail />} />
             <Route path="/page/:pageId" element={<PageDetail />} />
             <Route path="/pipeline" element={<PipelineView />} />
-            <Route path="/stage1-tracker" element={<Stage1Tracker />} />
             <Route path="/six-day-tracker" element={<SixDayTracker />} />
             <Route
               path="/team-performance"
@@ -534,11 +521,8 @@ function AppLayout() {
                 </ErrorBoundary>
               }
             />
-            <Route path="/workboard" element={<WeeklyWorkboard />} />
             <Route path="/tickets" element={<Tickets />} />
             <Route path="/news" element={<NewsFeed />} />
-            <Route path="/blue-ocean" element={<BlueOceanIdeas />} />
-            <Route path="/podcast-alerts" element={<PodcastAlerts />} />
             <Route path="/ideas" element={<IdeaEngine />} />
             <Route path="/competitor-ideas" element={<CompetitorIdeas />} />
             <Route path="/team-roles" element={<TeamRolesPage />} />

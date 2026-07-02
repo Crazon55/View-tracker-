@@ -219,7 +219,7 @@ export const ROLE_NAV: Record<string, '*' | string[]> = {
   editors:           ['/', '/content-tracker', '/growth'],
   carousel_designer: ['/', '/post-tracker', '/growth'],
 
-  smm:              ['/', '/content-tracker', '/post-tracker', '/growth', '/stage1-tracker', '/fsi-canvas'],
+  smm:              ['/', '/content-tracker', '/post-tracker', '/growth', '/fsi-canvas'],
   experiment_x:     ['/', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x', '/fsi-canvas', '/team-performance', '/tickets', '/news', '/growth'],
   content_ops_intern:  ['/', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x', '/fsi-canvas', '/six-day-tracker', '/growth'],
   // legacy — migrated to cs in backend

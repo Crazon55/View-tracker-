@@ -1,8 +1,8 @@
 import { useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard, ClipboardList, Image, BarChart3, Radio,
-  Trophy, LayoutGrid, Ticket, Newspaper, Waves, TrendingUp,
-  Users, Scissors, ChevronRight, Bell,
+  LayoutDashboard, ClipboardList, Image, Radio,
+  Trophy, Ticket, Newspaper, TrendingUp,
+  Users, Scissors, ChevronRight,
 } from "lucide-react";
 
 const pages = [
@@ -10,14 +10,10 @@ const pages = [
   { to: "/content-tracker", label: "Reel Tracker",          icon: ClipboardList,   external: false },
   { to: "/post-tracker",    label: "Post Tracker",          icon: Image,           external: false },
   { to: "/post-ips",        label: "Post IPs",              icon: Image,           external: false },
-  { to: "/stage1-tracker",  label: "Stage 1 Tracker",       icon: BarChart3,       external: false },
   { to: "/six-day-tracker", label: "6-Day Tracker",         icon: Radio,           external: false },
   { to: "/team-performance",label: "Teams",                 icon: Trophy,          external: false },
-  { to: "/workboard",       label: "Bandwidth Workboard",   icon: LayoutGrid,      external: false },
   { to: "/tickets",         label: "Tickets",               icon: Ticket,          external: false },
   { to: "/news",            label: "News Feed",             icon: Newspaper,       external: false },
-  { to: "/blue-ocean",      label: "Blue Ocean Ideas",      icon: Waves,           external: false },
-  { to: "/podcast-alerts",  label: "Podcast Alerts",        icon: Bell,            external: false },
   { to: "/growth",          label: "Growth",                icon: TrendingUp,      external: false },
   { to: "/pages",           label: "IP's",                  icon: Users,           external: false },
   { to: "http://16.112.125.207:5173/", label: "Pintu",     icon: Scissors,        external: true  },

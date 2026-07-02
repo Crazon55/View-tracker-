@@ -499,7 +499,6 @@ export default function Tickets() {
       setFiles([]);
       setCreateOpen(false);
       await qc.invalidateQueries({ queryKey: ["tickets"] });
-      await qc.invalidateQueries({ queryKey: ["weekly-workboard"] });
     },
     onError: (e: any) => toast.error(e?.message || "Failed to create ticket"),
   });
@@ -519,7 +518,6 @@ export default function Tickets() {
     },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["tickets"] });
-      await qc.invalidateQueries({ queryKey: ["weekly-workboard"] });
       toast.success("Saved");
     },
     onError: (e: any, _args, ctx: any) => {
@@ -533,7 +531,6 @@ export default function Tickets() {
     onSuccess: async () => {
       toast.success("Ticket deleted");
       await qc.invalidateQueries({ queryKey: ["tickets"] });
-      await qc.invalidateQueries({ queryKey: ["weekly-workboard"] });
     },
     onError: (e: any) => toast.error(e?.message || "Failed to delete ticket"),
   });
