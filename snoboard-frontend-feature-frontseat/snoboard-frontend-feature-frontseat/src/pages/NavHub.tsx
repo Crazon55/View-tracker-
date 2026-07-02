@@ -9,13 +9,12 @@ const pages = [
   { to: "/dashboard",       label: "Dashboard",             icon: LayoutDashboard, external: false },
   { to: "/content-tracker", label: "Reel Tracker",          icon: ClipboardList,   external: false },
   { to: "/post-tracker",    label: "Post Tracker",          icon: Image,           external: false },
-  { to: "/post-ips",        label: "Post IPs",              icon: Image,           external: false },
   { to: "/six-day-tracker", label: "6-Day Tracker",         icon: Radio,           external: false },
   { to: "/team-performance",label: "Teams",                 icon: Trophy,          external: false },
   { to: "/tickets",         label: "Tickets",               icon: Ticket,          external: false },
   { to: "/news",            label: "News Feed",             icon: Newspaper,       external: false },
   { to: "/growth",          label: "Growth",                icon: TrendingUp,      external: false },
-  { to: "/pages",           label: "IP's",                  icon: Users,           external: false },
+  { to: "/pages",           label: "IPs",                   icon: Users,           external: false },
   { to: "http://16.112.125.207:5173/", label: "Pintu",     icon: Scissors,        external: true  },
 ];
 

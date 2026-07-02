@@ -886,7 +886,7 @@ export default function Dashboard() {
                     return (
                       <div
                         key={page.id}
-                        onClick={() => navigate(`/page/${page.id}`)}
+                        onClick={() => navigate(`/pages/${page.id}`)}
                         className={`cursor-pointer transition-all duration-300 hover:scale-105 flex flex-col items-center ${ranks[i] === 1 ? "w-36 sm:w-44" : "w-28 sm:w-36"}`}
                       >
                         {/* Medal + Name */}
@@ -1096,7 +1096,7 @@ export default function Dashboard() {
             return (
               <div
                 key={page.id}
-                onClick={() => navigate(`/page/${page.id}`)}
+                onClick={() => navigate(`/pages/${page.id}`)}
                 className="group relative bg-zinc-950 border border-emerald-500/20 rounded-2xl p-5 sm:p-6 cursor-pointer transition-all duration-200 hover:border-emerald-500/40 hover:shadow-[0_0_30px_-5px_rgba(16,185,129,0.15)] active:scale-[0.98]"
               >
                 {/* Header */}

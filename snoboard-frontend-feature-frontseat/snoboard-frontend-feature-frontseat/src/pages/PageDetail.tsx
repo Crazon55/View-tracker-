@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getPageDetail, getContentEntries, createContentEntry, updateContentEntry, deleteContentEntry, getPages, getIdeas, getSixDayPageData } from "@/services/api";
-import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { useParams, useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import type { Page } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { ArrowLeft, ExternalLink, Plus, Trash2, Pencil, Check, X, Calendar, Table2, ChevronLeft, ChevronRight, TrendingUp, BarChart3 } from "lucide-react";
@@ -40,7 +40,10 @@ export default function PageDetail() {
   const { pageId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const defaultPostMode = location.pathname.startsWith("/post-ips/");
+  const [searchParams] = useSearchParams();
+  const defaultPostMode =
+    location.pathname.startsWith("/post-ips/") ||
+    searchParams.get("mode") === "posts";
   const [contentFilter, setContentFilter] = useState<"reels" | "posts">(defaultPostMode ? "posts" : "reels");
   const isPostMode = contentFilter === "posts";
   const queryClient = useQueryClient();
@@ -208,8 +211,8 @@ export default function PageDetail() {
       <div className="max-w-7xl mx-auto">
 
         {/* Header */}
-        <Button variant="ghost" size="sm" className="mb-4 text-zinc-500 hover:text-white" onClick={() => navigate(isPostMode ? "/post-ips" : "/pages")}>
-          <ArrowLeft className="w-4 h-4 mr-2" /> {isPostMode ? "Back to Post IPs" : "Back to IP's"}
+        <Button variant="ghost" size="sm" className="mb-4 text-zinc-500 hover:text-white" onClick={() => navigate(isPostMode ? "/pages?mode=posts" : "/pages")}>
+          <ArrowLeft className="w-4 h-4 mr-2" /> Back to IPs
         </Button>
 
         <div className="flex items-center justify-between mb-8">

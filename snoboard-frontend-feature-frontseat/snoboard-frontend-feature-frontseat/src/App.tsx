@@ -4,7 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { getDeadlines, getSixDayConfig, getSixDayDeadlines, getTickets } from "@/services/api";
-import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate, Navigate, useParams } from "react-router-dom";
 import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, Scissors, ClipboardList, Trophy, Ticket, Newspaper, Sparkles, ShieldCheck, FlaskConical, Eye } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { isRouteAllowed, canAccessPintu } from "@/lib/permissions";
@@ -25,7 +25,6 @@ import GrowthView from "./pages/GrowthView";
 import MainReelsView from "./pages/MainReelsView";
 import IdeaEngine from "./pages/IdeaEngine";
 import CompetitorIdeas from "./pages/CompetitorIdeas";
-import PostIPsView from "./pages/PostIPsView";
 import PipelineView from "./pages/PipelineView";
 import ContentTracker from "./pages/ContentTracker";
 import PostTracker from "./pages/PostTracker";
@@ -53,6 +52,16 @@ import {
 } from "@/components/ui/select";
 
 const queryClient = new QueryClient();
+
+function RedirectPostIpDetail() {
+  const { pageId } = useParams();
+  return <Navigate to={`/pages/${pageId}?mode=posts`} replace />;
+}
+
+function RedirectLegacyPageDetail() {
+  const { pageId } = useParams();
+  return <Navigate to={`/pages/${pageId}`} replace />;
+}
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -285,13 +294,12 @@ const navItems: NavItem[] = [
   { to: "/content-tracker", label: "Reel Tracker", icon: ClipboardList },
   ...playbookNavItems,
   { to: "/post-tracker", label: "Post Tracker", icon: Image },
-  { to: "/post-ips", label: "Post IPs", icon: Image },
   { to: "/six-day-tracker", label: "6-Day Tracker", icon: Radio },
   { to: "/team-performance", label: "Teams", icon: Trophy },
   { to: "/tickets", label: "Tickets", icon: Ticket },
   { to: "/news", label: "News Feed", icon: Newspaper },
   { to: "/growth", label: "Growth", icon: TrendingUp },
-  { to: "/pages", label: "IP's", icon: Users },
+  { to: "/pages", label: "IPs", icon: Users },
   { to: "http://16.112.125.207:5173/", label: "Pintu", icon: Scissors, external: true },
 ];
 
@@ -469,6 +477,8 @@ function AppLayout() {
     location.pathname === "/content-tracker" ||
     location.pathname === "/post-tracker" ||
     location.pathname === "/post-ips" ||
+    location.pathname === "/pages" ||
+    location.pathname.startsWith("/pages/") ||
     location.pathname === "/pipeline" ||
     location.pathname === "/six-day-tracker" ||
     location.pathname === "/team-performance" ||
@@ -508,9 +518,11 @@ function AppLayout() {
             <Route path="/wrap" element={<WrapView />} />
             <Route path="/content-tracker" element={<ContentTracker />} />
             <Route path="/post-tracker" element={<PostTracker />} />
-            <Route path="/post-ips" element={<PostIPsView />} />
-            <Route path="/post-ips/:pageId" element={<PageDetail />} />
-            <Route path="/page/:pageId" element={<PageDetail />} />
+            <Route path="/pages" element={<PagesView />} />
+            <Route path="/pages/:pageId" element={<PageDetail />} />
+            <Route path="/post-ips" element={<Navigate to="/pages?mode=posts" replace />} />
+            <Route path="/post-ips/:pageId" element={<RedirectPostIpDetail />} />
+            <Route path="/page/:pageId" element={<RedirectLegacyPageDetail />} />
             <Route path="/pipeline" element={<PipelineView />} />
             <Route path="/six-day-tracker" element={<SixDayTracker />} />
             <Route
@@ -623,7 +635,6 @@ function AppLayout() {
           {/* Main content */}
           <main className="flex-1 overflow-auto bg-zinc-950">
             <Routes>
-              <Route path="/pages" element={<PagesView />} />
               <Route path="/posts" element={<PostsView />} />
               <Route path="/reels/stage1" element={<ReelsStage1View />} />
               <Route path="/reels/main" element={<MainReelsView />} />
