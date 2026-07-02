@@ -8,6 +8,7 @@ export const WHITEBOARD_NODE_TYPES = [
   "Visual",
   "Visual Hook",
   "Written Hook",
+  "Carousel Body",
   "Performance",
   "Link",
   "Sticky Note",
@@ -18,11 +19,21 @@ export type WhiteboardNodeType = (typeof WHITEBOARD_NODE_TYPES)[number];
 
 export const WHITEBOARD_DEFAULT_STUDY_TYPE = "Whiteboard";
 
-/** Fixed card size for label-style nodes — prevents resize on select/deselect. */
-export const COMPACT_NODE_WIDTH = 200;
-export const COMPACT_NODE_HEIGHT = 64;
-export const LINK_NODE_WIDTH = 200;
-export const LINK_NODE_HEIGHT = 72;
+export {
+  COMPACT_NODE_WIDTH,
+  COMPACT_NODE_HEIGHT,
+  LINK_NODE_WIDTH,
+  LINK_NODE_HEIGHT,
+  DEFAULT_EXPANDED_WIDTH,
+  DEFAULT_EXPANDED_HEIGHT,
+  isNodeUiExpanded,
+  nodeCardWidth,
+  nodeCardHeight,
+  parseSlidesContent,
+  NODE_TYPE_LABEL_CLASS,
+  NODE_TITLE_BOX_CLASS,
+  NODE_BODY_BOX_CLASS,
+} from "./fsiNodeCardUi";
 
 export function isFrameNode(node: FsiNodeRecord): boolean {
   return node.structured_payload?.is_frame === true || node.node_type === "Frame";
@@ -79,17 +90,29 @@ export function isCompactLabelNode(node: FsiNodeRecord): boolean {
   return node.node_type === "Content Pillar" || node.node_type === "Content Bucket";
 }
 
-/** Title-only cards — hook/page names live in display_title, no extra fields. */
-export function isSimpleLabelNode(node: FsiNodeRecord): boolean {
+export function isCarouselBodyNode(node: FsiNodeRecord): boolean {
+  return node.node_type === "Carousel Body";
+}
+
+/** Nodes with user-controlled expand/collapse (corner toggle). */
+export function isCollapsibleCardNode(node: FsiNodeRecord): boolean {
   return (
     isCompactLabelNode(node) ||
+    isCarouselBodyNode(node) ||
     node.node_type === "Page Name" ||
     node.node_type === "Page" ||
     node.node_type === "Visual Hook" ||
     node.node_type === "Written Hook" ||
+    node.node_type === "Performance" ||
+    node.node_type === "Performance Insight" ||
     node.node_type === "Hook Pattern" ||
     node.node_type === "Hook Example"
   );
+}
+
+/** Title-only cards — fixed compact size when collapsed. */
+export function isSimpleLabelNode(node: FsiNodeRecord): boolean {
+  return isCollapsibleCardNode(node);
 }
 
 /** Resolve toolbar / UI label for any stored node. */
@@ -104,6 +127,7 @@ export function displayNodeType(node: FsiNodeRecord): string {
   if (isPageNameNode(node)) return "Page Name";
   if (node.node_type === "Content Pillar") return "Content Pillar";
   if (node.node_type === "Content Bucket") return "Content Bucket";
+  if (isCarouselBodyNode(node)) return "Carousel Body";
   return node.node_type;
 }
 
@@ -133,13 +157,21 @@ export function specForWhiteboardType(type: WhiteboardNodeType): CreateNodeSpec 
       return {
         node_type: "Visual Hook",
         display_title: "Visual Hook",
-        structured_payload: {},
+        structured_payload: { ui_expanded: false },
+        raw_body_text: "",
       };
     case "Written Hook":
       return {
         node_type: "Written Hook",
         display_title: "Written Hook",
-        structured_payload: {},
+        structured_payload: { ui_expanded: false },
+        raw_body_text: "",
+      };
+    case "Carousel Body":
+      return {
+        node_type: "Carousel Body",
+        display_title: "Carousel Body",
+        structured_payload: { ui_expanded: false, slides_content: [""] },
       };
     case "Performance":
       return {

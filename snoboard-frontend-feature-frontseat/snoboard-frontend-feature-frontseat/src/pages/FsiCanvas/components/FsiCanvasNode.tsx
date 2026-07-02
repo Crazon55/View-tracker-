@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { type NodeProps, useUpdateNodeInternals } from "@xyflow/react";
+import { NodeResizer, type NodeProps, useUpdateNodeInternals } from "@xyflow/react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { FsiNodeData } from "../lib/fsiFlowAdapter";
@@ -11,11 +11,21 @@ import { clipboardImageFiles } from "../lib/fsiScreenshotNode";
 import {
   COMPACT_NODE_HEIGHT,
   COMPACT_NODE_WIDTH,
+  isCarouselBodyNode,
   isLinkNode,
+  isNodeUiExpanded,
   LINK_NODE_HEIGHT,
   LINK_NODE_WIDTH,
+  NODE_BODY_BOX_CLASS,
+  NODE_TITLE_BOX_CLASS,
+  NODE_TYPE_LABEL_CLASS,
+  nodeCardHeight,
+  nodeCardWidth,
+  parseSlidesContent,
 } from "../lib/fsiWhiteboardTypes";
 import FsiNodeHandles from "./FsiNodeHandles";
+import FsiNodeExpandToggle from "./FsiNodeExpandToggle";
+import FsiCarouselSlidesEditor from "./FsiCarouselSlidesEditor";
 
 function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as FsiNodeData;
@@ -31,6 +41,8 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
     onTitleChange,
     onBodyChange,
     onPayloadChange,
+    onStructuredPayloadPatch,
+    showConnectionDots = false,
   } = nodeData;
 
   const [title, setTitle] = useState(fsiNode.display_title);
@@ -76,6 +88,17 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
     },
     [fsiNode.id, onPayloadChange],
   );
+
+  const patchPayload = useCallback(
+    (patch: Record<string, unknown>) => {
+      onStructuredPayloadPatch?.(fsiNode.id, patch);
+    },
+    [fsiNode.id, onStructuredPayloadPatch],
+  );
+
+  const uiExpanded = isNodeUiExpanded(payload);
+  const cardW = nodeCardWidth(payload, uiExpanded);
+  const cardH = nodeCardHeight(payload, uiExpanded);
 
   const inputClass =
     "nodrag nopan w-full rounded border border-emerald-900/40 bg-emerald-950/30 px-2 py-1 text-xs text-emerald-950 placeholder:text-emerald-900/40 focus:border-emerald-700 focus:outline-none";
@@ -181,28 +204,34 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
   };
 
   const renderFields = () => {
-    if (fieldDefs.length === 0) return null;
+    if (fieldDefs.length === 0 || !uiExpanded) return null;
     const visibleDefs = fieldDefs.filter(
-      (def) => editing || Boolean((fieldValues[def.key] ?? "").trim()),
+      (def) => canEdit || Boolean((fieldValues[def.key] ?? "").trim()),
     );
     if (visibleDefs.length === 0) return null;
 
     return (
-      <div className={`max-h-56 space-y-2 overflow-y-auto border-t ${borderClass} px-3 pb-3 pt-2`}>
+      <div className="max-h-40 space-y-2 overflow-y-auto border-t border-black/10 px-2 pb-2 pt-2">
         {visibleDefs.map((def) => {
           const val = fieldValues[def.key] ?? "";
           return (
             <div key={def.key}>
-              <label className="mb-0.5 block text-[9px] font-semibold uppercase text-emerald-950/70">
+              <label className="mb-0.5 block text-[9px] font-semibold uppercase text-black/70">
                 {def.label}
               </label>
-              {renderFieldInput(def, val)}
+              {canEdit ? renderFieldInput(def, val) : renderFieldValue(def, val)}
             </div>
           );
         })}
       </div>
     );
   };
+
+  const hookHasBody =
+    nodeData.nodeType === "Written Hook" ||
+    nodeData.nodeType === "Visual Hook" ||
+    nodeData.nodeType === "Hook Pattern" ||
+    nodeData.nodeType === "Hook Example";
 
   if (isScreenshot) {
     const replaceScreenshot = async (files: File[]) => {
@@ -263,62 +292,86 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
           canStartConnection={canEdit}
           canAcceptConnection={nodeData.isConnecting}
           requiredAnchors={connectionAnchors}
+          showConnectionDots={showConnectionDots || selected}
         />
       </div>
     );
   }
 
   if (isCompact) {
+    const carousel = isCarouselBodyNode(fsiNode);
+    const slides = parseSlidesContent(payload);
+
     return (
       <div
         ref={rootRef}
-        className={`relative box-border overflow-visible rounded-md border-2 px-4 py-2.5 shadow-lg ${
+        className={`relative box-border flex flex-col overflow-hidden rounded-md border-2 shadow-lg ${
           selected ? "ring-2 ring-white/50 ring-offset-0" : ""
         }`}
         style={{
-          width: COMPACT_NODE_WIDTH,
-          height: COMPACT_NODE_HEIGHT,
+          width: cardW,
+          height: uiExpanded ? cardH : COMPACT_NODE_HEIGHT,
           borderColor: nodeData.color,
           backgroundColor: nodeData.color,
         }}
-        onDoubleClick={(e) => {
-          e.stopPropagation();
-          if (canEdit) setTitleEditing(true);
-        }}
       >
-        {editingTitle ? (
-          <input
-            autoFocus
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onBlur={(e) => {
-              commitTitle(e.target.value);
-              setTitleEditing(false);
+        {uiExpanded && canEdit && selected && (
+          <NodeResizer
+            minWidth={COMPACT_NODE_WIDTH}
+            minHeight={COMPACT_NODE_HEIGHT}
+            onResizeEnd={(_event, params) => {
+              patchPayload({
+                card_width: Math.round(params.width),
+                card_height: Math.round(params.height),
+              });
             }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.currentTarget.blur();
-              }
-              if (e.key === "Escape") {
-                setTitle(fsiNode.display_title);
-                setTitleEditing(false);
-              }
-            }}
-            className="nodrag nopan w-full bg-transparent text-center text-sm font-semibold text-emerald-950 placeholder:text-emerald-900/40 focus:outline-none"
-            placeholder={nodeData.nodeType}
           />
-        ) : (
-          <div className="text-center text-sm font-semibold leading-tight text-emerald-950">
-            {title || nodeData.nodeType}
-          </div>
         )}
-        <div className="mt-0.5 text-center text-[9px] font-medium uppercase tracking-wide text-emerald-950/70">
-          {nodeData.nodeType}
+        <FsiNodeExpandToggle
+          expanded={uiExpanded}
+          onToggle={() => patchPayload({ ui_expanded: !uiExpanded })}
+        />
+        <div className="flex min-h-0 flex-1 flex-col px-3 py-2.5 pr-7">
+          <div className={NODE_TYPE_LABEL_CLASS}>{nodeData.nodeType}</div>
+          <div className={`mt-1 ${NODE_TITLE_BOX_CLASS}`}>
+            {canEdit ? (
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onBlur={(e) => commitTitle(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+                className="nodrag nopan w-full bg-transparent text-inherit focus:outline-none"
+                placeholder={nodeData.nodeType}
+              />
+            ) : (
+              <div className={uiExpanded ? "" : "line-clamp-2"}>{title || nodeData.nodeType}</div>
+            )}
+          </div>
+          {uiExpanded && hookHasBody && (
+            <textarea
+              rows={5}
+              disabled={!canEdit}
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              onBlur={(e) => commitBody(e.target.value)}
+              placeholder="Hook copy…"
+              className={`${NODE_BODY_BOX_CLASS} mt-2 min-h-[80px]`}
+            />
+          )}
+          {uiExpanded && carousel && (
+            <FsiCarouselSlidesEditor
+              slides={slides}
+              canEdit={canEdit}
+              onChange={(rows) => patchPayload({ slides_content: rows })}
+            />
+          )}
+          {renderFields()}
         </div>
         <FsiNodeHandles
           canStartConnection={canEdit}
           canAcceptConnection={nodeData.isConnecting}
           requiredAnchors={connectionAnchors}
+          showConnectionDots={showConnectionDots || selected}
         />
       </div>
     );
@@ -399,6 +452,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
           canStartConnection={canEdit}
           canAcceptConnection={nodeData.isConnecting}
           requiredAnchors={connectionAnchors}
+          showConnectionDots={showConnectionDots || selected}
         />
       </div>
     );

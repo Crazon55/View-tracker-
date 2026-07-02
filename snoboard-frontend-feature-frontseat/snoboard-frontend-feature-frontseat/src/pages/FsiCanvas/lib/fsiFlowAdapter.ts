@@ -14,6 +14,10 @@ import {
   isFrameNode,
   isLinkNode,
   isSimpleLabelNode,
+  isCarouselBodyNode,
+  isNodeUiExpanded,
+  nodeCardWidth,
+  nodeCardHeight,
 } from "./fsiWhiteboardTypes";
 import { toFlowPosition } from "./fsiNodePositions";
 
@@ -31,10 +35,12 @@ export type FsiNodeData = {
   onTitleChange?: (nodeId: string, title: string) => void;
   onBodyChange?: (nodeId: string, body: string) => void;
   onPayloadChange?: (nodeId: string, key: string, value: string) => void;
+  onStructuredPayloadPatch?: (nodeId: string, patch: Record<string, unknown>) => void;
   onScreenshotsChange?: (nodeId: string, screenshots: string[]) => void;
   connectionAnchors?: string[];
   /** True while user is dragging a new connection line. */
   isConnecting?: boolean;
+  showConnectionDots?: boolean;
 };
 
 export function graphToFlow(
@@ -45,6 +51,7 @@ export function graphToFlow(
     onTitleChange?: (nodeId: string, title: string) => void;
     onBodyChange?: (nodeId: string, body: string) => void;
     onPayloadChange?: (nodeId: string, key: string, value: string) => void;
+    onStructuredPayloadPatch?: (nodeId: string, patch: Record<string, unknown>) => void;
     onEdgeDelete?: (edgeId: string) => void;
     onEdgeLabelChange?: (edgeId: string, label: string) => void;
     onScreenshotsChange?: (nodeId: string, screenshots: string[]) => void;
@@ -100,6 +107,8 @@ export function graphToFlow(
 
     const isSimple = isSimpleLabelNode(n);
     const isLink = isLinkNode(n);
+    const isPerf = n.node_type === "Performance" || n.node_type === "Performance Insight";
+    const expanded = isNodeUiExpanded(payload);
 
     const flowNode: Node = {
       id: n.id,
@@ -107,7 +116,7 @@ export function graphToFlow(
       position: toFlowPosition(n, nodesById),
       draggable: true,
       ...(isSimple
-        ? { width: COMPACT_NODE_WIDTH, height: COMPACT_NODE_HEIGHT }
+        ? { width: nodeCardWidth(payload, expanded), height: nodeCardHeight(payload, expanded) }
         : isLink
           ? { width: LINK_NODE_WIDTH, height: LINK_NODE_HEIGHT }
           : {}),
@@ -123,10 +132,14 @@ export function graphToFlow(
         canEdit: options?.canEdit ?? false,
         isNote,
         isCompact: isSimple,
-        fieldDefs: isScreenshot || isNote || isSimple ? [] : getFieldDefs(n.node_type),
+        fieldDefs:
+          isScreenshot || isNote || (isSimple && !isPerf && !isCarouselBodyNode(n))
+            ? []
+            : getFieldDefs(n.node_type),
         onTitleChange: options?.onTitleChange,
         onBodyChange: options?.onBodyChange,
         onPayloadChange: options?.onPayloadChange,
+        onStructuredPayloadPatch: options?.onStructuredPayloadPatch,
         onScreenshotsChange: options?.onScreenshotsChange,
         connectionAnchors,
       } satisfies FsiNodeData,

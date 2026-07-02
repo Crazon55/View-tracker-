@@ -15,16 +15,15 @@ const SIDE_POSITION: Record<AnchorSide, Position> = {
   left: Position.Left,
 };
 
-/** Snap grid along each edge — 0, 5, 10, … 100 (Miro-style spread). */
 const ANCHOR_PCTS = Array.from({ length: 21 }, (_, i) => i * 5);
 
 type Props = {
   canStartConnection?: boolean;
   largeHitZone?: boolean;
-  /** When true, target edge strips accept an in-flight connection line. */
   canAcceptConnection?: boolean;
-  /** Extra anchor ids from saved edges (any pct) so lines reload on the correct spot. */
   requiredAnchors?: string[];
+  /** Show visible connection bubbles (when node is selected). */
+  showConnectionDots?: boolean;
 };
 
 function anchorPointStyle(side: AnchorSide, pct: number): CSSProperties {
@@ -43,7 +42,6 @@ function anchorPointStyle(side: AnchorSide, pct: number): CSSProperties {
 }
 
 function edgeStripStyle(side: AnchorSide, large: boolean): CSSProperties {
-  /** Thin edge band only — wide strips blocked node drag and allowed mid-node connects. */
   const thickness = large ? 18 : 12;
   switch (side) {
     case "top":
@@ -65,6 +63,9 @@ const stripClass = cn(
 const pointClass = cn(
   "!z-[30] !h-1 !w-1 !min-h-0 !min-w-0 !border-0 !bg-transparent !opacity-0 !pointer-events-none nodrag nopan",
 );
+const visibleDotClass = cn(
+  "!z-[40] !h-3 !w-3 !min-h-0 !min-w-0 !rounded-full !border-2 !border-zinc-300 !bg-zinc-800 !opacity-100 nodrag nopan pointer-events-none",
+);
 
 function collectAnchorIds(requiredAnchors: string[]): Set<string> {
   const ids = new Set<string>();
@@ -80,19 +81,12 @@ function collectAnchorIds(requiredAnchors: string[]): Set<string> {
   return ids;
 }
 
-function anchorMeta(id: string): { side: AnchorSide; kind: AnchorKind; pct: number } | null {
-  return parseAnchorHandle(id);
-}
-
-/**
- * Perimeter anchors at many points per side + invisible strips to grab an edge anywhere.
- * Strips pick side; pointer math in FsiFlowCanvas picks exact pct on connect.
- */
 export default function FsiNodeHandles({
   canStartConnection = false,
   largeHitZone = false,
   canAcceptConnection = false,
   requiredAnchors = [],
+  showConnectionDots = false,
 }: Props) {
   const sourcePointer = canStartConnection ? "!pointer-events-auto" : "!pointer-events-none";
   const targetPointer = canAcceptConnection ? "!pointer-events-auto" : "!pointer-events-none";
@@ -101,7 +95,7 @@ export default function FsiNodeHandles({
   return (
     <>
       {Array.from(anchorIds).map((id) => {
-        const meta = anchorMeta(id);
+        const meta = parseAnchorHandle(id);
         if (!meta) return null;
         const isOut = meta.kind === "out";
         return (
@@ -118,6 +112,19 @@ export default function FsiNodeHandles({
           />
         );
       })}
+      {showConnectionDots
+        ? SIDES.map((side) => (
+            <Handle
+              key={`dot-${side}`}
+              type="source"
+              position={SIDE_POSITION[side]}
+              id={`${side}-out-dot`}
+              className={visibleDotClass}
+              style={anchorPointStyle(side, 50)}
+              isConnectable={false}
+            />
+          ))
+        : null}
       {SIDES.map((side) => (
         <Handle
           key={`${side}-in-strip`}

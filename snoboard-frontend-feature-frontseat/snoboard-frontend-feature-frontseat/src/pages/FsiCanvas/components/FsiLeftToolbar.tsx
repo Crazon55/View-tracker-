@@ -14,6 +14,7 @@ import {
   PenLine,
   PanelLeftClose,
   PanelLeftOpen,
+  GalleryHorizontalEnd,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,7 @@ const TOOL_ICONS: Record<WhiteboardNodeType, React.ReactNode> = {
   Visual: <ImageIcon className="h-4 w-4 shrink-0" />,
   "Visual Hook": <Eye className="h-4 w-4 shrink-0" />,
   "Written Hook": <PenLine className="h-4 w-4 shrink-0" />,
+  "Carousel Body": <GalleryHorizontalEnd className="h-4 w-4 shrink-0" />,
   Performance: <BarChart3 className="h-4 w-4 shrink-0" />,
   Link: <Link2 className="h-4 w-4 shrink-0" />,
   "Sticky Note": <StickyNote className="h-4 w-4 shrink-0" />,
@@ -45,6 +47,7 @@ const TOOL_LABELS: Record<WhiteboardNodeType, string> = {
   Visual: "Visual",
   "Visual Hook": "Visual Hook",
   "Written Hook": "Written Hook",
+  "Carousel Body": "Carousel Body",
   Performance: "Performance",
   Link: "Link",
   "Sticky Note": "Sticky Note",

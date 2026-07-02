@@ -159,6 +159,7 @@ export const NODE_TYPE_COLORS: Record<string, string> = {
   "Visual Pattern": "#ec4899",
   "Visual Hook": "#a855f7",
   "Written Hook": "#c084fc",
+  "Carousel Body": "#6366f1",
   Performance: "#64748b",
   "Performance Insight": "#64748b",
   Link: "#3b82f6",
@@ -188,7 +189,9 @@ export function defaultPayloadForType(nodeType: string): Record<string, unknown>
       return { is_screenshot: true, image_url: "" };
     case "Visual Hook":
     case "Written Hook":
-      return { hook_text: "" };
+      return { hook_text: "", ui_expanded: false };
+    case "Carousel Body":
+      return { ui_expanded: false, slides_content: [""] };
     case "Performance":
     case "Performance Insight":
       return { views: "", likes: "", shares: "", comments: "", followers_gained: "" };

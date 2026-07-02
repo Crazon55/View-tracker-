@@ -34,6 +34,7 @@ export const NODE_FIELD_DEFS: Record<string, FieldDef[]> = {
     { key: "followers_gained", label: "Followers gained", inputType: "number" },
   ],
   Link: [{ key: "url", label: "URL", linkify: true }],
+  "Carousel Body": [],
   Frame: [],
   "Hook Pattern": [],
   "Hook Example": [],

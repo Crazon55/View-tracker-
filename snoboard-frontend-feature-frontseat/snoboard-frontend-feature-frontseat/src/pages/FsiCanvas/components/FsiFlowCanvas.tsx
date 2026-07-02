@@ -57,6 +57,8 @@ export type FsiFlowCanvasHandle = {
   fitAll: () => void;
   /** Move keyboard focus to the canvas pane (Backspace/Delete shortcuts). */
   focusCanvas: () => void;
+  /** Select every canvas node (not frames). */
+  selectAllNodes: () => void;
   /** Bounding box that covers all listed nodes using measured canvas sizes. */
   getBoundsForNodeIds: (nodeIds: string[]) => ReturnType<typeof boundsFromExtents> | null;
   /** Node ids currently selected on the canvas (live React Flow state). */
@@ -94,6 +96,7 @@ type FlowInnerProps = {
   onTitleChange: (nodeId: string, title: string) => void;
   onBodyChange: (nodeId: string, body: string) => void;
   onPayloadChange: (nodeId: string, key: string, value: string) => void;
+  onStructuredPayloadPatch: (nodeId: string, patch: Record<string, unknown>) => void;
   onScreenshotsChange: (nodeId: string, screenshots: string[]) => void;
   canvasTheme?: FsiCanvasTheme;
 };
@@ -125,6 +128,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     onTitleChange,
     onBodyChange,
     onPayloadChange,
+    onStructuredPayloadPatch,
     onScreenshotsChange,
     canvasTheme = "dark",
   },
@@ -203,9 +207,11 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   const onTitleChangeRef = useRef(onTitleChange);
   const onBodyChangeRef = useRef(onBodyChange);
   const onPayloadChangeRef = useRef(onPayloadChange);
+  const onStructuredPayloadPatchRef = useRef(onStructuredPayloadPatch);
   onTitleChangeRef.current = onTitleChange;
   onBodyChangeRef.current = onBodyChange;
   onPayloadChangeRef.current = onPayloadChange;
+  onStructuredPayloadPatchRef.current = onStructuredPayloadPatch;
 
   const stableTitleChange = useCallback((id: string, t: string) => {
     onTitleChangeRef.current(id, t);
@@ -215,6 +221,9 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   }, []);
   const stablePayloadChange = useCallback((id: string, k: string, v: string) => {
     onPayloadChangeRef.current(id, k, v);
+  }, []);
+  const stableStructuredPayloadPatch = useCallback((id: string, patch: Record<string, unknown>) => {
+    onStructuredPayloadPatchRef.current(id, patch);
   }, []);
 
   const onScreenshotsChangeRef = useRef(onScreenshotsChange);
@@ -281,11 +290,12 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         onTitleChange: stableTitleChange,
         onBodyChange: stableBodyChange,
         onPayloadChange: stablePayloadChange,
+        onStructuredPayloadPatch: stableStructuredPayloadPatch,
         onEdgeDelete: stableEdgeDelete,
         onEdgeLabelChange: stableEdgeLabelChange,
         onScreenshotsChange: stableScreenshotsChange,
       }),
-    [structureSignature, positionSignature, canEdit, stableTitleChange, stableBodyChange, stablePayloadChange, stableEdgeDelete, stableEdgeLabelChange, stableScreenshotsChange],
+    [structureSignature, positionSignature, canEdit, stableTitleChange, stableBodyChange, stablePayloadChange, stableStructuredPayloadPatch, stableEdgeDelete, stableEdgeLabelChange, stableScreenshotsChange],
   );
 
   const flowEdges = flowGraph.edges;
@@ -410,6 +420,18 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
       focusCanvas: () => {
         paneRef.current?.focus();
       },
+      selectAllNodes: () => {
+        setNodes((nds) =>
+          nds.map((n) => ({
+            ...n,
+            selected: n.type !== "fsiFrame",
+          })),
+        );
+        queueMicrotask(() => {
+          const selectedNodes = getNodes().filter((n) => n.selected && n.type !== "fsiFrame");
+          onSelectionChange({ nodes: selectedNodes, edges: [] });
+        });
+      },
       getBoundsForNodeIds: (nodeIds: string[]) => {
         if (nodeIds.length === 0) return null;
         const dbById = new Map(dbNodes.map((n) => [n.id, n]));
@@ -468,6 +490,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
       persistViewport,
       selectedNodeId,
       setCenter,
+      onSelectionChange,
     ],
   );
 
@@ -695,8 +718,8 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
       dragPositionLockRef.current.set(node.id, { ...node.position });
       window.setTimeout(() => {
         dragPositionLockRef.current.delete(node.id);
-      }, 800);
-      onNodeDragStop(node.id, abs.x, abs.y);
+      }, 1500);
+      onNodeDragStop(node.id, Math.round(abs.x), Math.round(abs.y));
     },
     [canEdit, getAbsoluteFlowPosition, onNodeDragStop],
   );
@@ -836,7 +859,11 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         ...n,
         connectable: canEdit,
         draggable: canEdit,
-        data: { ...(n.data as FsiNodeData), isConnecting },
+        data: {
+          ...(n.data as FsiNodeData),
+          isConnecting,
+          showConnectionDots: !!n.selected,
+        },
       })),
     [nodes, canEdit, isConnecting],
   );
@@ -849,7 +876,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   return (
     <div
       ref={paneRef}
-      className="relative h-full w-full overflow-hidden outline-none"
+      className="relative h-full w-full overflow-hidden outline-none select-none"
       tabIndex={0}
       onDragOver={handleDragOver}
       onDrop={handleDrop}

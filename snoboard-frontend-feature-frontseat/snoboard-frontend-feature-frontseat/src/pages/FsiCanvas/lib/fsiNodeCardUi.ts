@@ -1,0 +1,35 @@
+export const COMPACT_NODE_WIDTH = 200;
+export const COMPACT_NODE_HEIGHT = 64;
+export const LINK_NODE_WIDTH = 200;
+export const LINK_NODE_HEIGHT = 72;
+export const DEFAULT_EXPANDED_WIDTH = 320;
+export const DEFAULT_EXPANDED_HEIGHT = 240;
+
+export function isNodeUiExpanded(payload: Record<string, unknown> | undefined): boolean {
+  return payload?.ui_expanded === true;
+}
+
+export function nodeCardWidth(payload: Record<string, unknown> | undefined, expanded: boolean): number {
+  if (!expanded) return COMPACT_NODE_WIDTH;
+  const w = Number(payload?.card_width);
+  return Number.isFinite(w) && w >= COMPACT_NODE_WIDTH ? w : DEFAULT_EXPANDED_WIDTH;
+}
+
+export function nodeCardHeight(payload: Record<string, unknown> | undefined, expanded: boolean): number {
+  if (!expanded) return COMPACT_NODE_HEIGHT;
+  const h = Number(payload?.card_height);
+  return Number.isFinite(h) && h >= COMPACT_NODE_HEIGHT ? h : DEFAULT_EXPANDED_HEIGHT;
+}
+
+export function parseSlidesContent(payload: Record<string, unknown> | undefined): string[] {
+  const raw = payload?.slides_content;
+  if (Array.isArray(raw) && raw.length > 0) return raw.map((s) => String(s));
+  return [""];
+}
+
+export const NODE_TYPE_LABEL_CLASS =
+  "text-[10px] font-bold uppercase tracking-wide text-black";
+export const NODE_TITLE_BOX_CLASS =
+  "w-full rounded border border-black/15 bg-black/10 px-2 py-1.5 text-sm font-semibold leading-snug text-black";
+export const NODE_BODY_BOX_CLASS =
+  "nodrag nopan w-full flex-1 resize-none rounded border border-black/15 bg-black/10 px-2 py-1.5 text-xs leading-relaxed text-black placeholder:text-black/40 focus:border-black/30 focus:outline-none";

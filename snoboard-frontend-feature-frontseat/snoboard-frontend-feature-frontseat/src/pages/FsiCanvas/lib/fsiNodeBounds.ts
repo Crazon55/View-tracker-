@@ -1,6 +1,6 @@
 import { isNoteNode, isScreenshotNode } from "./fsiHierarchy";
 import type { FsiNodeRecord } from "./fsiNodeSchemas";
-import { isCompactLabelNode, isFrameNode, isLinkNode, isSimpleLabelNode, COMPACT_NODE_HEIGHT, COMPACT_NODE_WIDTH, LINK_NODE_HEIGHT, LINK_NODE_WIDTH } from "./fsiWhiteboardTypes";
+import { isCompactLabelNode, isFrameNode, isLinkNode, isSimpleLabelNode, isCarouselBodyNode, isNodeUiExpanded, nodeCardWidth, nodeCardHeight, COMPACT_NODE_HEIGHT, COMPACT_NODE_WIDTH, LINK_NODE_HEIGHT, LINK_NODE_WIDTH } from "./fsiWhiteboardTypes";
 
 const FRAME_PADDING = 48;
 const FRAME_HEADER = 44;
@@ -35,6 +35,13 @@ export function estimateNodeSize(node: FsiNodeRecord): { width: number; height: 
   }
   if (isNoteNode(node)) return { width: 220, height: 120 };
   if (isLinkNode(node)) return { width: LINK_NODE_WIDTH, height: LINK_NODE_HEIGHT };
+  if (isCarouselBodyNode(node)) {
+    const expanded = isNodeUiExpanded(node.structured_payload ?? {});
+    return {
+      width: nodeCardWidth(node.structured_payload, expanded),
+      height: nodeCardHeight(node.structured_payload, expanded),
+    };
+  }
   if (isCompactLabelNode(node) || isSimpleLabelNode(node)) {
     return { width: COMPACT_NODE_WIDTH, height: COMPACT_NODE_HEIGHT };
   }

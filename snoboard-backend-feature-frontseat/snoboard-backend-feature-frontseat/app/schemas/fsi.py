@@ -24,6 +24,7 @@ NODE_TYPES = [
     "Visual",
     "Visual Hook",
     "Written Hook",
+    "Carousel Body",
     "Performance",
     "Link",
     "Sticky Note",

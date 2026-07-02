@@ -890,6 +890,11 @@ export default function FsiCanvasWorkspace() {
       ) {
         return;
       }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        handleSelectAllNodes();
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !e.shiftKey) {
         e.preventDefault();
         handleUndo();
@@ -913,7 +918,7 @@ export default function FsiCanvasWorkspace() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [canEdit, handleUndo, handleRedo, handleDuplicateSelection, handleDeleteSelection]);
+  }, [canEdit, handleUndo, handleRedo, handleDuplicateSelection, handleDeleteSelection, handleSelectAllNodes]);
 
   const handleClearSelection = useCallback(() => {
     setSelectedNode(null);
@@ -992,6 +997,38 @@ export default function FsiCanvasWorkspace() {
     },
     [canEdit, history, setGraph, updateNodeMutation],
   );
+
+  const handleStructuredPayloadPatch = useCallback(
+    (nodeId: string, patch: Record<string, unknown>) => {
+      if (!canEdit) return;
+      const g = graphRef.current;
+      const node = g?.nodes.find((n) => n.id === nodeId);
+      if (!node || !g) return;
+      const beforePayload = { ...(node.structured_payload ?? {}) };
+      const nextPayload = { ...beforePayload, ...patch };
+      if (JSON.stringify(beforePayload) === JSON.stringify(nextPayload)) return;
+      if (!history.isApplying.current) {
+        history.pushEntry({
+          type: "node_patch",
+          nodeId,
+          before: { structured_payload: beforePayload },
+          after: { structured_payload: nextPayload },
+        });
+      }
+      setGraph({
+        ...g,
+        nodes: g.nodes.map((n) =>
+          n.id === nodeId ? { ...n, structured_payload: nextPayload } : n,
+        ),
+      });
+      updateNodeMutation.mutate({ id: nodeId, patch: { structured_payload: nextPayload } });
+    },
+    [canEdit, history, setGraph, updateNodeMutation],
+  );
+
+  const handleSelectAllNodes = useCallback(() => {
+    canvasRef.current?.selectAllNodes();
+  }, []);
 
   const handlePayloadChange = useCallback(
     (nodeId: string, key: string, value: string) => {
@@ -1105,8 +1142,13 @@ export default function FsiCanvasWorkspace() {
       }
 
       if (moved) {
-        setGraph(patchGraphNodePositions(g, updates));
-        for (const u of updates) {
+        const roundedUpdates = updates.map((u) => ({
+          ...u,
+          x: Math.round(u.x),
+          y: Math.round(u.y),
+        }));
+        setGraph(patchGraphNodePositions(g, roundedUpdates));
+        for (const u of roundedUpdates) {
           updateNodeMutation.mutate({ id: u.id, patch: { canvas_x: u.x, canvas_y: u.y } });
         }
       }
@@ -1331,6 +1373,7 @@ export default function FsiCanvasWorkspace() {
             onTitleChange={handleTitleChange}
             onBodyChange={handleBodyChange}
             onPayloadChange={handlePayloadChange}
+            onStructuredPayloadPatch={handleStructuredPayloadPatch}
             onScreenshotsChange={handleScreenshotsChange}
             canvasTheme={canvasTheme}
           />
