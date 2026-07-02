@@ -297,7 +297,7 @@ export const getSixDayDeadlines = () => fetchApi<any>("/api/v1/six-day/deadlines
 export const getSixDayPageData = (pageId: string, month?: string) =>
   fetchApi<any>(`/api/v1/six-day/page/${pageId}${month ? `?month=${month}` : ""}`);
 
-// Weekly workboard — roster + activity (for @mentions)
+// @mention roster (Tickets and similar)
 export type WorkboardMentionPerson = {
   display: string;
   role_id: string | null;
