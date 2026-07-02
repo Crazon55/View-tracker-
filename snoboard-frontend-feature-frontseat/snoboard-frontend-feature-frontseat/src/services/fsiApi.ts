@@ -26,6 +26,19 @@ export type FsiCloudinarySignedUpload = {
 
 type FsiBackendRetry = { path: string; method: string; body?: unknown; at: number };
 
+/** Turn Postgres enum mismatch errors into an actionable message for admins. */
+function fsiFormatDbError(message: string): string {
+  if (message.includes("study_type_enum") && message.includes("Whiteboard")) {
+    return (
+      "Database is missing the Whiteboard study type. Run migrations/fsi_schema_sync.sql in Supabase SQL Editor, then try again."
+    );
+  }
+  if (message.includes("node_type_enum")) {
+    return `${message} — run migrations/fsi_schema_sync.sql in Supabase SQL Editor.`;
+  }
+  return message;
+}
+
 function fsiNewId(): string {
   return crypto.randomUUID();
 }
@@ -200,7 +213,7 @@ export function createFsiApi() {
       return fsiDualMutate({
         supabase: async () => {
           const { data: created, error } = await _sb.from("studies").insert(row).select().single();
-          if (error) throw new Error(error.message);
+          if (error) throw new Error(fsiFormatDbError(error.message));
           return created;
         },
         backend: { path: `${FSI_BACKEND_BASE}/studies`, method: "POST", body: backendBody },
@@ -231,7 +244,7 @@ export function createFsiApi() {
             .eq("id", studyId)
             .select()
             .single();
-          if (error) throw new Error(error.message);
+          if (error) throw new Error(fsiFormatDbError(error.message));
           return updated;
         },
         backend: { path: `${FSI_BACKEND_BASE}/studies/${studyId}`, method: "PATCH", body: data },
@@ -241,7 +254,7 @@ export function createFsiApi() {
       await fsiDualMutate({
         supabase: async () => {
           const { error } = await _sb.from("studies").delete().eq("id", studyId);
-          if (error) throw new Error(error.message);
+          if (error) throw new Error(fsiFormatDbError(error.message));
           return { id: studyId };
         },
         backend: { path: `${FSI_BACKEND_BASE}/studies/${studyId}`, method: "DELETE" },
@@ -292,7 +305,7 @@ export function createFsiApi() {
       return fsiDualMutate({
         supabase: async () => {
           const { data: created, error } = await _sb.from("nodes").insert(row).select().single();
-          if (error) throw new Error(error.message);
+          if (error) throw new Error(fsiFormatDbError(error.message));
           await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", studyId);
           return created;
         },
@@ -393,7 +406,7 @@ export function createFsiApi() {
               .select()
               .single());
           }
-          if (error) throw new Error(error.message);
+          if (error) throw new Error(fsiFormatDbError(error.message));
           await _sb.from("studies").update({ updated_at: new Date().toISOString() }).eq("id", studyId);
           return created;
         },
@@ -432,7 +445,7 @@ export function createFsiApi() {
             .eq("id", connectionId)
             .select()
             .single();
-          if (error) throw new Error(error.message);
+          if (error) throw new Error(fsiFormatDbError(error.message));
           if (updated?.study_id) {
             await _sb
               .from("studies")

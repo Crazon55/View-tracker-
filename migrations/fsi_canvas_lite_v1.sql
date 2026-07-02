@@ -3,6 +3,7 @@
 
 DO $$ BEGIN
   CREATE TYPE study_type_enum AS ENUM (
+    'Whiteboard',
     'Page Study',
     'Carousel Study',
     'Hook Study',

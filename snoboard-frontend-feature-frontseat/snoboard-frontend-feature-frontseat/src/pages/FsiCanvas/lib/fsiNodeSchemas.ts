@@ -1,5 +1,5 @@
 export const STUDY_TYPES = [
-  "Whiteboard",
+  "Whiteboard", // keep in sync with migrations/fsi_schema_sync.sql
   "Page Study",
   "Carousel Study",
   "Hook Study",

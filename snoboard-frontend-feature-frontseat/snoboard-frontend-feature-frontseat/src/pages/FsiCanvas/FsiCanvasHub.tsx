@@ -19,6 +19,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import type { FsiStudy } from "./lib/fsiNodeSchemas";
+import { WHITEBOARD_DEFAULT_STUDY_TYPE } from "./lib/fsiWhiteboardTypes";
 
 export default function FsiCanvasHub() {
   const navigate = useNavigate();
@@ -48,7 +49,7 @@ export default function FsiCanvasHub() {
     mutationFn: () =>
       fsiApi.createStudy({
         title: form.title,
-        study_type: "Whiteboard",
+        study_type: WHITEBOARD_DEFAULT_STUDY_TYPE,
         target_account: form.target_account || form.title,
         niche_vertical: "",
         owner_id: user?.email || "",
