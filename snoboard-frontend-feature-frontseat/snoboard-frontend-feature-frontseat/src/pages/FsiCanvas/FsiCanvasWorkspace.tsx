@@ -877,6 +877,10 @@ export default function FsiCanvasWorkspace() {
     void history.redo(graphRef.current, setGraph);
   }, [history, setGraph]);
 
+  const handleSelectAllNodes = useCallback(() => {
+    canvasRef.current?.selectAllNodes();
+  }, []);
+
   useEffect(() => {
     if (!canEdit) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -1025,10 +1029,6 @@ export default function FsiCanvasWorkspace() {
     },
     [canEdit, history, setGraph, updateNodeMutation],
   );
-
-  const handleSelectAllNodes = useCallback(() => {
-    canvasRef.current?.selectAllNodes();
-  }, []);
 
   const handlePayloadChange = useCallback(
     (nodeId: string, key: string, value: string) => {

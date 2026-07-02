@@ -5,6 +5,10 @@
 import { supabase as _sb } from "@/lib/supabase";
 import { getAccessToken } from "./api";
 import type { FsiGraphSnapshot } from "@/pages/FsiCanvas/lib/fsiGraphSnapshot";
+import {
+  embedHandlesInEdgeLabelNote,
+  parseEmbeddedHandles,
+} from "@/pages/FsiCanvas/lib/fsiConnectionHandleMeta";
 
 const FSI_API_BASE = import.meta.env.VITE_API_URL || "";
 
