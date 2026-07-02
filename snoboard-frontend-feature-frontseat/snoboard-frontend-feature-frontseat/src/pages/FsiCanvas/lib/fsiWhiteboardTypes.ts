@@ -18,6 +18,12 @@ export type WhiteboardNodeType = (typeof WHITEBOARD_NODE_TYPES)[number];
 
 export const WHITEBOARD_DEFAULT_STUDY_TYPE = "Whiteboard";
 
+/** Fixed card size for label-style nodes — prevents resize on select/deselect. */
+export const COMPACT_NODE_WIDTH = 200;
+export const COMPACT_NODE_HEIGHT = 64;
+export const LINK_NODE_WIDTH = 200;
+export const LINK_NODE_HEIGHT = 72;
+
 export function isFrameNode(node: FsiNodeRecord): boolean {
   return node.structured_payload?.is_frame === true || node.node_type === "Frame";
 }

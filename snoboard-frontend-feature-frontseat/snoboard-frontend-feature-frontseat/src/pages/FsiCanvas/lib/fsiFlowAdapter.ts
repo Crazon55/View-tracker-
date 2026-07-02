@@ -5,7 +5,16 @@ import { getFieldDefs } from "./fsiNodeFieldDefs";
 import { isCanvasNode, isNoteNode, isScreenshotNode } from "./fsiHierarchy";
 import { resolveConnectionHandles, anchorIdsForNode } from "./fsiConnectionHandles";
 import { userVisibleEdgeLabel } from "./fsiConnectionHandleMeta";
-import { displayNodeType, isFrameNode, isSimpleLabelNode } from "./fsiWhiteboardTypes";
+import {
+  COMPACT_NODE_HEIGHT,
+  COMPACT_NODE_WIDTH,
+  LINK_NODE_HEIGHT,
+  LINK_NODE_WIDTH,
+  displayNodeType,
+  isFrameNode,
+  isLinkNode,
+  isSimpleLabelNode,
+} from "./fsiWhiteboardTypes";
 import { toFlowPosition } from "./fsiNodePositions";
 
 const STICKY_COLOR = "#fef08a";
@@ -89,11 +98,19 @@ export function graphToFlow(
       };
     }
 
+    const isSimple = isSimpleLabelNode(n);
+    const isLink = isLinkNode(n);
+
     const flowNode: Node = {
       id: n.id,
       type: "fsiNode",
       position: toFlowPosition(n, nodesById),
       draggable: true,
+      ...(isSimple
+        ? { width: COMPACT_NODE_WIDTH, height: COMPACT_NODE_HEIGHT }
+        : isLink
+          ? { width: LINK_NODE_WIDTH, height: LINK_NODE_HEIGHT }
+          : {}),
       data: {
         fsiNode: n,
         label: isScreenshot ? "Visual" : isNote ? "Sticky Note" : n.display_title,
@@ -105,8 +122,8 @@ export function graphToFlow(
             : customColor ?? colorForNodeType(uiType),
         canEdit: options?.canEdit ?? false,
         isNote,
-        isCompact: isSimpleLabelNode(n),
-        fieldDefs: isScreenshot || isNote || isSimpleLabelNode(n) ? [] : getFieldDefs(n.node_type),
+        isCompact: isSimple,
+        fieldDefs: isScreenshot || isNote || isSimple ? [] : getFieldDefs(n.node_type),
         onTitleChange: options?.onTitleChange,
         onBodyChange: options?.onBodyChange,
         onPayloadChange: options?.onPayloadChange,

@@ -147,6 +147,11 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   const connectingRef = useRef(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const connectCompletedRef = useRef(false);
+  const dragPositionLockRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+
+  function positionsNearlyEqual(a: { x: number; y: number }, b: { x: number; y: number }) {
+    return Math.abs(a.x - b.x) < 1 && Math.abs(a.y - b.y) < 1;
+  }
 
   const persistViewport = useCallback(
     (viewport: Viewport) => {
@@ -316,10 +321,13 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
       return flowGraph.nodes.map((next) => {
         const cur = byId.get(next.id);
         if (cur?.dragging) return cur;
+        const locked = dragPositionLockRef.current.get(next.id);
+        if (locked && cur) {
+          return { ...next, position: locked, data: next.data, selected: cur.selected };
+        }
         if (
           cur &&
-          cur.position.x === next.position.x &&
-          cur.position.y === next.position.y &&
+          positionsNearlyEqual(cur.position, next.position) &&
           cur.type === next.type &&
           cur.parentId === next.parentId
         ) {
@@ -684,6 +692,10 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     (_: React.MouseEvent, node: Node) => {
       if (!canEdit) return;
       const abs = getAbsoluteFlowPosition(node);
+      dragPositionLockRef.current.set(node.id, { ...node.position });
+      window.setTimeout(() => {
+        dragPositionLockRef.current.delete(node.id);
+      }, 800);
       onNodeDragStop(node.id, abs.x, abs.y);
     },
     [canEdit, getAbsoluteFlowPosition, onNodeDragStop],

@@ -8,7 +8,13 @@ import { FsiLinkifiedText, looksLikeUrl, normalizeLinkHref } from "../lib/fsiLin
 import { uploadFsiNodeScreenshotFiles } from "../lib/fsiNodeMedia";
 import { getScreenshotImageUrl, isScreenshotNode } from "../lib/fsiHierarchy";
 import { clipboardImageFiles } from "../lib/fsiScreenshotNode";
-import { isLinkNode } from "../lib/fsiWhiteboardTypes";
+import {
+  COMPACT_NODE_HEIGHT,
+  COMPACT_NODE_WIDTH,
+  isLinkNode,
+  LINK_NODE_HEIGHT,
+  LINK_NODE_WIDTH,
+} from "../lib/fsiWhiteboardTypes";
 import FsiNodeHandles from "./FsiNodeHandles";
 
 function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
@@ -29,6 +35,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
 
   const [title, setTitle] = useState(fsiNode.display_title);
   const [body, setBody] = useState(fsiNode.raw_body_text ?? "");
+  const [titleEditing, setTitleEditing] = useState(false);
   const payload = fsiNode.structured_payload ?? {};
   const [fieldValues, setFieldValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(fieldDefs.map((def) => [def.key, String(payload[def.key] ?? "")])),
@@ -73,7 +80,12 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
   const inputClass =
     "nodrag nopan w-full rounded border border-emerald-900/40 bg-emerald-950/30 px-2 py-1 text-xs text-emerald-950 placeholder:text-emerald-900/40 focus:border-emerald-700 focus:outline-none";
 
+  useEffect(() => {
+    setTitleEditing(false);
+  }, [fsiNode.id]);
+
   const editing = selected && canEdit;
+  const editingTitle = titleEditing && canEdit;
   const isScreenshot = isScreenshotNode(fsiNode);
   const screenshotUrl = getScreenshotImageUrl(fsiNode);
   const [replacingScreenshot, setReplacingScreenshot] = useState(false);
@@ -260,16 +272,38 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
     return (
       <div
         ref={rootRef}
-        className={`relative overflow-visible min-w-[120px] max-w-[280px] rounded-md border-2 px-4 py-2.5 shadow-lg ${
-          selected ? "ring-2 ring-white/50" : ""
+        className={`relative box-border overflow-visible rounded-md border-2 px-4 py-2.5 shadow-lg ${
+          selected ? "ring-2 ring-white/50 ring-offset-0" : ""
         }`}
-        style={{ borderColor: nodeData.color, backgroundColor: nodeData.color }}
+        style={{
+          width: COMPACT_NODE_WIDTH,
+          height: COMPACT_NODE_HEIGHT,
+          borderColor: nodeData.color,
+          backgroundColor: nodeData.color,
+        }}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          if (canEdit) setTitleEditing(true);
+        }}
       >
-        {editing ? (
+        {editingTitle ? (
           <input
+            autoFocus
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            onBlur={(e) => commitTitle(e.target.value)}
+            onBlur={(e) => {
+              commitTitle(e.target.value);
+              setTitleEditing(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.currentTarget.blur();
+              }
+              if (e.key === "Escape") {
+                setTitle(fsiNode.display_title);
+                setTitleEditing(false);
+              }
+            }}
             className="nodrag nopan w-full bg-transparent text-center text-sm font-semibold text-emerald-950 placeholder:text-emerald-900/40 focus:outline-none"
             placeholder={nodeData.nodeType}
           />
@@ -292,20 +326,40 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
 
   if (isLink) {
     const url = fieldValues.url ?? "";
-    const showUrl = editing || Boolean(url.trim());
+    const showUrl = Boolean(url.trim()) || editingTitle;
     return (
       <div
         ref={rootRef}
-        className={`relative overflow-visible min-w-[160px] max-w-[280px] rounded-md border-2 px-4 py-2.5 shadow-lg ${
-          selected ? "ring-2 ring-white/50" : ""
+        className={`relative box-border overflow-visible rounded-md border-2 px-4 py-2.5 shadow-lg ${
+          selected ? "ring-2 ring-white/50 ring-offset-0" : ""
         }`}
-        style={{ borderColor: nodeData.color, backgroundColor: nodeData.color }}
+        style={{
+          width: LINK_NODE_WIDTH,
+          minHeight: LINK_NODE_HEIGHT,
+          borderColor: nodeData.color,
+          backgroundColor: nodeData.color,
+        }}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          if (canEdit) setTitleEditing(true);
+        }}
       >
-        {editing ? (
+        {editingTitle ? (
           <input
+            autoFocus
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            onBlur={(e) => commitTitle(e.target.value)}
+            onBlur={(e) => {
+              commitTitle(e.target.value);
+              setTitleEditing(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+              if (e.key === "Escape") {
+                setTitle(fsiNode.display_title);
+                setTitleEditing(false);
+              }
+            }}
             className="nodrag nopan mb-1 w-full bg-transparent text-center text-sm font-semibold text-emerald-950 placeholder:text-emerald-900/40 focus:outline-none"
             placeholder="Link name"
           />
@@ -319,7 +373,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
         </div>
         {showUrl && (
           <div className="mt-2 border-t border-emerald-900/25 px-1 pt-2">
-            {editing ? (
+            {editingTitle ? (
               <input
                 type="text"
                 value={url}
@@ -336,7 +390,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
                 className={`${inputClass} block truncate text-center underline`}
                 onClick={(e) => e.stopPropagation()}
               >
-                {url}
+                {url || "Add URL (double-click to edit)"}
               </a>
             )}
           </div>
