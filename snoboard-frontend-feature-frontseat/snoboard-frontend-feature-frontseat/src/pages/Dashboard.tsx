@@ -547,7 +547,7 @@ export default function Dashboard() {
   const totalViews = stats?.total_views ?? 0;
   const reachTotal = isFirstOfMonth && prevMonthSixDay?.page_summaries
     ? (prevMonthSixDay.page_summaries as any[]).reduce(
-        (s: number, p: any) => s + (p.actual_views ?? p.cycle_views_sum ?? 0), 0
+        (s: number, p: any) => s + (p.cycle_views_sum ?? 0), 0
       )
     : totalViews;
   const allPagesRaw = stats?.pages ?? [];
@@ -592,15 +592,7 @@ export default function Dashboard() {
         const sd = sixDayByPageId.get(String(page.id));
         if (sd?.summary) {
           const cvs = Number(sd.summary.cycle_views_sum);
-          const avRaw = sd.summary.actual_views;
-          const avNum =
-            avRaw != null && avRaw !== "" && !Number.isNaN(Number(avRaw))
-              ? Number(avRaw)
-              : null;
-          // DB often stores actual_views=0 before reconcile — trust cycle sum when it has entries.
-          if (avNum != null && avNum > 0) return avNum;
           if (!Number.isNaN(cvs)) return cvs;
-          if (avNum != null) return avNum;
         }
         if (!customFrom || !customTo) return 0;
         return getCustomRangeViewsForPage(
@@ -1169,9 +1161,9 @@ export default function Dashboard() {
                         </span>
                       </li>
                     </ul>
-                    {Math.abs(apiCyclesCombined - viewsForPeriod) > 2 && sdPage?.summary?.actual_views != null && (
+                    {Math.abs(apiCyclesCombined - viewsForPeriod) > 2 && (
                       <p className="text-[9px] text-zinc-600 leading-snug">
-                        Month total uses monthly actual from the tracker when set; cycle rows sum entries only.
+                        Month total uses 6-day cycle sum; per-cycle rows sum entries only.
                       </p>
                     )}
                   </div>

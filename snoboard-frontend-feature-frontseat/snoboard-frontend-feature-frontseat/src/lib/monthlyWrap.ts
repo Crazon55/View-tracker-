@@ -348,13 +348,7 @@ function postingReportMonth(dateRaw: unknown): string | null {
 
 function viewsFromPageSummary(summary: any): number {
   const cvs = Number(summary?.cycle_views_sum ?? 0);
-  const avRaw = summary?.actual_views;
-  const avNum =
-    avRaw != null && avRaw !== "" && !Number.isNaN(Number(avRaw)) ? Number(avRaw) : null;
-  if (avNum != null && avNum > 0) return avNum;
-  if (!Number.isNaN(cvs) && cvs > 0) return cvs;
-  if (avNum != null) return avNum;
-  return 0;
+  return Number.isNaN(cvs) ? 0 : cvs;
 }
 
 function buildPageOwnerByHandle(): Record<string, string> {
