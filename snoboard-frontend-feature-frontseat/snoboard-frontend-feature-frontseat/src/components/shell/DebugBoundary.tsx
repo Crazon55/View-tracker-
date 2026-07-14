@@ -9,7 +9,7 @@ export class DebugBoundary extends Component<{ children: ReactNode }, { err: Err
   render() {
     if (this.state.err) {
       return (
-        <div style={{ padding: 40, color: "#f4f4f7", fontFamily: "'Geist Mono', monospace", background: "#0a0a0d", minHeight: "70vh" }}>
+        <div style={{ padding: 40, color: "#f4f4f7", fontFamily: "'JetBrains Mono', monospace", background: "#0a0a0d", minHeight: "70vh" }}>
           <h2 style={{ color: "#f87171", fontSize: 18, marginBottom: 12 }}>⚠ This page crashed — {this.state.err.name}</h2>
           <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, color: "#ecc06a", marginBottom: 16 }}>{this.state.err.message}</pre>
           <pre style={{ whiteSpace: "pre-wrap", fontSize: 10.5, color: "#8a8a94", maxHeight: 340, overflow: "auto", lineHeight: 1.5 }}>{this.state.err.stack}</pre>

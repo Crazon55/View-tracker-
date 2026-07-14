@@ -139,7 +139,7 @@ export function DataTable<T>({ columns, rows, empty }: {
               key={i}
               style={{
                 textAlign: c.align ?? "left",
-                fontFamily: "'Geist Mono',monospace",
+                fontFamily: "'JetBrains Mono',monospace",
                 fontSize: 9.5,
                 letterSpacing: ".12em",
                 color: "var(--f-faint)",
