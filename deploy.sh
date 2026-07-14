@@ -30,7 +30,7 @@ echo ""
 echo "=== Rebuilding frontend ==="
 cd "$FRONTEND_DIR"
 pm2 stop all 2>/dev/null || true
-npm ci
+npm ci --no-audit
 npm run build
 pm2 restart all 2>/dev/null || true
 
