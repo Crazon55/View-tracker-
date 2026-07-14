@@ -408,6 +408,33 @@ export const cleanupTeamRoles = () =>
   );
 export const getAllUserRoles = () => fetchApi<{ email: string; name: string; role: string }[]>("/api/v1/user-roles");
 
+// Role → per-area access matrices (unified RBAC overrides)
+export const getRoleAccess = () =>
+  fetchApi<Record<string, Record<string, string>>>("/api/v1/role-access");
+export const setRoleAccess = (role: string, access: Record<string, string>) =>
+  fetchApi<{ role: string; access: Record<string, string> }>(
+    `/api/v1/role-access/${encodeURIComponent(role)}`,
+    { method: "PUT", body: JSON.stringify({ access }) },
+  );
+
+// Per-person access mode ("edit" = full role, "view" = read-only)
+export const getUserAccessModes = () =>
+  fetchApi<Record<string, string>>("/api/v1/user-access-mode");
+export const setUserAccessMode = (email: string, mode: "edit" | "view") =>
+  fetchApi<{ email: string; mode: string }>("/api/v1/user-access-mode", {
+    method: "PUT",
+    body: JSON.stringify({ email, mode }),
+  });
+
+// Per-person area-access matrices
+export const getUserAccess = () =>
+  fetchApi<Record<string, Record<string, string>>>("/api/v1/user-access");
+export const setUserAccess = (email: string, access: Record<string, string>) =>
+  fetchApi<{ email: string; access: Record<string, string> }>("/api/v1/user-access", {
+    method: "PUT",
+    body: JSON.stringify({ email, access }),
+  });
+
 // Idea Thread — assignments + comments
 export const getIdeaAssignments = (ideaId: string) => fetchApi<any[]>(`/api/v1/ideas/${ideaId}/assignments`);
 export const addIdeaAssignment = (ideaId: string, data: { assignee_email: string; assignee_name: string; assigned_by_email: string }) =>
@@ -450,7 +477,9 @@ export function createExpApi(playbook: string) {
       script?: string; status?: string; views?: number; day_date?: string;
       frontseat_pool?: boolean; source_pool_id?: string;
       source?: string; video_format?: string; comp_link?: string;
-      yt_url?: string; yt_timestamps?: string; created_by?: string;
+      yt_url?: string; yt_timestamps?: string; frame_link?: string;
+      kalakar_link?: string; drive_link?: string; created_by?: string;
+      origin_playbook?: string; origin_idea_id?: string;
     }) => fetchApi<any>(`${base}/idea-bank`, { method: "POST", body: JSON.stringify(data) }),
     updateIdea: (id: string, data: Record<string, unknown>) =>
       fetchApi<any>(`${base}/idea-bank/${id}`, { method: "PATCH", body: JSON.stringify(data) }),

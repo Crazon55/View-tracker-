@@ -1,11 +1,15 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from "react";
+import { useSearchParams } from "react-router-dom";
+import { Calendar } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as DayCalendar } from "@/components/ui/calendar";
 import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import {
   canEditExperimentX,
-  getPlaybookAccess,
+  getPlaybookViewProfile,
 } from "@/lib/permissions";
 import { buildPlaybookContext, PLAYBOOK_CONFIGS, type PlaybookId } from "@/lib/playbookExperimentConfig";
 import { PlaybookExperimentContext, usePlaybook } from "@/lib/playbookExperimentContext";
@@ -59,13 +63,17 @@ function expIdeaUpdateMutationOpts(
 // ---------------------------------------------------------------------------
 // Constants (shared across playbooks)
 // ---------------------------------------------------------------------------
-const STAGES = ["new","approved","base_edit","testing","proven_ideas","scheduled","posted","kill"] as const;
+const STAGES = ["new","approved","base_edit","formatted","testing","proven_ideas","scheduled","posted","kill"] as const;
 type IdeaStage = (typeof STAGES)[number];
+
+// Video-editor production board columns (Approved → Base edit → Formatted → Posted).
+const PRODUCTION_STAGES = ["approved","base_edit","formatted","posted"] as const;
 
 const STAGE_LABEL: Record<IdeaStage, string> = {
   new:          "New",
   approved:     "Approved",
   base_edit:    "Base edit",
+  formatted:    "Formatted",
   testing:      "Testing",
   proven_ideas: "Proven",
   scheduled:    "Scheduled",
@@ -77,6 +85,7 @@ const STATUS_STYLE: Record<string, { bg: string; text: string }> = {
   new:          { bg: "rgba(74,127,212,0.15)",   text: "#7BB0FF" },
   approved:     { bg: "rgba(45,158,95,0.15)",    text: "#5AE0A0" },
   base_edit:    { bg: "rgba(123,97,196,0.15)",   text: "#B49EFF" },
+  formatted:    { bg: "rgba(56,189,248,0.15)",   text: "#5AD1FF" },
   testing:      { bg: "rgba(212,149,42,0.15)",   text: "#F0C060" },
   proven_ideas: { bg: "rgba(29,158,117,0.15)",   text: "#50E0B0" },
   scheduled:    { bg: "rgba(83,74,183,0.15)",    text: "#9B8FFF" },
@@ -87,7 +96,7 @@ const STATUS_STYLE: Record<string, { bg: string; text: string }> = {
   killed:       { bg: "rgba(201,59,59,0.15)",    text: "#FF7070" },
 };
 
-type TabMode = "idea-bank" | "content-bank" | "working-ideas" | "frontseat" | "calendar";
+type TabMode = "idea-bank" | "content-bank" | "working-ideas" | "frontseat" | "calendar" | "tracking";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -224,6 +233,30 @@ const btnSecondary: React.CSSProperties = {
   background: "transparent", color: "#a1a1aa", fontSize: 12, cursor: "pointer",
 };
 
+function PbGlassModalShell({ onClose, wide, children }: {
+  onClose: () => void;
+  wide?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="fglass-modal-overlay" onClick={onClose}>
+      <div className="fglass-modal-scrim" />
+      <div
+        onClick={e => e.stopPropagation()}
+        className="fglass-sheet fglass-modal"
+        style={{ maxWidth: wide ? 720 : 680, display: "flex", flexDirection: "column", gap: 14 }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+const pbModalCloseBtn: React.CSSProperties = {
+  background: "none", border: "none", fontSize: 20, cursor: "pointer",
+  padding: "4px 8px", borderRadius: 6, flexShrink: 0,
+};
+
 // ---------------------------------------------------------------------------
 // Inline views editor
 // ---------------------------------------------------------------------------
@@ -243,7 +276,8 @@ function ViewsEdit({ value, onSave }: { value: number; onSave: (v: number) => vo
   }
   const save = () => {
     setEditing(false);
-    const n = parseInt(draft.replace(/[^0-9]/g, ""), 10);
+    const cleaned = draft.replace(/[^0-9]/g, "");
+    const n = cleaned === "" ? 0 : parseInt(cleaned, 10);
     if (!isNaN(n) && n !== value) onSave(n);
   };
   return (
@@ -471,6 +505,72 @@ function opsCardBaselineTag(idea: any) {
   return TEST_RESULTS.find(t => t.value === best);
 }
 
+type PbPerfCfg = { value: string; label: string; color: string; bg: string };
+
+function PbBaselinePill({ testCfg }: { testCfg?: PbPerfCfg | null }) {
+  if (!testCfg) return null;
+  return (
+    <span style={{
+      display: "inline-block", fontSize: 10, fontWeight: 600,
+      padding: "1px 7px", borderRadius: 99,
+      background: testCfg.bg, color: testCfg.color,
+    }}>
+      {testCfg.label}
+    </span>
+  );
+}
+
+function pbKanbanCardClass(isSelected?: boolean, withBaseline?: boolean) {
+  return [
+    "fglass-card",
+    withBaseline ? "pb-baseline-glow" : "",
+    isSelected ? "is-selected" : "",
+  ].filter(Boolean).join(" ");
+}
+
+const pbKanbanCardStyle: React.CSSProperties = {
+  borderRadius: 12, padding: "11px 13px", marginBottom: 6, cursor: "grab",
+};
+
+function pbBaselineGlowStyle(testCfg: PbPerfCfg): React.CSSProperties {
+  return {
+    ["--pb-accent" as string]: testCfg.color,
+    ["--pb-accent-bg" as string]: testCfg.bg,
+  };
+}
+
+/** Glass card with optional baseline gradient glow. */
+function PbKanbanCardShell({
+  testCfg,
+  isSelected,
+  style,
+  children,
+  ...rest
+}: {
+  testCfg?: PbPerfCfg | null;
+  isSelected?: boolean;
+  style?: React.CSSProperties;
+  children: React.ReactNode;
+} & React.HTMLAttributes<HTMLDivElement>) {
+  const hasBaseline = !!testCfg;
+  return (
+    <div
+      {...rest}
+      className={pbKanbanCardClass(isSelected, hasBaseline)}
+      style={{
+        ...pbKanbanCardStyle,
+        minWidth: 0,
+        overflow: "hidden",
+        ...(hasBaseline ? pbBaselineGlowStyle(testCfg!) : {}),
+        ...style,
+        ...(rest.style || {}),
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 /** Content Ops — prominent Today / Yesterday badge. */
 function OpsDayTag({ isToday, size = "md" }: { isToday: boolean; size?: "sm" | "md" | "lg" }) {
   const color = isToday ? "#50E0B0" : "#D4952A";
@@ -505,14 +605,8 @@ function OpsFrontseatPageCard({ idea, letter, todayStr, onClick }: {
   return (
     <div
       onClick={onClick}
-      style={{
-        background: "#18181b", borderRadius: 8, overflow: "hidden",
-        border: `1.5px solid ${dayAccent}44`,
-        borderLeft: `4px solid ${dayAccent}`,
-        cursor: "pointer", marginBottom: 6, transition: "opacity 0.12s",
-      }}
-      onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
-      onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+      className={pbKanbanCardClass()}
+      style={{ ...pbKanbanCardStyle, overflow: "hidden", borderLeft: `3px solid ${dayAccent}` }}
     >
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6,
@@ -553,35 +647,35 @@ function OpsFrontseatPageCard({ idea, letter, todayStr, onClick }: {
 }
 
 /** Content Ops — kanban card with schedule, views, baseline, frame & comp links. */
-function OpsKanbanCard({ idea, onClick }: { idea: any; onClick: () => void }) {
+// Views-updated tint for the Tracking card: green glass once views are logged,
+// neutral grey while they're still pending — reuses the premium pb-baseline-glow.
+const VIEWS_DONE_CFG: PbPerfCfg = { value: "views_done", label: "", color: "#50E0B0", bg: "rgba(80,224,176,0.16)" };
+const VIEWS_PENDING_CFG: PbPerfCfg = { value: "views_pending", label: "", color: "#8b8b96", bg: "rgba(139,139,150,0.10)" };
+
+function OpsKanbanCard({ idea, onClick, isSelected }: { idea: any; onClick: () => void; isSelected?: boolean }) {
   const { pageColors } = usePlaybook();
   const pages = ideaPages(idea);
-  const isTesting = idea.status === "testing";
-  const testCfg = opsCardBaselineTag(idea);
-  const borderColor = isTesting && testCfg ? testCfg.color : "#27272a";
-  const hoverBorder = isTesting && testCfg ? testCfg.color : "#3f3f46";
+  const baselineCfg = opsCardBaselineTag(idea);
   const { date: pgDate, time: pgTime } = opsCardScheduleSummary(idea);
   const viewCount = (idea.views || 0) > 0 ? idea.views : 0;
+  const viewsUpdated = viewCount > 0;
+  const tintCfg = viewsUpdated ? VIEWS_DONE_CFG : VIEWS_PENDING_CFG;
 
   return (
-    <div
-      onClick={onClick}
-      style={{
-        background: isTesting && testCfg ? testCfg.bg : "#18181b",
-        border: `1.5px solid ${borderColor}`,
-        borderLeft: isTesting && testCfg ? `4px solid ${testCfg.color}` : `1.5px solid ${borderColor}`,
-        borderRadius: 9,
-        padding: "10px 12px", marginBottom: 6, cursor: "pointer",
-        transition: "border-color 0.12s",
-      }}
-      onMouseEnter={e => (e.currentTarget.style.borderColor = hoverBorder)}
-      onMouseLeave={e => (e.currentTarget.style.borderColor = borderColor)}
-    >
-      <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 600, color: "#e4e4e7", lineHeight: 1.35 }}>
+    <PbKanbanCardShell testCfg={tintCfg} isSelected={isSelected} onClick={onClick}>
+      <p style={{
+        margin: 0, fontSize: 13, fontWeight: 500, color: "#fff", lineHeight: 1.35,
+        overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", minWidth: 0,
+      } as any}>
         {idea.topic || <em style={{ color: "#52525b", fontWeight: 400 }}>Untitled</em>}
       </p>
+      {baselineCfg && (
+        <div style={{ marginTop: 6 }}>
+          <PbBaselinePill testCfg={baselineCfg} />
+        </div>
+      )}
       {pages.length > 0 && (
-        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8 }}>
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 8, marginBottom: 8 }}>
           {pages.map((pg: string) => {
             const pgc = pageColors[pg] || "#a1a1aa";
             return (
@@ -622,69 +716,71 @@ function OpsKanbanCard({ idea, onClick }: { idea: any; onClick: () => void }) {
           </a>
         )}
       </div>
-      {testCfg && (
-        <div style={{ marginTop: 8 }}>
-          <span style={{ fontSize: 10, fontWeight: 700, color: testCfg.color, background: testCfg.bg, borderRadius: 4, padding: "2px 8px" }}>
-            {testCfg.label}
-          </span>
-        </div>
-      )}
-    </div>
+    </PbKanbanCardShell>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Kanban card (used in Idea Bank board)
+// Kanban card (used in Idea Bank board) — same glass shell as Reel Tracker
 // ---------------------------------------------------------------------------
-function KanbanCard({ idea, onUpdate, onDelete, onClick, readOnly }: {
+function KanbanCard({ idea, onUpdate, onDelete, onClick, readOnly, isSelected }: {
   idea: any;
   onUpdate: (id: string, data: any) => void;
   onDelete: (id: string) => void;
   onClick: () => void;
   readOnly?: boolean;
+  isSelected?: boolean;
 }) {
-  const { pages: playbookPages, pageColors, pageShort, api, id: playbookId } = usePlaybook();
+  const { pageColors } = usePlaybook();
   const pages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
-  const pc = pageColors[pages[0]] || "#a1a1aa";
-  const isTesting = idea.status === "testing";
-  const testCfg = isTesting ? TEST_RESULTS.find(r => r.value === idea.test_result) : null;
-  const borderColor = testCfg ? testCfg.color : "#27272a";
-  const hoverBorder = testCfg ? testCfg.color : "#3f3f46";
+  const testCfg = ideaBaselineCfg(idea);
+  const viewCount = (idea.views || 0) > 0 ? idea.views : 0;
   return (
-    <div
+    <PbKanbanCardShell
+      testCfg={testCfg}
+      isSelected={isSelected}
       draggable={!readOnly}
       onDragStart={readOnly ? undefined : e => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", idea.id); }}
       onClick={onClick}
-      style={{
-        background: testCfg ? testCfg.bg : "#18181b",
-        border: `1.5px solid ${borderColor}`,
-        borderLeft: testCfg ? `4px solid ${testCfg.color}` : `1.5px solid ${borderColor}`,
-        borderRadius: 9,
-        padding: "10px 12px", marginBottom: 6, cursor: "pointer",
-        transition: "border-color 0.12s",
-      }}
-      onMouseEnter={e => (e.currentTarget.style.borderColor = hoverBorder)}
-      onMouseLeave={e => (e.currentTarget.style.borderColor = borderColor)}
     >
-      <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 600, color: "#e4e4e7", lineHeight: 1.35 }}>
+      <p style={{
+        margin: 0, fontSize: 13, fontWeight: 500, color: "#fff", lineHeight: 1.35,
+        overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", minWidth: 0,
+      } as any}>
         {idea.topic || <em style={{ color: "#52525b", fontWeight: 400 }}>Untitled</em>}
       </p>
-      <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
+      {(testCfg || viewCount > 0) && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 6, minWidth: 0 }}>
+          <div style={{ minWidth: 0 }}>{testCfg && <PbBaselinePill testCfg={testCfg} />}</div>
+          {viewCount > 0 && !idea.cross_playbook_views && (
+            <span style={{ fontSize: 10, fontWeight: 700, color: "#50E0B0", flexShrink: 0, whiteSpace: "nowrap" }}>
+              {fmt(viewCount)}
+            </span>
+          )}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 4, marginTop: 6, flexWrap: "wrap", alignItems: "center" }}>
+        <span style={{
+          fontSize: 10, padding: "1px 7px", borderRadius: 99, fontWeight: 500,
+          background: idea.source === "competitor" ? "#EEEDFE" : "#E8F5EE",
+          color: idea.source === "competitor" ? "#534AB7" : "#1A5E3A",
+        }}>
+          {idea.source === "competitor" ? "Comp" : "Orig"}
+        </span>
         {pages.map((pg: string) => {
           const pgc = pageColors[pg] || "#a1a1aa";
-          return <span key={pg} style={{ fontSize: 10, fontWeight: 700, color: pgc, background: pgc + "22", borderRadius: 4, padding: "1px 6px" }}>{pg}</span>;
+          return (
+            <span key={pg} style={{ fontSize: 10, fontWeight: 700, color: pgc, background: pgc + "22", borderRadius: 99, padding: "1px 7px" }}>
+              {pg}
+            </span>
+          );
         })}
-        <span style={{ fontSize: 10, color: "#52525b", background: "#27272a", borderRadius: 4, padding: "1px 6px" }}>
+        <span style={{ fontSize: 10, color: "#a1a1aa", background: "#27272a", borderRadius: 99, padding: "1px 7px" }}>
           {idea.content_type}
         </span>
         {idea.video_format && (
-          <span style={{ fontSize: 10, fontWeight: 600, color: "#50E0B0", background: "rgba(80,224,176,0.1)", borderRadius: 4, padding: "1px 6px" }}>
+          <span style={{ fontSize: 10, fontWeight: 600, color: "#50E0B0", background: "rgba(80,224,176,0.1)", borderRadius: 99, padding: "1px 7px" }}>
             {idea.video_format}
-          </span>
-        )}
-        {(idea.views || 0) > 0 && !idea.cross_playbook_views && (
-          <span style={{ fontSize: 10, fontWeight: 700, color: "#50E0B0", marginLeft: "auto" }}>
-            {fmt(idea.views)}
           </span>
         )}
         <DeployedFromBadge idea={idea} />
@@ -692,23 +788,14 @@ function KanbanCard({ idea, onUpdate, onDelete, onClick, readOnly }: {
       </div>
       <CrossPlaybookViewsBlock idea={idea} />
       {idea.script && (
-        <p style={{ margin: "6px 0 0", fontSize: 10, color: "#52525b", lineHeight: 1.4, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
+        <p className="fglass-muted" style={{ margin: "6px 0 0", fontSize: 10, lineHeight: 1.4, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
           {idea.script}
         </p>
       )}
-      {testCfg && (
-        <div style={{ marginTop: 6 }}>
-          <span style={{ fontSize: 10, fontWeight: 700, color: testCfg.color, background: testCfg.bg, borderRadius: 4, padding: "2px 8px" }}>
-            {testCfg.label}
-          </span>
-        </div>
-      )}
       {(idea.created_by || idea.edited_by) && (
-        <div style={{ display: "flex", gap: 8, marginTop: 7, flexWrap: "wrap", alignItems: "center", borderTop: "1px solid #1f1f22", paddingTop: 6 }}>
+        <div style={{ display: "flex", gap: 8, marginTop: 7, flexWrap: "wrap", alignItems: "center", borderTop: "1px solid rgba(255,255,255,.08)", paddingTop: 6 }}>
           {idea.created_by && (
-            <span style={{ fontSize: 11, color: "#71717a" }}>
-              <span style={{ color: "#52525b", fontSize: 10 }}>Created by </span>{idea.created_by}
-            </span>
+            <span className="fglass-muted" style={{ fontSize: 10 }}>by {idea.created_by}</span>
           )}
           {idea.edited_by && (
             <span style={{ fontSize: 11, color: "#a78bfa", background: "rgba(124,58,237,0.1)", borderRadius: 4, padding: "2px 7px", fontWeight: 500 }}>
@@ -717,7 +804,7 @@ function KanbanCard({ idea, onUpdate, onDelete, onClick, readOnly }: {
           )}
         </div>
       )}
-    </div>
+    </PbKanbanCardShell>
   );
 }
 
@@ -728,7 +815,8 @@ function PostedViewsInput({ value, onSave }: { value: number; onSave: (v: number
   useEffect(() => { if (!dirty.current) setDraft(value > 0 ? String(value) : ""); }, [value]);
   const save = () => {
     dirty.current = false;
-    const n = parseInt(draft.replace(/[^0-9]/g, ""), 10);
+    const cleaned = draft.replace(/[^0-9]/g, "");
+    const n = cleaned === "" ? 0 : parseInt(cleaned, 10);
     if (!isNaN(n) && n !== value) onSave(n);
   };
   return (
@@ -762,7 +850,8 @@ function PerPageViewInput({ value, pageColor, onSave }: { value: number; pageCol
   useEffect(() => { if (!dirty.current) setDraft(value > 0 ? String(value) : ""); }, [value]);
   const save = () => {
     dirty.current = false;
-    const n = parseInt(draft.replace(/[^0-9]/g, ""), 10);
+    const cleaned = draft.replace(/[^0-9]/g, "");
+    const n = cleaned === "" ? 0 : parseInt(cleaned, 10);
     if (!isNaN(n) && n !== value) onSave(n);
   };
   return (
@@ -799,7 +888,7 @@ const STAGE_ACTIONS: Record<string, { label: string; stage: string; bg: string; 
 };
 
 // Inline save text input — same as SafeTextInput in ContentTracker
-function SafeField({ value, onSave, placeholder, style, readOnly }: { value: string | null; onSave: (v: string) => void; placeholder?: string; style?: React.CSSProperties; readOnly?: boolean }) {
+function SafeField({ value, onSave, placeholder, style, readOnly, bare }: { value: string | null; onSave: (v: string) => void; placeholder?: string; style?: React.CSSProperties; readOnly?: boolean; bare?: boolean }) {
   const [local, setLocal] = useState(value || "");
   const dirty = useRef(false);
   useEffect(() => { if (!dirty.current) setLocal(value || ""); }, [value]);
@@ -808,11 +897,12 @@ function SafeField({ value, onSave, placeholder, style, readOnly }: { value: str
   }
   return (
     <input
+      className={bare ? undefined : "fglass-input"}
       value={local}
       onChange={e => { dirty.current = true; setLocal(e.target.value); }}
       onBlur={() => { const next = local.trim(); dirty.current = false; if (next !== (value || "").trim()) onSave(next); }}
       placeholder={placeholder}
-      style={{ width: "100%", padding: "9px 13px", border: "1.5px solid #3f3f46", borderRadius: 9, fontSize: 13, outline: "none", background: "#09090b", color: "#e4e4e7", boxSizing: "border-box", ...style }}
+      style={{ width: "100%", padding: "9px 13px", borderRadius: 9, fontSize: 13, outline: "none", boxSizing: "border-box", ...style }}
     />
   );
 }
@@ -826,11 +916,12 @@ function SafeArea({ value, onSave, placeholder, rows, readOnly }: { value: strin
   }
   return (
     <textarea
+      className="fglass-input"
       value={local} rows={rows || 3}
       onChange={e => { dirty.current = true; setLocal(e.target.value); }}
       onBlur={() => { dirty.current = false; if (local !== value) onSave(local); }}
       placeholder={placeholder}
-      style={{ width: "100%", padding: "9px 13px", border: "1.5px solid #3f3f46", borderRadius: 9, fontSize: 13, outline: "none", background: "#09090b", color: "#e4e4e7", boxSizing: "border-box", resize: "vertical", minHeight: 60 }}
+      style={{ width: "100%", padding: "9px 13px", borderRadius: 9, fontSize: 13, outline: "none", boxSizing: "border-box", resize: "vertical", minHeight: 60 }}
     />
   );
 }
@@ -858,36 +949,25 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
   const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "#71717a", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
 
   return (
-    <div
-      style={{ position: "fixed", inset: 0, zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center" }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} />
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          position: "relative", background: "#18181b", borderRadius: 16,
-          padding: "24px 28px", maxWidth: 680, width: "94%",
-          maxHeight: "88vh", overflowY: "auto",
-          boxShadow: "0 24px 80px rgba(0,0,0,0.5)", border: "1px solid #27272a",
-          display: "flex", flexDirection: "column", gap: 14,
-        }}
-      >
+    <PbGlassModalShell onClose={onClose} wide>
         {/* Title + close */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
-          {readOnly ? (
-            <p style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "#fff" }}>
-              {idea.topic || <em style={{ color: "#52525b", fontWeight: 400 }}>Untitled</em>}
-            </p>
-          ) : (
-            <SafeField
-              value={idea.topic}
-              onSave={v => onUpdate(idea.id, { topic: v })}
-              placeholder="Topic / hook"
-              style={{ fontSize: 16, fontWeight: 600, color: "#fff", border: "none", background: "transparent", padding: "0" }}
-            />
-          )}
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#71717a", padding: "0 4px", flexShrink: 0 }}>✕</button>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 2, paddingBottom: 14, borderBottom: "1px solid rgba(255,255,255,.08)" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {readOnly ? (
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: "#fff", letterSpacing: "-0.02em", lineHeight: 1.35 }}>
+                {idea.topic || <em style={{ color: "#52525b", fontWeight: 400 }}>Untitled</em>}
+              </h2>
+            ) : (
+              <SafeField
+                bare
+                value={idea.topic}
+                onSave={v => onUpdate(idea.id, { topic: v })}
+                placeholder="Topic / hook"
+                style={{ fontSize: 18, fontWeight: 600, color: "#fff", border: "none", background: "transparent", padding: 0, width: "100%", outline: "none" }}
+              />
+            )}
+          </div>
+          <button onClick={onClose} className="fglass-muted" style={pbModalCloseBtn}>✕</button>
         </div>
 
         {/* Stage + source + page tags */}
@@ -977,13 +1057,7 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
                   key={fmt}
                   type="button"
                   onClick={() => onUpdate(idea.id, { video_format: active ? "" : fmt })}
-                  style={{
-                    padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600,
-                    cursor: "pointer",
-                    border: active ? "2px solid #50E0B0" : "1.5px solid #3f3f46",
-                    background: active ? "rgba(80,224,176,0.12)" : "#18181b",
-                    color: active ? "#50E0B0" : "#71717a",
-                  }}
+                  className={`fglass-pill${active ? " is-on-green" : ""}`}
                 >{fmt}</button>
               );
             })}
@@ -1197,8 +1271,7 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
             Delete idea
           </button>
         )}
-      </div>
-    </div>
+    </PbGlassModalShell>
   );
 }
 
@@ -1215,37 +1288,35 @@ function ArchiveRow({ item, onUpdate, onDelete, readOnly }: { item: any; onUpdat
     <>
       <div
         onClick={() => setDetailOpen(true)}
-        style={{
-          background: "#111113", border: "1px solid #27272a", borderRadius: 8,
-          cursor: "pointer", transition: "border-color 0.12s",
-        }}
-        onMouseEnter={e => (e.currentTarget.style.borderColor = "#3f3f46")}
-        onMouseLeave={e => (e.currentTarget.style.borderColor = "#27272a")}
+        className="fglass-card pb-gallery-card"
+        style={{ borderRadius: 14, padding: "12px 14px", cursor: "pointer", display: "flex", flexDirection: "column", gap: 8, minHeight: 108 }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", flexWrap: "wrap" }}>
+        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#fff", lineHeight: 1.35, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
+          {item.topic || <em style={{ color: "#52525b", fontWeight: 400 }}>No topic</em>}
+        </p>
+        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
           {pages.map((pg: string) => {
             const pgc = pageColors[pg] || "#a1a1aa";
-            return <span key={pg} style={{ fontSize: 10, fontWeight: 700, color: pgc, background: pgc + "22", borderRadius: 4, padding: "2px 7px" }}>{pg}</span>;
+            return <span key={pg} style={{ fontSize: 10, fontWeight: 700, color: pgc, background: pgc + "22", borderRadius: 99, padding: "2px 8px" }}>{pg}</span>;
           })}
-          <span style={{ fontSize: 10, color: "#71717a", background: "#27272a", borderRadius: 4, padding: "2px 7px" }}>{item.content_type}</span>
-          <span style={{ fontSize: 10, fontWeight: 600, color: ss.text, background: ss.bg, borderRadius: 4, padding: "2px 6px" }}>{STAGE_LABEL[item.status] || item.status}</span>
-          <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: "#e4e4e7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {item.topic || <em style={{ color: "#52525b" }}>No topic</em>}
-          </span>
-          {item.created_by && (
-            <span style={{ fontSize: 11, color: "#71717a", whiteSpace: "nowrap" }}>
-              <span style={{ color: "#52525b", fontSize: 10 }}>by </span>{item.created_by}
+          <span style={{ fontSize: 10, color: "#a1a1aa", background: "#27272a", borderRadius: 99, padding: "2px 8px" }}>{item.content_type}</span>
+          <span style={{ fontSize: 10, fontWeight: 600, color: ss.text, background: ss.bg, borderRadius: 99, padding: "2px 8px" }}>{STAGE_LABEL[item.status] || item.status}</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: "auto", paddingTop: 6, borderTop: "1px solid rgba(255,255,255,.06)" }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", minWidth: 0 }}>
+            {item.created_by && <span className="fglass-muted" style={{ fontSize: 10 }}>by {item.created_by}</span>}
+            {item.edited_by && (
+              <span style={{ fontSize: 10, color: "#a78bfa", background: "rgba(124,58,237,0.1)", borderRadius: 99, padding: "1px 7px", fontWeight: 500 }}>
+                Edited by {item.edited_by}
+              </span>
+            )}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: item.views > 0 ? "#50E0B0" : "#3f3f46" }}>
+              {item.views > 0 ? fmt(item.views) : "—"}
             </span>
-          )}
-          {item.edited_by && (
-            <span style={{ fontSize: 11, color: "#a78bfa", background: "rgba(124,58,237,0.1)", borderRadius: 4, padding: "2px 7px", fontWeight: 500, whiteSpace: "nowrap" }}>
-              Edited by {item.edited_by}
-            </span>
-          )}
-          <span style={{ fontSize: 12, fontWeight: 600, color: item.views > 0 ? "#50E0B0" : "#3f3f46" }}>
-            {item.views > 0 ? fmt(item.views) : "—"}
-          </span>
-          <span style={{ fontSize: 10, color: "#52525b" }}>Open →</span>
+            <span className="fglass-muted" style={{ fontSize: 10 }}>Open →</span>
+          </div>
         </div>
       </div>
 
@@ -1274,24 +1345,15 @@ function WorkingIdeaDetailModal({ item, onClose }: { item: any; onClose: () => v
   });
 
   const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "#71717a", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
-  const fieldStyle: React.CSSProperties = { width: "100%", padding: "9px 13px", border: "1.5px solid #27272a", borderRadius: 9, fontSize: 13, background: "#09090b", color: "#e4e4e7", boxSizing: "border-box" };
+  const fieldStyle: React.CSSProperties = { width: "100%", padding: "9px 13px", borderRadius: 9, fontSize: 13, boxSizing: "border-box" };
   const pc = pageColors[item.page_handle] || "#a1a1aa";
   const idea = fullIdea || item;
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center" }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} />
-      <div onClick={e => e.stopPropagation()} style={{
-        position: "relative", background: "#18181b", borderRadius: 16,
-        padding: "24px 28px", maxWidth: 620, width: "94%",
-        maxHeight: "88vh", overflowY: "auto",
-        boxShadow: "0 24px 80px rgba(0,0,0,0.5)", border: "1px solid #27272a",
-        display: "flex", flexDirection: "column", gap: 14,
-      }}>
+    <PbGlassModalShell onClose={onClose}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "#fff" }}>{item.topic || "Untitled"}</h2>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#71717a" }}>✕</button>
+          <button onClick={onClose} className="fglass-muted" style={pbModalCloseBtn}>✕</button>
         </div>
 
         {/* Tags */}
@@ -1308,13 +1370,13 @@ function WorkingIdeaDetailModal({ item, onClose }: { item: any; onClose: () => v
           <>
             <div>
               <label style={ls}>Hook variations</label>
-              <pre style={{ ...fieldStyle, margin: 0, whiteSpace: "pre-wrap", fontFamily: "inherit", color: idea.hook_variations ? "#e4e4e7" : "#3f3f46", minHeight: 60 }}>
+              <pre className="fglass-input" style={{ ...fieldStyle, margin: 0, whiteSpace: "pre-wrap", fontFamily: "inherit", color: idea.hook_variations ? "#e4e4e7" : "#3f3f46", minHeight: 60 }}>
                 {idea.hook_variations || "No hook variations added"}
               </pre>
             </div>
             <div>
               <label style={ls}>Script / notes</label>
-              <pre style={{ ...fieldStyle, margin: 0, whiteSpace: "pre-wrap", fontFamily: "inherit", color: idea.script ? "#e4e4e7" : "#3f3f46", minHeight: 60 }}>
+              <pre className="fglass-input" style={{ ...fieldStyle, margin: 0, whiteSpace: "pre-wrap", fontFamily: "inherit", color: idea.script ? "#e4e4e7" : "#3f3f46", minHeight: 60 }}>
                 {idea.script || "No script added"}
               </pre>
             </div>
@@ -1351,16 +1413,15 @@ function WorkingIdeaDetailModal({ item, onClose }: { item: any; onClose: () => v
             </div>
           </>
         )}
-      </div>
-    </div>
+    </PbGlassModalShell>
   );
 }
 
 // Rank badge config — only within Proven Ideas
 const RANK_CONFIG: Record<number, { text: string; bg: string; border: string; label: string }> = {
-  1: { text: "#F0C060", bg: "rgba(240,192,96,0.12)", border: "rgba(240,192,96,0.4)", label: "#1" },
-  2: { text: "#C0C8D8", bg: "rgba(192,200,216,0.08)", border: "rgba(192,200,216,0.25)", label: "#2" },
-  3: { text: "#CD9060", bg: "rgba(205,144,96,0.08)", border: "rgba(205,144,96,0.25)", label: "#3" },
+  1: { text: "#E8C872", bg: "rgba(232,200,114,0.12)", border: "rgba(232,200,114,0.3)", label: "#1" },
+  2: { text: "#B8C8DC", bg: "rgba(184,200,220,0.1)", border: "rgba(184,200,220,0.25)", label: "#2" },
+  3: { text: "#D4A878", bg: "rgba(212,168,120,0.1)", border: "rgba(212,168,120,0.25)", label: "#3" },
 };
 
 // ---------------------------------------------------------------------------
@@ -1372,72 +1433,68 @@ function WorkingRow({ item, rank, onDistribute, readOnly }: { item: any; rank: n
   const pages = (item.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
   const rankCfg = RANK_CONFIG[rank];
 
-  const borderColor = rankCfg
-    ? rankCfg.border
-    : item.distributed ? "#27272a" : "#4c1d95";
-  const hoverBorder = rankCfg
-    ? rankCfg.text + "99"
-    : item.distributed ? "#3f3f46" : "#7c3aed";
-
   return (
     <>
       <div
         onClick={() => setDetailOpen(true)}
+        className="fglass-card pb-gallery-card"
         style={{
-          background: rankCfg ? rankCfg.bg : "#111113",
-          border: `1px solid ${borderColor}`,
-          borderLeft: rankCfg ? `3px solid ${rankCfg.text}` : undefined,
-          borderRadius: 8, overflow: "hidden",
-          opacity: item.distributed ? 0.6 : 1,
+          borderRadius: 16,
+          padding: "14px 15px",
           cursor: "pointer",
-          transition: "border-color 0.12s",
+          opacity: item.distributed ? 0.65 : 1,
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+          minHeight: 168,
         }}
-        onMouseEnter={e => (e.currentTarget.style.borderColor = hoverBorder)}
-        onMouseLeave={e => (e.currentTarget.style.borderColor = borderColor)}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", flexWrap: "wrap" }}>
-          {/* Rank badge */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
           {rankCfg ? (
             <span style={{
               fontSize: 10, fontWeight: 800, color: rankCfg.text,
               background: rankCfg.bg, border: `1px solid ${rankCfg.border}`,
-              borderRadius: 4, padding: "1px 7px", flexShrink: 0,
+              borderRadius: 99, padding: "2px 9px",
             }}>{rankCfg.label}</span>
           ) : (
-            <span style={{ fontSize: 10, color: "#3f3f46", minWidth: 22, textAlign: "right", flexShrink: 0 }}>
-              #{rank}
-            </span>
+            <span className="fglass-muted" style={{ fontSize: 10, fontWeight: 700 }}>#{rank}</span>
           )}
-
-          {pages.map((pg: string) => {
-            const pgc = pageColors[pg] || "#a1a1aa";
-            return <span key={pg} style={{ fontSize: 10, fontWeight: 700, color: pgc, background: pgc + "22", borderRadius: 4, padding: "2px 7px" }}>{pg}</span>;
-          })}
-          <span style={{ fontSize: 10, color: "#71717a", background: "#27272a", borderRadius: 4, padding: "2px 7px" }}>
-            Week {item.week_number}
-          </span>
-          <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: "#e4e4e7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {item.topic || <em style={{ color: "#52525b" }}>No topic</em>}
-          </span>
-          {item.created_by && (
-            <span style={{ fontSize: 11, color: "#71717a", whiteSpace: "nowrap" }}>
-              <span style={{ color: "#52525b", fontSize: 10 }}>by </span>{item.created_by}
-            </span>
-          )}
-          <span style={{ fontSize: 13, fontWeight: 700, color: rankCfg ? rankCfg.text : "#50E0B0", whiteSpace: "nowrap" }}>
+          <span style={{ fontSize: 15, fontWeight: 800, color: "#5AE0A8", letterSpacing: "-0.02em" }}>
             {fmt(item.views_achieved)}
           </span>
-          {item.distributed ? (
-            <span style={{ fontSize: 10, color: "#52525b", fontStyle: "italic" }}>Distributed</span>
-          ) : !readOnly ? (
-            <button
-              onClick={e => { e.stopPropagation(); onDistribute(item.id); }}
-              style={{ ...btnPrimary, padding: "4px 12px", fontSize: 11 }}
-            >
-              Distribute to all pages
-            </button>
-          ) : null}
-          <span style={{ fontSize: 10, color: "#52525b" }}>Open →</span>
+        </div>
+
+        <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "#fff", lineHeight: 1.35, flex: 1, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical" } as any}>
+          {item.topic || <em style={{ color: "#52525b", fontWeight: 400 }}>No topic</em>}
+        </p>
+
+        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+          {pages.map((pg: string) => {
+            const pgc = pageColors[pg] || "#a1a1aa";
+            return <span key={pg} style={{ fontSize: 10, fontWeight: 700, color: pgc, background: pgc + "22", borderRadius: 99, padding: "2px 8px" }}>{pg}</span>;
+          })}
+          <span className="fglass-muted" style={{ fontSize: 10, background: "#27272a", borderRadius: 99, padding: "2px 8px" }}>
+            Week {item.week_number}
+          </span>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,.06)" }}>
+          {item.created_by ? (
+            <span className="fglass-muted" style={{ fontSize: 10 }}>by {item.created_by}</span>
+          ) : <span />}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {item.distributed ? (
+              <span className="fglass-muted" style={{ fontSize: 10, fontStyle: "italic" }}>Distributed</span>
+            ) : !readOnly ? (
+              <button
+                onClick={e => { e.stopPropagation(); onDistribute(item.id); }}
+                style={{ ...btnPrimary, padding: "4px 10px", fontSize: 10, borderRadius: 8 }}
+              >
+                Distribute
+              </button>
+            ) : null}
+            <span className="fglass-muted" style={{ fontSize: 10 }}>Open →</span>
+          </div>
         </div>
       </div>
 
@@ -1497,34 +1554,21 @@ function AddIdeaModal({ open, onAdd, onClose }: {
 
   // Shared label + input styles matching Content Tracker exactly
   const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "#71717a", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
-  const is: React.CSSProperties = { width: "100%", padding: "9px 13px", border: "1.5px solid #3f3f46", borderRadius: 9, fontSize: 13, outline: "none", background: "#09090b", color: "#e4e4e7", boxSizing: "border-box" };
+  const is: React.CSSProperties = { width: "100%", padding: "9px 13px", borderRadius: 9, fontSize: 13, outline: "none", boxSizing: "border-box" };
 
   return (
-    <div
-      style={{ position: "fixed", inset: 0, zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center" }}
-      onClick={onClose}
-    >
-      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} />
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          position: "relative", background: "#18181b", borderRadius: 16,
-          padding: "24px 28px", maxWidth: 520, width: "94%",
-          maxHeight: "88vh", overflowY: "auto",
-          boxShadow: "0 24px 80px rgba(0,0,0,0.5)", border: "1px solid #27272a",
-          display: "flex", flexDirection: "column", gap: 14,
-        }}
-      >
+    <PbGlassModalShell onClose={onClose}>
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
           <h2 style={{ margin: 0, fontSize: 17, fontWeight: 600, color: "#fff", letterSpacing: "-0.02em" }}>Add new idea</h2>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#71717a", padding: "4px 8px", borderRadius: 6 }}>✕</button>
+          <button onClick={onClose} className="fglass-muted" style={pbModalCloseBtn}>✕</button>
         </div>
 
         {/* Title */}
         <div>
           <label style={ls}>Title / description *</label>
           <input
+            className="fglass-input"
             autoFocus value={topic} onChange={e => setTopic(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") submit(); }}
             placeholder="e.g. How Ambani built his first business"
@@ -1540,13 +1584,7 @@ function AddIdeaModal({ open, onAdd, onClose }: {
               {["original", "competitor"].map(s => (
                 <button
                   key={s} onClick={() => setSource(s)}
-                  style={{
-                    flex: 1, padding: "8px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                    border: source === s ? "2px solid #7c3aed" : "1.5px solid #3f3f46",
-                    background: source === s ? "#27272a" : "#18181b",
-                    color: source === s ? "#fff" : "#71717a",
-                    textTransform: "capitalize",
-                  }}
+                  className={`fglass-pill-block${source === s ? " is-on" : ""}`}
                 >
                   {s === "original" ? "Original" : "Competitor"}
                 </button>
@@ -1561,13 +1599,7 @@ function AddIdeaModal({ open, onAdd, onClose }: {
             <label style={ls}>Content type</label>
             <div style={{ display: "flex", gap: 6 }}>
               {["reel", "post"].map(t => (
-                <button key={t} onClick={() => setType(t)} style={{
-                  flex: 1, padding: "8px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                  border: type === t ? "2px solid #7c3aed" : "1.5px solid #3f3f46",
-                  background: type === t ? "#27272a" : "#18181b",
-                  color: type === t ? "#fff" : "#71717a",
-                  textTransform: "capitalize",
-                }}>
+                <button key={t} onClick={() => setType(t)} className={`fglass-pill-block${type === t ? " is-on" : ""}`}>
                   {t === "reel" ? "Reel" : "Post"}
                 </button>
               ))}
@@ -1575,14 +1607,14 @@ function AddIdeaModal({ open, onAdd, onClose }: {
           </div>
           <div style={{ flex: 1 }}>
             <label style={ls}>Date</label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...is, color: "#e4e4e7" }} />
+            <input type="date" className="fglass-input" value={date} onChange={e => setDate(e.target.value)} style={{ ...is, color: "#e4e4e7" }} />
           </div>
         </div>
 
         {/* Created by */}
         <div>
           <label style={ls}>Created by</label>
-          <div style={{ ...is, background: "#27272a", color: "#a1a1aa" }}>{createdBy || "—"}</div>
+          <div className="fglass-input" style={{ ...is, color: "#a1a1aa" }}>{createdBy || "—"}</div>
         </div>
 
         {/* Video format */}
@@ -1593,13 +1625,7 @@ function AddIdeaModal({ open, onAdd, onClose }: {
               <button
                 key={fmt} type="button"
                 onClick={() => setVideoFormat(v => v === fmt ? "" : fmt)}
-                style={{
-                  padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600,
-                  cursor: "pointer",
-                  border: videoFormat === fmt ? "2px solid #50E0B0" : "1.5px solid #3f3f46",
-                  background: videoFormat === fmt ? "rgba(80,224,176,0.12)" : "#18181b",
-                  color: videoFormat === fmt ? "#50E0B0" : "#71717a",
-                }}
+                className={`fglass-pill${videoFormat === fmt ? " is-on-green" : ""}`}
               >{fmt}</button>
             ))}
           </div>
@@ -1609,6 +1635,7 @@ function AddIdeaModal({ open, onAdd, onClose }: {
         <div>
           <label style={ls}>Hook variations (one per line)</label>
           <textarea
+            className="fglass-input"
             value={hookVars} onChange={e => setHookVars(e.target.value)}
             rows={4} placeholder={"Hook variation 1\nHook variation 2\nHook variation 3"}
             style={{ ...is, resize: "vertical", minHeight: 80, color: "#e4e4e7" }}
@@ -1618,14 +1645,14 @@ function AddIdeaModal({ open, onAdd, onClose }: {
         {/* Music ref */}
         <div>
           <label style={ls}>Music reference / suggestions</label>
-          <input value={musicRef} onChange={e => setMusicRef(e.target.value)}
+          <input className="fglass-input" value={musicRef} onChange={e => setMusicRef(e.target.value)}
             placeholder="e.g. Dark cinematic, trending audio XYZ" style={{ ...is, color: "#e4e4e7" }} />
         </div>
 
         {/* Frame link */}
         <div>
           <label style={ls}>Frame link</label>
-          <input value={frameLink} onChange={e => setFrameLink(e.target.value)}
+          <input className="fglass-input" value={frameLink} onChange={e => setFrameLink(e.target.value)}
             placeholder="Google Drive / reference frames link" style={{ ...is, color: "#e4e4e7" }} />
         </div>
 
@@ -1634,12 +1661,12 @@ function AddIdeaModal({ open, onAdd, onClose }: {
           <div style={{ display: "flex", gap: 10 }}>
             <div style={{ flex: 1 }}>
               <label style={ls}>YT link (original source)</label>
-              <input value={ytUrl} onChange={e => setYtUrl(e.target.value)}
+              <input className="fglass-input" value={ytUrl} onChange={e => setYtUrl(e.target.value)}
                 placeholder="https://youtube.com/watch?v=..." style={{ ...is, color: "#e4e4e7" }} />
             </div>
             <div style={{ flex: "0 0 140px" }}>
               <label style={ls}>YT timestamps</label>
-              <input value={ytTs} onChange={e => setYtTs(e.target.value)}
+              <input className="fglass-input" value={ytTs} onChange={e => setYtTs(e.target.value)}
                 placeholder="0:30–1:45" style={{ ...is, color: "#e4e4e7" }} />
             </div>
           </div>
@@ -1647,7 +1674,7 @@ function AddIdeaModal({ open, onAdd, onClose }: {
         {source === "competitor" && (
           <div>
             <label style={ls}>Comp link</label>
-            <input value={compLink} onChange={e => setCompLink(e.target.value)}
+            <input className="fglass-input" value={compLink} onChange={e => setCompLink(e.target.value)}
               placeholder="Competitor reel / post URL" style={{ ...is, color: "#e4e4e7" }} />
           </div>
         )}
@@ -1663,8 +1690,7 @@ function AddIdeaModal({ open, onAdd, onClose }: {
         >
           Add idea
         </button>
-      </div>
-    </div>
+    </PbGlassModalShell>
   );
 }
 
@@ -1684,8 +1710,13 @@ const TEST_RESULTS = [
   { value: "baseline",       label: "Baseline",       color: "#D4952A", bg: "rgba(212,149,42,0.12)" },
   { value: "above_baseline", label: "Above baseline", color: "#4A7FD4", bg: "rgba(74,127,212,0.12)"  },
   { value: "top_line",       label: "Top line",       color: "#2D9E5F", bg: "rgba(45,158,95,0.12)"  },
-  { value: "viral",          label: "Viral",          color: "#B49EFF", bg: "rgba(123,97,196,0.15)" },
+  { value: "viral",          label: "Outlier",        color: "#B49EFF", bg: "rgba(123,97,196,0.15)" },
 ] as const;
+
+function ideaBaselineCfg(idea: any): PbPerfCfg | null {
+  if (!idea?.test_result) return null;
+  return TEST_RESULTS.find(r => r.value === idea.test_result) ?? null;
+}
 
 const TEST_RESULT_RANK: Record<string, number> = {
   viral: 5,
@@ -1748,7 +1779,7 @@ function PerPageIdeaPanel({ idea, onUpdate, canEditSchedule, canEditPerformance,
   const stage = idea.status || "new";
   const editCaption = canEditCaption ?? !!canEditSchedule;
 
-  const patchPageField = (field: "page_posting_dates" | "page_posting_times" | "page_captions", page: string, value: string) => {
+  const patchPageField = (field: "page_posting_dates" | "page_posting_times" | "page_captions" | "page_live_links", page: string, value: string) => {
     const cur = { ...(idea[field] || {}) } as Record<string, string>;
     if (value) cur[page] = value;
     else delete cur[page];
@@ -1784,7 +1815,7 @@ function PerPageIdeaPanel({ idea, onUpdate, canEditSchedule, canEditPerformance,
       ) : pages.map(pg => {
         const pgc = pageColors[pg] || "#a1a1aa";
         const pgDate = ((idea.page_posting_dates || {}) as Record<string, string>)[pg] || "";
-        const pgTime = ((idea.page_posting_times || {}) as Record<string, string>)[pg] || "";
+        const pgLive = ((idea.page_live_links || {}) as Record<string, string>)[pg] || "";
         const pgCaption = ((idea.page_captions || {}) as Record<string, string>)[pg] || "";
         const pgViews = ((idea.page_views || {}) as Record<string, number>)[pg] || 0;
         const pgResult = ((idea.page_test_results || {}) as Record<string, string>)[pg] || "";
@@ -1798,23 +1829,23 @@ function PerPageIdeaPanel({ idea, onUpdate, canEditSchedule, canEditPerformance,
 
             {showSchedule && (
               <>
-                <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-                  <div style={{ flex: 1 }}>
-                    <label style={ls}>Posting date</label>
-                    {canEditSchedule ? (
-                      <input type="date" value={pgDate.slice(0, 10)} onChange={e => patchPageField("page_posting_dates", pg, e.target.value)} style={inp} />
-                    ) : (
-                      <span style={{ fontSize: 13, color: "#e4e4e7" }}>{pgDate ? fmtShortDate(pgDate.slice(0, 10)) : "—"}</span>
-                    )}
-                  </div>
-                  <div style={{ flex: "0 0 130px" }}>
-                    <label style={ls}>Posting time</label>
-                    {canEditSchedule ? (
-                      <input type="time" value={pgTime} onChange={e => patchPageField("page_posting_times", pg, e.target.value)} style={inp} />
-                    ) : (
-                      <span style={{ fontSize: 13, color: "#e4e4e7" }}>{pgTime ? fmtTimeLabel(pgTime) : "—"}</span>
-                    )}
-                  </div>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={ls}>Posting date</label>
+                  {canEditSchedule ? (
+                    <input type="date" value={pgDate.slice(0, 10)} onChange={e => patchPageField("page_posting_dates", pg, e.target.value)} style={inp} />
+                  ) : (
+                    <span style={{ fontSize: 13, color: "#e4e4e7" }}>{pgDate ? fmtShortDate(pgDate.slice(0, 10)) : "—"}</span>
+                  )}
+                </div>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={ls}>Live link</label>
+                  {canEditSchedule ? (
+                    <SafeField bare value={pgLive} onSave={v => patchPageField("page_live_links", pg, v)} placeholder="Instagram post link" style={inp} />
+                  ) : pgLive ? (
+                    <a href={pgLive} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#4A7FD4", wordBreak: "break-all" }}>{pgLive}</a>
+                  ) : (
+                    <span style={{ fontSize: 13, color: "#52525b" }}>—</span>
+                  )}
                 </div>
                 <div style={{ marginBottom: canEditPerformance ? 10 : 0 }}>
                   <label style={ls}>Caption</label>
@@ -1900,21 +1931,8 @@ function ContentOpsIdeaModal({ idea, onUpdate, onClose, viewOnly }: {
   const selectedPages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
 
   return (
-    <div
-      style={{ position: "fixed", inset: 0, zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center" }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} />
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          position: "relative", background: "#18181b", borderRadius: 16,
-          padding: "24px 28px", maxWidth: 560, width: "94%",
-          maxHeight: "88vh", overflowY: "auto",
-          boxShadow: "0 24px 80px rgba(0,0,0,0.5)", border: "1px solid #27272a",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 14 }}>
+    <PbGlassModalShell onClose={onClose}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
           <div>
             <p style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "#fff" }}>
               {idea.topic || <em style={{ color: "#52525b", fontWeight: 400 }}>Untitled</em>}
@@ -1929,7 +1947,7 @@ function ContentOpsIdeaModal({ idea, onUpdate, onClose, viewOnly }: {
               })}
             </div>
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#71717a", padding: "0 4px" }}>✕</button>
+          <button onClick={onClose} className="fglass-muted" style={pbModalCloseBtn}>✕</button>
         </div>
         <OpsViewOnlyLinks idea={idea} />
         <PerPageIdeaPanel
@@ -1941,8 +1959,7 @@ function ContentOpsIdeaModal({ idea, onUpdate, onClose, viewOnly }: {
           showFrameLink={false}
           showCompLink={false}
         />
-      </div>
-    </div>
+    </PbGlassModalShell>
   );
 }
 
@@ -2006,10 +2023,10 @@ function CalendarTab({ pageFilter, search, opsOnly, calendarViewOnly }: {
       <div
         key={`${entry.idea.id}-${entry.page}-${entry.date}`}
         onClick={() => openIdea(entry)}
+        className="fglass-card"
         style={{
-          padding: "6px 8px", marginBottom: 4, borderRadius: 6,
           cursor: calReadOnly && !opsOnly ? "default" : "pointer",
-          background: "#18181b", border: "1px solid #27272a",
+          borderRadius: 10, padding: "6px 8px", marginBottom: 4,
         }}
       >
         {entry.time ? (
@@ -2028,7 +2045,7 @@ function CalendarTab({ pageFilter, search, opsOnly, calendarViewOnly }: {
           {(pgViews || 0) > 0 && (
             <span style={{ fontSize: 9, color: "#50E0B0", fontWeight: 600 }}>{fmt(pgViews)}</span>
           )}
-          {tr && <span style={{ fontSize: 9, fontWeight: 600, color: tr.color }}>{tr.label}</span>}
+          {tr && <PbBaselinePill testCfg={tr} />}
         </div>
       </div>
     );
@@ -2147,7 +2164,7 @@ function CalendarTab({ pageFilter, search, opsOnly, calendarViewOnly }: {
 
 // Stage column dot colors
 const STAGE_DOT: Record<string, string> = {
-  new: "#4A7FD4", approved: "#2D9E5F", base_edit: "#7B61C4",
+  new: "#4A7FD4", approved: "#2D9E5F", base_edit: "#7B61C4", formatted: "#38BDF8",
   testing: "#D4952A", proven_ideas: "#1D9E75", scheduled: "#534AB7",
   posted: "#2D9E5F", kill: "#C93B3B",
 };
@@ -2164,7 +2181,6 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
   const [dropStage, setDropStage] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const autoArchiveDone = useRef(false);
-  const migrationDone = useRef(false);
 
   const { data: settings, isError: settingsError, error: settingsErr } = useQuery({
     queryKey: expQk(playbookId, "settings"),
@@ -2198,17 +2214,9 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
     pastWeeks.forEach(w => archiveMut.mutate(w, { onSuccess: () => qc.invalidateQueries({ queryKey: expQk(playbookId, "content-bank") }) }));
   }, [settings, allIdeas, currentWeek]);
 
-  // One-time migration: posted → proven_ideas
-  useEffect(() => {
-    if (migrationDone.current || allIdeas.length === 0) return;
-    const hasPosted = allIdeas.some((i: any) => i.status === "posted");
-    if (!hasPosted) return;
-    migrationDone.current = true;
-    api.migratePostedToProven().then(() => {
-      qc.invalidateQueries({ queryKey: expQk(playbookId, "idea-bank") });
-      qc.invalidateQueries({ queryKey: expQk(playbookId, "content-bank-all") });
-    });
-  }, [allIdeas, api, playbookId, qc]);
+  // NOTE: the old "posted → proven_ideas" auto-migration was removed — `posted` is now a
+  // first-class production stage (Approved → Base edit → Formatted → Posted), and posted
+  // items feed the CO Tracking view. Auto-converting them would break the loop.
 
   const displayWeek = useMemo(() => {
     const bankIdeas = (allIdeas as any[]).filter((i: any) => !i.frontseat_pool);
@@ -2360,11 +2368,11 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
                   <span style={{ fontSize: 13, fontWeight: 600, color: "#e4e4e7" }}>{STAGE_LABEL[stage as IdeaStage] || stage}</span>
                   <span style={{ fontSize: 12, color: "#52525b" }}>{opsStageCounts[stage] ?? stageIdeas.length}</span>
                 </div>
-                <div style={{ minHeight: 120 }}>
+                <div className="fglass-lane" style={{ minHeight: 120 }}>
                   {stageIdeas.length === 0 ? (
                     <p style={{ fontSize: 11, color: "#3f3f46", textAlign: "center", padding: "24px 8px", border: "1.5px dashed #27272a", borderRadius: 8 }}>Empty</p>
                   ) : stageIdeas.map((idea: any) => (
-                    <OpsKanbanCard key={idea.id} idea={idea} onClick={() => setDetailIdea(idea)} />
+                    <OpsKanbanCard key={idea.id} idea={idea} isSelected={detailIdea?.id === idea.id} onClick={() => setDetailIdea(idea)} />
                   ))}
                 </div>
               </div>
@@ -2386,11 +2394,11 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
     <div>
       {/* Toolbar */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 12, color: "#71717a" }}>
+        <span className="fglass-muted" style={{ fontSize: 12 }}>
           Week {displayWeek}{displayWeek !== currentWeek ? ` (calendar week ${currentWeek})` : ""} · {filtered.length} idea{filtered.length !== 1 ? "s" : ""}
         </span>
         {can('add_experiment_idea') && !readOnly && (
-          <button onClick={() => setAddOpen(true)} style={{ ...btnPrimary, padding: "5px 14px" }}>
+          <button onClick={() => setAddOpen(true)} style={{ ...btnPrimary, padding: "5px 14px", marginLeft: "auto" }}>
             + New idea
           </button>
         )}
@@ -2417,20 +2425,15 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
               setDraggingId(null); setDropStage(null);
             }}
           >
-            {/* Column header */}
-            <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 4px 10px" }}>
+            {/* Column header — label only, not interactive */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, padding: "0 2px" }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: STAGE_DOT[stage] || "#52525b", flexShrink: 0 }} />
               <span style={{ fontSize: 11, fontWeight: 600, color: STATUS_STYLE[stage]?.text || "#a1a1aa" }}>{STAGE_LABEL[stage]}</span>
-              <span style={{ fontSize: 10, color: "#52525b", fontWeight: 500 }}>{stageCounts[stage] ?? 0}</span>
+              <span className="fglass-muted" style={{ fontSize: 10, fontWeight: 500 }}>{stageCounts[stage] ?? 0}</span>
             </div>
 
             {/* Drop zone */}
-            <div style={{
-              minHeight: 60, padding: 2, borderRadius: 9,
-              border: dropStage === stage ? "2px solid #7c3aed" : "2px solid transparent",
-              background: dropStage === stage ? "rgba(124,58,237,0.05)" : "transparent",
-              transition: "all 0.12s",
-            }}>
+            <div className={`fglass-lane${dropStage === stage ? " is-drop-target" : ""}`}>
               {filtered
                 .filter((i: any) => (i.status || "new") === stage)
                 .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -2445,6 +2448,7 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
                     <KanbanCard
                       idea={idea}
                       readOnly={readOnly}
+                      isSelected={detailIdea?.id === idea.id}
                       onUpdate={(id, data) => updateMut.mutate({ id, data })}
                       onDelete={id => deleteMut.mutate(id)}
                       onClick={() => setDetailIdea(idea)}
@@ -2470,6 +2474,528 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
           onUpdate={(id, data) => updateMut.mutate({ id, data })}
           onDelete={readOnly ? undefined : id => deleteMut.mutate(id)}
           onClose={() => setDetailIdea(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Production tab — the video editor's board. CS distributes an idea onto pages
+// in Frontseat, which creates one per-page pipeline copy (shared source_pool_id)
+// in the "approved" stage. Here those copies are GROUPED into one card so the
+// editor edits one idea (one base edit) rather than N page-copies. Advancing
+// Base edit → Formatted → Posted rewrites the underlying copies' status, which
+// is exactly what the Frontseat page cards read — so CS sees progress live.
+// ---------------------------------------------------------------------------
+const PRODUCTION_STAGE_ORDER: Record<string, number> = { approved: 0, base_edit: 1, formatted: 2, posted: 3 };
+
+/** A distributed copy enters production at "approved"; treat any legacy "new" copy as approved. */
+function prodStage(status: string | undefined | null): string {
+  const s = status || "approved";
+  return s === "new" ? "approved" : s;
+}
+
+type ProdCopy = any;
+type ProdGroup = { key: string; topic: string; source: string; content_type: string; created_by: string; copies: ProdCopy[]; pages: string[]; stage: string };
+
+/** Group per-page copies by source_pool_id (fallback id) into one card. The group's
+ *  stage is the furthest-advanced copy — mark any page posted and the card moves to
+ *  Posted; pages that haven't caught up are shown dimmed on the card. */
+function groupBySourcePool(copies: ProdCopy[]): ProdGroup[] {
+  const map = new Map<string, ProdCopy[]>();
+  for (const c of copies) {
+    const key = c.source_pool_id || c.id;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(c);
+  }
+  const groups: ProdGroup[] = [];
+  for (const [key, list] of map) {
+    const pages = [...new Set(list.map((c) => (c.page_handle || "").trim()).filter(Boolean))];
+    const stage = list
+      .map((c) => prodStage(c.status))
+      .reduce((max, s) => (PRODUCTION_STAGE_ORDER[s] > PRODUCTION_STAGE_ORDER[max] ? s : max), "approved");
+    const first = list[0];
+    groups.push({
+      key, topic: first.topic || "", source: first.source, content_type: first.content_type,
+      created_by: first.created_by || "", copies: list, pages, stage,
+    });
+  }
+  return groups;
+}
+
+function ProductionTab({ pageFilter, search, readOnly }: { pageFilter: string; search: string; readOnly?: boolean }) {
+  const { api, id: playbookId, pageColors } = usePlaybook();
+  const qc = useQueryClient();
+  const [detailGroup, setDetailGroup] = useState<ProdGroup | null>(null);
+  const [checklist, setChecklist] = useState<{ group: ProdGroup; to: "formatted" | "posted" } | null>(null);
+  const [draggingKey, setDraggingKey] = useState<string | null>(null);
+  const [dropStage, setDropStage] = useState<string | null>(null);
+
+  const todayStr = toLocalISO(new Date());
+
+  // Fetch TODAY only — the SAME query the Frontseat uses, so Production reads the exact
+  // same rows the CS is distributing (and stays in sync with it). Fetching the whole bank
+  // instead would hit the DB row cap and silently drop today's newest rows.
+  const { data: allIdeas = [], isLoading } = useQuery({
+    queryKey: expQk(playbookId, "idea-bank", "today", todayStr),
+    queryFn: () => api.getIdeaBank({ day_date: todayStr }),
+    staleTime: EXP_STALE_MS,
+    refetchOnWindowFocus: false,
+  });
+
+  // Batch status write across every copy in a group (single base edit → all pages).
+  const batchMut = useMutation({
+    mutationFn: ({ ids, data }: { ids: string[]; data: Record<string, unknown> }) =>
+      Promise.all(ids.map((id) => api.updateIdea(id, data))),
+    onMutate: async ({ ids, data }) => {
+      await qc.cancelQueries({ queryKey: ["exp", playbookId] });
+      const snapshots = qc.getQueriesData<any[]>({ queryKey: ["exp", playbookId] });
+      ids.forEach((id) => mergeExpIdeaInCaches(qc, playbookId, id, data));
+      return { snapshots };
+    },
+    onError: (e: any, _v, ctx: any) => {
+      ctx?.snapshots?.forEach(([key, data]: [unknown, unknown]) => qc.setQueryData(key as any, data));
+      toast.error(e?.message || "Couldn't update");
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["exp", playbookId] }),
+  });
+
+  // Pipeline copies (not pool ideas) sitting in a production stage. Posted copies only
+  // linger on the board for the day they went out — after that they belong to Tracking.
+  const groups = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    const copies = (allIdeas as any[]).filter((i: any) => {
+      if (i.frontseat_pool) return false;
+      // Only ideas CS distributed through Frontseat (they carry source_pool_id) belong on the
+      // production board — this keeps legacy idea-bank rows off it.
+      if (!i.source_pool_id) return false;
+      // Mirror the Frontseat exactly: only today's distributed copies (Frontseat is day-scoped).
+      if ((i.day_date || "").slice(0, 10) !== todayStr) return false;
+      const s = prodStage(i.status);
+      if (!(s in PRODUCTION_STAGE_ORDER)) return false;
+      if (pageFilter !== "all" && !(i.page_handle || "").split(",").some((p: string) => p.trim() === pageFilter)) return false;
+      return true;
+    });
+    let gs = groupBySourcePool(copies);
+    if (q) gs = gs.filter((g) => g.topic.toLowerCase().includes(q));
+    return gs;
+  }, [allIdeas, search, pageFilter, todayStr]);
+
+  // Formatted/Posted ask which pages (page checklist); Approved/Base edit apply to the
+  // whole group directly. Used by both the button and drag-and-drop between columns.
+  const advance = (group: ProdGroup, to: string) => {
+    if (to === "formatted" || to === "posted") {
+      setChecklist({ group, to });
+    } else {
+      batchMut.mutate({ ids: group.copies.map((c) => c.id), data: { status: to } });
+    }
+  };
+
+  const applyChecklist = (group: ProdGroup, to: "formatted" | "posted", pickedPages: string[]) => {
+    const ids = group.copies
+      .filter((c) => pickedPages.includes((c.page_handle || "").trim()))
+      .map((c) => c.id);
+    if (!ids.length) { setChecklist(null); return; }
+    const data: Record<string, unknown> = { status: to };
+    if (to === "posted") {
+      // Each copy is a single-page row → stamp that page's posting date to today.
+      group.copies
+        .filter((c) => ids.includes(c.id))
+        .forEach((c) => {
+          const page = (c.page_handle || "").trim();
+          batchMut.mutate({ ids: [c.id], data: { status: "posted", page_posting_dates: { ...(c.page_posting_dates || {}), [page]: todayStr } } });
+        });
+    } else {
+      batchMut.mutate({ ids, data });
+    }
+    setChecklist(null);
+  };
+
+  if (isLoading) return <p style={{ color: "#52525b", fontSize: 12, padding: "20px 0" }}>Loading…</p>;
+
+  return (
+    <div>
+      <p style={{ fontSize: 12, color: "#71717a", marginBottom: 14 }}>
+        {groups.length} idea{groups.length !== 1 ? "s" : ""} in production · one card per idea (grouped across pages)
+      </p>
+      <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 20, minHeight: "calc(100vh - 260px)" }}>
+        {PRODUCTION_STAGES.map((stage) => {
+          const colGroups = groups.filter((g) => g.stage === stage);
+          return (
+            <div
+              key={stage}
+              style={{ minWidth: 205, maxWidth: 250, flex: "1 0 205px" }}
+              onDragOver={readOnly ? undefined : (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropStage(stage); }}
+              onDragLeave={readOnly ? undefined : () => setDropStage(null)}
+              onDrop={readOnly ? undefined : (e) => {
+                e.preventDefault();
+                const key = e.dataTransfer.getData("text/plain");
+                setDraggingKey(null); setDropStage(null);
+                const g = groups.find((x) => x.key === key);
+                if (g && g.stage !== stage) advance(g, stage);
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, padding: "0 2px" }}>
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: STAGE_DOT[stage] || "#52525b", flexShrink: 0 }} />
+                <span style={{ fontSize: 11, fontWeight: 600, color: STATUS_STYLE[stage]?.text || "#a1a1aa" }}>{STAGE_LABEL[stage]}</span>
+                <span className="fglass-muted" style={{ fontSize: 10, fontWeight: 500 }}>{colGroups.length}</span>
+              </div>
+              <div className={`fglass-lane${dropStage === stage ? " is-drop-target" : ""}`}>
+                {colGroups.length === 0 ? (
+                  <div style={{ padding: "20px 10px", textAlign: "center", color: "#3f3f46", fontSize: 11, border: "1.5px dashed #27272a", borderRadius: 9 }}>Empty</div>
+                ) : colGroups.map((g) => (
+                  <div
+                    key={g.key}
+                    draggable={!readOnly}
+                    onDragStart={readOnly ? undefined : (e) => { setDraggingKey(g.key); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", g.key); }}
+                    onDragEnd={readOnly ? undefined : () => { setDraggingKey(null); setDropStage(null); }}
+                    style={{ opacity: draggingKey === g.key ? 0.4 : 1, transition: "opacity 0.12s" }}
+                  >
+                    <ProductionCard
+                      group={g}
+                      pageColors={pageColors}
+                      readOnly={readOnly}
+                      onOpen={() => setDetailGroup(g)}
+                      onAdvance={(to) => advance(g, to)}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {checklist && (
+        <PageChecklistModal
+          group={checklist.group}
+          to={checklist.to}
+          pageColors={pageColors}
+          onConfirm={(pages) => applyChecklist(checklist.group, checklist.to, pages)}
+          onClose={() => setChecklist(null)}
+        />
+      )}
+      {detailGroup && (
+        <ProductionDetailModal
+          group={detailGroup}
+          pageColors={pageColors}
+          readOnly={readOnly}
+          onAdvance={(to) => advance(detailGroup, to)}
+          onSaveGroup={(data) => batchMut.mutate({ ids: detailGroup.copies.map((c) => c.id), data })}
+          onClose={() => setDetailGroup(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ProductionDetailModal({ group, pageColors, readOnly, onAdvance, onSaveGroup, onClose }: {
+  group: ProdGroup;
+  pageColors: Record<string, string>;
+  readOnly?: boolean;
+  onAdvance: (to: string) => void;
+  onSaveGroup: (data: Record<string, unknown>) => void;
+  onClose: () => void;
+}) {
+  const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "#71717a", marginBottom: 8, letterSpacing: "0.04em", textTransform: "uppercase" };
+  const next = PRODUCTION_NEXT[group.stage];
+  const ss = STATUS_STYLE[group.stage] || STATUS_STYLE.approved;
+  // Reference fields are idea-level (shared across pages) — edits apply to every page copy.
+  const src = group.copies[0] || {};
+  return (
+    <PbGlassModalShell onClose={onClose}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+          <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#fff" }}>{group.topic || "Untitled"}</h3>
+          <span style={{ fontSize: 10, fontWeight: 700, color: ss.text, background: ss.bg, borderRadius: 99, padding: "2px 8px", flexShrink: 0 }}>
+            {STAGE_LABEL[group.stage as IdeaStage] || group.stage}
+          </span>
+        </div>
+        <button onClick={onClose} style={pbModalCloseBtn}>×</button>
+      </div>
+
+      {/* One base edit, but each page has its own hook — the editor edits the base to each. */}
+      <div>
+        <label style={ls}>Hook variations by page</label>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {group.copies.map((c) => {
+            const page = (c.page_handle || "").trim();
+            const col = pageColors[page] || "#a1a1aa";
+            return (
+              <div key={c.id} style={{ border: "1px solid #27272a", borderRadius: 9, padding: "10px 12px", background: "#0f0f11" }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: col, background: col + "22", borderRadius: 99, padding: "2px 9px" }}>{page}</span>
+                <p style={{ margin: "8px 0 0", fontSize: 13, color: "#e4e4e7", whiteSpace: "pre-wrap", lineHeight: 1.4 }}>
+                  {(c.hook_variations || "").trim() || <span style={{ color: "#52525b" }}>No hook yet</span>}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Video format */}
+      <div>
+        <label style={ls}>Video format</label>
+        {readOnly ? (
+          <span style={{ fontSize: 13, color: src.video_format ? "#50E0B0" : "#52525b" }}>{src.video_format || "—"}</span>
+        ) : (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {VIDEO_FORMATS.map((fmt) => {
+              const active = src.video_format === fmt;
+              return (
+                <button key={fmt} type="button" onClick={() => onSaveGroup({ video_format: active ? "" : fmt })} className={`fglass-pill${active ? " is-on-green" : ""}`}>{fmt}</button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Music ref */}
+      <div>
+        <label style={ls}>Music reference / suggestions</label>
+        <SafeField readOnly={readOnly} value={src.music_ref} onSave={(v) => onSaveGroup({ music_ref: v })} placeholder="e.g. Dark cinematic, trending audio" />
+      </div>
+
+      {/* Frame link */}
+      <div>
+        <label style={ls}>Frame link</label>
+        <SafeField readOnly={readOnly} value={src.frame_link} onSave={(v) => onSaveGroup({ frame_link: v })} placeholder="Google Drive / reference frames link" />
+        {src.frame_link && <a href={src.frame_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block", marginTop: 4 }}>{src.frame_link}</a>}
+      </div>
+
+      {/* YT link + timestamps */}
+      <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ flex: 1 }}>
+          <label style={ls}>YT link (original source)</label>
+          <SafeField readOnly={readOnly} value={src.yt_url} onSave={(v) => onSaveGroup({ yt_url: v })} placeholder="https://youtube.com/watch?v=..." />
+        </div>
+        <div style={{ flex: "0 0 140px" }}>
+          <label style={ls}>YT timestamps</label>
+          <SafeField readOnly={readOnly} value={src.yt_timestamps} onSave={(v) => onSaveGroup({ yt_timestamps: v })} placeholder="0:30–1:45" />
+        </div>
+      </div>
+      {src.yt_url && <a href={src.yt_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all" }}>{src.yt_url}</a>}
+
+      {/* Comp link */}
+      <div>
+        <label style={ls}>Comp link</label>
+        <SafeField readOnly={readOnly} value={src.comp_link} onSave={(v) => onSaveGroup({ comp_link: v })} placeholder="Competitor reel / post URL" />
+        {src.comp_link && <a href={src.comp_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block", marginTop: 4 }}>{src.comp_link}</a>}
+      </div>
+
+      {!readOnly && next && (
+        <div style={{ display: "flex", gap: 8 }}>
+          <button type="button" onClick={() => { onAdvance(next.to); onClose(); }} style={btnPrimary}>{next.label}</button>
+          <button type="button" onClick={onClose} style={btnSecondary}>Close</button>
+        </div>
+      )}
+    </PbGlassModalShell>
+  );
+}
+
+const PRODUCTION_NEXT: Record<string, { to: string; label: string } | null> = {
+  approved: { to: "base_edit", label: "Start base edit" },
+  base_edit: { to: "formatted", label: "Mark formatted" },
+  formatted: { to: "posted", label: "Mark posted" },
+  posted: null,
+};
+
+function ProductionCard({ group, pageColors, readOnly, onOpen, onAdvance }: {
+  group: ProdGroup;
+  pageColors: Record<string, string>;
+  readOnly?: boolean;
+  onOpen: () => void;
+  onAdvance: (to: string) => void;
+}) {
+  const next = PRODUCTION_NEXT[group.stage];
+  // Per-page progress ticks — a page is "done for this stage" once its copy reached it.
+  const pageStage = (page: string): string => {
+    const c = group.copies.find((x) => (x.page_handle || "").trim() === page);
+    return prodStage(c?.status);
+  };
+  return (
+    <PbKanbanCardShell isSelected={false} onClick={onOpen}>
+      <p style={{
+        margin: 0, fontSize: 12.5, fontWeight: 500, color: "#fff", lineHeight: 1.3,
+        overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", minWidth: 0,
+      } as any}>
+        {group.topic || <em style={{ color: "#52525b", fontWeight: 400 }}>Untitled</em>}
+      </p>
+      <div style={{ display: "flex", gap: 4, marginTop: 5, flexWrap: "wrap", alignItems: "center" }}>
+        <span style={{ fontSize: 9.5, color: "#a1a1aa", background: "#27272a", borderRadius: 99, padding: "1px 6px" }}>{group.content_type}</span>
+        {group.pages.map((pg) => {
+          const c = pageColors[pg] || "#a1a1aa";
+          // Dim a page that hasn't caught up to the card's furthest stage.
+          const behind = PRODUCTION_STAGE_ORDER[pageStage(pg)] < PRODUCTION_STAGE_ORDER[group.stage];
+          return (
+            <span key={pg} title={behind ? `${pg} · ${STAGE_LABEL[pageStage(pg) as IdeaStage] || pageStage(pg)}` : pg}
+              style={{ fontSize: 9.5, fontWeight: 700, color: c, background: c + "22", borderRadius: 99, padding: "1px 6px", opacity: behind ? 0.4 : 1 }}>
+              {pg}
+            </span>
+          );
+        })}
+        {group.created_by && <span className="fglass-muted" style={{ fontSize: 9.5 }}>· {group.created_by}</span>}
+      </div>
+      {!readOnly && next && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onAdvance(next.to); }}
+          style={{ ...btnPrimary, marginTop: 6, width: "100%", padding: "3px 10px", fontSize: 11, borderRadius: 6 }}
+        >
+          {next.label}
+        </button>
+      )}
+    </PbKanbanCardShell>
+  );
+}
+
+function PageChecklistModal({ group, to, pageColors, onConfirm, onClose }: {
+  group: ProdGroup;
+  to: "formatted" | "posted";
+  pageColors: Record<string, string>;
+  onConfirm: (pages: string[]) => void;
+  onClose: () => void;
+}) {
+  // All pages in the group are pickable (pre-ticked) so this works both directions —
+  // moving forward to the stage, or backtracking a card into it.
+  const allPages = [...new Set(group.copies.map((c) => (c.page_handle || "").trim()).filter(Boolean))];
+  const [picked, setPicked] = useState<string[]>(allPages);
+  const verb = to === "formatted" ? "formatted" : "posted";
+  return (
+    <PbGlassModalShell onClose={onClose}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#fff" }}>Which pages is it {verb} for?</h3>
+        <button onClick={onClose} style={pbModalCloseBtn}>×</button>
+      </div>
+      <p className="fglass-muted" style={{ margin: 0, fontSize: 12 }}>{group.topic || "Untitled idea"}</p>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {allPages.map((p) => {
+          const c = pageColors[p] || "#a1a1aa";
+          const active = picked.includes(p);
+          return (
+            <button key={p} type="button" onClick={() => setPicked((cur) => active ? cur.filter((x) => x !== p) : [...cur, p])}
+              style={{ padding: "8px 14px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                border: active ? `2px solid ${c}` : "1.5px solid #3f3f46", background: active ? c + "22" : "#18181b", color: active ? c : "#71717a" }}>
+              {active ? "✓ " : ""}{p}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+        <button type="button" onClick={() => onConfirm(picked)} disabled={!picked.length} style={{ ...btnPrimary, opacity: picked.length ? 1 : 0.5 }}>
+          Mark {verb}
+        </button>
+        <button type="button" onClick={onClose} style={btnSecondary}>Cancel</button>
+      </div>
+    </PbGlassModalShell>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tracking tab — Content Ops (CO). The daily loop's last step: every piece the
+// editor marked Posted shows here as a card on the day it went out. CO updates
+// views + baseline; those views flow back to the Idea Engine, turning the idea
+// into an "existing" idea. Today / Yesterday toggle to catch anything missed.
+// ---------------------------------------------------------------------------
+function TrackingTab({ pageFilter, search, viewOnly }: { pageFilter: string; search: string; viewOnly?: boolean }) {
+  const { api, id: playbookId } = usePlaybook();
+  const qc = useQueryClient();
+  const todayStr = toLocalISO(new Date());
+  const yesterdayStr = addDays(todayStr, -1);
+  const [targetDay, setTargetDay] = useState<string>(todayStr);
+  const [detail, setDetail] = useState<any>(null);
+  const isCustomDay = targetDay !== todayStr && targetDay !== yesterdayStr;
+  const dayWord = targetDay === todayStr ? "today" : targetDay === yesterdayStr ? "yesterday" : fmtShortDate(targetDay);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  // Fetch just the selected day's rows (fetching the whole bank hits the DB row cap).
+  const { data: allIdeas = [], isLoading } = useQuery({
+    queryKey: expQk(playbookId, "idea-bank", "today", targetDay),
+    queryFn: () => api.getIdeaBank({ day_date: targetDay }),
+    staleTime: EXP_STALE_MS,
+    refetchOnWindowFocus: false,
+  });
+
+  const updateMut = useMutation(expIdeaUpdateMutationOpts(qc, playbookId, api, {
+    onDetail: (id, patch) => setDetail((p: any) => (p?.id === id ? { ...p, ...patch } : p)),
+  }));
+
+  const cards = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    return (allIdeas as any[]).filter((i: any) => {
+      if (i.frontseat_pool) return false;
+      if ((i.status || "") !== "posted") return false;
+      const dates = (i.page_posting_dates || {}) as Record<string, unknown>;
+      const postedOnDay = Object.values(dates).some((d) => String(d).slice(0, 10) === targetDay);
+      if (!postedOnDay) return false;
+      if (pageFilter !== "all" && !(i.page_handle || "").split(",").some((p: string) => p.trim() === pageFilter)) return false;
+      if (q && !(i.topic || "").toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [allIdeas, targetDay, pageFilter, search]);
+
+  const seg: React.CSSProperties = { padding: "6px 14px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer", border: "1px solid #27272a" };
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
+        {([["yesterday", yesterdayStr], ["today", todayStr]] as const).map(([label, iso]) => {
+          const on = targetDay === iso;
+          return (
+            <button key={label} type="button" onClick={() => setTargetDay(iso)}
+              style={{ ...seg, background: on ? "#fff" : "transparent", color: on ? "#000" : "#a1a1aa", borderColor: on ? "#fff" : "#27272a" }}>
+              {label === "today" ? "Today" : "Yesterday"}
+            </button>
+          );
+        })}
+        {/* Any past day — on-brand calendar popover (native picker can't be themed black). */}
+        <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+          <PopoverTrigger asChild>
+            <button type="button"
+              style={{ ...seg, display: "inline-flex", alignItems: "center", gap: 7, cursor: "pointer",
+              background: isCustomDay ? "#fff" : "transparent", color: isCustomDay ? "#000" : "#a1a1aa", borderColor: isCustomDay ? "#fff" : "#27272a" }}>
+              <Calendar size={14} strokeWidth={1.8} />
+              {isCustomDay ? fmtShortDate(targetDay) : "Pick a day"}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-auto p-0 border-white/10 text-zinc-200"
+            style={{ background: "#0a0a0d" }}>
+            <DayCalendar
+              mode="single"
+              selected={new Date(`${targetDay}T00:00:00`)}
+              onSelect={(d) => { if (d) { setTargetDay(toLocalISO(d)); setPickerOpen(false); } }}
+              disabled={{ after: new Date() }}
+              initialFocus
+            />
+          </PopoverContent>
+        </Popover>
+        <span className="fglass-muted" style={{ fontSize: 12, marginLeft: 4 }}>
+          {cards.length} posted {dayWord} · tap a card to update views &amp; baseline
+        </span>
+      </div>
+
+      {isLoading ? (
+        <p style={{ color: "#52525b", fontSize: 12, padding: "20px 0" }}>Loading…</p>
+      ) : cards.length === 0 ? (
+        <div style={{ padding: "56px 0", textAlign: "center", border: "1.5px dashed #27272a", borderRadius: 14 }}>
+          <p style={{ margin: 0, fontSize: 14, color: "#e4e4e7" }}>Nothing posted {dayWord}.</p>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#52525b" }}>When the editor marks content Posted, it lands here to be tracked.</p>
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12, paddingBottom: 20 }}>
+          {cards.map((idea) => (
+            <OpsKanbanCard key={idea.id} idea={idea} isSelected={detail?.id === idea.id} onClick={() => setDetail(idea)} />
+          ))}
+        </div>
+      )}
+
+      {detail && (
+        <ContentOpsIdeaModal
+          idea={detail}
+          viewOnly={viewOnly}
+          onUpdate={(id, data) => updateMut.mutate({ id, data })}
+          onClose={() => setDetail(null)}
         />
       )}
     </div>
@@ -2666,15 +3192,17 @@ function ContentBankTab({ pageFilter, search, readOnly }: { pageFilter: string; 
       ) : (
         grouped.map(([day, items]) => (
           <DayGroup key={day} dateStr={day} count={items.length}>
-            {items.map(item => (
-              <ArchiveRow
-                key={item.id}
-                item={item}
-                readOnly={readOnly}
-                onUpdate={(id, data) => updateMut.mutate({ id, data })}
-                onDelete={id => deleteMut.mutate(id)}
-              />
-            ))}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
+              {items.map(item => (
+                <ArchiveRow
+                  key={item.id}
+                  item={item}
+                  readOnly={readOnly}
+                  onUpdate={(id, data) => updateMut.mutate({ id, data })}
+                  onDelete={id => deleteMut.mutate(id)}
+                />
+              ))}
+            </div>
           </DayGroup>
         ))
       )}
@@ -2741,8 +3269,8 @@ function WorkingIdeasTab({ pageFilter, search, readOnly }: { pageFilter: string;
   return (
     <div>
       {/* Toolbar */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 12, color: "#71717a" }}>View goal:</span>
+      <div className="six-day-glass-bar" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap", padding: "10px 14px", borderRadius: 14 }}>
+        <span className="fglass-muted" style={{ fontSize: 12 }}>View goal:</span>
         {editingGoal ? (
           <>
             <input
@@ -2765,15 +3293,9 @@ function WorkingIdeasTab({ pageFilter, search, readOnly }: { pageFilter: string;
         <span style={{ color: "#52525b", fontSize: 12 }}>· {ideas.length} proven idea{ideas.length !== 1 ? "s" : ""}</span>
 
         {/* Sort toggle */}
-        <div style={{ marginLeft: "auto", display: "flex", background: "#27272a", borderRadius: 7, overflow: "hidden", border: "1px solid #3f3f46" }}>
-          <button
-            onClick={() => setSortBy("views")}
-            style={{ padding: "4px 12px", border: "none", fontSize: 11, fontWeight: 500, cursor: "pointer", background: sortBy === "views" ? "#534AB7" : "transparent", color: sortBy === "views" ? "#fff" : "#71717a" }}
-          >Top views</button>
-          <button
-            onClick={() => setSortBy("date")}
-            style={{ padding: "4px 12px", border: "none", fontSize: 11, fontWeight: 500, cursor: "pointer", background: sortBy === "date" ? "#3f3f46" : "transparent", color: sortBy === "date" ? "#fff" : "#71717a" }}
-          >Recent</button>
+        <div className="six-day-seg" style={{ marginLeft: "auto" }}>
+          <button type="button" className={sortBy === "views" ? "is-on" : ""} onClick={() => setSortBy("views")}>Top views</button>
+          <button type="button" className={sortBy === "date" ? "is-on" : ""} onClick={() => setSortBy("date")}>Recent</button>
         </div>
       </div>
 
@@ -2787,49 +3309,53 @@ function WorkingIdeasTab({ pageFilter, search, readOnly }: { pageFilter: string;
         <>
           {/* Top performer spotlight — only shown when sorted by views */}
           {sortBy === "views" && topIdea && (
-            <div style={{
-              marginBottom: 20, padding: "16px 20px",
-              background: "linear-gradient(135deg, rgba(240,192,96,0.08) 0%, rgba(240,192,96,0.03) 100%)",
-              border: "1.5px solid rgba(240,192,96,0.35)",
-              borderLeft: "4px solid #F0C060",
-              borderRadius: 12,
-            }}>
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+            <div className="fglass-card pb-gallery-spotlight" style={{ marginBottom: 16, padding: "18px 20px", borderRadius: 16 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                    <span style={{ fontSize: 10, fontWeight: 800, color: "#F0C060", background: "rgba(240,192,96,0.15)", border: "1px solid rgba(240,192,96,0.4)", borderRadius: 4, padding: "2px 8px", letterSpacing: "0.04em" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+                    <span style={{
+                      fontSize: 10, fontWeight: 800, color: "#E8C872",
+                      background: "rgba(232,200,114,0.14)", border: "1px solid rgba(232,200,114,0.32)",
+                      borderRadius: 99, padding: "3px 10px", letterSpacing: "0.06em",
+                    }}>
                       TOP IDEA
                     </span>
-                    <span style={{ fontSize: 10, color: "#71717a" }}>Week {topIdea.week_number}</span>
+                    <span className="fglass-muted" style={{ fontSize: 10 }}>Week {topIdea.week_number}</span>
                     {(() => {
                       const pages = (topIdea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
                       return pages.map((pg: string) => {
                         const pgc = pageColors[pg] || "#a1a1aa";
-                        return <span key={pg} style={{ fontSize: 10, fontWeight: 700, color: pgc, background: pgc + "22", borderRadius: 4, padding: "1px 6px" }}>{pg}</span>;
+                        return <span key={pg} style={{ fontSize: 10, fontWeight: 700, color: pgc, background: pgc + "22", borderRadius: 99, padding: "2px 8px" }}>{pg}</span>;
                       });
                     })()}
                   </div>
-                  <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "#fff", lineHeight: 1.4 }}>
+                  <p style={{ margin: 0, fontSize: 17, fontWeight: 600, color: "#fff", lineHeight: 1.35, letterSpacing: "-0.02em" }}>
                     {topIdea.topic || <em style={{ color: "#52525b" }}>No topic</em>}
                   </p>
                   {topIdea.created_by && (
-                    <p style={{ margin: "4px 0 0", fontSize: 11, color: "#71717a" }}>by {topIdea.created_by}</p>
+                    <p className="fglass-muted" style={{ margin: "6px 0 0", fontSize: 11 }}>by {topIdea.created_by}</p>
                   )}
                 </div>
                 <div style={{ textAlign: "right", flexShrink: 0 }}>
-                  <div style={{ fontSize: 26, fontWeight: 800, color: "#F0C060", letterSpacing: "-0.02em" }}>
+                  <div style={{ fontSize: 28, fontWeight: 800, color: "#5AE0A8", letterSpacing: "-0.03em", lineHeight: 1 }}>
                     {fmt(topIdea.views_achieved)}
                   </div>
-                  <div style={{ fontSize: 10, color: "#71717a", fontWeight: 500 }}>views achieved</div>
+                  <div className="fglass-muted" style={{ fontSize: 10, fontWeight: 500, marginTop: 4 }}>views achieved</div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Ranked list */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {filtered.map((item, idx) => (
-              <WorkingRow key={item.id} item={item} rank={idx + 1} readOnly={readOnly} onDistribute={id => distributeMut.mutate(id)} />
+          {/* Gallery grid */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
+            {(sortBy === "views" && topIdea ? filtered.slice(1) : filtered).map((item, idx) => (
+              <WorkingRow
+                key={item.id}
+                item={item}
+                rank={idx + 1 + (sortBy === "views" && topIdea ? 1 : 0)}
+                readOnly={readOnly}
+                onDistribute={id => distributeMut.mutate(id)}
+              />
             ))}
           </div>
         </>
@@ -2974,12 +3500,8 @@ function FrontseatPoolCard({ idea, letter, onDragStart, onClick, onDelete, readO
       draggable={!readOnly}
       onDragStart={readOnly ? undefined : e => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", idea.id); onDragStart(); }}
       onClick={onClick}
-      style={{
-        position: "relative", background: "#18181b", border: "1.5px solid #27272a", borderRadius: 8,
-        padding: "8px 10px", cursor: "grab", marginBottom: 6, transition: "border-color 0.12s",
-      }}
-      onMouseEnter={e => (e.currentTarget.style.borderColor = "#3f3f46")}
-      onMouseLeave={e => (e.currentTarget.style.borderColor = "#27272a")}
+      className={pbKanbanCardClass()}
+      style={{ ...pbKanbanCardStyle, position: "relative" }}
     >
       {!readOnly && onDelete && (
       <button
@@ -3025,14 +3547,8 @@ function FrontseatPageCard({ idea, letter, onClick, onRemoveFromPage }: {
   return (
     <div
       onClick={onClick}
-      style={{
-        background: "#18181b", borderRadius: 8, position: "relative",
-        borderTop: "1.5px solid #27272a", borderRight: "1.5px solid #27272a",
-        borderBottom: "1.5px solid #27272a", borderLeft: `3px solid ${ss.text}`,
-        padding: "8px 10px", cursor: "pointer", marginBottom: 6, transition: "opacity 0.12s",
-      }}
-      onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
-      onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+      className={pbKanbanCardClass()}
+      style={{ ...pbKanbanCardStyle, position: "relative", borderLeft: `3px solid ${ss.text}` }}
     >
       {/* ✕ positioned absolute so it never triggers the card's onClick */}
       {onRemoveFromPage && (
@@ -3238,12 +3754,19 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
     // Prevent duplicate copies for the same pool idea + page combo
     const alreadyAssigned = (ideasByPage[page] || []).some((c: any) => c.source_pool_id === ideaId);
     if (alreadyAssigned) return;
-    // Create a pipeline copy for this page
+    // Create a pipeline copy for this page. An idea that already has a base-edit link
+    // (drive/frame) is an EXISTING idea — the base edit is done, so it skips straight
+    // to the editor's Base edit column; a fresh idea starts at Approved for base editing.
+    // Carry the links so the editor sees the existing edit.
+    const hasBaseEdit = !!(idea.drive_link || idea.frame_link);
     createCopyMut.mutate({
       topic: idea.topic, source: idea.source, content_type: idea.content_type,
-      video_format: idea.video_format || "", status: "new", page_handle: page,
+      video_format: idea.video_format || "", status: hasBaseEdit ? "base_edit" : "approved", page_handle: page,
+      hook_variations: idea.hook_variations || "",
       comp_link: idea.comp_link || "", yt_url: idea.yt_url || "",
-      yt_timestamps: idea.yt_timestamps || "", created_by: idea.created_by || "",
+      yt_timestamps: idea.yt_timestamps || "",
+      frame_link: idea.frame_link || "", drive_link: idea.drive_link || "", kalakar_link: idea.kalakar_link || "",
+      created_by: idea.created_by || "",
       day_date: todayStr, frontseat_pool: false, source_pool_id: ideaId,
     });
     // Track assigned pages on pool idea (for chip display)
@@ -3519,25 +4042,22 @@ export default function PlaybookExperimentPage({ playbookId }: { playbookId: Pla
 function ExperimentXShell() {
   const { pages: playbookPages, id: playbookId, label, emoji } = usePlaybook();
   const { role } = usePermissions();
-  const access = getPlaybookAccess(role, playbookId);
-  const opsOnly = access === "ops";
-  const viewOnly = access === "view";
-  const readOnly = access !== "edit";
-  const [tab, setTab] = useState<TabMode>(() => (opsOnly || viewOnly ? "calendar" : "idea-bank"));
+  // Role decides which tabs show and which are editable (VE → Production only,
+  // CS → Frontseat edit + rest view, CO → edit all).
+  const profile = getPlaybookViewProfile(role, playbookId);
+  const [searchParams] = useSearchParams();
+  // Honor a ?tab= deep-link (e.g. Idea Engine shortcuts land CS on Content
+  // Distribution, VE on Production) when it's a tab this role can see; else the
+  // role's default tab.
+  const [tab, setTab] = useState<TabMode>(() => {
+    const requested = searchParams.get("tab") as TabMode | null;
+    if (requested && (profile?.tabs as TabMode[] | undefined)?.includes(requested)) return requested;
+    return (profile?.defaultTab as TabMode) ?? "idea-bank";
+  });
   const [pageFilter, setPageFilter] = useState("all");
   const [search, setSearch] = useState("");
 
-  const visibleTabs: TabMode[] = opsOnly || viewOnly
-    ? ["calendar", "idea-bank", "frontseat"]
-    : ["frontseat", "idea-bank", "calendar", "content-bank", "working-ideas"];
-
-  const accessLabel =
-    access === "edit" ? null
-    : access === "ops" ? "Ops — view frame, comp & captions · edit schedule, views & baseline"
-    : access === "view" ? "View only"
-    : null;
-
-  if (access === "none") {
+  if (!profile) {
     return (
       <div style={{ minHeight: "100vh", background: "#09090b", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <p style={{ color: "#71717a", fontSize: 14 }}>You don&apos;t have permission to view {label}.</p>
@@ -3545,70 +4065,50 @@ function ExperimentXShell() {
     );
   }
 
-  const tabColors: Record<TabMode, string> = {
-    "frontseat":     "#7c3aed",
-    "idea-bank":     "#3f3f46",
-    "calendar":      "#2563eb",
-    "content-bank":  "#1A5E3A",
-    "working-ideas": "#534AB7",
-  };
+  const visibleTabs = profile.tabs as TabMode[];
+  const canEditTab = (t: TabMode) => profile.edit.includes(t as any);
+
   const tabLabels: Record<TabMode, string> = {
-    "frontseat":     "Frontseat",
-    "idea-bank":     "Idea Bank",
+    "frontseat":     "Content Distribution",
+    "idea-bank":     "Production",
+    "tracking":      "Tracking",
     "calendar":      "Calendar",
     "content-bank":  "Content Bank",
     "working-ideas": "Proven Ideas",
   };
 
   return (
-    <div style={{
-      fontFamily: "'DM Sans','Helvetica Neue',sans-serif",
-      minHeight: "100vh", background: "#09090b", color: "#e4e4e7",
-      padding: "72px 28px 60px 72px",
-    }}>
+    <div className="fglass-page pb-page" style={{ padding: "16px 20px 40px 64px" }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
       {/* Header */}
-      <div style={{ marginBottom: 20 }}>
+      <div className="fglass-divider" style={{ marginBottom: 14, paddingBottom: 12, borderBottomWidth: 1, borderBottomStyle: "solid" }}>
         <h1 style={{ fontSize: 20, fontWeight: 700, color: "#fff", margin: 0, letterSpacing: "-0.02em" }}>
           {label} <span style={{ fontSize: 15 }}>{emoji}</span>
         </h1>
-        <p style={{ fontSize: 12, color: "#52525b", margin: "4px 0 0" }}>
+        <p className="fglass-muted" style={{ fontSize: 12, margin: "4px 0 0" }}>
           {playbookPages.length} pages · {playbookPages.join(", ")}
-          {accessLabel && (
-            <span style={{ marginLeft: 10, color: access === "ops" ? "#a78bfa" : "#71717a", fontWeight: 600 }}>
-              · {accessLabel}
-            </span>
-          )}
         </p>
       </div>
 
-      {/* Filter bar */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22, flexWrap: "wrap" }}>
-        {/* Tab switcher */}
-        <div style={{ display: "flex", background: "#27272a", borderRadius: 7, overflow: "hidden", border: "1px solid #3f3f46" }}>
-          {visibleTabs.map(t => (
-            <button
-              key={t}
-              onClick={() => { setTab(t); setSearch(""); }}
-              style={{
-                padding: "5px 14px", border: "none", fontSize: 12, fontWeight: 500, cursor: "pointer",
-                background: tab === t ? tabColors[t] : "transparent",
-                color: tab === t ? "#fff" : "#71717a",
-              }}
-            >
-              {tabLabels[t]}
-            </button>
-          ))}
-        </div>
-
-        {/* Page filter */}
+      {/* Tab switcher — single glass seg, no outer bar */}
+      <div className="six-day-seg" style={{ marginBottom: 10 }}>
+        {visibleTabs.map(t => (
+          <button
+            key={t}
+            type="button"
+            className={tab === t ? "is-on" : ""}
+            onClick={() => { setTab(t); setSearch(""); }}
+          >
+            {tabLabels[t]}
+          </button>
+        ))}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 22, flexWrap: "wrap" }}>
         <select value={pageFilter} onChange={e => setPageFilter(e.target.value)} style={sel}>
           <option value="all">All pages</option>
           {playbookPages.map(p => <option key={p} value={p}>{p}</option>)}
         </select>
-
-        {/* Search */}
         <input
           placeholder="Search ideas…"
           value={search}
@@ -3617,13 +4117,15 @@ function ExperimentXShell() {
         />
       </div>
 
-      {/* Tab content */}
-      <div style={{ maxWidth: (tab === "idea-bank" || tab === "frontseat" || tab === "calendar") ? "none" : 860 }}>
-        {tab === "frontseat"     && <FrontseatTab readOnly={readOnly} opsOnly={opsOnly} />}
-        {tab === "idea-bank"     && <IdeaBankTab pageFilter={pageFilter} search={search} readOnly={readOnly} opsOnly={opsOnly} />}
-        {tab === "calendar"      && <CalendarTab pageFilter={pageFilter} search={search} opsOnly={opsOnly} calendarViewOnly={viewOnly} />}
-        {tab === "content-bank"  && <ContentBankTab pageFilter={pageFilter} search={search} readOnly={readOnly} />}
-        {tab === "working-ideas" && <WorkingIdeasTab pageFilter={pageFilter} search={search} readOnly={readOnly} />}
+      {/* Tab content — per-tab edit rights come from the role's view profile. */}
+      <div>
+        {tab === "frontseat"     && <FrontseatTab readOnly={!canEditTab("frontseat")} />}
+        {/* Idea Bank IS the video-editor Production board (Approved → Base edit → Formatted → Posted). */}
+        {tab === "idea-bank"     && <ProductionTab pageFilter={pageFilter} search={search} readOnly={!canEditTab("idea-bank")} />}
+        {tab === "tracking"      && <TrackingTab pageFilter={pageFilter} search={search} viewOnly={!canEditTab("tracking")} />}
+        {tab === "calendar"      && <CalendarTab pageFilter={pageFilter} search={search} calendarViewOnly={!canEditTab("calendar")} />}
+        {tab === "content-bank"  && <ContentBankTab pageFilter={pageFilter} search={search} readOnly={!canEditTab("content-bank")} />}
+        {tab === "working-ideas" && <WorkingIdeasTab pageFilter={pageFilter} search={search} readOnly={!canEditTab("working-ideas")} />}
       </div>
     </div>
   );

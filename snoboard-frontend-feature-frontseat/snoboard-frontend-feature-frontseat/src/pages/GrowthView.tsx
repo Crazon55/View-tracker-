@@ -39,11 +39,11 @@ function MonthSection({ month, views }: { month: string; views: any[] }) {
   const stage2 = views.filter((v) => v.stage === 2).sort((a: any, b: any) => (b.views ?? 0) - (a.views ?? 0));
 
   return (
-    <div className="border border-zinc-800 rounded-2xl overflow-hidden">
+    <div className="fglass-panel fglass-purple-shadow rounded-2xl overflow-hidden">
       {/* Month header */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-8 py-6 bg-zinc-900 hover:bg-zinc-800/50 transition-colors"
+        className="w-full flex items-center justify-between px-8 py-6 hover:bg-white/[0.03] transition-colors"
       >
         <div className="flex items-center gap-4">
           {expanded ? <ChevronDown className="w-5 h-5 text-zinc-500" /> : <ChevronRight className="w-5 h-5 text-zinc-500" />}
@@ -52,7 +52,7 @@ function MonthSection({ month, views }: { month: string; views: any[] }) {
         <div className="flex items-center gap-3">
           <TrendingUp className="w-5 h-5 text-violet-400" />
           <span className="text-2xl font-black text-violet-400 tabular-nums">{formatCompact(totalViews)}</span>
-          <span className="text-sm text-zinc-500">total views</span>
+          <span className="text-sm fglass-meta">total views</span>
         </div>
       </button>
 
@@ -65,7 +65,7 @@ function MonthSection({ month, views }: { month: string; views: any[] }) {
               <div className="flex items-center gap-3 mb-5">
                 <div className="w-3 h-3 rounded-full bg-emerald-500" />
                 <h3 className="text-lg font-bold text-white">Stage 3 — Main IPs</h3>
-                <span className="text-sm text-zinc-500">
+                <span className="text-sm fglass-meta">
                   {formatCompact(stage3.reduce((s, v) => s + (v.views ?? 0), 0))} views
                 </span>
               </div>
@@ -79,7 +79,7 @@ function MonthSection({ month, views }: { month: string; views: any[] }) {
               <div className="flex items-center gap-3 mb-5">
                 <div className="w-3 h-3 rounded-full bg-amber-500" />
                 <h3 className="text-lg font-bold text-white">Stage 2</h3>
-                <span className="text-sm text-zinc-500">
+                <span className="text-sm fglass-meta">
                   {formatCompact(stage2.reduce((s, v) => s + (v.views ?? 0), 0))} views
                 </span>
               </div>
@@ -93,7 +93,7 @@ function MonthSection({ month, views }: { month: string; views: any[] }) {
               <div className="flex items-center gap-3 mb-5">
                 <div className="w-3 h-3 rounded-full bg-blue-500" />
                 <h3 className="text-lg font-bold text-white">Stage 1</h3>
-                <span className="text-sm text-zinc-500">
+                <span className="text-sm fglass-meta">
                   {formatCompact(stage1.reduce((s, v) => s + (v.views ?? 0), 0))} views
                 </span>
               </div>
@@ -108,46 +108,46 @@ function MonthSection({ month, views }: { month: string; views: any[] }) {
 
 function GrowthTable({ views, totalViews, showFollowers = false }: { views: any[]; totalViews: number; showFollowers?: boolean }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full">
+    <div className="growth-table-wrap overflow-x-auto rounded-xl border border-white/[0.06] bg-black/35">
+      <table className="growth-table w-full">
         <thead>
-          <tr className="border-b border-zinc-800">
-            <th className="text-left text-zinc-500 text-xs uppercase tracking-wider py-3 px-4 w-64">IP</th>
-            {showFollowers && <th className="text-right text-zinc-500 text-xs uppercase tracking-wider py-3 px-4">Followers Gained</th>}
-            <th className="text-right text-zinc-500 text-xs uppercase tracking-wider py-3 px-4">Views</th>
-            <th className="text-right text-zinc-500 text-xs uppercase tracking-wider py-3 px-4 w-28">% Share</th>
+          <tr className="border-b border-white/[0.08]">
+            <th className="text-left fglass-meta text-xs uppercase tracking-wider py-3 px-4 w-64">IP</th>
+            {showFollowers && <th className="text-right fglass-meta text-xs uppercase tracking-wider py-3 px-4">Followers Gained</th>}
+            <th className="text-right fglass-meta text-xs uppercase tracking-wider py-3 px-4">Views</th>
+            <th className="text-right fglass-meta text-xs uppercase tracking-wider py-3 px-4 w-28">% Share</th>
           </tr>
         </thead>
         <tbody>
           {views.map((v) => (
-            <tr key={v.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/20 transition-colors">
+            <tr key={v.id} className="border-b border-white/[0.05] hover:bg-white/[0.03] transition-colors">
               <td className="py-4 px-4">
                 <span className="text-base font-semibold text-white">@{v.handle}</span>
               </td>
               {showFollowers && (
-                <td className="py-4 px-4 text-right font-mono text-base text-zinc-400 tabular-nums">
+                <td className="py-4 px-4 text-right font-mono text-base fglass-muted tabular-nums">
                   {(v.followers_gained ?? 0) > 0 ? (v.followers_gained).toLocaleString() : "—"}
                 </td>
               )}
               <td className="py-4 px-4 text-right font-mono text-base font-bold text-white tabular-nums">{(v.views ?? 0).toLocaleString()}</td>
-              <td className="py-4 px-4 text-right text-sm text-zinc-500">
+              <td className="py-4 px-4 text-right text-sm fglass-meta">
                 {totalViews > 0 ? (((v.views ?? 0) / totalViews) * 100).toFixed(1) + "%" : "—"}
               </td>
             </tr>
           ))}
         </tbody>
         <tfoot>
-          <tr className="border-t border-zinc-700">
-            <td className="py-4 px-4 text-sm font-bold text-zinc-400">Total</td>
+          <tr className="border-t border-white/[0.1] bg-black/25">
+            <td className="py-4 px-4 text-sm font-bold fglass-muted">Total</td>
             {showFollowers && (
-              <td className="py-4 px-4 text-right font-mono text-sm font-bold text-zinc-400 tabular-nums">
+              <td className="py-4 px-4 text-right font-mono text-sm font-bold fglass-muted tabular-nums">
                 {views.reduce((s, v) => s + (v.followers_gained ?? 0), 0).toLocaleString()}
               </td>
             )}
             <td className="py-4 px-4 text-right font-mono text-sm font-bold text-white tabular-nums">
               {views.reduce((s, v) => s + (v.views ?? 0), 0).toLocaleString()}
             </td>
-            <td className="py-4 px-4 text-right text-sm text-zinc-500">
+            <td className="py-4 px-4 text-right text-sm fglass-meta">
               {totalViews > 0 ? ((views.reduce((s, v) => s + (v.views ?? 0), 0) / totalViews) * 100).toFixed(1) + "%" : "—"}
             </td>
           </tr>
@@ -230,10 +230,10 @@ export default function GrowthView() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-950">
+      <div className="fglass-page min-h-screen flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-zinc-500 text-sm">Loading growth data...</p>
+          <p className="fglass-muted text-sm">Loading growth data...</p>
         </div>
       </div>
     );
@@ -243,18 +243,18 @@ export default function GrowthView() {
   const grandTotal = filteredViews.reduce((s: number, v: any) => s + (v.views ?? 0), 0);
 
   return (
-    <div className="min-h-screen bg-zinc-950 px-6 py-10">
+    <div className="fglass-page min-h-screen px-6 py-10">
       <div className="max-w-7xl mx-auto space-y-10">
 
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-black text-white uppercase tracking-wider">Growth</h1>
-            <p className="text-sm text-zinc-500 mt-2">Monthly views breakdown by page and stage</p>
+            <p className="fglass-muted text-sm mt-2">Monthly views breakdown by page and stage</p>
           </div>
           <div className="flex items-center gap-4">
             <div className="text-right">
-              <p className="text-xs text-zinc-500 uppercase tracking-wider">All Time Total</p>
+              <p className="text-xs fglass-meta uppercase tracking-wider">All Time Total</p>
               <p className="text-3xl font-black text-violet-400 tabular-nums">{formatCompact(grandTotal)}</p>
             </div>
             <Select value={selectedPage} onValueChange={setSelectedPage}>
@@ -273,11 +273,11 @@ export default function GrowthView() {
 
         {/* Overview Chart — Total / Reels / Posts / Followers line graph */}
         {chartData.length > 0 && (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8">
-            <h2 className="text-sm uppercase tracking-[0.2em] text-zinc-400 font-semibold mb-6">
+          <div className="fglass-panel fglass-purple-shadow rounded-2xl p-8">
+            <h2 className="text-sm uppercase tracking-[0.2em] fglass-label font-semibold mb-6">
               Total Monthly Views · Reels · Posts · Followers Gained
             </h2>
-            <p className="text-xs text-zinc-600 mb-4">Click a data point to see page-wise breakdown</p>
+            <p className="text-xs fglass-meta mb-4">Click a data point to see page-wise breakdown</p>
             <ResponsiveContainer width="100%" height={450}>
               <LineChart data={chartData} margin={{ top: 10, right: 60, bottom: 10, left: 10 }}
                 onClick={(e: any) => {
@@ -323,9 +323,9 @@ export default function GrowthView() {
           const barData = monthViews.map((v: any) => ({ handle: `@${v.handle}`, views: v.views ?? 0 }));
 
           return (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8">
+            <div className="fglass-panel fglass-purple-shadow rounded-2xl p-8">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-sm uppercase tracking-[0.2em] text-zinc-400 font-semibold">
+                <h2 className="text-sm uppercase tracking-[0.2em] fglass-label font-semibold">
                   {monthLabel} — Page Breakdown
                 </h2>
                 <button onClick={() => setDrillMonth(null)} className="text-xs text-zinc-500 hover:text-white transition-colors">Close</button>

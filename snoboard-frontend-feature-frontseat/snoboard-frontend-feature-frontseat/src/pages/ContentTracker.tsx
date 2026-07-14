@@ -301,6 +301,7 @@ function SafeTextInput({value, onSave, style, placeholder, type}: {value: string
   return (
     <input
       type={type || "text"}
+      className="fglass-input"
       value={local}
       onChange={e => { dirty.current = true; setLocal(e.target.value); }}
       onBlur={() => {
@@ -321,6 +322,7 @@ function SafeTextArea({value, onSave, style, placeholder, rows}: {value: string;
   useEffect(() => { if (!dirty.current) setLocal(value || ""); }, [value]);
   return (
     <textarea
+      className="fglass-input"
       value={local}
       onChange={e => { dirty.current = true; setLocal(e.target.value); }}
       onBlur={() => {
@@ -337,12 +339,12 @@ function SafeTextArea({value, onSave, style, placeholder, rows}: {value: string;
 function Modal({open,onClose,title,children,wide}: {open:boolean;onClose:()=>void;title:string;children:React.ReactNode;wide?:boolean}){
   if(!open) return null;
   return (
-    <div style={{position:"fixed",inset:0,zIndex:999,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={onClose}>
-      <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.6)",backdropFilter:"blur(4px)"}}/>
-      <div onClick={e=>e.stopPropagation()} style={{position:"relative",background:"#18181b",borderRadius:16,padding:"24px 28px",maxWidth:wide?720:520,width:"94%",maxHeight:"88vh",overflowY:"auto",boxShadow:"0 24px 80px rgba(0,0,0,0.5)",border:"1px solid #27272a"}}>
+    <div className="fglass-modal-overlay" onClick={onClose}>
+      <div className="fglass-modal-scrim"/>
+      <div onClick={e=>e.stopPropagation()} className="fglass-sheet fglass-modal" style={{maxWidth:wide?720:520}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
           <h2 style={{margin:0,fontSize:17,fontWeight:600,color:"#fff",letterSpacing:"-0.02em"}}>{title}</h2>
-          <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#71717a",padding:"4px 8px",borderRadius:6}}>✕</button>
+          <button onClick={onClose} className="fglass-muted" style={{background:"none",border:"none",fontSize:20,cursor:"pointer",padding:"4px 8px",borderRadius:6}}>✕</button>
         </div>
         {children}
       </div>
@@ -441,15 +443,14 @@ function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove,stage}: {po:any;
   );
 }
 
-function IdeaCard({idea,niches,onClick}: {idea:any;niches:any[];onClick:()=>void}){
+function IdeaCard({idea,niches,onClick,isSelected}: {idea:any;niches:any[];onClick:()=>void;isSelected?:boolean}){
   const ideaNiches=niches.filter((n: any)=>(idea.nicheIds||[]).includes(n.id));
   const pc=idea.postings?.length||0;
   const bp=idea.postings?.reduce((b: string|null, p: any)=>{const t=gPerf(p.views,p.baselineViews);const o: Record<string,number>={viral:4,topline:3,baseline:2,below:1};return(o[t||""]||0)>(o[b||""]||0)?t:b;},null);
   const hv=idea.hook_variations?.length||0;
   const shareUrl = `${window.location.origin}/content-tracker?idea=${idea.id}`;
   return(
-    <div onClick={onClick} style={{background:"#18181b",borderRadius:10,padding:"11px 13px",marginBottom:5,border:"1px solid #27272a",cursor:"grab",transition:"box-shadow 0.15s",position:"relative"}}
-      onMouseEnter={e=>(e.currentTarget.style.boxShadow="0 3px 12px rgba(0,0,0,0.3)")} onMouseLeave={e=>(e.currentTarget.style.boxShadow="none")}>
+    <div onClick={onClick} className={`fglass-card fglass-purple-shadow${isSelected ? " is-selected" : ""}`} style={{borderRadius:12,padding:"11px 13px",marginBottom:6,cursor:"grab"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
         <p style={{margin:0,fontSize:13,fontWeight:500,color:"#fff",lineHeight:1.35,flex:1}}>{idea.title}</p>
         <div style={{display:"flex",gap:4,alignItems:"center",flexShrink:0}}>
@@ -470,14 +471,14 @@ function IdeaCard({idea,niches,onClick}: {idea:any;niches:any[];onClick:()=>void
       <div style={{display:"flex",gap:4,marginTop:6,flexWrap:"wrap",alignItems:"center"}}>
         <span style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:idea.source==="competitor"?"#EEEDFE":"#E8F5EE",color:idea.source==="competitor"?"#534AB7":"#1A5E3A",fontWeight:500}}>{idea.source==="competitor"?"Comp":"Orig"}</span>
         {ideaNiches.map((n: any)=><span key={n.id} style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:"#27272a",color:"#a1a1aa",fontWeight:500}}>{n.name}</span>)}
-        {pc>0&&<span style={{fontSize:10,color:"#52525b",fontWeight:500}}>{pc}pg</span>}
+        {pc>0&&<span className="fglass-muted" style={{fontSize:10,fontWeight:500}}>{pc}pg</span>}
       </div>
       {/* Info row */}
       <div style={{marginTop:5,display:"flex",flexDirection:"column",gap:2}}>
         {idea.tags?.includes("comp_research")&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:99,background:"rgba(212,118,42,0.15)",color:"#F0A050",fontWeight:600,alignSelf:"flex-start"}}>COMP RESEARCH</span>}
-        {idea.created_by&&<span style={{fontSize:10,color:"#52525b"}}>by {idea.created_by}</span>}
-        {hv>0&&<span style={{fontSize:10,color:"#52525b"}}>{hv} hook{hv>1?"s":""}</span>}
-        {idea.music_ref&&<span style={{fontSize:10,color:"#3f3f46",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>♪ {idea.music_ref}</span>}
+        {idea.created_by&&<span className="fglass-muted" style={{fontSize:10}}>by {idea.created_by}</span>}
+        {hv>0&&<span className="fglass-muted" style={{fontSize:10}}>{hv} hook{hv>1?"s":""}</span>}
+        {idea.music_ref&&<span className="fglass-muted" style={{fontSize:10,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",opacity:.75}}>♪ {idea.music_ref}</span>}
         {((idea.comp_link || idea.link) || idea.yt_url || idea.frame_link || idea.kalakar_link) && (
           <div
             style={{display:"flex",flexWrap:"wrap",gap:8,alignItems:"center"}}
@@ -1081,8 +1082,8 @@ export default function ContentTracker(){
     setEditNiche(null);
   }
 
-  const is: React.CSSProperties={width:"100%",padding:"9px 13px",border:"1.5px solid #3f3f46",borderRadius:9,fontSize:13,outline:"none",background:"#09090b",boxSizing:"border-box"};
-  const ls: React.CSSProperties={display:"block",fontSize:11,fontWeight:600,color:"#71717a",marginBottom:4,letterSpacing:"0.04em",textTransform:"uppercase"};
+  const is: React.CSSProperties={width:"100%",padding:"9px 13px",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",color:"rgba(244,244,247,.95)"};
+  const ls: React.CSSProperties={};
   const bp: React.CSSProperties={padding:"9px 20px",background:"#7c3aed",color:"#fff",border:"none",borderRadius:9,fontSize:13,fontWeight:600,cursor:"pointer"};
   const bs: React.CSSProperties={padding:"9px 20px",background:"#27272a",color:"#e4e4e7",border:"1px solid #3f3f46",borderRadius:9,fontSize:13,fontWeight:500,cursor:"pointer"};
 
@@ -1124,11 +1125,11 @@ export default function ContentTracker(){
   }
 
   return(
-    <div style={{fontFamily:"'DM Sans','Helvetica Neue',sans-serif",minHeight:"100vh",background:"#09090b",color:"#fff"}}>
+    <div className="fglass-page" style={{fontFamily:"'DM Sans','Helvetica Neue',sans-serif",minHeight:"100vh",color:"#fff"}}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 
       {/* Header — left padded to clear hamburger menu */}
-      <div style={{padding:"20px 24px 12px 70px",borderBottom:"1px solid #27272a",background:"#09090b"}}>
+      <div className="fglass-divider" style={{padding:"20px 24px 12px 70px",borderBottomWidth:1,borderBottomStyle:"solid",background:"transparent"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
           <div>
             <h1 style={{margin:0,fontSize:20,fontWeight:700,letterSpacing:"-0.03em"}}>Content tracker</h1>
@@ -1207,39 +1208,7 @@ export default function ContentTracker(){
                 </>
               )}
             </div>
-            <p
-              style={{ margin: "6px 0 0", fontSize: 11, color: "#a1a1aa", lineHeight: 1.5, maxWidth: 920 }}
-              title="In-scope = ideas created in the STATS SCOPE above. Source % is within that set. Scaled = those ideas currently in Proven, Scheduled, or Posted. Killed = ideas currently in Killed whose killed date falls in scope (or legacy: created in scope if killed date is missing)."
-            >
-              <span style={{ color: "#a1a1aa" }}>
-                {ideasForHeaderStats.length} in scope
-                {statFilterMode === "today" && " · created today"}
-                {statFilterMode === "all" && " · all ideas"}
-                {statFilterMode === "custom" && statFrom && statTo && (
-                  <>
-                    {" "}
-                    · created {statFrom === statTo ? fmtD(statFrom) : `${fmtD(statFrom)} – ${fmtD(statTo)}`}
-                  </>
-                )}
-              </span>
-              <br />
-              <span style={{ color: "#71717a" }}>Source</span>{" "}
-              — Original {lifecycleStats.origPct.toFixed(0)}% ({lifecycleStats.nOrig}) · Comp {lifecycleStats.compPct.toFixed(0)}% ({lifecycleStats.nComp})
-              {lifecycleStats.nOther > 0 && (
-                <> · Other {lifecycleStats.otherPct.toFixed(0)}% ({lifecycleStats.nOther})</>
-              )}
-              <span style={{ color: "#3f3f46" }}> · </span>
-              <span
-                style={{ color: "#50E0B0" }}
-                title="Among in-scope ideas: currently in Proven, Scheduled, or Posted"
-              >
-                Scaled (past testing): {lifecycleStats.scaled}
-              </span>
-              <span style={{ color: "#3f3f46" }}> · </span>
-              <span style={{ color: "#FF7070" }} title="Ideas in Killed with killed date in scope (see tooltip on the line above)">
-                {lifecycleStats.killed} killed
-              </span>
-            </p>
+            {/* stats-scope source/scaled/killed summary removed per request (unused) */}
           </div>
         </div>
         <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap",alignItems:"center"}}>
@@ -1408,10 +1377,10 @@ export default function ContentTracker(){
                 <span style={{fontSize:11,fontWeight:600,color:SC[stage].text}}>{SL[stage]}</span>
                 <span style={{fontSize:10,color:"#52525b",fontWeight:500}}>{ideaStageCounts[stage] ?? 0}</span>
               </div>
-              <div style={{minHeight:50,padding:1,borderRadius:9,transition:"all 0.15s",border:dropStage===stage?"2px solid #7c3aed":"2px solid transparent",background:dropStage===stage?"rgba(124,58,237,0.05)":"transparent"}}>
+              <div className={`fglass-lane${dropStage===stage?" is-drop-target":""}`} style={{transition:"all 0.15s"}}>
                 {rbacFilteredIdeas.filter((i: any)=>normalizePipelineStage(i.stage)===stage).sort((a: any,b: any)=>b.createdAt-a.createdAt).map((idea: any)=>(
                   <div key={idea.id} draggable onDragStart={e=>{setDraggingId(idea.id);e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain",idea.id);}} onDragEnd={()=>{setDraggingId(null);setDropStage(null);}} style={{opacity:draggingId===idea.id?0.4:1,transition:"opacity 0.15s"}}>
-                    <IdeaCard idea={idea} niches={niches} onClick={()=>openDetail(idea)}/>
+                    <IdeaCard idea={idea} niches={niches} isSelected={detailIdea?.id===idea.id} onClick={()=>openDetail(idea)}/>
                   </div>
                 ))}
                 {(ideaStageCounts[stage] ?? 0)===0&&<div style={{padding:"24px 12px",textAlign:"center",color:"#3f3f46",fontSize:11,border:"1.5px dashed #3f3f46",borderRadius:9}}>Empty</div>}
@@ -1432,7 +1401,7 @@ export default function ContentTracker(){
             <div style={{flex:1}}><label style={ls}>Niches *</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{niches.map((n: any)=>{const sel=newIdea.nicheIds.includes(n.id);return <button key={n.id} type="button" onClick={()=>setNewIdea(p=>({...p,nicheIds:sel?p.nicheIds.filter(x=>x!==n.id):[...p.nicheIds,n.id]}))} style={{padding:"6px 12px",borderRadius:8,border:sel?"2px solid #7c3aed":"1.5px solid #3f3f46",background:sel?"#27272a":"#18181b",fontSize:12,fontWeight:600,cursor:"pointer",color:sel?"#fff":"#71717a"}}>{n.name}</button>;})}</div></div>
           </div>
           <div><label style={ls}>Created by</label><div style={{...is,background:"#27272a",color:"#a1a1aa"}}>{user?.user_metadata?.full_name || user?.email?.split("@")[0] || "—"}</div></div>
-          <div><label style={ls}>Hook variations (one per line)</label><textarea value={newIdea.hook_variations} onChange={e=>setNewIdea(p=>({...p,hook_variations:e.target.value}))} rows={4} placeholder={"Hook variation 1\nHook variation 2\nHook variation 3"} style={{...is,resize:"vertical",minHeight:80}}/></div>
+          <div><label style={ls}>Hook variations (one per line)</label><textarea className="fglass-input" value={newIdea.hook_variations} onChange={e=>setNewIdea(p=>({...p,hook_variations:e.target.value}))} rows={4} placeholder={"Hook variation 1\nHook variation 2\nHook variation 3"} style={{...is,resize:"vertical",minHeight:80}}/></div>
           <div><label style={ls}>Music reference / suggestions</label><input value={newIdea.music_ref} onChange={e=>setNewIdea(p=>({...p,music_ref:e.target.value}))} placeholder="e.g. Dark cinematic, trending audio XYZ" style={is}/></div>
           <div><label style={ls}>Frame link</label><input value={newIdea.frame_link} onChange={e=>setNewIdea(p=>({...p,frame_link:e.target.value}))} placeholder="Google Drive / reference frames link" style={is}/></div>
           {newIdea.source==="original"&&(
@@ -1493,7 +1462,7 @@ export default function ContentTracker(){
             )}
 
             {/* Editable fields */}
-            <div><label style={ls}>Niches</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{niches.map((n: any)=>{const sel=detailNicheIds.includes(n.id);return <button key={n.id} onClick={()=>{const next=sel?detailNicheIds.filter((x: string)=>x!==n.id):[...detailNicheIds,n.id];setDetailNicheIds(next);saveNiches(cd.id,next);const newCdPages=niches.filter((nn: any)=>next.includes(nn.id)).flatMap((nn: any)=>nn.pages||[]).filter((v: string,i: number,a: string[])=>a.indexOf(v)===i);setDetailApprovedPages((prev: string[])=>{const pr=prev.filter(p=>newCdPages.some((np: string)=>normH(np)===normH(p)));if(pr.length!==prev.length) saveApprovedPages(cd.id,pr);return pr;});}} style={{padding:"6px 12px",borderRadius:8,border:sel?"2px solid #7c3aed":"1.5px solid #3f3f46",background:sel?"#27272a":"#18181b",fontSize:12,fontWeight:600,cursor:"pointer",color:sel?"#fff":"#71717a"}}>{n.name}</button>;})}</div></div>
+            <div><label style={ls}>Niches</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{niches.map((n: any)=>{const sel=detailNicheIds.includes(n.id);return <button key={n.id} type="button" onClick={()=>{const next=sel?detailNicheIds.filter((x: string)=>x!==n.id):[...detailNicheIds,n.id];setDetailNicheIds(next);saveNiches(cd.id,next);const newCdPages=niches.filter((nn: any)=>next.includes(nn.id)).flatMap((nn: any)=>nn.pages||[]).filter((v: string,i: number,a: string[])=>a.indexOf(v)===i);setDetailApprovedPages((prev: string[])=>{const pr=prev.filter(p=>newCdPages.some((np: string)=>normH(np)===normH(p)));if(pr.length!==prev.length) saveApprovedPages(cd.id,pr);return pr;});}} className={`fglass-pill${sel?" is-on":""}`}>{n.name}</button>;})}</div></div>
             {cdPages.length>0 && (cdStage==="approved" || cdStage==="base_edit") && (
               <div>
                 <label style={ls}>Approved for pages</label>
@@ -1510,13 +1479,7 @@ export default function ContentTracker(){
                           setDetailApprovedPages(next);
                           saveApprovedPages(cd.id, next);
                         }}
-                        style={{
-                          padding:"6px 12px",borderRadius:8,
-                          border:sel?"2px solid #2D9E5F":"1.5px solid #3f3f46",
-                          background:sel?"rgba(45,158,95,0.12)":"#18181b",
-                          fontSize:12,fontWeight:600,cursor:"pointer",
-                          color:sel?"#5AE0A0":"#71717a",
-                        }}
+                        className={`fglass-pill${sel?" is-on-green":""}`}
                       >@{String(page).replace(/^@/,"")}</button>
                     );
                   })}

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef, Fragment } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import {
   getSixDayMonth, upsertSixDayEntry,
@@ -355,58 +355,42 @@ export default function SixDayTracker() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 pt-20 pb-12 px-4 sm:px-6">
-      <div className="max-w-6xl mx-auto">
+    <div className="min-h-screen six-day-page">
+      <div className="six-day-page-inner">
 
         {/* ── Header ── */}
-        <div className="flex items-start justify-between gap-4 mb-8">
-          <div className="flex items-center gap-5">
-            <div className="relative shrink-0">
-              <img
-                src="/rabbit.webp"
-                alt="late rabbit"
-                className="w-20 h-20 rounded-2xl object-cover object-top"
-              />
-              <div className="absolute inset-0 rounded-2xl ring-1 ring-white/10" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-black text-white uppercase tracking-tight leading-none">
-                6-Day Tracker
-              </h1>
-              <p className="text-sm text-zinc-500 mt-1.5">Auto-cycles from the 1st of every month</p>
-            </div>
+        <div className="six-day-header">
+          <div>
+            <div className="six-day-eyebrow">Content · Cycle tracking</div>
+            <h1 className="six-day-title">6-Day Tracker</h1>
+            <p className="six-day-lead">Auto-cycles from the 1st of every month</p>
           </div>
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="inline-flex items-center bg-zinc-900 border border-zinc-800 rounded-xl p-1 gap-0.5">
-              {(["cycles", "reconcile"] as TabMode[]).map((v) => (
-                <button
-                  key={v}
-                  onClick={() => setTab(v)}
-                  className={`text-[11px] uppercase tracking-wider px-4 py-2 rounded-lg font-semibold transition-all ${
-                    tab === v
-                      ? "bg-violet-600 text-white shadow-lg shadow-violet-600/25"
-                      : "text-zinc-500 hover:text-zinc-300"
-                  }`}
-                >
-                  {v === "cycles" ? "Cycles" : "Month-end fix"}
-                </button>
-              ))}
-            </div>
+          <div className="six-day-seg shrink-0">
+            {(["cycles", "reconcile"] as TabMode[]).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setTab(v)}
+                className={tab === v ? "is-on" : ""}
+              >
+                {v === "cycles" ? "Cycles" : "Month-end fix"}
+              </button>
+            ))}
           </div>
         </div>
 
         {/* ── Overdue warning ── */}
         {overdueCycles.length > 0 && (
-          <div className="mb-5 bg-amber-500/8 border border-amber-500/25 rounded-2xl px-5 py-4 flex items-center gap-4">
+          <div className="six-day-alert">
             <div className="relative shrink-0">
               <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
               <div className="absolute inset-0 rounded-full bg-amber-500 animate-ping opacity-60" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-amber-300">
+              <p className="text-sm font-semibold text-amber-200">
                 {overdueCycles.length} cycle{overdueCycles.length > 1 ? "s" : ""} overdue
               </p>
-              <p className="text-xs text-amber-500/70 mt-0.5">
+              <p className="text-xs text-amber-400/80 mt-0.5">
                 {overdueCycles.map((c: any) =>
                   `Cycle ${c.cycle} (${fmtShort(c.start)}–${fmtShort(c.end)}): ${c.missing_count} IPs unfilled`
                 ).join(" · ")}
@@ -416,72 +400,62 @@ export default function SixDayTracker() {
         )}
 
         {/* ── Month nav + total views ── */}
-        <div className="flex items-center gap-0 mb-6">
-          <button onClick={() => shiftMonth(-1)} className="p-2.5 rounded-xl hover:bg-zinc-800 text-zinc-500 hover:text-white transition-colors">
+        <div className="six-day-toolbar six-day-glass-bar">
+          <button type="button" onClick={() => shiftMonth(-1)} className="six-day-icon-btn" aria-label="Previous month">
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <h2 className="text-base font-bold text-white w-40 text-center">{monthLabel}</h2>
-          <button onClick={() => shiftMonth(1)} className="p-2.5 rounded-xl hover:bg-zinc-800 text-zinc-500 hover:text-white transition-colors">
+          <h2 className="text-sm font-semibold text-white w-36 text-center tracking-tight">{monthLabel}</h2>
+          <button type="button" onClick={() => shiftMonth(1)} className="six-day-icon-btn" aria-label="Next month">
             <ChevronRight className="w-4 h-4" />
           </button>
-          <div className="ml-4 flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-white tabular-nums">{fmt(totalCycleViews)}</span>
-            <span className="text-xs text-zinc-500 font-medium">total views</span>
-            {monthFetching && <span className="text-[10px] text-zinc-600 ml-2">updating…</span>}
+          <div className="flex items-baseline gap-1.5 pl-1">
+            <span className="text-xl font-bold text-white tabular-nums tracking-tight">{fmt(totalCycleViews)}</span>
+            <span className="text-[11px] fglass-muted font-medium">total views</span>
+            {monthFetching && <span className="text-[10px] fglass-meta ml-1">updating…</span>}
           </div>
-          {/* Month-end action — right side */}
           <button
+            type="button"
             onClick={() => setTab("reconcile")}
-            className={`ml-auto text-xs font-semibold px-4 py-2 rounded-xl border transition-all ${
-              tab === "reconcile"
-                ? "bg-violet-600/20 border-violet-500/40 text-violet-300"
-                : "border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-700"
-            }`}
+            className={`ml-auto fglass-filter-pill h-8 ${tab === "reconcile" ? "is-on" : ""}`}
           >
             Month-end correction
           </button>
         </div>
 
         {/* ── Niche filter ── */}
-        <div className="mb-5 flex flex-wrap items-center gap-2">
-          <span className="text-[10px] uppercase tracking-widest text-zinc-600 font-semibold mr-1">
-            Filter by niche
-          </span>
+        <div className="six-day-filters six-day-glass-bar">
+          <span className="six-day-filters-label">Filter by niche</span>
           <button
+            type="button"
             onClick={clearNiche}
-            className={`inline-flex items-center gap-1.5 h-7 px-3 rounded-full text-xs font-bold transition-all ${
-              isAllActive
-                ? "bg-violet-600 text-white shadow-md shadow-violet-600/30"
-                : "bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white"
-            }`}
+            className={`fglass-filter-pill${isAllActive ? " is-on" : ""}`}
           >
-            All <span className={`tabular-nums text-[10px] ${isAllActive ? "opacity-75" : "text-zinc-600"}`}>{nicheCounts.all}</span>
+            All <span className={`tabular-nums text-[10px] ${isAllActive ? "opacity-90" : "fglass-meta"}`}>{nicheCounts.all}</span>
           </button>
           {([
-            { key: "garfields", label: "Garfields", emoji: "🐱", count: nicheCounts.garfields, active: "bg-gradient-to-r from-orange-500 to-amber-500 text-zinc-900 shadow-md shadow-orange-500/30" },
-            { key: "goofies", label: "Goofies", emoji: "🐶", count: nicheCounts.goofies, active: "bg-gradient-to-r from-sky-500 to-indigo-500 text-white shadow-md shadow-indigo-500/30" },
-            { key: "sheruses", label: "The Sherus", emoji: "🦁", count: nicheCounts.sheruses, active: "bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-md shadow-rose-500/30" },
-            { key: "tech", label: "Tech", emoji: "⚡", count: nicheCounts.tech, active: "bg-gradient-to-r from-cyan-500 to-teal-500 text-zinc-900 shadow-md shadow-cyan-500/30" },
-            { key: "experimentx", label: "The Bizz playbook", emoji: "🧪", count: nicheCounts.experimentx, active: "bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-md shadow-violet-500/30" },
+            { key: "garfields", label: "Garfields", emoji: "🐱", count: nicheCounts.garfields, on: "is-on-orange" },
+            { key: "goofies", label: "Goofies", emoji: "🐶", count: nicheCounts.goofies, on: "is-on-sky" },
+            { key: "sheruses", label: "The Sherus", emoji: "🦁", count: nicheCounts.sheruses, on: "is-on-rose" },
+            { key: "tech", label: "Tech", emoji: "⚡", count: nicheCounts.tech, on: "is-on-cyan" },
+            { key: "experimentx", label: "The Bizz playbook", emoji: "🧪", count: nicheCounts.experimentx, on: "is-on-violet" },
           ] as const).map((opt) => {
             const isActive = nicheFilterSet.has(opt.key);
             return (
               <button
                 key={opt.key}
+                type="button"
                 onClick={() => toggleNiche(opt.key)}
                 aria-pressed={isActive}
-                className={`inline-flex items-center gap-1.5 h-7 px-3 rounded-full text-xs font-bold transition-all ${
-                  isActive ? opt.active : "bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white"
-                }`}
+                className={`fglass-filter-pill${isActive ? ` ${opt.on}` : ""}`}
               >
                 <span aria-hidden>{opt.emoji}</span>
                 {opt.label}
-                <span className={`tabular-nums text-[10px] ${isActive ? "opacity-75" : "text-zinc-600"}`}>{opt.count}</span>
+                <span className={`tabular-nums text-[10px] ${isActive ? "opacity-90" : "fglass-meta"}`}>{opt.count}</span>
               </button>
             );
           })}
           {nicheCounts.none > 0 && isAllActive && (
-            <span className="text-[10px] text-zinc-700 ml-auto">
+            <span className="text-[10px] fglass-meta ml-auto">
               {nicheCounts.none} not in a niche yet
             </span>
           )}
@@ -498,7 +472,7 @@ export default function SixDayTracker() {
               <p className="text-xs text-zinc-500 text-center py-1">Loading saved cycle data…</p>
             )}
             {pages.length === 0 ? (
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-8 text-center text-sm text-zinc-500">
+              <div className="rounded-2xl fglass-panel border-0 p-8 text-center text-sm text-zinc-500">
                 No accounts in this niche yet. Switch the filter above or add handles to the niche.
               </div>
             ) : null}
@@ -542,6 +516,13 @@ export default function SixDayTracker() {
 
 function fmtShort(d: string) {
   return new Date(d + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
+const GALLERY_COLS = 3;
+function galleryRows<T>(items: T[]): T[][] {
+  const rows: T[][] = [];
+  for (let i = 0; i < items.length; i += GALLERY_COLS) rows.push(items.slice(i, i + GALLERY_COLS));
+  return rows;
 }
 
 /** Merge a saved `six_day_entries` row into the month query cache — avoids refetch races that clear IP inputs. */
@@ -610,25 +591,35 @@ function CycleCard({
   })();
 
   const accent = cycle.status === "done"
-    ? { bar: "bg-emerald-500", glow: "shadow-emerald-500/10", border: "border-emerald-500/15", badge: "bg-emerald-500/15 text-emerald-400", progress: "bg-emerald-500" }
+    ? { bar: "bg-emerald-500/70", border: "border-white/[0.04]", badge: "bg-emerald-500/10 text-emerald-400/90", progress: "bg-emerald-500/80" }
     : cycle.status === "active"
-      ? { bar: "bg-amber-500", glow: "shadow-amber-500/10", border: "border-amber-500/20", badge: "bg-amber-500/15 text-amber-400", progress: "bg-amber-500" }
-      : { bar: "bg-zinc-700", glow: "", border: "border-zinc-800", badge: "bg-zinc-800 text-zinc-500", progress: "bg-zinc-700" };
+      ? { bar: "bg-amber-500/70", border: "border-white/[0.04]", badge: "bg-amber-500/10 text-amber-400/90", progress: "bg-amber-500/80" }
+      : { bar: "bg-white/10", border: "border-white/[0.04]", badge: "bg-white/5 text-zinc-500", progress: "bg-white/15" };
 
   const fillPct = pages.length > 0 ? Math.round((filledCount / pages.length) * 100) : 0;
+  const [openPageId, setOpenPageId] = useState<string | null>(null);
+  const openPage = openPageId ? pages.find((p: any) => String(p.id) === openPageId) : null;
+
+  useEffect(() => {
+    if (!expanded) setOpenPageId(null);
+  }, [expanded]);
+
+  function togglePage(pageId: string) {
+    setOpenPageId((prev) => (prev === pageId ? null : pageId));
+  }
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`relative bg-zinc-900 border ${accent.border} rounded-2xl overflow-hidden shadow-lg ${accent.glow}`}
+      className={`relative fglass-cycle border ${accent.border} overflow-hidden`}
     >
       {/* Left accent bar */}
       <div className={`absolute left-0 top-0 bottom-0 w-[3px] ${accent.bar}`} />
 
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between pl-6 pr-5 py-5 text-left hover:bg-white/[0.02] transition-colors"
+        className="w-full flex items-center justify-between pl-6 pr-5 py-5 text-left hover:bg-black/20 transition-colors"
       >
         <div className="flex items-center gap-4">
           {cycle.status === "done"
@@ -638,7 +629,7 @@ function CycleCard({
               : <Clock className="w-4 h-4 text-zinc-600 shrink-0" />}
           <div>
             <span className="text-white font-bold text-base">Cycle {cycle.cycle}</span>
-            <span className="text-zinc-500 text-xs ml-3">{fmtShort(cycle.start)} — {fmtShort(cycle.end)}</span>
+            <span className="fglass-muted text-xs ml-3">{fmtShort(cycle.start)} — {fmtShort(cycle.end)}</span>
           </div>
           <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${accent.badge}`}>
             {cycle.status === "done" ? "Done" : cycle.status === "active" ? "Active" : "Upcoming"}
@@ -648,17 +639,17 @@ function CycleCard({
         <div className="flex items-center gap-8">
           {/* Views */}
           <div className="text-right hidden sm:block">
-            <p className="text-[10px] uppercase tracking-wider text-zinc-600 mb-0.5">Views</p>
+            <p className="text-[10px] uppercase tracking-wider fglass-label mb-0.5">Views</p>
             <p className="text-xl font-black text-white tabular-nums leading-none">{fmt(totalViews)}</p>
           </div>
 
           {/* IPs Filled + progress bar */}
           <div className="hidden sm:block text-right min-w-[80px]">
-            <p className="text-[10px] uppercase tracking-wider text-zinc-600 mb-0.5">IPs Filled</p>
+            <p className="text-[10px] uppercase tracking-wider fglass-label mb-0.5">IPs Filled</p>
             <p className="text-sm font-bold text-white leading-none">
-              {filledCount}<span className="text-zinc-600">/{pages.length}</span>
+              {filledCount}<span className="fglass-meta">/{pages.length}</span>
             </p>
-            <div className="mt-2 h-1 w-20 bg-zinc-800 rounded-full overflow-hidden">
+            <div className="mt-2 h-1 w-20 bg-white/8 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-500 ${accent.progress}`}
                 style={{ width: `${fillPct}%` }}
@@ -681,20 +672,51 @@ function CycleCard({
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="border-t border-zinc-800 p-5 sm:p-6 space-y-2">
-              {pages.map((p: any) => (
-                <IPDropdown
-                  key={p.id}
-                  page={p}
-                  cycle={cycle}
-                  monthDate={monthDate}
-                  selectedMonth={selectedMonth}
-                  qc={qc}
-                  userEmail={userEmail}
-                  onDataChange={onDataChange}
-                  canEdit={canEdit}
-                />
-              ))}
+            <div className="border-t fglass-divider">
+              <div className="six-day-gallery">
+                {galleryRows(pages).map((row, rowIdx) => {
+                  const rowHasOpen = openPageId != null && row.some((p: any) => String(p.id) === openPageId);
+                  return (
+                    <Fragment key={rowIdx}>
+                      <div className="six-day-gallery-row">
+                        {row.map((p: any) => (
+                          <IPGalleryChip
+                            key={p.id}
+                            page={p}
+                            cycle={cycle}
+                            selected={openPageId === String(p.id)}
+                            onSelect={() => togglePage(String(p.id))}
+                          />
+                        ))}
+                      </div>
+                      <AnimatePresence>
+                        {rowHasOpen && openPage && (
+                          <motion.div
+                            key={openPage.id}
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 4 }}
+                            transition={{ duration: 0.16 }}
+                            className="six-day-gallery-sheet"
+                          >
+                            <IPDetailSheet
+                              page={openPage}
+                              cycle={cycle}
+                              monthDate={monthDate}
+                              selectedMonth={selectedMonth}
+                              qc={qc}
+                              userEmail={userEmail}
+                              onDataChange={onDataChange}
+                              canEdit={canEdit}
+                              onClose={() => setOpenPageId(null)}
+                            />
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </Fragment>
+                  );
+                })}
+              </div>
             </div>
           </motion.div>
         )}
@@ -704,9 +726,64 @@ function CycleCard({
 }
 
 
-/* ──────── IP row: collapsible accordion per page ──────── */
-function IPDropdown({
-  page, cycle, monthDate, selectedMonth, qc, userEmail, onDataChange, canEdit,
+/* ──────── Gallery chip (collapsed tile in grid) ──────── */
+function IPGalleryChip({
+  page, cycle, selected, onSelect,
+}: {
+  page: any;
+  cycle: any;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const entry = (cycle.entries || []).find((e: any) => String(e.page_id) === String(page.id));
+  const toplineItems = (cycle.top_content || []).filter((t: any) => t.page_id === page.id);
+  const hasData =
+    (!!entry && ((entry.views ?? 0) > 0 || entry.reel_pct != null || entry.post_pct != null || entry.reel_perf != null || entry.post_perf != null))
+    || toplineItems.length > 0;
+
+  const views = Number(entry?.views ?? 0);
+  const reelPct = entry?.reel_pct != null && entry.reel_pct !== "" ? entry.reel_pct : null;
+  const postPct = entry?.post_pct != null && entry.post_pct !== "" ? entry.post_pct : null;
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`fglass-chip${selected ? " fglass-chip-on" : ""}`}
+    >
+      <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${hasData ? "bg-emerald-400/75" : "bg-zinc-500/55"}`} />
+      <div className="flex-1 min-w-0">
+        <span className="block text-[13px] font-medium text-white/88 truncate leading-tight">
+          {page.name || page.handle}
+        </span>
+        <span className="block text-[11px] fglass-muted truncate">@{page.handle}</span>
+      </div>
+      {(views > 0 || reelPct != null || postPct != null) && (
+        <div className="flex flex-col items-end gap-1 shrink-0 mr-0.5">
+          {views > 0 && (
+            <span className="text-[12px] font-bold text-white tabular-nums leading-none">{fmt(views)}</span>
+          )}
+          {(reelPct != null || postPct != null) && (
+            <div className="flex items-center gap-1">
+              {reelPct != null && (
+                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 leading-none tabular-nums">R {reelPct}%</span>
+              )}
+              {postPct != null && (
+                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 leading-none tabular-nums">P {postPct}%</span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+      <ChevronDown className={`w-3.5 h-3.5 shrink-0 fglass-muted opacity-80 transition-transform duration-200 ${selected ? "rotate-180" : ""}`} />
+    </button>
+  );
+}
+
+
+/* ──────── IP detail sheet (opens below gallery) ──────── */
+function IPDetailSheet({
+  page, cycle, monthDate, selectedMonth, qc, userEmail, onDataChange, canEdit, onClose,
 }: {
   page: any;
   cycle: any;
@@ -716,8 +793,8 @@ function IPDropdown({
   userEmail: string;
   onDataChange: () => void;
   canEdit: boolean;
+  onClose: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [addMode, setAddMode] = useState(false);
   const [newLink, setNewLink] = useState("");
   const [newViews, setNewViews] = useState("");
@@ -818,14 +895,14 @@ function IPDropdown({
     );
   }
 
-  /** Auto-save on collapse — only if dirty AND there's actual data worth persisting */
-  function handleToggle() {
-    if (open && isDirty()) {
-      const hasActualData = Number(weekViews) > 0 || reelPctStr !== "" || postPctStr !== "" || reelPerfStr !== "" || postPerfStr !== "";
-      if (hasActualData) saveEntry();
-    }
-    setOpen(!open);
+  /** Auto-save on close — only if dirty AND there's actual data worth persisting */
+  function saveIfDirty() {
+    if (!isDirty()) return;
+    const hasActualData = Number(weekViews) > 0 || reelPctStr !== "" || postPctStr !== "" || reelPerfStr !== "" || postPerfStr !== "";
+    if (hasActualData) saveEntry();
   }
+
+  useEffect(() => () => saveIfDirty(), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const createMut = useMutation({
     mutationFn: createSixDayTopContent,
@@ -854,139 +931,95 @@ function IPDropdown({
     });
   }
 
-  const hasData = (
-    !!entry && ((entry.views ?? 0) > 0 || entry.reel_pct != null || entry.post_pct != null || entry.reel_perf != null || entry.post_perf != null)
-  ) || toplineItems.length > 0;
   const views = entry?.views || 0;
 
   return (
-    <div className={`border rounded-xl overflow-hidden transition-all ${
-      open ? "border-zinc-700" : hasData ? "border-zinc-800/80" : "border-zinc-800/40"
-    } bg-zinc-900/40`}>
-
-      {/* ── Collapsed header row ── */}
-      <button
-        onClick={handleToggle}
-        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.02] transition-colors group"
-      >
-        {/* Status dot */}
-        <div className={`w-2 h-2 rounded-full shrink-0 transition-colors ${
-          hasData ? "bg-emerald-400" : "bg-zinc-700 group-hover:bg-zinc-600"
-        }`} />
-
-        {/* Name + handle */}
-        <div className="flex-1 min-w-0 flex items-center gap-2.5">
-          <span className="text-white font-semibold text-sm truncate">{page.name || page.handle}</span>
-          <span className="text-zinc-600 text-xs shrink-0">@{page.handle}</span>
+    <div className="fglass-sheet overflow-hidden">
+      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b fglass-divider">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-white/90 truncate">{page.name || page.handle}</div>
+          <div className="text-xs fglass-muted truncate">@{page.handle}</div>
         </div>
-
-        {/* Summary stats (only when collapsed) */}
-        {!open && (
-          <div className="flex items-center gap-3 shrink-0">
-            {views > 0 && (
-              <span className="text-white font-bold text-sm tabular-nums">{fmt(views)}</span>
-            )}
-            {reelPctStr && (
-              <span className="text-[10px] bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded-full tabular-nums">
-                R {reelPctStr}%
-              </span>
-            )}
-            {postPctStr && (
-              <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full tabular-nums">
-                P {postPctStr}%
-              </span>
-            )}
-            {toplineItems.length > 0 && (
-              <span className="text-[10px] bg-zinc-800 text-zinc-500 px-2 py-0.5 rounded-full">
-                {toplineItems.length} link{toplineItems.length !== 1 ? "s" : ""}
-              </span>
-            )}
-            {upsertEntryMut.isPending && (
-              <span className="text-[10px] text-violet-400">saving…</span>
-            )}
-          </div>
-        )}
-
-        <ChevronDown className={`w-4 h-4 text-zinc-600 shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
-      </button>
-
-      {/* ── Expanded content ── */}
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            className="overflow-hidden"
+        <div className="flex items-center gap-3 shrink-0">
+          {views > 0 && <span className="text-sm font-bold text-white/80 tabular-nums">{fmt(views)}</span>}
+          <button
+            type="button"
+            onClick={() => { saveIfDirty(); onClose(); }}
+            className="p-1.5 rounded-lg fglass-muted hover:text-white/75 hover:bg-white/5 transition-colors"
+            aria-label="Close"
           >
-            <div className="border-t border-zinc-800 px-4 py-4 space-y-4">
+            <ChevronDown className="w-4 h-4 rotate-180" />
+          </button>
+        </div>
+      </div>
+
+      <div className="px-4 py-4 space-y-4">
 
               {/* Input grid */}
               <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
                 <div className="w-[7.5rem] shrink-0">
-                  <p className="text-[9px] uppercase tracking-wider text-zinc-500 mb-1">Total</p>
+                  <p className="text-[9px] uppercase fglass-label mb-1">Total</p>
                   <Input type="number" min={0} value={weekViews}
                     onChange={(e) => setWeekViews(e.target.value)}
                     onBlur={() => saveEntry()}
                     disabled={!canEdit || upsertEntryMut.isPending}
-                    className="h-8 text-xs bg-zinc-800 border-zinc-600 text-white tabular-nums px-2 focus:border-violet-500"
+                    className="h-8 text-xs fglass-input tabular-nums px-2"
                   />
                 </div>
                 <div className="w-[3.75rem] shrink-0">
-                  <p className="text-[9px] uppercase tracking-wider text-zinc-500 mb-1">Reel %</p>
+                  <p className="text-[9px] uppercase fglass-label mb-1">Reel %</p>
                   <Input type="number" min={0} max={100} value={reelPctStr}
                     onChange={(e) => setReelPctStr(e.target.value)}
                     onBlur={() => saveEntry()}
                     disabled={!canEdit || upsertEntryMut.isPending}
-                    className="h-8 text-xs bg-zinc-800 border-zinc-600 text-purple-300 tabular-nums px-2 focus:border-purple-500"
+                    className="h-8 text-xs fglass-input tabular-nums px-2"
                   />
                 </div>
                 <div className="w-[3.75rem] shrink-0">
-                  <p className="text-[9px] uppercase tracking-wider text-zinc-500 mb-1">Post %</p>
+                  <p className="text-[9px] uppercase fglass-label mb-1">Post %</p>
                   <Input type="number" min={0} max={100} value={postPctStr}
                     onChange={(e) => setPostPctStr(e.target.value)}
                     onBlur={() => saveEntry()}
                     disabled={!canEdit || upsertEntryMut.isPending}
-                    className="h-8 text-xs bg-zinc-800 border-zinc-600 text-emerald-300 tabular-nums px-2 focus:border-emerald-500"
+                    className="h-8 text-xs fglass-input tabular-nums px-2"
                   />
                 </div>
                 <div className="w-[5.5rem] shrink-0">
-                  <p className="text-[9px] uppercase tracking-wider text-zinc-500 mb-1">Reel baseline</p>
+                  <p className="text-[9px] uppercase fglass-label mb-1">Reel baseline</p>
                   <Input type="number" step="0.01" value={reelPerfStr}
                     onChange={(e) => setReelPerfStr(e.target.value)}
                     onBlur={() => saveEntry()}
                     disabled={!canEdit || upsertEntryMut.isPending}
-                    className="h-8 text-xs bg-zinc-800 border-zinc-600 text-white tabular-nums px-2 focus:border-violet-500"
+                    className="h-8 text-xs fglass-input tabular-nums px-2"
                   />
                 </div>
                 <div className="w-[5.5rem] shrink-0">
-                  <p className="text-[9px] uppercase tracking-wider text-zinc-500 mb-1">Post baseline</p>
+                  <p className="text-[9px] uppercase fglass-label mb-1">Post baseline</p>
                   <Input type="number" step="0.01" value={postPerfStr}
                     onChange={(e) => setPostPerfStr(e.target.value)}
                     onBlur={() => saveEntry()}
                     disabled={!canEdit || upsertEntryMut.isPending}
-                    className="h-8 text-xs bg-zinc-800 border-zinc-600 text-white tabular-nums px-2 focus:border-violet-500"
+                    className="h-8 text-xs fglass-input tabular-nums px-2"
                   />
                 </div>
                 {upsertEntryMut.isPending && (
-                  <span className="text-[10px] text-violet-400 self-end pb-1">saving…</span>
+                  <span className="text-[10px] fglass-muted self-end pb-1">saving…</span>
                 )}
               </div>
 
               {/* Topline links */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-600 font-semibold">Topline posts / reels</p>
+                  <p className="text-[10px] uppercase fglass-label font-semibold">Topline posts / reels</p>
                   {toplineItems.length > 0 && (
-                    <span className="text-[10px] text-zinc-500">
+                    <span className="text-[10px] fglass-muted">
                       Sum: <span className="text-zinc-300 font-bold tabular-nums">{fmt(toplineViewsSum)}</span>
                     </span>
                   )}
                 </div>
 
                 {toplineItems.length > 0 && (
-                  <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/40 p-2 space-y-1.5">
+                  <div className="rounded-lg border border-white/12 bg-white/[0.02] backdrop-blur-sm p-2 space-y-1.5">
                     {toplineItems.slice().sort((a: any, b: any) => (b.views || 0) - (a.views || 0)).map((item: any) => (
                       <ContentItemRow key={item.id} item={item} canEdit={canEdit}
                         onUpdate={(data) => updateMut.mutate({ id: item.id, data })}
@@ -997,21 +1030,21 @@ function IPDropdown({
                 )}
 
                 {canEdit && (addMode ? (
-                  <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 space-y-2">
+                  <div className="fglass rounded-lg p-3 space-y-2 border-0">
                     <div className="flex flex-wrap gap-2">
                       <Input value={newLink} onChange={(e) => setNewLink(e.target.value)}
                         placeholder="Instagram link…"
-                        className="h-8 text-xs bg-zinc-800 border-zinc-700 text-white flex-1 min-w-[160px]"
+                        className="h-8 text-xs fglass-input flex-1 min-w-[160px]"
                       />
                       <Input type="number" min={0} value={newViews} onChange={(e) => setNewViews(e.target.value)}
                         placeholder="Views"
-                        className="h-8 w-32 text-xs bg-zinc-800 border-zinc-700 text-white tabular-nums"
+                        className="h-8 w-32 text-xs fglass-input tabular-nums"
                       />
                       <Select value={newType} onValueChange={setNewType}>
-                        <SelectTrigger className="h-8 w-[5.5rem] text-xs bg-zinc-800 border-zinc-700 text-white">
+                        <SelectTrigger className="h-8 w-[5.5rem] text-xs fglass-input">
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent className="bg-zinc-800 border-zinc-700">
+                        <SelectContent className="bg-[#121218]/95 border-white/10 backdrop-blur-xl">
                           <SelectItem value="reel" className="text-white text-xs">Reel</SelectItem>
                           <SelectItem value="post" className="text-white text-xs">Post</SelectItem>
                         </SelectContent>
@@ -1020,11 +1053,11 @@ function IPDropdown({
                     <div className="flex justify-end gap-2">
                       <Button size="sm" variant="ghost"
                         onClick={() => { setAddMode(false); setNewLink(""); setNewViews(""); }}
-                        className="h-7 text-xs text-zinc-400"
+                        className="h-7 text-xs text-zinc-500 hover:text-zinc-300"
                       >Cancel</Button>
                       <Button size="sm" onClick={handleAdd}
                         disabled={!newLink || createMut.isPending}
-                        className="h-7 text-xs bg-violet-600 hover:bg-violet-700"
+                        className="h-7 text-xs bg-white/10 hover:bg-white/15 text-white border border-white/12"
                       >
                         {createMut.isPending ? "Adding…" : "Add link"}
                       </Button>
@@ -1032,16 +1065,13 @@ function IPDropdown({
                   </div>
                 ) : (
                   <button type="button" onClick={() => setAddMode(true)}
-                    className="flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 transition-colors"
+                    className="flex items-center gap-1.5 text-xs fglass-muted hover:text-zinc-200 transition-colors"
                   >
                     <Plus className="w-3.5 h-3.5" /> Add topline link
                   </button>
                 ))}
               </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      </div>
     </div>
   );
 }
@@ -1198,118 +1228,209 @@ function ReconcileView({
     return s + (p.actual_views ?? 0);
   }, 0);
   const totalDrift = totalActual - totalCycle;
+  const [openPageId, setOpenPageId] = useState<string | null>(null);
+  const togglePage = (id: string) => setOpenPageId((prev) => (prev === id ? null : id));
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
 
       {/* ── Stat cards ── */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="relative bg-zinc-900 border border-zinc-800 rounded-2xl p-5 overflow-hidden">
-          <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-zinc-600" />
-          <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Cycle Sum</p>
-          <p className="text-3xl font-black text-white tabular-nums leading-none">{fmt(totalCycle)}</p>
-          <p className="text-xs text-zinc-600 mt-2">from all 5 cycles</p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="six-day-stat-card">
+          <p className="six-day-stat-label">Cycle Sum</p>
+          <p className="six-day-stat-value">{fmt(totalCycle)}</p>
+          <p className="six-day-stat-sub">from all 5 cycles</p>
         </div>
-        <div className="relative bg-zinc-900 border border-violet-500/20 rounded-2xl p-5 overflow-hidden">
-          <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-violet-500" />
-          <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-2">IG Dashboard</p>
-          <p className="text-3xl font-black text-white tabular-nums leading-none">{totalActual > 0 ? fmt(totalActual) : "—"}</p>
-          <p className="text-xs text-zinc-600 mt-2">actual monthly views</p>
+        <div className="six-day-stat-card six-day-stat-card--accent">
+          <p className="six-day-stat-label">IG Dashboard</p>
+          <p className="six-day-stat-value">{totalActual > 0 ? fmt(totalActual) : "—"}</p>
+          <p className="six-day-stat-sub">actual monthly views</p>
         </div>
-        <div className={`relative bg-zinc-900 rounded-2xl p-5 overflow-hidden border ${
-          totalActual === 0 ? "border-zinc-800" : totalDrift > 0 ? "border-emerald-500/20" : totalDrift < 0 ? "border-red-500/20" : "border-zinc-800"
+        <div className={`six-day-stat-card${
+          totalActual === 0 ? "" : totalDrift > 0 ? " six-day-stat-card--up" : totalDrift < 0 ? " six-day-stat-card--down" : ""
         }`}>
-          <div className={`absolute left-0 top-0 bottom-0 w-[3px] ${
-            totalActual === 0 ? "bg-zinc-700" : totalDrift > 0 ? "bg-emerald-500" : totalDrift < 0 ? "bg-red-500" : "bg-zinc-600"
-          }`} />
-          <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Drift</p>
-          <p className={`text-3xl font-black tabular-nums leading-none ${
-            totalActual === 0 ? "text-zinc-600" : totalDrift > 0 ? "text-emerald-400" : totalDrift < 0 ? "text-red-400" : "text-zinc-400"
+          <p className="six-day-stat-label">Drift</p>
+          <p className={`six-day-stat-value ${
+            totalActual === 0 ? "fglass-meta" : totalDrift > 0 ? "text-emerald-400" : totalDrift < 0 ? "text-red-400" : "text-zinc-300"
           }`}>
             {totalActual > 0 ? (totalDrift > 0 ? "+" : "") + fmt(totalDrift) : "—"}
           </p>
-          <p className="text-xs text-zinc-600 mt-2">dashboard vs cycles</p>
+          <p className="six-day-stat-sub">dashboard vs cycles</p>
         </div>
       </div>
 
-      {/* ── Reconciliation rows ── */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
-          <div>
-            <h3 className="text-sm font-bold text-white tracking-wide">Monthly Reconciliation</h3>
-            <p className="text-xs text-zinc-500 mt-0.5">Enter actual IG dashboard totals — drift feeds the Growth chart</p>
-          </div>
-          {canEdit && (
-          <Button
-            size="sm"
+      {/* ── Gallery header ── */}
+      <div className="six-day-glass-bar flex items-center justify-between gap-3 px-4 py-3">
+        <div>
+          <h3 className="text-sm font-semibold text-white tracking-tight">Monthly Reconciliation</h3>
+          <p className="text-xs fglass-muted mt-0.5">Enter actual IG dashboard totals — drift feeds the Growth chart</p>
+        </div>
+        {canEdit && (
+          <button
+            type="button"
             onClick={saveAll}
             disabled={actualMut.isPending}
-            className="gap-1.5 text-xs bg-violet-600 hover:bg-violet-700 shadow-lg shadow-violet-600/20"
+            className="fglass-filter-pill is-on h-8 shrink-0"
           >
-            <Save className="w-3 h-3" /> Save All
-          </Button>
-          )}
-        </div>
+            <Save className="w-3 h-3" />
+            Save All
+          </button>
+        )}
+      </div>
 
-        {/* Column headers */}
-        <div className="grid grid-cols-[1fr_auto_auto_auto] gap-4 items-center px-5 py-2.5 border-b border-zinc-800/60">
-          <p className="text-[10px] uppercase tracking-widest text-zinc-600">Page</p>
-          <p className="text-[10px] uppercase tracking-widest text-zinc-600 text-right w-20">Cycle Sum</p>
-          <p className="text-[10px] uppercase tracking-widest text-zinc-600 w-44">IG Dashboard</p>
-          <p className="text-[10px] uppercase tracking-widest text-zinc-600 text-right w-24">Drift</p>
-        </div>
-
-        <div className="divide-y divide-zinc-800/50">
-          {reconcileRows.map((p: any) => {
-            const actual = drafts[p.page_id] !== "" ? Number(drafts[p.page_id]) : null;
-            const drift = actual != null ? actual - (p.cycle_views_sum || 0) : null;
-            const hasDraft = drafts[p.page_id] !== "" && drafts[p.page_id] !== undefined;
-
-            return (
-              <div key={p.page_id} className="grid grid-cols-[1fr_auto_auto_auto] gap-4 items-center px-5 py-3.5 hover:bg-white/[0.02] transition-colors group">
-                {/* Page name */}
-                <div className="min-w-0">
-                  <span className="text-white font-semibold text-sm">{p.name || p.handle}</span>
-                  <span className="text-zinc-600 text-xs ml-2">@{p.handle}</span>
-                </div>
-
-                {/* Cycle sum */}
-                <div className="w-20 text-right">
-                  <span className="text-zinc-400 text-sm tabular-nums font-medium">{fmt(p.cycle_views_sum || 0)}</span>
-                </div>
-
-                {/* Actual input */}
-                <div className="w-44">
-                  <Input
-                    type="number"
-                    value={drafts[p.page_id] ?? ""}
-                    onChange={(e) => setDrafts((prev) => ({ ...prev, [p.page_id]: e.target.value }))}
-                    onKeyDown={(e) => { if (canEdit && e.key === "Enter") saveSingle(p.page_id); }}
-                    onBlur={() => { if (canEdit && hasDraft) saveSingle(p.page_id); }}
-                    disabled={!canEdit}
-                    placeholder="Enter views…"
-                    className="h-8 w-full text-xs bg-zinc-800 border-zinc-600 text-white tabular-nums placeholder-zinc-600 focus:border-violet-500"
-                  />
-                </div>
-
-                {/* Drift */}
-                <div className="w-24 text-right">
-                  {drift != null ? (
-                    <span className={`inline-flex items-center gap-1 text-xs font-bold tabular-nums px-2.5 py-1 rounded-full ${
-                      drift > 0 ? "bg-emerald-500/10 text-emerald-400"
-                      : drift < 0 ? "bg-red-500/10 text-red-400"
-                      : "text-zinc-500"
-                    }`}>
-                      {drift > 0 ? <TrendingUp className="w-3 h-3" /> : drift < 0 ? <TrendingDown className="w-3 h-3" /> : null}
-                      {drift > 0 ? "+" : ""}{fmt(drift)}
-                    </span>
-                  ) : (
-                    <span className="text-zinc-700 text-xs">—</span>
-                  )}
-                </div>
+      {/* ── Page gallery ── */}
+      <div className="six-day-reconcile-gallery">
+        {galleryRows(reconcileRows).map((row, rowIdx) => {
+          const rowHasOpen = openPageId != null && row.some((p: any) => String(p.page_id) === openPageId);
+          const openPage = rowHasOpen ? row.find((p: any) => String(p.page_id) === openPageId) : null;
+          return (
+            <Fragment key={rowIdx}>
+              <div className="six-day-gallery-row">
+                {row.map((p: any) => {
+                  const raw = drafts[p.page_id];
+                  const actual = raw !== "" && raw !== undefined ? Number(raw) : null;
+                  const drift = actual != null && !Number.isNaN(actual) ? actual - (p.cycle_views_sum || 0) : null;
+                  return (
+                    <ReconcileGalleryChip
+                      key={p.page_id}
+                      page={p}
+                      cycleSum={p.cycle_views_sum || 0}
+                      drift={drift}
+                      selected={openPageId === String(p.page_id)}
+                      onSelect={() => togglePage(String(p.page_id))}
+                    />
+                  );
+                })}
               </div>
-            );
-          })}
+              <AnimatePresence>
+                {rowHasOpen && openPage && (
+                  <motion.div
+                    key={openPage.page_id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 4 }}
+                    transition={{ duration: 0.16 }}
+                    className="six-day-gallery-sheet"
+                  >
+                    <ReconcileDetailSheet
+                      page={openPage}
+                      draft={drafts[openPage.page_id] ?? ""}
+                      onDraftChange={(v) => setDrafts((prev) => ({ ...prev, [openPage.page_id]: v }))}
+                      onSave={() => saveSingle(openPage.page_id)}
+                      canEdit={canEdit}
+                      isSaving={actualMut.isPending}
+                      onClose={() => setOpenPageId(null)}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </Fragment>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ReconcileGalleryChip({
+  page, cycleSum, drift, selected, onSelect,
+}: {
+  page: any;
+  cycleSum: number;
+  drift: number | null;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const hasActual = drift != null;
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`fglass-chip${selected ? " fglass-chip-on" : ""}`}
+    >
+      <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${hasActual ? "bg-violet-400/80" : "bg-zinc-500/55"}`} />
+      <div className="flex-1 min-w-0 text-left">
+        <span className="block text-[13px] font-medium text-white/88 truncate leading-tight">
+          {page.name || page.handle}
+        </span>
+        <span className="block text-[11px] fglass-muted truncate">@{page.handle}</span>
+        <span className="block text-[10px] fglass-muted mt-1 tabular-nums">
+          Cycle {fmt(cycleSum)}
+          {drift != null && (
+            <span className={drift > 0 ? " text-emerald-400/90" : drift < 0 ? " text-red-400/90" : ""}>
+              {" · "}{drift > 0 ? "+" : ""}{fmt(drift)} drift
+            </span>
+          )}
+        </span>
+      </div>
+      <ChevronDown className={`w-3.5 h-3.5 shrink-0 fglass-muted opacity-80 transition-transform duration-200 ${selected ? "rotate-180" : ""}`} />
+    </button>
+  );
+}
+
+function ReconcileDetailSheet({
+  page, draft, onDraftChange, onSave, canEdit, isSaving, onClose,
+}: {
+  page: any;
+  draft: string;
+  onDraftChange: (v: string) => void;
+  onSave: () => void;
+  canEdit: boolean;
+  isSaving: boolean;
+  onClose: () => void;
+}) {
+  const cycleSum = page.cycle_views_sum || 0;
+  const actual = draft !== "" && draft !== undefined ? Number(draft) : null;
+  const drift = actual != null && !Number.isNaN(actual) ? actual - cycleSum : null;
+  const hasDraft = draft !== "" && draft !== undefined;
+
+  return (
+    <div className="fglass-sheet overflow-hidden">
+      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b fglass-divider">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-white truncate">{page.name || page.handle}</div>
+          <div className="text-xs fglass-muted truncate">@{page.handle}</div>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-1.5 rounded-lg fglass-muted hover:text-white/75 hover:bg-white/5 transition-colors"
+          aria-label="Close"
+        >
+          <ChevronUp className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="rounded-xl border border-white/[0.06] bg-black/20 px-3 py-2.5">
+          <p className="text-[9px] uppercase fglass-label mb-1">Cycle sum</p>
+          <p className="text-lg font-bold text-white tabular-nums">{fmt(cycleSum)}</p>
+        </div>
+        <div className="rounded-xl border border-white/[0.06] bg-black/20 px-3 py-2.5">
+          <p className="text-[9px] uppercase fglass-label mb-1">IG dashboard</p>
+          <Input
+            type="number"
+            value={draft}
+            onChange={(e) => onDraftChange(e.target.value)}
+            onKeyDown={(e) => { if (canEdit && e.key === "Enter") onSave(); }}
+            onBlur={() => { if (canEdit && hasDraft) onSave(); }}
+            disabled={!canEdit || isSaving}
+            placeholder="Enter views…"
+            className="h-9 w-full text-sm fglass-input tabular-nums mt-0.5"
+          />
+        </div>
+        <div className="rounded-xl border border-white/[0.06] bg-black/20 px-3 py-2.5 flex flex-col justify-center">
+          <p className="text-[9px] uppercase fglass-label mb-1">Drift</p>
+          {drift != null ? (
+            <span className={`inline-flex items-center gap-1 text-sm font-bold tabular-nums ${
+              drift > 0 ? "text-emerald-400" : drift < 0 ? "text-red-400" : "text-zinc-400"
+            }`}>
+              {drift > 0 ? <TrendingUp className="w-3.5 h-3.5" /> : drift < 0 ? <TrendingDown className="w-3.5 h-3.5" /> : null}
+              {drift > 0 ? "+" : ""}{fmt(drift)}
+            </span>
+          ) : (
+            <span className="text-sm fglass-meta">—</span>
+          )}
         </div>
       </div>
     </div>

@@ -325,6 +325,7 @@ function SafeTextInput({value, onSave, style, placeholder, type}: {value: string
   return (
     <input
       type={type || "text"}
+      className="fglass-input"
       value={local}
       onChange={e => { dirty.current = true; setLocal(e.target.value); }}
       onBlur={() => {
@@ -345,6 +346,7 @@ function SafeTextArea({value, onSave, style, placeholder, rows}: {value: string;
   useEffect(() => { if (!dirty.current) setLocal(value || ""); }, [value]);
   return (
     <textarea
+      className="fglass-input"
       value={local}
       onChange={e => { dirty.current = true; setLocal(e.target.value); }}
       onBlur={() => {
@@ -682,31 +684,31 @@ function Modal({open,onClose,title,onTitleChange,children,wide}: {open:boolean;o
 
   if(!open) return null;
   return (
-    <div style={{position:"fixed",inset:0,zIndex:999,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={onClose}>
-      <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.6)",backdropFilter:"blur(4px)"}}/>
-      <div onClick={e=>e.stopPropagation()} style={{position:"relative",background:"#18181b",borderRadius:16,padding:"24px 28px",maxWidth:wide?720:520,width:"94%",maxHeight:"88vh",overflowY:"auto",boxShadow:"0 24px 80px rgba(0,0,0,0.5)",border:"1px solid #27272a"}}>
+    <div className="fglass-modal-overlay" onClick={onClose}>
+      <div className="fglass-modal-scrim"/>
+      <div onClick={e=>e.stopPropagation()} className="fglass-sheet fglass-modal" style={{maxWidth:wide?720:520}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
           {onTitleChange&&editing?(
             <input
               ref={titleInputRef}
+              className="fglass-input"
               value={draft}
               onChange={e=>setDraft(e.target.value)}
               onBlur={commitEdit}
               onKeyDown={e=>{if(e.key==="Enter")commitEdit();if(e.key==="Escape"){setEditing(false);}}}
-              style={{flex:1,fontSize:17,fontWeight:600,color:"#fff",letterSpacing:"-0.02em",background:"transparent",border:"none",borderBottom:"1.5px solid #7c3aed",outline:"none",padding:"0 0 2px",marginRight:8}}
+              style={{flex:1,fontSize:17,fontWeight:600,letterSpacing:"-0.02em",border:"none",borderBottom:"1.5px solid rgba(124,58,237,.55)",outline:"none",padding:"0 0 2px",marginRight:8,background:"transparent"}}
             />
           ):(
             <div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}>
               <h2 style={{margin:0,fontSize:17,fontWeight:600,color:"#fff",letterSpacing:"-0.02em",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{title}</h2>
               {onTitleChange&&(
-                <button onClick={startEdit} title="Rename" style={{background:"none",border:"none",cursor:"pointer",color:"#52525b",padding:"2px 4px",borderRadius:5,lineHeight:1,flexShrink:0,display:"flex",alignItems:"center"}}
-                  onMouseEnter={e=>(e.currentTarget.style.color="#a1a1aa")} onMouseLeave={e=>(e.currentTarget.style.color="#52525b")}>
+                <button onClick={startEdit} title="Rename" className="fglass-muted" style={{background:"none",border:"none",cursor:"pointer",padding:"2px 4px",borderRadius:5,lineHeight:1,flexShrink:0,display:"flex",alignItems:"center"}}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 </button>
               )}
             </div>
           )}
-          <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#71717a",padding:"4px 8px",borderRadius:6,flexShrink:0}}>✕</button>
+          <button onClick={onClose} className="fglass-muted" style={{background:"none",border:"none",fontSize:20,cursor:"pointer",padding:"4px 8px",borderRadius:6,flexShrink:0}}>✕</button>
         </div>
         {children}
       </div>
@@ -791,14 +793,13 @@ function PostingCard({po,page,fmtD,PT,updatePostingMut,onRemove}: {po:any;page:s
   );
 }
 
-function IdeaCard({idea,niches,onClick}: {idea:any;niches:any[];onClick:()=>void}){
+function IdeaCard({idea,niches,onClick,isSelected}: {idea:any;niches:any[];onClick:()=>void;isSelected?:boolean}){
   const ideaNiches=niches.filter((n: any)=>(idea.nicheIds||[]).includes(n.id));
   const pc=idea.postings?.length||0;
   const bp=idea.postings?.reduce((b: string|null, p: any)=>{const t=gPerf(p.views,p.baselineViews);const o: Record<string,number>={viral:4,topline:3,baseline:2,below:1};return(o[t||""]||0)>(o[b||""]||0)?t:b;},null);
   const shareUrl = `${window.location.origin}/post-tracker?idea=${idea.id}`;
   return(
-    <div onClick={onClick} style={{background:"#18181b",borderRadius:10,padding:"11px 13px",marginBottom:5,border:"1px solid #27272a",cursor:"grab",transition:"box-shadow 0.15s"}}
-      onMouseEnter={e=>(e.currentTarget.style.boxShadow="0 3px 12px rgba(0,0,0,0.3)")} onMouseLeave={e=>(e.currentTarget.style.boxShadow="none")}>
+    <div onClick={onClick} className={`fglass-card fglass-purple-shadow${isSelected ? " is-selected" : ""}`} style={{borderRadius:12,padding:"11px 13px",marginBottom:6,cursor:"grab"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
         <p style={{margin:0,fontSize:13,fontWeight:500,color:"#fff",lineHeight:1.35,flex:1}}>{idea.title}</p>
         <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
@@ -822,7 +823,7 @@ function IdeaCard({idea,niches,onClick}: {idea:any;niches:any[];onClick:()=>void
         {splitPillarBucket(idea.content_pillar).map((t) => (
           <span key={t} style={{fontSize:9,padding:"1px 6px",borderRadius:99,background:"rgba(124,58,237,0.15)",color:"#B49EFF",fontWeight:500}}>{t}</span>
         ))}
-        {pc>0&&<span style={{fontSize:10,color:"#52525b",fontWeight:500}}>{pc}pg</span>}
+        {pc>0&&<span className="fglass-muted" style={{fontSize:10,fontWeight:500}}>{pc}pg</span>}
       </div>
       {/* Info row */}
       <div style={{marginTop:5,display:"flex",flexDirection:"column",gap:2}}>
@@ -1504,8 +1505,8 @@ export default function PostTracker(){
     setEditNiche(null);
   }
 
-  const is: React.CSSProperties={width:"100%",padding:"9px 13px",border:"1.5px solid #3f3f46",borderRadius:9,fontSize:13,outline:"none",background:"#09090b",boxSizing:"border-box"};
-  const ls: React.CSSProperties={display:"block",fontSize:11,fontWeight:600,color:"#71717a",marginBottom:4,letterSpacing:"0.04em",textTransform:"uppercase"};
+  const is: React.CSSProperties={width:"100%",padding:"9px 13px",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",color:"rgba(244,244,247,.95)"};
+  const ls: React.CSSProperties={};
   const bp: React.CSSProperties={padding:"9px 20px",background:"#7c3aed",color:"#fff",border:"none",borderRadius:9,fontSize:13,fontWeight:600,cursor:"pointer"};
   const bs: React.CSSProperties={padding:"9px 20px",background:"#27272a",color:"#e4e4e7",border:"1px solid #3f3f46",borderRadius:9,fontSize:13,fontWeight:500,cursor:"pointer"};
 
@@ -1598,11 +1599,11 @@ export default function PostTracker(){
   }
 
   return(
-    <div style={{fontFamily:"'DM Sans','Helvetica Neue',sans-serif",minHeight:"100vh",background:"#09090b",color:"#fff"}}>
+    <div className="fglass-page" style={{fontFamily:"'DM Sans','Helvetica Neue',sans-serif",minHeight:"100vh",color:"#fff"}}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 
       {/* Header — left padded to clear hamburger menu */}
-      <div style={{padding:"20px 24px 12px 70px",borderBottom:"1px solid #27272a",background:"#09090b"}}>
+      <div className="fglass-divider" style={{padding:"20px 24px 12px 70px",borderBottomWidth:1,borderBottomStyle:"solid",background:"transparent"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
           <div>
             <h1 style={{margin:0,fontSize:20,fontWeight:700,letterSpacing:"-0.03em"}}>Post tracker</h1>
@@ -1779,10 +1780,10 @@ export default function PostTracker(){
                 <span style={{fontSize:11,fontWeight:600,color:SC[stage].text}}>{SL[stage]}</span>
                 <span style={{fontSize:10,color:"#52525b",fontWeight:500}}>{ideaStageCounts[stage] ?? 0}</span>
               </div>
-              <div style={{minHeight:50,padding:1,borderRadius:9,transition:"all 0.15s",border:dropStage===stage?"2px solid #7c3aed":"2px solid transparent",background:dropStage===stage?"rgba(124,58,237,0.05)":"transparent"}}>
+              <div className={`fglass-lane${dropStage===stage?" is-drop-target":""}`} style={{transition:"all 0.15s"}}>
                 {rbacFilteredIdeas.filter((i: any)=>normalizePostTrackerStage(i.stage)===stage).sort((a: any,b: any)=>b.createdAt-a.createdAt).map((idea: any)=>(
                   <div key={idea.id} draggable onDragStart={e=>{setDraggingId(idea.id);e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain",idea.id);}} onDragEnd={()=>{setDraggingId(null);setDropStage(null);}} style={{opacity:draggingId===idea.id?0.4:1,transition:"opacity 0.15s"}}>
-                    <IdeaCard idea={idea} niches={niches} onClick={()=>openDetail(idea)}/>
+                    <IdeaCard idea={idea} niches={niches} isSelected={detailIdea?.id===idea.id} onClick={()=>openDetail(idea)}/>
                   </div>
                 ))}
                 {(ideaStageCounts[stage] ?? 0)===0&&<div style={{padding:"24px 12px",textAlign:"center",color:"#3f3f46",fontSize:11,border:"1.5px dashed #3f3f46",borderRadius:9}}>Empty</div>}
@@ -1810,7 +1811,7 @@ export default function PostTracker(){
             <div style={{flex:1}}><label style={ls}>Niches *</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{niches.map((n: any)=>{const sel=newIdea.nicheIds.includes(n.id);return <button key={n.id} type="button" onClick={()=>setNewIdea(p=>({...p,nicheIds:sel?p.nicheIds.filter(x=>x!==n.id):[...p.nicheIds,n.id]}))} style={{padding:"6px 12px",borderRadius:8,border:sel?"2px solid #7c3aed":"1.5px solid #3f3f46",background:sel?"#27272a":"#18181b",fontSize:12,fontWeight:600,cursor:"pointer",color:sel?"#fff":"#71717a"}}>{n.name}</button>;})}</div></div>
             <div style={{flex:1}}><label style={ls}>Created by</label><div style={{...is,background:"#27272a",color:"#a1a1aa"}}>{user?.user_metadata?.full_name || user?.email?.split("@")[0] || "—"}</div></div>
           </div>
-          <div><label style={ls}>Hook text</label><textarea value={newIdea.hook_text} onChange={e=>setNewIdea(p=>({...p,hook_text:e.target.value}))} rows={2} placeholder="Short feed hook — the scroll-stopper line" style={{...is,resize:"vertical",minHeight:56}}/></div>
+          <div><label style={ls}>Hook text</label><textarea className="fglass-input" value={newIdea.hook_text} onChange={e=>setNewIdea(p=>({...p,hook_text:e.target.value}))} rows={2} placeholder="Short feed hook — the scroll-stopper line" style={{...is,resize:"vertical",minHeight:56}}/></div>
           <div><label style={ls}>Caption</label><textarea value={newIdea.caption} onChange={e=>setNewIdea(p=>({...p,caption:e.target.value}))} rows={4} placeholder="Paste the full Instagram caption here…" style={{...is,resize:"vertical",minHeight:90}}/></div>
           {newIdea.format === "carousel" && (
             <SlidesContentEditor
@@ -1887,6 +1888,7 @@ export default function PostTracker(){
             <div>
               <label style={ls}>Comments by the writer</label>
               <textarea
+                className="fglass-input"
                 value={writerDraft}
                 onChange={(e)=>{
                   writerDirty.current = true;
@@ -1946,7 +1948,7 @@ export default function PostTracker(){
             )}
 
             {/* Editable fields */}
-            <div><label style={ls}>Niches</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{niches.map((n: any)=>{const sel=detailNicheIds.includes(n.id);return <button key={n.id} onClick={()=>{const next=sel?detailNicheIds.filter((x: string)=>x!==n.id):[...detailNicheIds,n.id];setDetailNicheIds(next);saveNiches(cd.id,next);}} style={{padding:"6px 12px",borderRadius:8,border:sel?"2px solid #7c3aed":"1.5px solid #3f3f46",background:sel?"#27272a":"#18181b",fontSize:12,fontWeight:600,cursor:"pointer",color:sel?"#fff":"#71717a"}}>{n.name}</button>;})}</div></div>
+            <div><label style={ls}>Niches</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{niches.map((n: any)=>{const sel=detailNicheIds.includes(n.id);return <button key={n.id} type="button" onClick={()=>{const next=sel?detailNicheIds.filter((x: string)=>x!==n.id):[...detailNicheIds,n.id];setDetailNicheIds(next);saveNiches(cd.id,next);}} className={`fglass-pill${sel?" is-on":""}`}>{n.name}</button>;})}</div></div>
             <div>
               <label style={ls}>Format</label>
               <div style={{display:"flex",gap:6}}>
@@ -1964,18 +1966,7 @@ export default function PostTracker(){
                       setDetailIdea((cur: any)=>(cur && cur.id===cd.id ? {...cur, format:f, slides_content: nextSlides} : cur));
                       updateIdeaMut.mutate({id:cd.id,data:{format:f, slides_content: nextSlides}});
                     }}
-                    style={{
-                      flex:1,
-                      padding:"8px 10px",
-                      borderRadius:8,
-                      border: cd.format===f ? "2px solid #7c3aed" : "1.5px solid #3f3f46",
-                      background: cd.format===f ? "#27272a" : "#18181b",
-                      fontSize:12,
-                      fontWeight:600,
-                      cursor:"pointer",
-                      textTransform:"capitalize",
-                      color: cd.format===f ? "#fff" : "#a1a1aa",
-                    }}
+                    className={`fglass-pill-block${cd.format===f?" is-on":""}`}
                   >
                     {f}
                   </button>

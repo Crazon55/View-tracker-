@@ -130,35 +130,35 @@ export default function PagesView() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-950">
+      <div className="fglass-page min-h-screen flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 px-6 py-8">
+    <div className="fglass-page min-h-screen px-6 py-8">
       <div className="max-w-7xl mx-auto space-y-8">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-black text-white">IPs</h1>
-            <p className="text-zinc-500 mt-1">
+            <p className="fglass-muted mt-1">
               {isPosts
                 ? "Post IPs by stage — drag to change stage, click to manage posts"
                 : "Reel IPs by stage — drag to change stage, click to manage reels"}
             </p>
-            <div className="inline-flex items-center bg-zinc-800/80 rounded-full p-0.5 gap-0.5 mt-4">
+            <div className="inline-flex items-center six-day-seg mt-4">
               <button
                 type="button"
                 onClick={() => setIpMode("reels")}
-                className={`text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-full font-medium transition-all ${!isPosts ? "bg-emerald-600 text-white" : "text-zinc-500 hover:text-zinc-300"}`}
+                className={!isPosts ? "is-on" : ""}
               >
                 Reels
               </button>
               <button
                 type="button"
                 onClick={() => setIpMode("posts")}
-                className={`text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-full font-medium transition-all ${isPosts ? "bg-emerald-600 text-white" : "text-zinc-500 hover:text-zinc-300"}`}
+                className={isPosts ? "is-on" : ""}
               >
                 Posts
               </button>
@@ -213,7 +213,7 @@ export default function PagesView() {
             return (
               <div
                 key={stage.value}
-                className={`border rounded-2xl p-5 transition-all ${dropStage === stage.value ? "scale-[1.01] border-2 brightness-110" : ""} ${stage.color}`}
+                className={`fglass-panel fglass-purple-shadow rounded-2xl p-5 transition-all ${dropStage === stage.value ? "scale-[1.01] ring-2 ring-violet-500/40" : ""}`}
                 onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropStage(stage.value); }}
                 onDragLeave={() => setDropStage(null)}
                 onDrop={(e) => {
@@ -239,7 +239,7 @@ export default function PagesView() {
                       draggable
                       onDragStart={(e) => { setDraggingId(page.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", page.id); }}
                       onDragEnd={() => { setDraggingId(null); setDropStage(null); }}
-                      className={`group flex items-center justify-between bg-zinc-950/60 hover:bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-xl px-4 py-3 cursor-grab active:cursor-grabbing transition-all ${draggingId === page.id ? "opacity-40 scale-95" : ""}`}
+                      className={`group flex items-center justify-between fglass-card fglass-purple-shadow rounded-xl px-4 py-3 cursor-grab active:cursor-grabbing transition-all ${draggingId === page.id ? "opacity-40 scale-95" : ""}`}
                       onClick={() => openPage(page.id)}
                     >
                       <div className="flex items-center gap-3 min-w-0">

@@ -3,6 +3,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { PlaybookId } from "@/lib/playbookExperimentConfig";
+import { canonicalRole } from "@/lib/accessModel";
 
 export type Permission =
   | 'view_own_ideas'        // see only ideas you created
@@ -95,6 +96,48 @@ export function isPlaybookViewOnly(role: string | null, playbookId: PlaybookId):
   return getPlaybookAccess(role, playbookId) === "view";
 }
 
+// ── Per-role playbook view profile ─────────────────────────────────────────────
+// The daily loop splits a playbook across three roles. Each sees a different slice:
+//   VE (video editor) → ONLY the Production board.
+//   CS               → edit Frontseat, view everything else.
+//   CO (content ops) → edit everything, lands on Tracking.
+//   admin/senior_cs  → edit everything.
+//   view-only        → see everything, edit nothing.
+export type PlaybookTabId = "frontseat" | "idea-bank" | "tracking" | "calendar" | "content-bank" | "working-ideas";
+export type PlaybookViewProfile = { tabs: PlaybookTabId[]; edit: PlaybookTabId[]; defaultTab: PlaybookTabId };
+
+// Calendar, Content Bank and Proven Ideas were retired from the playbook nav —
+// the Idea Engine now covers all of that. Tabs live on: Content Distribution
+// (frontseat), Production (idea-bank), Tracking.
+const ALL_PLAYBOOK_TABS: PlaybookTabId[] = ["frontseat", "idea-bank", "tracking"];
+
+/** Resolve which playbook tabs a role sees and which it can edit. Classifies by canonical
+ *  role first (so aliases like "editors" → VE work), then falls back to the access level. */
+export function getPlaybookViewProfile(role: string | null, playbookId: PlaybookId): PlaybookViewProfile | null {
+  const roles = (role || "").split(",").map((r) => canonicalRole(r.trim())).filter(Boolean);
+  const has = (r: string) => roles.includes(r);
+
+  if (has("admin") || has("senior_cs")) {
+    return { tabs: ALL_PLAYBOOK_TABS, edit: ALL_PLAYBOOK_TABS, defaultTab: "idea-bank" };
+  }
+  if (has("co")) {
+    return { tabs: ["tracking", "frontseat", "idea-bank"], edit: ALL_PLAYBOOK_TABS, defaultTab: "tracking" };
+  }
+  if (has("cs")) {
+    return { tabs: ALL_PLAYBOOK_TABS, edit: ["frontseat"], defaultTab: "frontseat" };
+  }
+  if (has("ve")) {
+    return { tabs: ["idea-bank"], edit: ["idea-bank"], defaultTab: "idea-bank" };
+  }
+
+  // Other roles fall back to the coarse access level.
+  const access = getPlaybookAccess(role, playbookId);
+  if (access === "none") return null;
+  if (access === "edit") return { tabs: ALL_PLAYBOOK_TABS, edit: ALL_PLAYBOOK_TABS, defaultTab: "idea-bank" };
+  if (access === "ops") return { tabs: ["tracking", "idea-bank", "frontseat"], edit: ["tracking"], defaultTab: "tracking" };
+  return { tabs: ALL_PLAYBOOK_TABS, edit: [], defaultTab: "idea-bank" }; // view-only
+}
+
 export function accessiblePlaybookIds(role: string | null): PlaybookId[] {
   return PLAYBOOK_IDS.filter((id) => canAccessPlaybook(role, id));
 }
@@ -141,6 +184,18 @@ const COLLABORATOR_PERMISSIONS: Permission[] = [
   'view_pintu',
 ]
 
+// Video editor — edit access to every playbook (their Production board). Tab scoping to
+// Production-only is handled by getPlaybookViewProfile.
+const VE_PERMISSIONS: Permission[] = [
+  'view_playbook_bpb', 'edit_playbook_bpb',
+  'view_playbook_xf', 'edit_playbook_xf',
+  'view_playbook_tech', 'edit_playbook_tech',
+  'view_fsi_canvas', 'edit_fsi_canvas',
+]
+
+// Content Strategist — playbook access is VIEW; getPlaybookViewProfile grants Frontseat edit.
+const CS_PLAYBOOK_VIEW: Permission[] = ['view_playbook_bpb', 'view_playbook_xf', 'view_playbook_tech']
+
 /** Explicit Pintu nav access (in addition to view_pintu role permission). */
 const PINTU_NAV_EMAILS = new Set([
   'nitesh.gunupudi@owledmedia.com',
@@ -154,12 +209,16 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
   boss_man:  ADMIN_PERMISSIONS,
   ai_dev:    ADMIN_PERMISSIONS,
 
-  // Content creators — own their ideas, full nav
-  cs: CS_CW_PERMISSIONS,
+  // Content creators — own their ideas, full nav. CS also gets playbook VIEW so they can
+  // open the playbook; Frontseat edit is granted by getPlaybookViewProfile.
+  cs: [...CS_CW_PERMISSIONS, ...CS_PLAYBOOK_VIEW],
   cw: CS_CW_PERMISSIONS,
 
+  // Video editor — playbook Production board only (tab scoping via getPlaybookViewProfile).
+  ve:      VE_PERMISSIONS,
+  editors: VE_PERMISSIONS,
+
   // Collaborators — only see ideas they are tagged on, restricted nav
-  editors:           COLLABORATOR_PERMISSIONS,
   carousel_designer: COLLABORATOR_PERMISSIONS,
 
   // Design — reads everything site-wide, but in Post Tracker only sees tagged ideas
@@ -216,7 +275,9 @@ export const ROLE_NAV: Record<string, '*' | string[]> = {
 
   design: '*',
 
-  editors:           ['/', '/content-tracker', '/growth'],
+  // Video editor — playbook Production board only, nothing else.
+  ve:      ['/', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x'],
+  editors: ['/', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x'],
   carousel_designer: ['/', '/post-tracker', '/growth'],
 
   smm:              ['/', '/content-tracker', '/post-tracker', '/growth', '/fsi-canvas'],

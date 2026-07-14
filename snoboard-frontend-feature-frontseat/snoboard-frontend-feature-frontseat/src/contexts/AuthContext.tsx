@@ -3,8 +3,15 @@ import type { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { setAccessToken, getUserRole, setUserRole } from "@/services/api";
 import { hasPermission } from "@/lib/permissions";
+import { ALL_ROLES, canonicalRole } from "@/lib/accessModel";
 
 const ALLOWED_DOMAIN = "owledmedia.com";
+/** Valid preview targets: legacy preview roles OR any unified/legacy access-model role. */
+const isValidPreviewRole = (r: string | null | undefined): boolean =>
+  !!r && (ROLES.some((x) => x.value === r) || ALL_ROLES.some((x) => x.key === r));
+/** ONLY true admins may preview roles — not Senior CS or anyone else. */
+const isAdminRole = (role: string | null | undefined): boolean =>
+  !!role && role.split(",").map((r) => r.trim()).some((r) => canonicalRole(r) === "admin");
 const ROLE_PREVIEW_PREFIX = "role_preview_";
 
 function rolePreviewStorageKey(email: string) {
@@ -44,7 +51,12 @@ const ROLES = [
 function roleLabel(roleValue: string | null): string | null {
   if (!roleValue) return null;
   const primary = roleValue.split(",")[0]?.trim();
-  return ROLES.find((r) => r.value === primary)?.label || primary || roleValue;
+  return (
+    ROLES.find((r) => r.value === primary)?.label ||
+    ALL_ROLES.find((r) => r.key === primary)?.label ||
+    primary ||
+    roleValue
+  );
 }
 
 interface AuthContextType {
@@ -106,12 +118,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const loadStoredPreview = (email: string, realRole: string | null) => {
-    if (!realRole || !hasPermission(realRole, "manage_team")) {
+    if (!realRole || !isAdminRole(realRole)) {
       clearStoredPreview(email);
       return;
     }
     const stored = sessionStorage.getItem(rolePreviewStorageKey(email));
-    if (stored && ROLES.some((r) => r.value === stored)) {
+    if (stored && isValidPreviewRole(stored)) {
       setRolePreviewState(stored);
     } else {
       clearStoredPreview(email);
@@ -187,8 +199,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const setRolePreview = (previewRole: string) => {
-    if (!user?.email || !actualRole || !hasPermission(actualRole, "manage_team")) return;
-    if (!ROLES.some((r) => r.value === previewRole)) return;
+    if (!user?.email || !actualRole || !isAdminRole(actualRole)) return;
+    if (!isValidPreviewRole(previewRole)) return;
     sessionStorage.setItem(rolePreviewStorageKey(user.email), previewRole);
     setRolePreviewState(previewRole);
   };
@@ -241,7 +253,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const canUseRolePreview = !!actualRole && hasPermission(actualRole, "manage_team");
+  const canUseRolePreview = isAdminRole(actualRole);
   const isRolePreviewActive = canUseRolePreview && !!rolePreview;
   const effectiveRole = isRolePreviewActive ? rolePreview : actualRole;
 

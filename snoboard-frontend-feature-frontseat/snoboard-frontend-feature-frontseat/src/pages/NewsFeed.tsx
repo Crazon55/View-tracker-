@@ -541,7 +541,7 @@ function resetLearning() {
 function SourceBadge({ item }: { item: FeedItem }) {
   if (item.type === "linkedin") {
     return (
-      <span className="inline-flex items-center gap-1 text-[9px] font-black tracking-[0.3em] uppercase text-blue-400/90 font-sans">
+      <span className="news-byline news-byline--linkedin inline-flex items-center gap-1">
         <Linkedin className="w-2.5 h-2.5" />
         LinkedIn
       </span>
@@ -549,14 +549,14 @@ function SourceBadge({ item }: { item: FeedItem }) {
   }
   if (item.type === "inshorts") {
     return (
-      <span className="inline-flex items-center gap-1 text-[9px] font-black tracking-[0.3em] uppercase text-orange-400/90 font-sans">
+      <span className="news-byline news-byline--inshorts inline-flex items-center gap-1">
         <Zap className="w-2.5 h-2.5" />
         Inshorts{item.source ? ` · ${item.source}` : ""}
       </span>
     );
   }
   return (
-    <span className="text-[9px] font-black tracking-[0.3em] uppercase text-amber-400/80 font-sans">
+    <span className="news-byline news-byline--news">
       {item.source}
     </span>
   );
@@ -567,13 +567,6 @@ const TOPIC_LABELS: Record<Exclude<TopicFilter, "all">, string> = {
   startup: "Startup",
   founder: "Founder",
   political: "Political",
-};
-
-const TOPIC_CHIP_COLORS: Record<Exclude<TopicFilter, "all">, string> = {
-  tech: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
-  startup: "bg-violet-500/10 text-violet-400 border-violet-500/20",
-  founder: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-  political: "bg-rose-500/10 text-rose-400 border-rose-500/20",
 };
 
 // ─── Feed Card ────────────────────────────────────────────────────────────────
@@ -594,81 +587,77 @@ function FeedCard({
   onYes: (item: FeedItem) => void;
   onNo: (item: FeedItem) => void;
 }) {
+  const isLead = idx === 0;
+  const topic = detectPrimaryTopic(item);
+
   return (
-    <div className={cn(
-      "rounded-2xl border bg-zinc-900/40 border-t-2 hover:border-zinc-700 hover:bg-zinc-900/70 transition-all duration-150 overflow-hidden",
-      vote === "yes"
-        ? "border-emerald-800 border-t-emerald-500/60"
-        : "border-zinc-800 border-t-amber-500/50"
-    )}>
-      <div className="p-5 sm:p-6">
-        {/* Byline row */}
-        <div className="flex items-center gap-2 mb-3">
+    <article className={cn("news-card", isLead && "news-card--lead", vote === "yes" && "is-yes")}>
+      {!isLead && (
+        <span className="news-story-no" aria-hidden="true">§{idx + 1}</span>
+      )}
+      <div className="news-card-inner">
+        {topic && (
+          <p className="news-kicker">{TOPIC_LABELS[topic]}</p>
+        )}
+
+        <div className="news-byline-row">
           <SourceBadge item={item} />
-          <div className="flex-1 h-px bg-zinc-800" />
-          <span className="text-[9px] tracking-[0.1em] text-zinc-600 font-sans">
-            {formatDate(item.publishedAt)}
-          </span>
+          <span className="news-dateline-sep">|</span>
+          <span className="news-dateline">{formatDate(item.publishedAt)}</span>
+          {isLead && (
+            <>
+              <span className="news-dateline-sep">|</span>
+              <span className="news-dateline">Lead Story</span>
+            </>
+          )}
         </div>
 
-        <div className="flex items-start gap-5">
+        <div className="flex items-start gap-4">
           <div className="flex-1 min-w-0">
-            {/* Title / Author */}
             <h3 className={cn(
-              "font-serif font-black text-white leading-tight mb-2 break-words",
-              idx === 0 ? "text-2xl" : "text-xl"
+              "news-headline",
+              isLead ? "news-headline--lead" : "news-headline--item",
+              !isLead && "mb-2",
             )}>
               {item.type === "linkedin" ? (
-                <a href={item.authorUrl} target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 transition-colors">
+                <a href={item.authorUrl} target="_blank" rel="noopener noreferrer" className="hover:text-[var(--accent-2)] transition-colors">
                   {item.title}
                 </a>
               ) : item.title}
             </h3>
 
-            {/* Body */}
             {item.body && (
-              <>
-                <div className="h-px bg-zinc-800 mb-2" />
-                <p className="text-[11px] text-zinc-500 leading-relaxed line-clamp-4 font-sans">
-                  {item.body}
-                </p>
-              </>
+              <p className={cn(
+                "news-deck",
+                isLead ? "news-deck--lead news-deck--dropcap line-clamp-3" : "line-clamp-4",
+              )}>
+                {item.body}
+              </p>
             )}
 
-            {/* LinkedIn engagement */}
             {item.type === "linkedin" && (
               <div className="flex items-center gap-4 mt-2">
-                <div className="flex items-center gap-1 text-[10px] text-zinc-600">
+                <div className="flex items-center gap-1 text-[10px] fglass-meta">
                   <ThumbsUp className="w-3 h-3" />
                   {formatCompact(item.likes || 0)}
                 </div>
-                <div className="flex items-center gap-1 text-[10px] text-zinc-600">
+                <div className="flex items-center gap-1 text-[10px] fglass-meta">
                   <MessageSquare className="w-3 h-3" />
                   {formatCompact(item.comments || 0)}
                 </div>
               </div>
             )}
 
+            {topic && (
+              <span className={cn("news-section-tag", `news-section-tag--${topic}`)}>
+                {TOPIC_LABELS[topic]}
+              </span>
+            )}
 
-            {/* Topic tag */}
-            {(() => {
-              const topic = detectPrimaryTopic(item);
-              if (!topic) return null;
-              return (
-                <span className={cn(
-                  "text-[9px] px-2 py-0.5 rounded-full border font-sans",
-                  TOPIC_CHIP_COLORS[topic],
-                )}>
-                  {TOPIC_LABELS[topic]}
-                </span>
-              );
-            })()}
-
-            {/* Keyword tags */}
             {item.matchedKeywords.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-2">
                 {item.matchedKeywords.map((k) => (
-                  <span key={k} className="text-[9px] px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20">
+                  <span key={k} className="text-[9px] px-2 py-0.5 rounded-sm bg-violet-500/10 text-violet-400 border border-violet-500/20 font-mono uppercase tracking-wide">
                     {k}
                   </span>
                 ))}
@@ -676,28 +665,27 @@ function FeedCard({
             )}
           </div>
 
-          {/* Actions */}
-          <div className="shrink-0 flex flex-col gap-2 items-end border-l border-zinc-800 pl-5 w-[110px]">
+          <div className={cn(
+            "flex flex-col gap-2 items-end shrink-0",
+            isLead ? "news-col-rule w-[100px]" : "news-col-rule",
+          )}>
             <a
               href={item.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-xs text-zinc-300 hover:text-white hover:border-white/20 transition-colors"
+              className="news-btn"
             >
               <ExternalLink className="w-3 h-3" />
               {item.type === "linkedin" ? "View Post" : "Read"}
             </a>
 
-            {/* Yes / No feedback */}
             <div className="flex gap-1.5">
               <button
                 onClick={() => onYes(item)}
                 title="Good content — learn more like this"
                 className={cn(
-                  "inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors",
-                  vote === "yes"
-                    ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
-                    : "bg-white/[0.03] border-white/10 text-zinc-500 hover:bg-emerald-500/10 hover:border-emerald-500/30 hover:text-emerald-400"
+                  "news-btn px-2.5",
+                  vote === "yes" && "border-emerald-500/40 text-emerald-300 bg-emerald-500/15",
                 )}
               >
                 <ThumbsUp className="w-3 h-3" />
@@ -705,21 +693,15 @@ function FeedCard({
               <button
                 onClick={() => onNo(item)}
                 title="Not relevant — hide and learn to block similar"
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border bg-white/[0.03] border-white/10 text-zinc-500 hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-400 transition-colors"
+                className="news-btn px-2.5 hover:border-red-500/30 hover:text-red-400 hover:bg-red-500/10"
               >
                 <ThumbsDown className="w-3 h-3" />
               </button>
             </div>
 
-            {/* Save */}
             <button
               onClick={() => onSave(item)}
-              className={cn(
-                "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors",
-                isSaved
-                  ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-red-500/10 hover:border-red-500/20 hover:text-red-400"
-                  : "bg-amber-500/10 border border-amber-500/20 text-amber-300 hover:bg-amber-500/20"
-              )}
+              className={cn("news-btn news-btn--save", isSaved && "is-saved")}
             >
               {isSaved
                 ? <><BookmarkCheck className="w-3 h-3" /> Saved</>
@@ -729,7 +711,10 @@ function FeedCard({
           </div>
         </div>
       </div>
-    </div>
+      {isLead && (
+        <div className="news-fold-rule" aria-hidden="true">Also in this edition</div>
+      )}
+    </article>
   );
 }
 
@@ -869,46 +854,44 @@ export default function NewsFeed() {
   }).length;
 
   return (
-    <div className="min-h-screen bg-zinc-950 pt-20 pb-16 px-4 sm:px-6 overflow-x-hidden">
-      <div className="max-w-5xl mx-auto w-full">
+    <div className="news-page overflow-x-hidden">
+      <div className="news-page-inner">
 
         {/* Masthead */}
-        <div className="mb-10">
-          <div className="h-[2px] bg-amber-500/50" />
-          <div className="h-px bg-zinc-700 mt-0.5 mb-4" />
+        <div className="mb-8">
+          <div className="news-rule" />
+          <div className="news-rule-thin mt-0.5 mb-4" />
           <div className="flex items-end justify-between px-1">
             <div className="text-left pb-1">
-              <p className="text-[8px] tracking-[0.3em] uppercase text-zinc-600 font-sans leading-relaxed">Est. 2024</p>
-              <p className="text-[8px] tracking-[0.3em] uppercase text-zinc-600 font-sans">Vol. I</p>
+              <p className="news-meta leading-relaxed">Est. 2024</p>
+              <p className="news-meta">Vol. I</p>
             </div>
             <div className="text-center flex-1 px-4">
-              <h1 className="font-serif text-4xl sm:text-5xl font-black text-white tracking-tight leading-none">
-                NEWS PIECES
-              </h1>
-              <p className="text-[9px] tracking-[0.35em] uppercase text-zinc-500 mt-2 font-sans">
-                News · Inshorts · LinkedIn
-              </p>
+              <h1 className="news-masthead-title">NEWS PIECES</h1>
+              <p className="news-masthead-ornament" aria-hidden="true">❧</p>
+              <p className="news-masthead-tagline">India business intelligence — curated daily</p>
+              <p className="news-masthead-sub">News · Inshorts · LinkedIn</p>
             </div>
             <div className="text-right pb-1">
-              <p className="text-[8px] tracking-[0.2em] uppercase text-zinc-600 font-sans">
+              <p className="news-meta">
                 {new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
               </p>
               <button
                 onClick={handleScrape}
                 disabled={isFetching}
-                className="inline-flex items-center gap-1 text-[8px] tracking-[0.2em] uppercase text-zinc-500 hover:text-amber-400 transition-colors disabled:opacity-40 mt-1 ml-auto font-sans"
+                className="inline-flex items-center gap-1 news-meta hover:text-[var(--accent-2)] transition-colors disabled:opacity-40 mt-1 ml-auto"
               >
                 <RefreshCw className={cn("w-2.5 h-2.5", isFetching && "animate-spin")} />
                 {isFetching ? "Scraping…" : "Scrape Feed"}
               </button>
               {(noCount > 0 || learnedPatterns > 0) && (
                 <div className="flex items-center gap-2 mt-1 justify-end">
-                  <span className="text-[7px] tracking-[0.15em] text-zinc-700 font-sans">
+                  <span className="text-[7px] tracking-[0.15em] fglass-meta">
                     {noCount} hidden · {learnedPatterns} patterns learned
                   </span>
                   <button
                     onClick={handleResetLearning}
-                    className="text-[7px] tracking-[0.15em] uppercase text-zinc-700 hover:text-red-500 transition-colors font-sans"
+                    className="text-[7px] tracking-[0.15em] uppercase fglass-meta hover:text-red-400 transition-colors"
                   >
                     Reset
                   </button>
@@ -916,62 +899,52 @@ export default function NewsFeed() {
               )}
             </div>
           </div>
-          <div className="h-px bg-zinc-700 mt-4 mb-0.5" />
-          <div className="h-[2px] bg-amber-500/50" />
+          <div className="news-rule-thin mt-4 mb-0.5" />
+          <div className="news-rule" />
         </div>
 
         {/* Filter Tabs */}
-        <div className="mb-6 border-b border-zinc-800">
-          <div className="flex items-center">
+        <div className="news-tabs">
+          <div className="flex items-center flex-wrap">
             {FILTER_TABS.filter((t) => t !== "Saved").map((tab) => (
               <button
                 key={tab}
                 onClick={() => setFilter(tab)}
-                className={cn(
-                  "flex items-center gap-1.5 px-4 py-2 text-[9px] tracking-[0.25em] uppercase font-black font-sans border-b-2 -mb-px transition-colors whitespace-nowrap",
-                  filter === tab
-                    ? "border-amber-400 text-amber-300"
-                    : "border-transparent text-zinc-600 hover:text-zinc-300"
-                )}
+                className={cn("news-tab", filter === tab && "is-on")}
               >
                 {tab === "LinkedIn" && <Linkedin className="w-2.5 h-2.5" />}
                 {tab === "News" && <Newspaper className="w-2.5 h-2.5" />}
                 {tab === "Inshorts" && <Zap className="w-2.5 h-2.5" />}
                 {tab}
                 {tab === "News" && newsCount > 0 && (
-                  <span className="text-[8px] text-zinc-600 font-mono">({newsCount})</span>
+                  <span className="news-tab-count font-mono">({newsCount})</span>
                 )}
                 {tab === "Inshorts" && inshortsCount > 0 && (
-                  <span className="text-[8px] text-zinc-600 font-mono">({inshortsCount})</span>
+                  <span className="news-tab-count font-mono">({inshortsCount})</span>
                 )}
                 {tab === "LinkedIn" && linkedinCount > 0 && (
-                  <span className="text-[8px] text-zinc-600 font-mono">({linkedinCount})</span>
+                  <span className="news-tab-count font-mono">({linkedinCount})</span>
                 )}
               </button>
             ))}
 
-            <div className="w-px h-4 bg-zinc-700 mx-2 self-center" />
+            <div className="w-px h-4 bg-white/10 mx-2 self-center" />
 
             <button
               onClick={() => setFilter("Saved")}
-              className={cn(
-                "inline-flex items-center gap-1 px-4 py-2 text-[9px] tracking-[0.25em] uppercase font-black font-sans border-b-2 -mb-px transition-colors whitespace-nowrap",
-                filter === "Saved"
-                  ? "border-emerald-400 text-emerald-300"
-                  : "border-transparent text-zinc-600 hover:text-zinc-300"
-              )}
+              className={cn("news-tab", filter === "Saved" && "is-on-saved")}
             >
               <BookmarkCheck className="w-3 h-3" />
               Saved {saved.size > 0 && `(${saved.size})`}
             </button>
 
             <div className="ml-auto relative pb-1">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-600" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 fglass-meta" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search feed…"
-                className="pl-7 pr-3 py-1 text-[10px] bg-transparent border-0 text-zinc-400 placeholder:text-zinc-700 outline-none focus:text-zinc-200 w-44 font-sans"
+                className="news-search"
               />
             </div>
           </div>
@@ -979,24 +952,18 @@ export default function NewsFeed() {
 
         {/* Topic filters */}
         {filter !== "Saved" && (
-          <div className="mb-6 flex items-center gap-2 flex-wrap">
-            <span className="text-[9px] uppercase tracking-wider text-zinc-600 font-sans shrink-0">Topic:</span>
+          <div className="news-filter-bar">
+            <span className="news-filter-label shrink-0">Topic:</span>
             {TOPIC_FILTERS.map(({ key, label }) => (
               <button
                 key={key}
+                type="button"
                 onClick={() => setTopicFilter(key)}
-                className={cn(
-                  "inline-flex items-center gap-1 text-[9px] px-2.5 py-1 rounded-full border font-sans transition-colors",
-                  topicFilter === key
-                    ? key === "all"
-                      ? "bg-amber-500/15 text-amber-300 border-amber-500/40"
-                      : TOPIC_CHIP_COLORS[key as Exclude<TopicFilter, "all">] + " ring-1 ring-white/10"
-                    : "bg-zinc-900/50 text-zinc-500 border-zinc-800 hover:text-zinc-300 hover:border-zinc-700",
-                )}
+                className={cn("news-pill", topicFilter === key && "is-on")}
               >
                 {label}
                 {key !== "all" && topicCounts[key as Exclude<TopicFilter, "all">] > 0 && (
-                  <span className="text-[8px] opacity-70 font-mono">
+                  <span className="news-pill-count font-mono">
                     ({topicCounts[key as Exclude<TopicFilter, "all">]})
                   </span>
                 )}
@@ -1007,34 +974,34 @@ export default function NewsFeed() {
 
         {/* Count */}
         <div className="flex items-center gap-3 mb-6">
-          <div className="h-px flex-1 bg-zinc-800" />
-          <p className="text-[9px] tracking-[0.3em] uppercase text-zinc-600 font-sans shrink-0">
+          <div className="h-px flex-1 bg-white/[0.08]" />
+          <p className="news-count-line shrink-0">
             {isLoading
               ? "Loading edition…"
               : filter === "Saved"
                 ? `${filtered.length} saved item${filtered.length !== 1 ? "s" : ""}`
                 : `${filtered.length} item${filtered.length !== 1 ? "s" : ""} in circulation`}
           </p>
-          <div className="h-px flex-1 bg-zinc-800" />
+          <div className="h-px flex-1 bg-white/[0.08]" />
         </div>
 
         {/* Source summary pills */}
         {!isLoading && filter === "All" && allItems.length > 0 && (
-          <div className="flex items-center gap-2 mb-6 flex-wrap">
-            <span className="text-[9px] uppercase tracking-wider text-zinc-600 font-sans">Sources:</span>
+          <div className="news-filter-bar">
+            <span className="news-filter-label">Sources:</span>
             {newsCount > 0 && (
-              <span className="inline-flex items-center gap-1 text-[9px] px-2 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                <Newspaper className="w-2.5 h-2.5" /> {newsCount} news articles
+              <span className="news-source-pill is-on">
+                <Newspaper className="w-3 h-3" /> {newsCount} news articles
               </span>
             )}
             {inshortsCount > 0 && (
-              <span className="inline-flex items-center gap-1 text-[9px] px-2 py-1 rounded-full bg-orange-500/10 text-orange-400 border border-orange-500/20">
-                <Zap className="w-2.5 h-2.5" /> {inshortsCount} Inshorts cards
+              <span className="news-source-pill news-source-pill--inshorts">
+                <Zap className="w-3 h-3" /> {inshortsCount} Inshorts cards
               </span>
             )}
             {linkedinCount > 0 && (
-              <span className="inline-flex items-center gap-1 text-[9px] px-2 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                <Linkedin className="w-2.5 h-2.5" /> {linkedinCount} LinkedIn posts
+              <span className="news-source-pill news-source-pill--linkedin">
+                <Linkedin className="w-3 h-3" /> {linkedinCount} LinkedIn posts
               </span>
             )}
           </div>
@@ -1043,32 +1010,32 @@ export default function NewsFeed() {
         {/* States */}
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3">
-            <RefreshCw className="w-5 h-5 animate-spin text-zinc-600" />
-            <p className="text-[10px] tracking-[0.3em] uppercase text-zinc-600 font-sans">Fetching the latest edition…</p>
+            <RefreshCw className="w-5 h-5 animate-spin fglass-meta" />
+            <p className="news-count-line">Fetching the latest edition…</p>
           </div>
         ) : error ? (
-          <div className="rounded-2xl border border-red-800/40 bg-red-900/10 border-t-2 border-t-red-700/60 p-8 text-center">
-            <p className="font-serif text-xl font-black text-white mb-1">— Correction —</p>
-            <p className="text-xs text-zinc-500 font-sans">{(error as Error).message}</p>
+          <div className="news-card border-t-red-500/50 p-8 text-center">
+            <p className="news-headline news-headline--item mb-1">— Correction —</p>
+            <p className="news-deck">{(error as Error).message}</p>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 border-t-2 border-t-amber-500/30 p-12 text-center">
+          <div className="news-card p-12 text-center">
             {filter === "Saved" ? (
               <>
-                <BookmarkCheck className="w-8 h-8 text-zinc-700 mx-auto mb-3" />
-                <p className="font-serif text-xl font-black text-white">No Saved Items</p>
-                <p className="text-[11px] text-zinc-600 mt-1 font-sans tracking-wide">Save any article or post to bookmark it here.</p>
+                <BookmarkCheck className="w-8 h-8 fglass-meta mx-auto mb-3" />
+                <p className="news-headline news-headline--item">No Saved Items</p>
+                <p className="news-deck mt-1">Save any article or post to bookmark it here.</p>
               </>
             ) : (
               <>
-                <Newspaper className="w-8 h-8 text-zinc-700 mx-auto mb-3" />
-                <p className="font-serif text-xl font-black text-white">No Items in Circulation</p>
-                <p className="text-[11px] text-zinc-600 mt-1 font-sans tracking-wide">Nothing found matching your filters.</p>
+                <Newspaper className="w-8 h-8 fglass-meta mx-auto mb-3" />
+                <p className="news-headline news-headline--item">No Items in Circulation</p>
+                <p className="news-deck mt-1">Nothing found matching your filters.</p>
               </>
             )}
           </div>
         ) : (
-          <div className="grid gap-4">
+          <div className="news-edition-grid">
             {filtered.map((item, idx) => (
               <FeedCard
                 key={item.id}

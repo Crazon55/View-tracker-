@@ -24,6 +24,7 @@ import ReelsStage1View from "./pages/ReelsStage1View";
 import GrowthView from "./pages/GrowthView";
 import MainReelsView from "./pages/MainReelsView";
 import IdeaEngine from "./pages/IdeaEngine";
+import IdeaEngineGallery from "./pages/IdeaEngineGallery";
 import CompetitorIdeas from "./pages/CompetitorIdeas";
 import PipelineView from "./pages/PipelineView";
 import ContentTracker from "./pages/ContentTracker";
@@ -39,9 +40,26 @@ import ExperimentX from "./pages/ExperimentX";
 import FsiCanvasHub from "./pages/FsiCanvas/FsiCanvasHub";
 import FsiCanvasWorkspace from "./pages/FsiCanvas/FsiCanvasWorkspace";
 import NotFound from "./pages/NotFound";
+import { FramerTopNav } from "./components/shell/FramerTopNav";
+import { WavyGridBackground } from "./components/shell/WavyGridBackground";
+import { FsiCanvasFab } from "./components/shell/FsiCanvasFab";
+import { DebugBoundary } from "./components/shell/DebugBoundary";
+import SeedingOverview from "./pages/Seeding/SeedingOverview";
+import SeedingBDDashboard from "./pages/Seeding/SeedingBDDashboard";
+import SeedingApprovalQueue from "./pages/Seeding/SeedingApprovalQueue";
+import { canonicalRole, canSeeAnyNonSeeding } from "./lib/accessModel";
+import SeedingAllDeals from "./pages/Seeding/SeedingAllDeals";
+import SeedingTeamwise from "./pages/Seeding/SeedingTeamwise";
+import SeedingFulfillmentBoard from "./pages/Seeding/SeedingFulfillmentBoard";
+import SeedingSubmitBrief from "./pages/Seeding/SeedingSubmitBrief";
+import SeedingDealDetail from "./pages/Seeding/SeedingDealDetail";
+import SeedingSectionPage from "./pages/Seeding/SeedingSectionPage";
+import { SeedingPreviewBanner } from "./components/seeding/SeedingPreviewBanner";
+import FramerHome from "./pages/FramerHome";
 import { MonthlyWrapRoot, MonthlyWrapOpenButton } from "./components/MonthlyWrapHost";
 import { stashWrapMonthFromUrl } from "@/lib/monthlyWrap";
 import { RolePreviewBanner } from "./components/RolePreviewBanner";
+import { RolePreviewPicker } from "./components/RolePreviewPicker";
 import { RolePreviewRouteGuard } from "./components/RolePreviewRouteGuard";
 import {
   Select,
@@ -452,6 +470,34 @@ function HamburgerMenu() {
   );
 }
 
+/** BD sees a team-scoped dashboard; everyone else sees the admin Overview. */
+function SeedingHome() {
+  const { role } = usePermissions();
+  const isBD = String(role || "").split(",").map((r) => r.trim()).some((r) => canonicalRole(r) === "bd");
+  return isBD ? <SeedingBDDashboard /> : <SeedingOverview />;
+}
+
+// The FSOS Home ("Overall growth"). Roles scoped to Seeding only (BD, Fulfillment)
+// have no non-seeding areas, so send them to Seeding. Content Strategists LAND on
+// the Idea Engine — their home base — the first time they hit "/" each session, but
+// can still open the Home dashboard afterwards (clicking Home no longer bounces).
+// Everyone else gets the growth overview.
+const CS_LANDED_KEY = "fsos-cs-landed";
+function Home() {
+  const { role } = usePermissions();
+  const roles = String(role || "").split(",").map((r) => canonicalRole(r.trim()));
+  const isCs = roles.includes("cs");
+  // Read (don't mutate) during render; the one-shot flag is set in the effect below.
+  const shouldLandCs = isCs && !sessionStorage.getItem(CS_LANDED_KEY);
+  useEffect(() => {
+    if (isCs) sessionStorage.setItem(CS_LANDED_KEY, "1");
+  }, [isCs]);
+
+  if (!canSeeAnyNonSeeding(role)) return <Navigate to="/seeding" replace />;
+  if (shouldLandCs) return <Navigate to="/idea-engine" replace />;
+  return <FramerHome />;
+}
+
 function AppLayout() {
   const location = useLocation();
   const { user, signOut, isRolePreviewActive } = useAuth();
@@ -481,9 +527,11 @@ function AppLayout() {
     location.pathname.startsWith("/pages/") ||
     location.pathname === "/pipeline" ||
     location.pathname === "/six-day-tracker" ||
+    location.pathname === "/growth" ||
     location.pathname === "/team-performance" ||
     location.pathname === "/tickets" ||
     location.pathname === "/news" ||
+    location.pathname === "/idea-engine" ||
     location.pathname.startsWith("/post-ips/") ||
     location.pathname.startsWith("/page/") ||
     location.pathname === "/team-roles" ||
@@ -492,29 +540,49 @@ function AppLayout() {
     location.pathname.startsWith("/fsi-canvas/") ||
     location.pathname === "/canvas";
 
+  const isSeeding = location.pathname.startsWith("/seeding");
+  const seedingRoles = (layoutRole || "").split(",").map((s) => s.trim()).filter(Boolean);
+  // FSI Canvas workspace (/fsi-canvas/:studyId) is a focused full-screen tool —
+  // hide the global top nav so it isn't stacked above the canvas's own header.
+  const isCanvasWorkspace = /^\/fsi-canvas\/[^/]+/.test(location.pathname);
+  const isCanvasRoute = location.pathname.startsWith("/fsi-canvas");
+
   return (
     <>
       <RolePreviewRouteGuard />
       <RolePreviewBanner />
-      {isFullScreen ? (
-        <div className={`relative ${isRolePreviewActive ? "pt-11" : ""}`}>
-          <HamburgerMenu />
-          <div className={`fixed right-5 z-[60] flex items-center gap-2 sm:gap-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl px-3 sm:px-4 py-2 shadow-lg max-w-[min(100vw-1rem,480px)] flex-wrap justify-end ${isRolePreviewActive ? "top-14" : "top-5"}`}>
-            <MonthlyWrapOpenButton />
-            <AnimalPicker userId={user?.id} />
-            <p className="text-sm text-zinc-400">
-              {getGreeting()}, <span className="text-white font-medium">{getFirstName(user)}</span>
-            </p>
-            <button
-              onClick={signOut}
-              className="h-7 w-7 rounded-lg hover:bg-white/10 flex items-center justify-center transition-colors shrink-0"
-              title="Sign out"
-            >
-              <LogOut className="w-3.5 h-3.5 text-zinc-400 hover:text-red-400" />
-            </button>
-          </div>
+      {!isCanvasWorkspace && (
+        <FramerTopNav
+          roles={seedingRoles}
+          role={layoutRole}
+          greeting={getGreeting()}
+          userName={getFirstName(user)}
+          onSignOut={signOut}
+          right={<><RolePreviewPicker /><MonthlyWrapOpenButton /><AnimalPicker userId={user?.id} /></>}
+        />
+      )}
+      {!isCanvasRoute && <FsiCanvasFab />}
+      <DebugBoundary>
+      {isSeeding ? (
+        <div>
+          <SeedingPreviewBanner />
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/seeding" element={<SeedingHome />} />
+            <Route path="/seeding/approvals" element={<SeedingApprovalQueue />} />
+            <Route path="/seeding/deals" element={<SeedingAllDeals />} />
+            <Route path="/seeding/deals/:dealId" element={<SeedingDealDetail />} />
+            <Route path="/seeding/fulfillment" element={<SeedingFulfillmentBoard />} />
+            <Route path="/seeding/submit" element={<SeedingSubmitBrief />} />
+            <Route path="/seeding/pages" element={<SeedingSectionPage />} />
+            <Route path="/seeding/teamwise" element={<SeedingTeamwise />} />
+            <Route path="/seeding/users" element={<SeedingSectionPage />} />
+          </Routes>
+        </div>
+      ) : isFullScreen ? (
+        <div className="relative">
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/dashboard-old" element={<Dashboard />} />
             <Route path="/wrap" element={<WrapView />} />
             <Route path="/content-tracker" element={<ContentTracker />} />
             <Route path="/post-tracker" element={<PostTracker />} />
@@ -535,6 +603,7 @@ function AppLayout() {
             />
             <Route path="/tickets" element={<Tickets />} />
             <Route path="/news" element={<NewsFeed />} />
+            <Route path="/idea-engine" element={<IdeaEngineGallery />} />
             <Route path="/ideas" element={<IdeaEngine />} />
             <Route path="/competitor-ideas" element={<CompetitorIdeas />} />
             <Route path="/team-roles" element={<TeamRolesPage />} />
@@ -552,98 +621,23 @@ function AppLayout() {
               }
             />
             <Route path="/canvas" element={<Navigate to="/fsi-canvas" replace />} />
+            <Route path="/growth" element={<GrowthView />} />
           </Routes>
         </div>
       ) : (
-        <div className={`flex min-h-screen bg-zinc-950 ${isRolePreviewActive ? "pt-11" : ""}`}>
-          {/* Sidebar */}
-          <aside className="w-60 shrink-0 border-r border-zinc-800 bg-zinc-950 flex flex-col">
-            <div className="px-5 py-5 border-b border-zinc-800">
-              <h1 className="text-lg font-bold tracking-tight text-white">FSBOARD</h1>
-              <p className="text-xs text-zinc-500 mt-0.5">Frontseat Media</p>
-            </div>
-
-            <nav className="flex-1 px-3 py-4 space-y-1">
-              <NavLink
-                to="/fsi-canvas"
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition-colors mb-2 border ${
-                    isActive
-                      ? "border-amber-500/40 bg-amber-500/15 text-amber-100"
-                      : "border-amber-500/30 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20"
-                  }`
-                }
-              >
-                <Sparkles className="w-4 h-4" />
-                FSI Canvas
-              </NavLink>
-              {sidebarNavItems.filter((item) => item.to !== "/fsi-canvas").map(({ to, label, icon: Icon, external }) => (
-                external ? (
-                  <a
-                    key={to}
-                    href={to}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-zinc-500 hover:text-white hover:bg-zinc-900"
-                  >
-                    <Icon className="w-4 h-4" />
-                    {label}
-                  </a>
-                ) : (
-                  <NavLink
-                    key={to}
-                    to={to}
-                    end={to === "/"}
-                    className={({ isActive }) =>
-                      `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                        isActive
-                          ? "bg-violet-500/10 text-violet-400"
-                          : "text-zinc-500 hover:text-white hover:bg-zinc-900"
-                      }`
-                    }
-                  >
-                    <Icon className="w-4 h-4" />
-                    <span className="flex-1">{label}</span>
-                    {label === "Tickets" && ticketsBadgeCount > 0 ? (
-                      <span className="min-w-[18px] h-[18px] px-1.5 rounded-full bg-violet-500/20 border border-violet-500/30 text-[10px] font-black text-violet-100 flex items-center justify-center">
-                        {ticketsBadgeCount}
-                      </span>
-                    ) : null}
-                  </NavLink>
-                )
-              ))}
-            </nav>
-
-            <div className="px-3 py-4 border-t border-zinc-800">
-              <div className="flex items-center gap-2 px-3 mb-1">
-                <AnimalPicker userId={user?.id} />
-                <p className="text-sm text-zinc-400 truncate">
-                  {getGreeting()}, <span className="text-white font-medium">{getFirstName(user)}</span>
-                </p>
-              </div>
-              <p className="px-3 text-xs text-zinc-600 truncate mb-2">{user?.email}</p>
-              <button
-                onClick={signOut}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors w-full text-left text-red-400 hover:text-red-300 hover:bg-zinc-900"
-              >
-                <LogOut className="w-4 h-4" />
-                Sign out
-              </button>
-            </div>
-          </aside>
-
-          {/* Main content */}
-          <main className="flex-1 overflow-auto bg-zinc-950">
+        <div className="min-h-screen">
+          {/* Main content (old FSBOARD sidebar removed — nav is now the global FramerTopNav) */}
+          <main>
             <Routes>
               <Route path="/posts" element={<PostsView />} />
               <Route path="/reels/stage1" element={<ReelsStage1View />} />
               <Route path="/reels/main" element={<MainReelsView />} />
-              <Route path="/growth" element={<GrowthView />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </main>
         </div>
       )}
+      </DebugBoundary>
     </>
   );
 }
@@ -704,6 +698,7 @@ function AuthGate() {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
+      <WavyGridBackground />
       <Toaster />
       <Sonner />
       <BrowserRouter>

@@ -1,5 +1,6 @@
 import { Eye, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { ALL_ROLES } from "@/lib/accessModel";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -15,7 +16,6 @@ export function RolePreviewBanner() {
     roleName,
     actualRoleName,
     canUseRolePreview,
-    ROLES,
     setRolePreview,
     clearRolePreview,
     rolePreview,
@@ -24,7 +24,7 @@ export function RolePreviewBanner() {
   if (!canUseRolePreview || !isRolePreviewActive) return null;
 
   return (
-    <div className="fixed top-0 inset-x-0 z-[70] flex items-center justify-center gap-3 border-b border-amber-500/40 bg-amber-950/95 px-4 py-2 backdrop-blur-sm">
+    <div className="relative z-[60] flex items-center justify-center gap-3 border-b border-amber-500/40 bg-amber-950/95 px-4 py-2">
       <Eye className="h-4 w-4 shrink-0 text-amber-300" />
       <p className="text-sm text-amber-100">
         Previewing as <span className="font-semibold text-white">{roleName}</span>
@@ -37,8 +37,8 @@ export function RolePreviewBanner() {
           <SelectValue placeholder="Switch role" />
         </SelectTrigger>
         <SelectContent className="bg-zinc-950 border-zinc-800">
-          {ROLES.map(({ value, label }) => (
-            <SelectItem key={value} value={value} className="text-sm">
+          {ALL_ROLES.map(({ key, label }) => (
+            <SelectItem key={key} value={key} className="text-sm">
               {label}
             </SelectItem>
           ))}

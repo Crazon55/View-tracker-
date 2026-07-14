@@ -21,13 +21,11 @@ import {
   Film,
   Image as ImageIcon,
   Rocket,
-  Target,
   Swords,
   Users,
   AtSign,
   Medal,
   TrendingUp,
-  Star,
   Loader2,
   ChevronDown,
   ChevronRight,
@@ -443,7 +441,7 @@ export default function TeamPerformance() {
   // Render states AFTER hooks (avoids hook-order crashes)
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-zinc-950 pt-24 pb-16 flex items-center justify-center text-zinc-500 gap-2">
+      <div className="fglass-page min-h-screen pt-24 pb-16 flex items-center justify-center fglass-muted gap-2">
         <Loader2 className="w-5 h-5 animate-spin text-violet-500" />
         Warming up the arena…
       </div>
@@ -452,21 +450,15 @@ export default function TeamPerformance() {
   if (isError || !data) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     return (
-      <div className="min-h-screen bg-zinc-950 pt-24 pb-16 px-6 text-center space-y-3 max-w-lg mx-auto">
+      <div className="fglass-page min-h-screen pt-24 pb-16 px-6 text-center space-y-3 max-w-lg mx-auto">
         <p className="text-red-400 text-sm">Could not load the leaderboard.</p>
-        <p className="text-zinc-500 text-xs break-words">{msg}</p>
+        <p className="fglass-muted text-xs break-words">{msg}</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 pt-20 pb-20 px-4 sm:px-6 overflow-hidden relative">
-      {/* bg decor */}
-      <div className="pointer-events-none absolute inset-0 -z-0">
-        <div className="absolute -top-40 -left-40 w-[500px] h-[500px] rounded-full bg-orange-500/10 blur-3xl" />
-        <div className="absolute -top-40 -right-40 w-[500px] h-[500px] rounded-full bg-indigo-500/10 blur-3xl" />
-      </div>
-
+    <div className="fglass-page min-h-screen pt-20 pb-20 px-4 sm:px-6 overflow-hidden relative">
       <div className="relative max-w-6xl mx-auto">
         {/* ============================== header ============================== */}
         <ScrollReveal>
@@ -609,62 +601,10 @@ export default function TeamPerformance() {
           />
         )}
 
-        {/* ============================== HALL OF FAME ============================== */}
-        <ScrollReveal delay={0.05}>
-          <HallOfFame
-            topCreator={data.top_creator_6d}
-            topIdea6d={data.top_idea_6d}
-            topIdeaAll={data.top_idea_overall}
-            viewsPeriod={data.views_period}
-            viewsPeriodDays={data.views_period_days ?? data.window_days ?? 7}
-          />
-        </ScrollReveal>
-
-        {/* ============================== DETAILS TOGGLE ============================== */}
-        <div className="mt-6 sticky top-16 z-10">
-          <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/70 backdrop-blur-xl px-4 py-3 flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-zinc-300">Keep it clean</p>
-              <p className="text-[11px] text-zinc-500 truncate">
-                Toggle extra sections (team breakdown + creator board)
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowDetails((v) => !v)}
-              className="shrink-0 inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] hover:bg-white/[0.07] text-zinc-200 px-3 py-2 text-xs font-bold transition-colors"
-            >
-              {showDetails ? (
-                <>
-                  <ChevronDown className="w-4 h-4 text-zinc-400" />
-                  Hide details
-                </>
-              ) : (
-                <>
-                  <ChevronRight className="w-4 h-4 text-zinc-400" />
-                  Show details
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {showDetails && (
+        {/* "Keep it clean" toggle removed per request — team breakdown + creator board always shown */}
+        {(
           <>
-            {/* ============================== TEAM CARDS ============================== */}
-            <ScrollReveal delay={0.08} className="mt-8">
-              <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-                {[teamA, teamB, teamC].filter(Boolean).map((team: any) => (
-                  <TeamCard
-                    key={team.key}
-                    team={team}
-                    isLeader={leaderKey === team.key}
-                    viewsPeriod={data.views_period}
-                    viewsPeriodDays={data.views_period_days ?? data.window_days ?? 7}
-                  />
-                ))}
-              </div>
-            </ScrollReveal>
+            {/* team breakdown cards (Garfields / Goofies / Sherus) removed per request */}
 
             {/* ============================== PEOPLE LEADERBOARD ============================== */}
             <ScrollReveal delay={0.1}>
@@ -812,8 +752,7 @@ function HeroScoreboard({
   const tie = leaderKey === null;
 
   return (
-    <div className="relative rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900 via-zinc-950 to-zinc-900 p-5 sm:p-8 overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white/[0.03] to-transparent pointer-events-none" />
+    <div className="relative fglass-panel fglass-purple-shadow rounded-3xl p-5 sm:p-8 overflow-hidden">
 
       {tie && (
         <div className="flex items-center justify-center mb-4">
@@ -1018,204 +957,6 @@ function TeamScorePanel({
   );
 }
 
-/* ============================== hall of fame ============================== */
-
-function HallOfFame({
-  topCreator,
-  topIdea6d,
-  topIdeaAll,
-  viewsPeriod,
-  viewsPeriodDays: _viewsPeriodDays,
-}: {
-  topCreator: any | null | undefined;
-  topIdea6d: any | null | undefined;
-  topIdeaAll: any | null | undefined;
-  viewsPeriod?: string;
-  viewsPeriodDays?: number;
-}) {
-  const monthMode = viewsPeriod === "calendar_month";
-  const rollDays = _viewsPeriodDays ?? 7;
-  return (
-    <div className="mt-8">
-      <div className="flex items-center gap-2 mb-3">
-        <Trophy className="w-4 h-4 text-amber-400" />
-        <h2 className="text-sm font-black uppercase tracking-[0.2em] text-white">Hall of Fame</h2>
-      </div>
-      <div className="grid gap-4 md:grid-cols-3">
-        <MvpCard creator={topCreator} monthMode={monthMode} rollingDays={rollDays} />
-        <IdeaTrophyCard
-          idea={topIdea6d}
-          label={monthMode ? "Hottest idea · month" : `Hottest idea · ${rollDays}d`}
-          icon={<Flame className="w-4 h-4 text-orange-400" />}
-          gradient="from-orange-500/20 via-red-500/10 to-transparent"
-          borderClass="border-orange-500/30"
-        />
-        <IdeaTrophyCard
-          idea={topIdeaAll}
-          label="Biggest hit · all time"
-          icon={<Star className="w-4 h-4 text-amber-400" />}
-          gradient="from-amber-500/20 via-yellow-500/10 to-transparent"
-          borderClass="border-amber-500/30"
-        />
-      </div>
-    </div>
-  );
-}
-
-function MvpCard({
-  creator,
-  monthMode,
-  rollingDays = 7,
-}: {
-  creator: any | null | undefined;
-  monthMode?: boolean;
-  rollingDays?: number;
-}) {
-  if (!creator) {
-    return (
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 text-center text-zinc-500 text-sm">
-        <Crown className="w-5 h-5 mx-auto mb-2 text-zinc-600" />
-        No MVP yet — first posting with views takes the crown.
-      </div>
-    );
-  }
-  const skin = teamSkin(creator.team);
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={{ scale: 1.02 }}
-      className={`relative rounded-2xl border ${skin.ring} border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-950 p-5 overflow-hidden`}
-    >
-      <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${skin.grad}`} />
-      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] font-bold text-amber-400 mb-3">
-        <Crown className="w-3.5 h-3.5" /> MVP · {monthMode ? "month" : `${rollingDays}d`}
-      </div>
-      <div className="flex items-center gap-3">
-        <motion.div
-          animate={{ rotate: [0, -10, 10, 0] }}
-          transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
-          className={`w-14 h-14 rounded-2xl flex items-center justify-center text-3xl bg-gradient-to-br ${skin.grad} shadow-lg`}
-        >
-          {creator.team_emoji}
-        </motion.div>
-        <div className="min-w-0">
-          <p className="text-xl font-black text-white truncate">{creator.name}</p>
-          <p className="text-xs text-zinc-500">
-            <span className={`${skin.text} font-semibold`}>{creator.team_label}</span> ·{" "}
-            {creator.ideas} idea{creator.ideas === 1 ? "" : "s"}
-          </p>
-        </div>
-      </div>
-      <div className="mt-4 flex items-end justify-between">
-        <div>
-          <p className="text-[10px] uppercase tracking-wider text-zinc-500">
-            Views · {monthMode ? "month (posts)" : `${rollingDays}d`}
-          </p>
-          <p className="text-3xl font-black text-white tabular-nums leading-none">
-            <Odometer value={creator.views} format={formatViews} />
-          </p>
-        </div>
-        <motion.div
-          animate={{ y: [0, -3, 0] }}
-          transition={{ duration: 2, repeat: Infinity }}
-          className="text-amber-400"
-        >
-          <Trophy className="w-8 h-8 drop-shadow-[0_0_12px_rgba(251,191,36,0.5)]" />
-        </motion.div>
-      </div>
-    </motion.div>
-  );
-}
-
-function IdeaTrophyCard({
-  idea,
-  label,
-  icon,
-  gradient,
-  borderClass,
-}: {
-  idea: any | null | undefined;
-  label: string;
-  icon: React.ReactNode;
-  gradient: string;
-  borderClass: string;
-}) {
-  if (!idea) {
-    return (
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 text-center text-zinc-500 text-sm">
-        <div className="flex justify-center mb-2 opacity-50">{icon}</div>
-        Nothing here yet — the first viral post wins.
-      </div>
-    );
-  }
-  const skin = teamSkin(idea.team);
-  const isReel = (idea.type || "").toLowerCase() === "reel";
-  const isCompetitor = (idea.source || "").toLowerCase() === "competitor";
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={{ scale: 1.02 }}
-      className={`relative rounded-2xl border ${borderClass} bg-gradient-to-br ${gradient} bg-zinc-900/80 p-5 overflow-hidden`}
-    >
-      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] font-bold text-white/90 mb-3">
-        {icon} <span>{label}</span>
-      </div>
-      <p className="text-base font-bold text-white line-clamp-2 leading-snug min-h-[2.5rem]">
-        {idea.title}
-      </p>
-      <div className="flex flex-wrap items-center gap-1.5 mt-3">
-        <Badge
-          className={`${skin.bg} ${skin.text} border border-white/10 text-[10px] font-bold`}
-        >
-          {idea.team_emoji} {idea.team_label}
-        </Badge>
-        <Badge
-          className={`text-[10px] font-bold border ${
-            isReel
-              ? "bg-purple-500/15 text-purple-300 border-purple-500/30"
-              : "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
-          }`}
-        >
-          {isReel ? <Film className="w-3 h-3 mr-1" /> : <ImageIcon className="w-3 h-3 mr-1" />}
-          {isReel ? "Reel" : "Post"}
-        </Badge>
-        <Badge
-          className={`text-[10px] font-bold border ${
-            isCompetitor
-              ? "bg-rose-500/15 text-rose-300 border-rose-500/30"
-              : "bg-sky-500/15 text-sky-300 border-sky-500/30"
-          }`}
-        >
-          {isCompetitor ? (
-            <>
-              <Target className="w-3 h-3 mr-1" /> Competitor
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-3 h-3 mr-1" /> Original
-            </>
-          )}
-        </Badge>
-      </div>
-      <div className="flex items-end justify-between mt-4">
-        <div>
-          <p className="text-[10px] uppercase tracking-wider text-zinc-400">Views</p>
-          <p className="text-3xl font-black text-white tabular-nums leading-none">
-            <Odometer value={idea.views || 0} format={formatViews} />
-          </p>
-        </div>
-        {idea.creator && (
-          <p className="text-[11px] text-zinc-400 italic text-right max-w-[45%] truncate">
-            by {idea.creator}
-          </p>
-        )}
-      </div>
-    </motion.div>
-  );
-}
-
 /* ============================== team card ============================== */
 
 function TeamCardLineProgress({
@@ -1262,15 +1003,13 @@ function TeamCard({
   viewsPeriodDays?: number;
 }) {
   const skin = teamSkin(team.key);
-  const cr = team.top_creator_6d;
-  const idea = team.top_idea_6d;
   const monthMode = viewsPeriod === "calendar_month";
   const n = viewsPeriodDays ?? 7;
   return (
     <div
-      className={`relative rounded-3xl border ${
-        isLeader ? `border-amber-500/35 shadow-lg ${skin.glow}` : "border-white/[0.08]"
-      } bg-zinc-950/40 backdrop-blur-xl overflow-hidden`}
+      className={`relative fglass-panel fglass-purple-shadow rounded-3xl overflow-hidden ${
+        isLeader ? `ring-1 ring-amber-500/35 shadow-lg ${skin.glow}` : ""
+      }`}
     >
       <div className={`absolute inset-x-0 top-0 h-px bg-gradient-to-r ${skin.grad} opacity-90`} />
 
@@ -1307,34 +1046,6 @@ function TeamCard({
       </div>
 
       <div className="px-5 pb-5 space-y-5">
-        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] backdrop-blur-sm p-4 space-y-4">
-          <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-[0.18em] text-zinc-500 mb-1.5">
-              Top creator · {monthMode ? "month" : `${n}d`}
-            </p>
-            <p className="text-sm font-bold text-white truncate">{cr?.name ?? "—"}</p>
-            {cr ? (
-              <p className="text-[12px] text-zinc-400 mt-0.5">
-                {formatViews(cr.views)} · {cr.ideas} idea{cr.ideas === 1 ? "" : "s"}
-              </p>
-            ) : (
-              <p className="text-[12px] text-zinc-500 mt-0.5">—</p>
-            )}
-          </div>
-          <div className="h-px bg-zinc-800/80" />
-          <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-[0.18em] text-zinc-500 mb-1.5">
-              Top idea · {monthMode ? "month" : `${n}d`}
-            </p>
-            <p className="text-sm font-bold text-white line-clamp-2 leading-snug">{idea?.title ?? "—"}</p>
-            {idea ? (
-              <p className="text-[12px] text-zinc-400 mt-0.5">{formatViews(idea.views)} views</p>
-            ) : (
-              <p className="text-[12px] text-zinc-500 mt-0.5">—</p>
-            )}
-          </div>
-        </div>
-
         <div>
           <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 mb-2">Ideas pipeline</p>
           <p className="text-[13px] text-zinc-300 leading-relaxed">
@@ -1464,7 +1175,7 @@ function PeopleLeaderboard({
           No creators on the board yet — post something and tag yourself on the idea.
         </div>
       ) : (
-        <div ref={listRef} className="rounded-2xl border border-zinc-800 bg-zinc-900/50 divide-y divide-zinc-800 overflow-hidden">
+        <div ref={listRef} className="fglass-panel fglass-purple-shadow rounded-2xl divide-y divide-white/[0.06] overflow-hidden">
           {sorted.map((p, i) => {
             const skin = teamSkin(p.team);
             const score = mode === "6d" ? p.views_6d : p.views_total;

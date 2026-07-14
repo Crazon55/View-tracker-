@@ -48,11 +48,13 @@ from app.experiment_playbooks import (
     exp_sum_views,
 )
 from app.routers.fsi import router as fsi_router
+from app.seeding.routes import api as seeding_router, init_seeding, close_seeding
 
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="View Tracker", version="1.0.0")
 app.include_router(fsi_router, prefix="/api/v1/fsi")
+app.include_router(seeding_router, prefix="/api/seeding")  # merged Seeding backend
 
 app.add_middleware(
     CORSMiddleware,
@@ -80,6 +82,20 @@ async def startup_team_cleanup():
             logger.info("Team cleanup on startup: user_roles=%s content_strategists=%s", ur, cs)
     except Exception as exc:
         logger.warning("Team cleanup on startup skipped: %s", exc)
+
+
+@app.on_event("startup")
+async def startup_seeding():
+    """Warm the seeding asyncpg pool + storage."""
+    try:
+        await init_seeding()
+    except Exception as exc:
+        logger.warning("Seeding init on startup skipped: %s", exc)
+
+
+@app.on_event("shutdown")
+async def shutdown_seeding():
+    await close_seeding()
 
 
 _WORKBOARD_MENTION_SKIP: frozenset[str] = frozenset({"", "tracker", "comp research"})
@@ -1323,6 +1339,122 @@ async def set_user_role(req: dict):
             detail="Could not save role — check Supabase connection and user_roles table permissions",
         )
     return {"success": True, "data": verify[0]}
+
+
+# ── Role → per-area access matrices (unified RBAC) ────────────────────────────
+# Stored as JSON on the backend: { "<role>": { "<area_key>": "none|view|edit", … } }.
+# These are OVERRIDES merged over the frontend defaults in accessModel.ts.
+_ROLE_ACCESS_FILE = os.path.join(os.path.dirname(__file__), "role_access.json")
+
+
+def _read_role_access() -> dict:
+    try:
+        with open(_ROLE_ACCESS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _write_role_access(data: dict) -> None:
+    with open(_ROLE_ACCESS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+
+@app.get("/api/v1/role-access")
+async def get_role_access():
+    """All persisted role → area-access overrides."""
+    return {"success": True, "data": _read_role_access()}
+
+
+@app.put("/api/v1/role-access/{role}")
+async def set_role_access(role: str, req: dict):
+    """Persist one role's full area-access matrix."""
+    role = (role or "").strip().lower()
+    if not role:
+        raise HTTPException(status_code=400, detail="role required")
+    access = req.get("access")
+    if not isinstance(access, dict):
+        raise HTTPException(status_code=400, detail="access object required")
+    valid = {"none", "view", "edit"}
+    cleaned = {str(k): str(v) for k, v in access.items() if str(v) in valid}
+    data = _read_role_access()
+    data[role] = cleaned
+    _write_role_access(data)
+    return {"success": True, "data": {"role": role, "access": cleaned}}
+
+
+# ── Per-person access mode ("edit" = full role, "view" = read-only everywhere) ──
+_USER_MODE_FILE = os.path.join(os.path.dirname(__file__), "user_access_mode.json")
+
+
+def _read_user_modes() -> dict:
+    try:
+        with open(_USER_MODE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _write_user_modes(data: dict) -> None:
+    with open(_USER_MODE_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+
+@app.get("/api/v1/user-access-mode")
+async def get_user_access_modes():
+    """All persisted per-person access modes: { "<email>": "edit"|"view" }."""
+    return {"success": True, "data": _read_user_modes()}
+
+
+@app.put("/api/v1/user-access-mode")
+async def set_user_access_mode(req: dict):
+    """Set one person's access mode. Default (absent) = 'edit'."""
+    email = (req.get("email") or "").strip().lower()
+    mode = str(req.get("mode") or "").strip().lower()
+    if not email or mode not in {"edit", "view"}:
+        raise HTTPException(status_code=400, detail="email and mode ('edit'|'view') required")
+    data = _read_user_modes()
+    data[email] = mode
+    _write_user_modes(data)
+    return {"success": True, "data": {"email": email, "mode": mode}}
+
+
+# ── Per-PERSON area-access matrices: { "<email>": { "<area_key>": "none|view|edit" } } ──
+_USER_ACCESS_FILE = os.path.join(os.path.dirname(__file__), "user_access.json")
+
+
+def _read_user_access() -> dict:
+    try:
+        with open(_USER_ACCESS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _write_user_access(data: dict) -> None:
+    with open(_USER_ACCESS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+
+@app.get("/api/v1/user-access")
+async def get_user_access():
+    """All persisted per-person area-access matrices."""
+    return {"success": True, "data": _read_user_access()}
+
+
+@app.put("/api/v1/user-access")
+async def set_user_access(req: dict):
+    """Persist one person's full area-access matrix."""
+    email = (req.get("email") or "").strip().lower()
+    access = req.get("access")
+    if not email or not isinstance(access, dict):
+        raise HTTPException(status_code=400, detail="email and access object required")
+    valid = {"none", "view", "edit"}
+    cleaned = {str(k): str(v) for k, v in access.items() if str(v) in valid}
+    data = _read_user_access()
+    data[email] = cleaned
+    _write_user_access(data)
+    return {"success": True, "data": {"email": email, "access": cleaned}}
 
 
 @app.delete("/api/v1/user-role/{email}")
@@ -5136,6 +5268,8 @@ async def exp_create_idea(playbook: str, req: ExpIdeaCreate):
         "yt_url": req.yt_url,
         "yt_timestamps": req.yt_timestamps,
         "comp_link": req.comp_link,
+        "kalakar_link": req.kalakar_link,
+        "drive_link": req.drive_link,
         "created_by": req.created_by,
         "edited_by": req.edited_by,
         "test_result": req.test_result,
@@ -5145,6 +5279,7 @@ async def exp_create_idea(playbook: str, req: ExpIdeaCreate):
         "page_posting_dates": req.page_posting_dates or {},
         "page_posting_times": req.page_posting_times or {},
         "page_captions": req.page_captions or {},
+        "page_live_links": req.page_live_links or {},
     }
     if req.origin_playbook and req.origin_idea_id:
         row["origin_playbook"] = validate_playbook(req.origin_playbook)
@@ -5232,6 +5367,7 @@ async def exp_deploy_idea_to_playbook(target_playbook: str, source_playbook: str
         "page_posting_dates": {},
         "page_posting_times": {},
         "page_captions": {},
+        "page_live_links": {},
         "page_views": {},
         "page_test_results": {},
         "origin_playbook": root_pb,
@@ -5373,6 +5509,7 @@ async def exp_archive_week(playbook: str, request: Request):
             "page_posting_dates": i.get("page_posting_dates", {}),
             "page_posting_times": i.get("page_posting_times", {}),
             "page_captions": i.get("page_captions", {}),
+            "page_live_links": i.get("page_live_links", {}),
         } for i in to_insert]
         client.table(get_playbook_tables(pb).content_bank).insert(rows).execute()
         for i in to_insert:
@@ -5391,9 +5528,10 @@ async def exp_update_content_bank_item(playbook: str, item_id: str, request: Req
     pb = validate_playbook(playbook)
     body = await request.json()
     allowed = {"topic", "script", "views", "status", "content_type", "source", "hook_variations",
-                "music_ref", "frame_link", "yt_url", "yt_timestamps", "comp_link", "page_views",
+                "music_ref", "frame_link", "yt_url", "yt_timestamps", "comp_link", "kalakar_link",
+                "drive_link", "page_views",
                 "created_by", "edited_by", "test_result", "video_format", "page_handle",
-                "page_posting_dates", "page_posting_times", "page_captions"}
+                "page_posting_dates", "page_posting_times", "page_captions", "page_live_links"}
     update_data = {k: v for k, v in body.items() if k in allowed}
     if not update_data:
         raise HTTPException(status_code=400, detail="No valid fields to update")

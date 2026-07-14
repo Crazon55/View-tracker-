@@ -259,7 +259,7 @@ async function uploadToCloudinary(file: File, signed: Awaited<ReturnType<typeof 
   return (await res.json()) as any;
 }
 
-const PAGE_BG = "#09090b";
+const PAGE_BG = "#000";
 
 function playNotificationChime() {
   try {
@@ -800,23 +800,7 @@ export default function Tickets() {
   };
 
   return (
-    <div className="min-h-screen px-5 pt-20 pb-16" style={{ background: PAGE_BG }}>
-      {/* Kitchen atmosphere lighting */}
-      <div className="pointer-events-none fixed inset-0 -z-10">
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            background: `
-              radial-gradient(ellipse 900px 420px at 15% 15%, rgba(124,58,237,0.10), transparent 60%),
-              radial-gradient(ellipse 720px 360px at 80% 20%, rgba(168,85,247,0.10), transparent 55%),
-              radial-gradient(ellipse 900px 520px at 50% 110%, rgba(0,0,0,0.65), transparent 65%),
-              linear-gradient(to bottom, rgba(0,0,0,0.35), rgba(0,0,0,0.75))
-            `,
-          }}
-        />
-      </div>
-
+    <div className="fglass-page min-h-screen px-5 pt-20 pb-16">
       <div className="max-w-[1400px] mx-auto">
         {/* Header */}
         <div className="flex items-start justify-between gap-4 flex-wrap mb-10">
@@ -1164,7 +1148,7 @@ export default function Tickets() {
         {/* Kitchen rail sections */}
         <div className="space-y-12">
           {COLUMNS.filter((c) => c.key !== "resolved").map((col) => (
-            <div key={col.key}>
+            <div key={col.key} className="tickets-glass-section">
               {/* Section label */}
               <div className="flex items-center gap-3 mb-5 px-1">
                 <span className="text-xs font-black uppercase tracking-[0.25em] text-violet-400">
@@ -1338,7 +1322,7 @@ export default function Tickets() {
           ))}
 
           {/* Served / Spike pile */}
-          <div className="rounded-2xl border border-white/10 bg-white/[0.02] backdrop-blur-xl overflow-hidden">
+          <div className="tickets-glass-section overflow-hidden">
             <div className="p-4 border-b border-white/10 flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-3">
                 <Layers className="w-4 h-4 text-emerald-400" />
@@ -1390,7 +1374,7 @@ export default function Tickets() {
                       key={t.id}
                       draggable
                       onDragStart={() => { dragIdRef.current = t.id; }}
-                      className="rounded-xl border border-white/10 bg-zinc-950/40 p-3 cursor-pointer hover:bg-zinc-950/60 transition-colors"
+                      className="fglass-card fglass-purple-shadow rounded-xl p-3 cursor-pointer"
                       onClick={() => { setSelectedTicketId(t.id); setDetailOpen(true); setEditingDesc(false); setEditingTitle(false); }}
                     >
                       <div className="flex items-start justify-between gap-3">

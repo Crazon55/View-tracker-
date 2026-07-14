@@ -78,9 +78,17 @@
   }
 
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply text-foreground antialiased;
     font-family: 'Outfit', system-ui, sans-serif;
     letter-spacing: -0.01em;
+    background: #000;
+  }
+
+  #root {
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+    background: transparent;
   }
 
   /* Grid background with double-layer depth */
@@ -334,10 +342,26 @@
   animation: float 6s ease-in-out infinite;
 }
 
-/* Make native date/time input calendar & clock icons white */
+/* Make ALL native picker icons (calendar / clock / month / week) visible on the
+   dark theme — they render near-black by default and vanish on our black bg. */
+/* `brightness(0) invert(1)` forces the glyph to solid WHITE regardless of its
+   base colour. Plain invert(1) breaks on color-scheme:dark inputs, whose glyph
+   is already light and would invert back to black. */
 input[type="date"]::-webkit-calendar-picker-indicator,
-input[type="datetime-local"]::-webkit-calendar-picker-indicator {
-  filter: invert(1);
+input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+input[type="month"]::-webkit-calendar-picker-indicator,
+input[type="week"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: brightness(0) invert(1);
+  opacity: 0.9;
+  cursor: pointer;
+}
+/* Any input carrying color-scheme:dark also gets a guaranteed-visible picker
+   icon, regardless of type — covers custom/overridden inputs. */
+input[style*="color-scheme: dark"]::-webkit-calendar-picker-indicator,
+input[style*="colorScheme"]::-webkit-calendar-picker-indicator {
+  filter: brightness(0) invert(1);
+  opacity: 0.9;
   cursor: pointer;
 }
 
@@ -405,4 +429,16 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 .fsi-flow-canvas .react-flow__handle:hover {
   opacity: 0 !important;
   background: transparent !important;
+}
+
+/* The canvas pane sets user-select:none (keeps panning/box-select from highlighting
+   text). That inherits into node fields and, in Chromium, blocks caret placement and
+   text selection inside them — making nodes feel impossible to edit. Re-enable it for
+   the actual form fields so typing and selecting work normally. */
+.fsi-flow-canvas input,
+.fsi-flow-canvas textarea,
+.fsi-flow-canvas select,
+.fsi-flow-canvas [contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
 }

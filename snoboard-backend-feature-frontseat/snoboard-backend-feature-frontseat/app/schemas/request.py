@@ -178,6 +178,8 @@ class ExpIdeaCreate(BaseModel):
     yt_url: str = ""
     yt_timestamps: str = ""
     comp_link: str = ""
+    kalakar_link: str = ""
+    drive_link: str = ""
     created_by: str = ""
     edited_by: str = ""
     test_result: str = ""
@@ -187,6 +189,7 @@ class ExpIdeaCreate(BaseModel):
     page_posting_dates: dict = {}
     page_posting_times: dict = {}
     page_captions: dict = {}
+    page_live_links: dict = {}
     origin_playbook: str | None = None
     origin_idea_id: str | None = None
 
@@ -208,6 +211,8 @@ class ExpIdeaUpdate(BaseModel):
     yt_url: str | None = None
     yt_timestamps: str | None = None
     comp_link: str | None = None
+    kalakar_link: str | None = None
+    drive_link: str | None = None
     created_by: str | None = None
     currently_editing_by: str | None = None
     edited_by: str | None = None
@@ -218,6 +223,7 @@ class ExpIdeaUpdate(BaseModel):
     page_posting_dates: dict | None = None
     page_posting_times: dict | None = None
     page_captions: dict | None = None
+    page_live_links: dict | None = None
 
 
 class ExpSettingsUpdate(BaseModel):
