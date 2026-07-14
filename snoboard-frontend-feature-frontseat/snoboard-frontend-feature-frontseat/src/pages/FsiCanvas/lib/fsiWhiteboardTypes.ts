@@ -36,6 +36,7 @@ export {
   NODE_TITLE_INPUT_CLASS,
   NODE_TITLE_EMPTY_CLASS,
   NODE_TITLE_DISPLAY_CLASS,
+  NODE_FIELD_INPUT_CLASS,
   isUnsetNodeTitle,
 } from "./fsiNodeCardUi";
 
@@ -101,6 +102,7 @@ export function isCarouselBodyNode(node: FsiNodeRecord): boolean {
 /** Nodes with user-controlled expand/collapse (corner toggle). */
 export function isCollapsibleCardNode(node: FsiNodeRecord): boolean {
   return (
+    isLinkNode(node) ||
     isCompactLabelNode(node) ||
     isCarouselBodyNode(node) ||
     node.node_type === "Page Name" ||
@@ -192,8 +194,8 @@ export function specForWhiteboardType(type: WhiteboardNodeType): CreateNodeSpec 
     case "Link":
       return {
         node_type: "Link",
-        display_title: "Link",
-        structured_payload: { url: "" },
+        display_title: "",
+        structured_payload: { ui_expanded: false, url: "" },
       };
     case "Sticky Note":
       return {

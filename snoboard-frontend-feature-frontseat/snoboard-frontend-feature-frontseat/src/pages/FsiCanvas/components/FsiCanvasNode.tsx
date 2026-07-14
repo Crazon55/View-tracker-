@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { NodeResizer, type NodeProps, useUpdateNodeInternals } from "@xyflow/react";
-import { Loader2 } from "lucide-react";
+import { ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { FsiNodeData } from "../lib/fsiFlowAdapter";
 import { PERFORMANCE_LABELS } from "../lib/fsiNodeSchemas";
@@ -14,13 +14,12 @@ import {
   isCarouselBodyNode,
   isLinkNode,
   isNodeUiExpanded,
-  LINK_NODE_HEIGHT,
-  LINK_NODE_WIDTH,
   NODE_BODY_BOX_CLASS,
   NODE_TYPE_LABEL_CLASS,
   NODE_TITLE_DISPLAY_CLASS,
   NODE_TITLE_EMPTY_CLASS,
   NODE_TITLE_INPUT_CLASS,
+  NODE_FIELD_INPUT_CLASS,
   isUnsetNodeTitle,
   nodeCardHeight,
   nodeCardWidth,
@@ -50,7 +49,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
 
   const [title, setTitle] = useState(fsiNode.display_title);
   const [body, setBody] = useState(fsiNode.raw_body_text ?? "");
-  const [titleEditing, setTitleEditing] = useState(false);
+  const [linkUrl, setLinkUrl] = useState(() => String(fsiNode.structured_payload?.url ?? ""));
   const payload = fsiNode.structured_payload ?? {};
   const [fieldValues, setFieldValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(fieldDefs.map((def) => [def.key, String(payload[def.key] ?? "")])),
@@ -59,7 +58,8 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
   useEffect(() => {
     setTitle(fsiNode.display_title);
     setBody(fsiNode.raw_body_text ?? "");
-  }, [fsiNode.display_title, fsiNode.raw_body_text]);
+    setLinkUrl(String(fsiNode.structured_payload?.url ?? ""));
+  }, [fsiNode.id, fsiNode.display_title, fsiNode.raw_body_text, fsiNode.structured_payload?.url]);
 
   useEffect(() => {
     setFieldValues(
@@ -106,15 +106,8 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
   const inputClass =
     "nodrag nopan nowheel w-full rounded border border-emerald-900/40 bg-emerald-950/30 px-2 py-1 text-xs text-emerald-950 placeholder:text-emerald-900/40 focus:border-emerald-700 focus:outline-none";
 
-  useEffect(() => {
-    setTitleEditing(false);
-  }, [fsiNode.id]);
-
-  // Fields are editable based on edit permission alone (not selection). Gating on
-  // `selected` meant focusing a field auto-selected the node, which restructured it
-  // (static → inputs), grew it, and fired a re-measure that blurred you mid-type.
+  // Fields are editable based on edit permission alone (not selection).
   const editing = canEdit;
-  const editingTitle = titleEditing && canEdit;
   const isScreenshot = isScreenshotNode(fsiNode);
   const screenshotUrl = getScreenshotImageUrl(fsiNode);
   const [replacingScreenshot, setReplacingScreenshot] = useState(false);
@@ -154,7 +147,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
     };
   }, []);
 
-  const isLink = isLinkNode(fsiNode);
+  const isLinkCard = isLinkNode(fsiNode);
   const isNiche = nodeData.nodeType === "Niche";
   const noteInputClass =
     "nodrag nopan nowheel w-full rounded-sm border border-amber-900/20 bg-amber-50/80 px-2.5 py-2 text-xs text-zinc-900 placeholder:text-zinc-500 focus:border-amber-700 focus:outline-none";
@@ -339,6 +332,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
     const carousel = isCarouselBodyNode(fsiNode);
     const slides = parseSlidesContent(payload);
     const titleEmpty = isUnsetNodeTitle(title, nodeData.nodeType);
+    const linkUrlEmpty = !linkUrl.trim();
 
     return (
       <div
@@ -370,7 +364,50 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
         />
         <div className="flex min-h-0 flex-1 flex-col px-3 py-2.5 pr-7">
           <div className={NODE_TYPE_LABEL_CLASS}>{nodeData.nodeType}</div>
-          {canEdit ? (
+          {isLinkCard ? (
+            canEdit ? (
+              <div className="mt-2.5 flex min-w-0 items-center gap-1.5">
+                <input
+                  type="url"
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  onBlur={(e) => commitField("url", e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onPointerDownCapture={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  className={`${NODE_FIELD_INPUT_CLASS} min-w-0 flex-1`}
+                  placeholder="https://..."
+                />
+                {!linkUrlEmpty ? (
+                  <a
+                    href={normalizeLinkHref(linkUrl)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Open link"
+                    className="nodrag nopan flex h-7 w-7 shrink-0 items-center justify-center self-center rounded text-black/60 hover:bg-black/10 hover:text-black"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                  </a>
+                ) : null}
+              </div>
+            ) : linkUrlEmpty ? (
+              <div className={NODE_TITLE_EMPTY_CLASS}>https://...</div>
+            ) : (
+              <a
+                href={normalizeLinkHref(linkUrl)}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={linkUrl}
+                className={`${NODE_TITLE_DISPLAY_CLASS} cursor-pointer underline decoration-black/40 hover:decoration-black`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {linkUrl}
+              </a>
+            )
+          ) : canEdit ? (
             <input
               value={titleEmpty ? "" : title}
               onChange={(e) => setTitle(e.target.value)}
@@ -409,90 +446,6 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
           )}
           {renderFields()}
         </div>
-        <FsiNodeHandles
-          canStartConnection={canEdit}
-          canAcceptConnection={nodeData.isConnecting}
-          requiredAnchors={connectionAnchors}
-          showConnectionDots={showConnectionDots || selected}
-        />
-      </div>
-    );
-  }
-
-  if (isLink) {
-    const url = fieldValues.url ?? "";
-    const showUrl = Boolean(url.trim()) || editingTitle;
-    return (
-      <div
-        ref={rootRef}
-        className={`relative box-border overflow-visible rounded-md border-2 px-4 py-2.5 shadow-lg ${selected ? "ring-[3px] ring-sky-400 shadow-[0_0_0_5px_rgba(56,189,248,0.28)] ring-offset-0" : ""
-          }`}
-        style={{
-          width: LINK_NODE_WIDTH,
-          minHeight: LINK_NODE_HEIGHT,
-          borderColor: nodeData.color,
-          backgroundColor: nodeData.color,
-        }}
-        onDoubleClick={(e) => {
-          e.stopPropagation();
-          if (canEdit) setTitleEditing(true);
-        }}
-      >
-        {editingTitle ? (
-          <input
-            autoFocus
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onBlur={(e) => {
-              commitTitle(e.target.value);
-              setTitleEditing(false);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") e.currentTarget.blur();
-              if (e.key === "Escape") {
-                setTitle(fsiNode.display_title);
-                setTitleEditing(false);
-              }
-            }}
-            onPointerDown={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-            className="nodrag nopan nowheel mb-1 w-full bg-transparent text-center text-sm font-semibold text-emerald-950 placeholder:text-emerald-900/40 focus:outline-none"
-            placeholder="Link name"
-          />
-        ) : (
-          <div className="text-center text-sm font-semibold leading-tight text-emerald-950">
-            {title || "Link"}
-          </div>
-        )}
-        <div className="text-center text-[9px] font-medium uppercase tracking-wide text-emerald-950/70">
-          Link
-        </div>
-        {showUrl && (
-          <div className="mt-2 border-t border-emerald-900/25 px-1 pt-2">
-            {editingTitle ? (
-              <input
-                type="text"
-                value={url}
-                onChange={(e) => setFieldValues((prev) => ({ ...prev, url: e.target.value }))}
-                onBlur={(e) => commitField("url", e.target.value)}
-                onPointerDown={(e) => e.stopPropagation()}
-                onMouseDown={(e) => e.stopPropagation()}
-                placeholder="https://…"
-                className={`${inputClass} text-center`}
-              />
-            ) : (
-              <a
-                href={normalizeLinkHref(url)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`${inputClass} block truncate text-center underline`}
-                onClick={(e) => e.stopPropagation()}
-              >
-                {url || "Add URL (double-click to edit)"}
-              </a>
-            )}
-          </div>
-        )}
         <FsiNodeHandles
           canStartConnection={canEdit}
           canAcceptConnection={nodeData.isConnecting}

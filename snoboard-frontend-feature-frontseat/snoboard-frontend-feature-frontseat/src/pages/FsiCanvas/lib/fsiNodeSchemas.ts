@@ -220,6 +220,7 @@ export function defaultTitleForType(nodeType: string): string {
       "Carousel Body",
       "Performance",
       "Performance Insight",
+      "Link",
     ].includes(nodeType)
   ) {
     return "";

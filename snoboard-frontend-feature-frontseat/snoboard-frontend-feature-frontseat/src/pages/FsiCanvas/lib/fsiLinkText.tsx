@@ -4,14 +4,20 @@ const URL_PATTERN = /((?:https?:\/\/|www\.)[^\s<]+[^\s<.,;:!?)}\]'"])/gi;
 
 export function normalizeLinkHref(raw: string): string {
   const trimmed = raw.trim();
+  if (!trimmed) return trimmed;
   if (/^https?:\/\//i.test(trimmed)) return trimmed;
   if (/^www\./i.test(trimmed)) return `https://${trimmed}`;
+  if (/^[a-z0-9][-a-z0-9.]*\.[a-z]{2,}(\/[^\s]*)?$/i.test(trimmed)) return `https://${trimmed}`;
   return trimmed;
 }
 
 export function looksLikeUrl(value: string): boolean {
   const v = value.trim();
-  return /^https?:\/\//i.test(v) || /^www\./i.test(v);
+  return (
+    /^https?:\/\//i.test(v) ||
+    /^www\./i.test(v) ||
+    /^[a-z0-9][-a-z0-9.]*\.[a-z]{2,}(\/[^\s]*)?$/i.test(v)
+  );
 }
 
 export function FsiLinkifiedText({

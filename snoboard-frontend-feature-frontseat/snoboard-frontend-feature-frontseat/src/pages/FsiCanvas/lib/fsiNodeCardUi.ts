@@ -1,7 +1,7 @@
 export const COMPACT_NODE_WIDTH = 200;
 export const COMPACT_NODE_HEIGHT = 80;
-export const LINK_NODE_WIDTH = 200;
-export const LINK_NODE_HEIGHT = 72;
+export const LINK_NODE_WIDTH = COMPACT_NODE_WIDTH;
+export const LINK_NODE_HEIGHT = COMPACT_NODE_HEIGHT;
 export const DEFAULT_EXPANDED_WIDTH = 320;
 export const DEFAULT_EXPANDED_HEIGHT = 240;
 
@@ -29,8 +29,9 @@ export function parseSlidesContent(payload: Record<string, unknown> | undefined)
 
 export const NODE_TYPE_LABEL_CLASS =
   "text-[10px] font-bold uppercase tracking-wide text-black";
-export const NODE_TITLE_INPUT_CLASS =
-  "nodrag nopan nowheel mt-2.5 w-full rounded bg-transparent px-1.5 py-1 text-sm font-semibold leading-snug text-black caret-black outline-none placeholder:text-black/40 hover:bg-black/5 focus:bg-white focus:ring-2 focus:ring-sky-500";
+export const NODE_FIELD_INPUT_CLASS =
+  "nodrag nopan nowheel rounded bg-transparent px-1.5 py-1 text-sm font-semibold leading-snug text-black caret-black outline-none placeholder:text-black/40 hover:bg-black/5 focus:bg-white focus:ring-2 focus:ring-sky-500";
+export const NODE_TITLE_INPUT_CLASS = `mt-2.5 w-full ${NODE_FIELD_INPUT_CLASS}`;
 export const NODE_TITLE_EMPTY_CLASS =
   "mt-2.5 px-1.5 py-1 text-sm font-semibold leading-snug text-black/40";
 export const NODE_TITLE_DISPLAY_CLASS =

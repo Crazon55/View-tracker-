@@ -8,11 +8,8 @@ import { userVisibleEdgeLabel } from "./fsiConnectionHandleMeta";
 import {
   COMPACT_NODE_HEIGHT,
   COMPACT_NODE_WIDTH,
-  LINK_NODE_HEIGHT,
-  LINK_NODE_WIDTH,
   displayNodeType,
   isFrameNode,
-  isLinkNode,
   isSimpleLabelNode,
   isCarouselBodyNode,
   isNodeUiExpanded,
@@ -106,7 +103,6 @@ export function graphToFlow(
     }
 
     const isSimple = isSimpleLabelNode(n);
-    const isLink = isLinkNode(n);
     const isPerf = n.node_type === "Performance" || n.node_type === "Performance Insight";
     const expanded = isNodeUiExpanded(payload);
 
@@ -117,9 +113,7 @@ export function graphToFlow(
       draggable: true,
       ...(isSimple
         ? { width: nodeCardWidth(payload, expanded), height: nodeCardHeight(payload, expanded) }
-        : isLink
-          ? { width: LINK_NODE_WIDTH, height: LINK_NODE_HEIGHT }
-          : {}),
+        : {}),
       data: {
         fsiNode: n,
         label: isScreenshot ? "Visual" : isNote ? "Sticky Note" : n.display_title,
