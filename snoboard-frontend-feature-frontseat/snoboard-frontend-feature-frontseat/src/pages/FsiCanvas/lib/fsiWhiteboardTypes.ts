@@ -33,6 +33,11 @@ export {
   NODE_TYPE_LABEL_CLASS,
   NODE_TITLE_BOX_CLASS,
   NODE_BODY_BOX_CLASS,
+  NODE_TITLE_PROMPT,
+  NODE_TITLE_INPUT_CLASS,
+  NODE_TITLE_EMPTY_CLASS,
+  NODE_TITLE_DISPLAY_CLASS,
+  isUnsetNodeTitle,
 } from "./fsiNodeCardUi";
 
 export function isFrameNode(node: FsiNodeRecord): boolean {
@@ -142,11 +147,11 @@ export type CreateNodeSpec = {
 export function specForWhiteboardType(type: WhiteboardNodeType): CreateNodeSpec {
   switch (type) {
     case "Page Name":
-      return { node_type: "Page Name", display_title: "Page Name", structured_payload: {} };
+      return { node_type: "Page Name", display_title: "", structured_payload: { ui_expanded: false } };
     case "Content Pillar":
-      return { node_type: "Content Pillar", display_title: "Content Pillar", structured_payload: {} };
+      return { node_type: "Content Pillar", display_title: "", structured_payload: { ui_expanded: false } };
     case "Content Bucket":
-      return { node_type: "Content Bucket", display_title: "Content Bucket", structured_payload: {} };
+      return { node_type: "Content Bucket", display_title: "", structured_payload: { ui_expanded: false } };
     case "Visual":
       return {
         node_type: "Visual",
@@ -156,27 +161,27 @@ export function specForWhiteboardType(type: WhiteboardNodeType): CreateNodeSpec 
     case "Visual Hook":
       return {
         node_type: "Visual Hook",
-        display_title: "Visual Hook",
+        display_title: "",
         structured_payload: { ui_expanded: false },
         raw_body_text: "",
       };
     case "Written Hook":
       return {
         node_type: "Written Hook",
-        display_title: "Written Hook",
+        display_title: "",
         structured_payload: { ui_expanded: false },
         raw_body_text: "",
       };
     case "Carousel Body":
       return {
         node_type: "Carousel Body",
-        display_title: "Carousel Body",
+        display_title: "",
         structured_payload: { ui_expanded: false, slides_content: [""] },
       };
     case "Performance":
       return {
         node_type: "Performance",
-        display_title: "Performance",
+        display_title: "",
         structured_payload: {
           views: "",
           likes: "",

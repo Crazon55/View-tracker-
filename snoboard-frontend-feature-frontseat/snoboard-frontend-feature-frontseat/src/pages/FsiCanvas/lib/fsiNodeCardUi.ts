@@ -1,5 +1,5 @@
 export const COMPACT_NODE_WIDTH = 200;
-export const COMPACT_NODE_HEIGHT = 64;
+export const COMPACT_NODE_HEIGHT = 76;
 export const LINK_NODE_WIDTH = 200;
 export const LINK_NODE_HEIGHT = 72;
 export const DEFAULT_EXPANDED_WIDTH = 320;
@@ -29,7 +29,20 @@ export function parseSlidesContent(payload: Record<string, unknown> | undefined)
 
 export const NODE_TYPE_LABEL_CLASS =
   "text-[10px] font-bold uppercase tracking-wide text-black";
+export const NODE_TITLE_PROMPT = "Type here";
+export const NODE_TITLE_INPUT_CLASS =
+  "nodrag nopan nowheel mt-0.5 w-full rounded bg-transparent px-1.5 py-0.5 text-lg font-medium leading-tight text-black caret-black outline-none placeholder:text-black/25 hover:bg-black/5 focus:bg-white focus:ring-2 focus:ring-sky-500";
+export const NODE_TITLE_EMPTY_CLASS =
+  "mt-0.5 px-1.5 py-0.5 text-lg font-medium leading-tight text-black/25";
+export const NODE_TITLE_DISPLAY_CLASS =
+  "mt-0.5 px-1.5 py-0.5 text-sm font-semibold leading-snug text-black line-clamp-2";
 export const NODE_TITLE_BOX_CLASS =
   "w-full rounded border border-black/15 bg-black/10 px-2 py-1.5 text-sm font-semibold leading-snug text-black";
 export const NODE_BODY_BOX_CLASS =
   "nodrag nopan w-full flex-1 resize-none rounded border border-black/15 bg-black/10 px-2 py-1.5 text-xs leading-relaxed text-black placeholder:text-black/40 focus:border-black/30 focus:outline-none";
+
+/** True when the title is unset or still the legacy default (same as node type). */
+export function isUnsetNodeTitle(title: string, nodeType: string): boolean {
+  const trimmed = title.trim();
+  return !trimmed || trimmed === nodeType;
+}

@@ -209,6 +209,21 @@ export function defaultPayloadForType(nodeType: string): Record<string, unknown>
 export function defaultTitleForType(nodeType: string): string {
   if (nodeType === "Sticky Note") return "Note";
   if (nodeType === "Frame") return "Frame 1";
+  if (
+    [
+      "Page Name",
+      "Page",
+      "Content Pillar",
+      "Content Bucket",
+      "Visual Hook",
+      "Written Hook",
+      "Carousel Body",
+      "Performance",
+      "Performance Insight",
+    ].includes(nodeType)
+  ) {
+    return "";
+  }
   return nodeType;
 }
 

@@ -17,8 +17,12 @@ import {
   LINK_NODE_HEIGHT,
   LINK_NODE_WIDTH,
   NODE_BODY_BOX_CLASS,
-  NODE_TITLE_BOX_CLASS,
   NODE_TYPE_LABEL_CLASS,
+  NODE_TITLE_DISPLAY_CLASS,
+  NODE_TITLE_EMPTY_CLASS,
+  NODE_TITLE_INPUT_CLASS,
+  NODE_TITLE_PROMPT,
+  isUnsetNodeTitle,
   nodeCardHeight,
   nodeCardWidth,
   parseSlidesContent,
@@ -101,13 +105,16 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
   const cardH = nodeCardHeight(payload, uiExpanded);
 
   const inputClass =
-    "nodrag nopan w-full rounded border border-emerald-900/40 bg-emerald-950/30 px-2 py-1 text-xs text-emerald-950 placeholder:text-emerald-900/40 focus:border-emerald-700 focus:outline-none";
+    "nodrag nopan nowheel w-full rounded border border-emerald-900/40 bg-emerald-950/30 px-2 py-1 text-xs text-emerald-950 placeholder:text-emerald-900/40 focus:border-emerald-700 focus:outline-none";
 
   useEffect(() => {
     setTitleEditing(false);
   }, [fsiNode.id]);
 
-  const editing = selected && canEdit;
+  // Fields are editable based on edit permission alone (not selection). Gating on
+  // `selected` meant focusing a field auto-selected the node, which restructured it
+  // (static → inputs), grew it, and fired a re-measure that blurred you mid-type.
+  const editing = canEdit;
   const editingTitle = titleEditing && canEdit;
   const isScreenshot = isScreenshotNode(fsiNode);
   const screenshotUrl = getScreenshotImageUrl(fsiNode);
@@ -120,14 +127,40 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
     const ro = new ResizeObserver(() => updateNodeInternals(id));
     ro.observe(el);
     return () => ro.disconnect();
-  }, [id, updateNodeInternals, isScreenshot, screenshotUrl, fieldDefs.length, title, body]);
+  }, [id, updateNodeInternals, isScreenshot, screenshotUrl, fieldDefs.length]);
+
+  // Interacting with a node's form field must NOT select/drag the node. React Flow's
+  // node selection & drag run on NATIVE listeners on the parent .react-flow__node, so
+  // React's synthetic stopPropagation on the input fires too late. Stop these events
+  // natively at the node root (a child of .react-flow__node) whenever the target is an
+  // editable field — clicks on the rest of the node still select/drag as normal.
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const stopFieldEvents = (e: Event) => {
+      const t = e.target as HTMLElement | null;
+      if (t && t.closest("input, textarea, select, [contenteditable='true']")) {
+        e.stopPropagation();
+      }
+    };
+    el.addEventListener("pointerdown", stopFieldEvents);
+    el.addEventListener("mousedown", stopFieldEvents);
+    el.addEventListener("click", stopFieldEvents);
+    el.addEventListener("dblclick", stopFieldEvents);
+    return () => {
+      el.removeEventListener("pointerdown", stopFieldEvents);
+      el.removeEventListener("mousedown", stopFieldEvents);
+      el.removeEventListener("click", stopFieldEvents);
+      el.removeEventListener("dblclick", stopFieldEvents);
+    };
+  }, []);
 
   const isLink = isLinkNode(fsiNode);
   const isNiche = nodeData.nodeType === "Niche";
   const noteInputClass =
-    "nodrag nopan w-full rounded-sm border border-amber-900/20 bg-amber-50/80 px-2.5 py-2 text-xs text-zinc-900 placeholder:text-zinc-500 focus:border-amber-700 focus:outline-none";
+    "nodrag nopan nowheel w-full rounded-sm border border-amber-900/20 bg-amber-50/80 px-2.5 py-2 text-xs text-zinc-900 placeholder:text-zinc-500 focus:border-amber-700 focus:outline-none";
   const nicheFieldClass =
-    "nodrag nopan w-full rounded border border-amber-950/45 bg-amber-950/35 px-2 py-1.5 text-xs text-emerald-950 placeholder:text-emerald-900/35 focus:border-amber-900 focus:outline-none";
+    "nodrag nopan nowheel w-full rounded border border-amber-950/45 bg-amber-950/35 px-2 py-1.5 text-xs text-emerald-950 placeholder:text-emerald-900/35 focus:border-amber-900 focus:outline-none";
   const fieldInputClass = isNiche ? nicheFieldClass : inputClass;
   const borderClass = isNiche ? "border-amber-950/30" : "border-emerald-900/30";
 
@@ -164,6 +197,8 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
           value={val}
           onChange={(e) => setFieldValues((prev) => ({ ...prev, [def.key]: e.target.value }))}
           onBlur={(e) => commitField(def.key, e.target.value)}
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
           className={`${fieldInputClass} resize-none`}
         />
       ) : (
@@ -178,6 +213,8 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
             setFieldValues((prev) => ({ ...prev, [def.key]: e.target.value }));
             commitField(def.key, e.target.value);
           }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
           className={fieldInputClass}
         >
           {(def.selectOptions ?? PERFORMANCE_LABELS).map((o) => (
@@ -196,6 +233,8 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
         value={val}
         onChange={(e) => setFieldValues((prev) => ({ ...prev, [def.key]: e.target.value }))}
         onBlur={(e) => commitField(def.key, e.target.value)}
+        onPointerDown={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
         className={fieldInputClass}
       />
     ) : (
@@ -254,9 +293,8 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
     return (
       <div
         ref={rootRef}
-        className={`relative w-[280px] overflow-visible rounded-md border-2 border-pink-500/80 bg-zinc-950 shadow-lg ${
-          selected ? "ring-2 ring-white/50" : ""
-        }`}
+        className={`relative w-[280px] overflow-visible rounded-md border-2 border-pink-500/80 bg-zinc-950 shadow-lg ${selected ? "ring-[3px] ring-sky-400 shadow-[0_0_0_5px_rgba(56,189,248,0.28)]" : ""
+          }`}
         onPaste={(e) => {
           if (!editing) return;
           const files = clipboardImageFiles(e.clipboardData);
@@ -301,13 +339,13 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
   if (isCompact) {
     const carousel = isCarouselBodyNode(fsiNode);
     const slides = parseSlidesContent(payload);
+    const titleEmpty = isUnsetNodeTitle(title, nodeData.nodeType);
 
     return (
       <div
         ref={rootRef}
-        className={`relative box-border flex flex-col overflow-hidden rounded-md border-2 shadow-lg ${
-          selected ? "ring-2 ring-white/50 ring-offset-0" : ""
-        }`}
+        className={`relative box-border flex flex-col overflow-hidden rounded-2xl border-2 shadow-lg ${selected ? "ring-[3px] ring-sky-400 shadow-[0_0_0_5px_rgba(56,189,248,0.28)] ring-offset-0" : ""
+          }`}
         style={{
           width: cardW,
           height: uiExpanded ? cardH : COMPACT_NODE_HEIGHT,
@@ -333,20 +371,23 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
         />
         <div className="flex min-h-0 flex-1 flex-col px-3 py-2.5 pr-7">
           <div className={NODE_TYPE_LABEL_CLASS}>{nodeData.nodeType}</div>
-          <div className={`mt-1 ${NODE_TITLE_BOX_CLASS}`}>
-            {canEdit ? (
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                onBlur={(e) => commitTitle(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-                className="nodrag nopan w-full bg-transparent text-inherit focus:outline-none"
-                placeholder={nodeData.nodeType}
-              />
-            ) : (
-              <div className={uiExpanded ? "" : "line-clamp-2"}>{title || nodeData.nodeType}</div>
-            )}
-          </div>
+          {canEdit ? (
+            <input
+              value={titleEmpty ? "" : title}
+              onChange={(e) => setTitle(e.target.value)}
+              onBlur={(e) => commitTitle(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+              onPointerDown={(e) => e.stopPropagation()}
+              onPointerDownCapture={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              className={titleEmpty && !uiExpanded ? NODE_TITLE_INPUT_CLASS : `${NODE_TITLE_INPUT_CLASS} text-sm font-semibold`}
+              placeholder={NODE_TITLE_PROMPT}
+            />
+          ) : titleEmpty ? (
+            <div className={NODE_TITLE_EMPTY_CLASS}>{NODE_TITLE_PROMPT}</div>
+          ) : (
+            <div className={NODE_TITLE_DISPLAY_CLASS}>{title}</div>
+          )}
           {uiExpanded && hookHasBody && (
             <textarea
               rows={5}
@@ -354,6 +395,8 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
               value={body}
               onChange={(e) => setBody(e.target.value)}
               onBlur={(e) => commitBody(e.target.value)}
+              onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
               placeholder="Hook copy…"
               className={`${NODE_BODY_BOX_CLASS} mt-2 min-h-[80px]`}
             />
@@ -383,9 +426,8 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
     return (
       <div
         ref={rootRef}
-        className={`relative box-border overflow-visible rounded-md border-2 px-4 py-2.5 shadow-lg ${
-          selected ? "ring-2 ring-white/50 ring-offset-0" : ""
-        }`}
+        className={`relative box-border overflow-visible rounded-md border-2 px-4 py-2.5 shadow-lg ${selected ? "ring-[3px] ring-sky-400 shadow-[0_0_0_5px_rgba(56,189,248,0.28)] ring-offset-0" : ""
+          }`}
         style={{
           width: LINK_NODE_WIDTH,
           minHeight: LINK_NODE_HEIGHT,
@@ -413,7 +455,9 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
                 setTitleEditing(false);
               }
             }}
-            className="nodrag nopan mb-1 w-full bg-transparent text-center text-sm font-semibold text-emerald-950 placeholder:text-emerald-900/40 focus:outline-none"
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="nodrag nopan nowheel mb-1 w-full bg-transparent text-center text-sm font-semibold text-emerald-950 placeholder:text-emerald-900/40 focus:outline-none"
             placeholder="Link name"
           />
         ) : (
@@ -432,6 +476,8 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
                 value={url}
                 onChange={(e) => setFieldValues((prev) => ({ ...prev, url: e.target.value }))}
                 onBlur={(e) => commitField("url", e.target.value)}
+                onPointerDown={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
                 placeholder="https://…"
                 className={`${inputClass} text-center`}
               />
@@ -461,9 +507,8 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
   return (
     <div
       ref={rootRef}
-      className={`relative overflow-visible min-w-[200px] max-w-[300px] rounded-md border-2 shadow-lg ${
-        selected ? "ring-2 ring-white/50" : ""
-      }`}
+      className={`relative overflow-visible min-w-[200px] max-w-[300px] rounded-md border-2 shadow-lg ${selected ? "ring-[3px] ring-sky-400 shadow-[0_0_0_5px_rgba(56,189,248,0.28)]" : ""
+        }`}
       style={{
         borderColor: isNote ? "#eab308" : nodeData.color,
         backgroundColor: isNote ? "#fef08a" : nodeData.color,
@@ -483,6 +528,8 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 onBlur={(e) => commitBody(e.target.value)}
+                onPointerDown={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
                 placeholder="post_id, views, url…"
                 className={`${noteInputClass} resize-none`}
               />
@@ -501,6 +548,8 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 onBlur={(e) => commitTitle(e.target.value)}
+                onPointerDown={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
                 placeholder="Niche name"
                 className={`${nicheFieldClass} mb-1 text-sm font-bold`}
               />
@@ -519,6 +568,8 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 onBlur={(e) => commitTitle(e.target.value)}
+                onPointerDown={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
                 className={`${inputClass} mb-1 text-sm font-bold`}
               />
             ) : (
