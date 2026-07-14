@@ -2,7 +2,7 @@ import { useCallback, useRef, useState, useEffect, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { OnSelectionChangeFunc } from "@xyflow/react";
-import { ArrowLeft, Copy, Loader2, Moon, RotateCcw, SquareDashedMousePointer, Sun, Trash2 } from "lucide-react";
+import { ArrowLeft, Copy, Loader2, Moon, Redo2, RotateCcw, SquareDashedMousePointer, Sun, Trash2, Undo2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { fsiApi, flushFsiBackendSyncQueue } from "@/services/fsiApi";
@@ -866,6 +866,7 @@ export default function FsiCanvasWorkspace() {
       handleDeleteNode(ids[0]!);
       return;
     }
+    if (!window.confirm(`Delete ${ids.length} selected nodes?`)) return;
     deleteNodesBulkMutation.mutate(ids);
   }, [canEdit, deleteNodesBulkMutation, handleDeleteNode, multiSelectedIds, selectedNode]);
 
@@ -883,15 +884,17 @@ export default function FsiCanvasWorkspace() {
 
   useEffect(() => {
     if (!canEdit) return;
+    const isEditable = (el: Element | null) =>
+      !!el &&
+      (el.tagName === "INPUT" ||
+        el.tagName === "TEXTAREA" ||
+        el.tagName === "SELECT" ||
+        (el as HTMLElement).isContentEditable);
     const onKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (
-        target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.tagName === "SELECT" ||
-          target.isContentEditable)
-      ) {
+      // Never hijack keys while a text field is focused — check both the event target
+      // and the active element (focus can differ from the keydown target). This keeps
+      // Ctrl+A / Backspace / typing working inside node fields instead of the canvas.
+      if (isEditable(e.target as Element | null) || isEditable(document.activeElement)) {
         return;
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") {
@@ -1207,7 +1210,7 @@ export default function FsiCanvasWorkspace() {
 
   return (
     <div className="flex h-screen flex-col bg-zinc-950 text-white">
-      <header className="shrink-0 border-b border-zinc-800 bg-zinc-950 pt-8 pb-0.5">
+      <header className="shrink-0 border-b border-zinc-800 bg-zinc-950 pt-2 pb-0.5">
         <div className="flex h-6 items-center gap-1.5 px-3 pl-12 pr-28 sm:pr-36">
           <Button
             variant="ghost"
@@ -1258,6 +1261,29 @@ export default function FsiCanvasWorkspace() {
 
             {canEdit && (
               <>
+                <div className="mx-0.5 h-4 w-px shrink-0 bg-zinc-800" />
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  disabled={!history.canUndo}
+                  onClick={handleUndo}
+                  title="Undo (Ctrl+Z)"
+                >
+                  <Undo2 className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  disabled={!history.canRedo}
+                  onClick={handleRedo}
+                  title="Redo (Ctrl+Shift+Z)"
+                >
+                  <Redo2 className="h-3.5 w-3.5" />
+                </Button>
+
                 <div className="mx-0.5 h-4 w-px shrink-0 bg-zinc-800" />
 
                 <Button

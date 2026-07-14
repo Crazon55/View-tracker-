@@ -674,13 +674,23 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   }, [setEdges]);
 
   const handleNodeClick = useCallback(
-    (_: React.MouseEvent, node: Node) => {
+    (e: React.MouseEvent, node: Node) => {
       clearEdgeSelection();
-      paneRef.current?.focus();
+      // Only steal focus to the pane (for keyboard shortcuts) when NOT clicking into
+      // a text field — otherwise this blurs the field and kills the typing caret.
+      const target = e.target as HTMLElement | null;
+      const inField = !!target?.closest?.("input, textarea, select, [contenteditable='true']");
+      if (!inField) paneRef.current?.focus();
+      // Selection itself is driven by the node's own onPointerDownCapture; here we
+      // just keep the workspace's selected-node state in sync.
+      queueMicrotask(() => {
+        const selectedNodes = getNodes().filter((n) => n.selected && n.type !== "fsiFrame");
+        onSelectionChange({ nodes: selectedNodes, edges: [] });
+      });
       const data = node.data as FsiNodeData;
       onNodeSelect(data.fsiNode);
     },
-    [clearEdgeSelection, onNodeSelect],
+    [clearEdgeSelection, getNodes, onNodeSelect, onSelectionChange],
   );
 
   const handlePaneClick = useCallback(() => {
@@ -900,6 +910,10 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         nodesDraggable={canEdit}
         nodesConnectable={canEdit}
         elementsSelectable={canEdit}
+        // Node wrappers must NOT be focusable — otherwise clicking into a node's text
+        // field focuses the node instead of the input, so you can't type. (Delete is
+        // driven by the workspace keydown + selection state, not node focus.)
+        nodesFocusable={false}
         onNodeClick={handleNodeClick}
         onEdgeClick={handleEdgeClick}
         onPaneClick={handlePaneClick}
@@ -919,6 +933,9 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         panOnDrag={[1, 2]}
         selectionMode={SelectionMode.Partial}
         deleteKeyCode={null}
+        // Double-click is how you select a word in a text field — don't let the canvas
+        // hijack it to zoom. (Node creation uses the explicit onPaneDoubleClick handler.)
+        zoomOnDoubleClick={false}
         defaultEdgeOptions={{
           type: "fsiEdge",
           selectable: true,

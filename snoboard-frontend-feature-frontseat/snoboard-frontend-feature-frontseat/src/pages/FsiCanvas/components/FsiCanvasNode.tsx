@@ -21,7 +21,6 @@ import {
   NODE_TITLE_DISPLAY_CLASS,
   NODE_TITLE_EMPTY_CLASS,
   NODE_TITLE_INPUT_CLASS,
-  NODE_TITLE_PROMPT,
   isUnsetNodeTitle,
   nodeCardHeight,
   nodeCardWidth,
@@ -380,11 +379,11 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
               onPointerDown={(e) => e.stopPropagation()}
               onPointerDownCapture={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
-              className={titleEmpty && !uiExpanded ? NODE_TITLE_INPUT_CLASS : `${NODE_TITLE_INPUT_CLASS} text-sm font-semibold`}
-              placeholder={NODE_TITLE_PROMPT}
+              className={NODE_TITLE_INPUT_CLASS}
+              placeholder={nodeData.nodeType}
             />
           ) : titleEmpty ? (
-            <div className={NODE_TITLE_EMPTY_CLASS}>{NODE_TITLE_PROMPT}</div>
+            <div className={NODE_TITLE_EMPTY_CLASS}>{nodeData.nodeType}</div>
           ) : (
             <div className={NODE_TITLE_DISPLAY_CLASS}>{title}</div>
           )}
