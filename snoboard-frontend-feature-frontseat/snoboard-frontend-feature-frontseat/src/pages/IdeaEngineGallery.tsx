@@ -3,12 +3,13 @@
 // card surfaces who made it, total views, and which pages it was already posted on
 // (so the same idea isn't re-posted), plus a button to open it in its playbook.
 // Date-driven — always lands on today; yesterday is one click away. No "All" firehose.
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, ExternalLink, Eye, Search, X, Check, CalendarDays, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { FramerPage, PageHeader } from "@/components/framer/Framer";
+import { Calendar as DayCalendar } from "@/components/ui/calendar";
 import { StatusBadge } from "@/components/seeding/StatusBadge";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -576,7 +577,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-/** Local date control — native picker via showPicker(); no Radix portal (avoids z-index / click issues). */
+/** Local date control — custom black/purple calendar (native picker can’t be themed). */
 function PickDayControl({
   value,
   open,
@@ -588,39 +589,25 @@ function PickDayControl({
   onOpenChange: (open: boolean) => void;
   onChange: (ymd: string) => void;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
   const custom = value !== TODAY && value !== YESTERDAY;
-
-  const openPicker = () => {
-    onOpenChange(true);
-    // Defer so the input is mounted / focused before the browser picker opens.
-    requestAnimationFrame(() => {
-      const el = inputRef.current;
-      if (!el) return;
-      try {
-        el.showPicker?.();
-      } catch {
-        el.focus();
-      }
-    });
-  };
 
   return (
     <div style={{ position: "relative", display: "inline-flex" }}>
       <button
         type="button"
-        onClick={() => (open ? onOpenChange(false) : openPicker())}
+        onClick={() => onOpenChange(!open)}
         style={{
           display: "inline-flex",
           alignItems: "center",
           gap: 8,
           ...datePillBase,
           cursor: "pointer",
-          color: "var(--f-dim)",
-          borderColor: custom ? "rgba(167,139,250,.5)" : "var(--f-line)",
+          color: custom ? "#e9d5ff" : "var(--f-dim)",
+          borderColor: custom ? "rgba(167,139,250,.55)" : "var(--f-line)",
+          background: custom ? "rgba(124,58,237,.14)" : "transparent",
         }}
       >
-        <CalendarDays size={14} strokeWidth={1.6} />
+        <CalendarDays size={14} strokeWidth={1.6} color={custom ? "#a78bfa" : undefined} />
         {custom ? prettyDate(value) : "Pick a day"}
       </button>
       {open && (
@@ -632,31 +619,53 @@ function PickDayControl({
               top: "calc(100% + 6px)",
               left: 0,
               zIndex: 81,
-              padding: 12,
-              borderRadius: 12,
-              background: "rgba(16,16,18,.98)",
-              border: "1px solid var(--f-line)",
-              boxShadow: "0 12px 32px -12px rgba(0,0,0,.8)",
+              padding: "10px 10px 8px",
+              borderRadius: 14,
+              background: "#0a0a0d",
+              border: "1px solid rgba(167,139,250,.28)",
+              boxShadow: "0 16px 40px -12px rgba(0,0,0,.85), 0 0 28px -14px rgba(124,58,237,.55)",
             }}
           >
-            <div style={{ fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--f-faint)", marginBottom: 8 }}>
-              Choose date
-            </div>
-            <input
-              ref={inputRef}
-              type="date"
-              value={value}
-              max={TODAY}
-              autoFocus
-              onChange={(e) => {
-                if (!e.target.value) return;
-                onChange(e.target.value);
+            <DayCalendar
+              mode="single"
+              selected={new Date(`${value}T00:00:00`)}
+              onSelect={(d) => {
+                if (!d) return;
+                onChange(ymd(d));
                 onOpenChange(false);
               }}
-              onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
-              className="fglass-input"
-              style={{ ...modalInput, colorScheme: "dark", cursor: "pointer", minWidth: 180 }}
+              disabled={{ after: new Date() }}
+              initialFocus
+              className="idea-engine-cal text-zinc-200"
+              classNames={{
+                caption_label: "text-sm font-semibold text-zinc-100",
+                head_cell: "text-zinc-500 rounded-md w-9 font-normal text-[0.75rem]",
+                day: "h-9 w-9 p-0 font-normal text-zinc-300 hover:bg-violet-500/15 hover:text-violet-200 rounded-md aria-selected:opacity-100",
+                day_selected:
+                  "bg-[#7c3aed] text-white hover:bg-[#6d28d9] hover:text-white focus:bg-[#7c3aed] focus:text-white",
+                day_today: "border border-[#a78bfa]/70 text-[#c4b5fd] aria-selected:border-transparent",
+                day_outside: "text-zinc-600 opacity-50",
+                day_disabled: "text-zinc-600 opacity-40",
+                nav_button:
+                  "h-7 w-7 bg-transparent p-0 text-zinc-400 border border-violet-500/25 hover:bg-violet-500/15 hover:text-violet-200 opacity-100",
+              }}
             />
+            <div style={{ display: "flex", gap: 8, padding: "4px 6px 2px", borderTop: "1px solid rgba(167,139,250,.18)", marginTop: 4 }}>
+              <button
+                type="button"
+                onClick={() => { onChange(TODAY); onOpenChange(false); }}
+                style={{ fontSize: 12, fontWeight: 600, color: "#a78bfa", background: "none", border: "none", cursor: "pointer", padding: "6px 4px" }}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                onClick={() => { onChange(YESTERDAY); onOpenChange(false); }}
+                style={{ fontSize: 12, fontWeight: 500, color: "#a1a1aa", background: "none", border: "none", cursor: "pointer", padding: "6px 4px" }}
+              >
+                Yesterday
+              </button>
+            </div>
           </div>
         </>
       )}
