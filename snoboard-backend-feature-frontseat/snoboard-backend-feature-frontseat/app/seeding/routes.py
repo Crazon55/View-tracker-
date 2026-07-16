@@ -1512,15 +1512,23 @@ async def root():
 
 # ----------------------------- Lifecycle (called by FSOS app/main.py) -----------------------------
 async def init_seeding():
-    """Init storage + warm the asyncpg pool. Data is already migrated, so no auto-seed."""
+    """Init storage + warm the asyncpg pool. Data is already migrated, so no auto-seed.
+
+    Missing DATABASE_URL must not crash the process — the rest of FSOS still runs.
+    Log a one-line warning (no traceback) so PM2 error logs don't look like a crash-loop.
+    """
     try:
         init_storage()
     except Exception as e:
-        logger.warning(f"Seeding storage init skipped: {e}")
+        logger.warning("Seeding storage init skipped: %s", e)
     try:
         await db.get_pool()
+        logger.info("Seeding Postgres pool ready")
     except Exception as e:
-        logger.exception(f"Seeding pool warm-up failed: {e}")
+        logger.warning(
+            "Seeding DB unavailable (set DATABASE_URL or SUPABASE_DB_URL in .env to enable /api/seeding): %s",
+            e,
+        )
 
 
 async def close_seeding():
