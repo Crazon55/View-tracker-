@@ -3,14 +3,12 @@
 // card surfaces who made it, total views, and which pages it was already posted on
 // (so the same idea isn't re-posted), plus a button to open it in its playbook.
 // Date-driven — always lands on today; yesterday is one click away. No "All" firehose.
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, ExternalLink, Eye, Search, X, Check, CalendarDays, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { FramerPage, PageHeader } from "@/components/framer/Framer";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar as DayCalendar } from "@/components/ui/calendar";
 import { StatusBadge } from "@/components/seeding/StatusBadge";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -256,24 +254,12 @@ export default function IdeaEngineGallery() {
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 22, flexWrap: "wrap" }}>
         <DatePill active={dayDate === YESTERDAY} onClick={() => setDayDate(YESTERDAY)}>Yesterday</DatePill>
         <DatePill active={dayDate === TODAY} onClick={() => setDayDate(TODAY)}>Today</DatePill>
-        <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-          <PopoverTrigger asChild>
-            <button type="button"
-              style={{ display: "inline-flex", alignItems: "center", gap: 8, ...datePillBase, cursor: "pointer", color: "var(--f-dim)", borderColor: dayDate !== TODAY && dayDate !== YESTERDAY ? "rgba(167,139,250,.5)" : "var(--f-line)" }}>
-              <CalendarDays size={14} strokeWidth={1.6} />
-              {dayDate !== TODAY && dayDate !== YESTERDAY ? prettyDate(dayDate) : "Pick a day"}
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-auto p-0 border-white/10 text-zinc-200" style={{ background: "#0a0a0d" }}>
-            <DayCalendar
-              mode="single"
-              selected={new Date(`${dayDate}T00:00:00`)}
-              onSelect={(d) => { if (d) { setDayDate(ymd(d)); setPickerOpen(false); } }}
-              disabled={{ after: new Date() }}
-              initialFocus
-            />
-          </PopoverContent>
-        </Popover>
+        <PickDayControl
+          value={dayDate}
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          onChange={setDayDate}
+        />
         <div style={{ flex: 1 }} />
         <div style={{ position: "relative", minWidth: 220 }}>
           <Search size={14} strokeWidth={1.6} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: "var(--f-faint)" }} />
@@ -587,6 +573,94 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span style={{ fontSize: 11, letterSpacing: ".07em", textTransform: "uppercase", color: "var(--f-faint)", display: "block", marginBottom: 6 }}>{label}</span>
       {children}
     </label>
+  );
+}
+
+/** Local date control — native picker via showPicker(); no Radix portal (avoids z-index / click issues). */
+function PickDayControl({
+  value,
+  open,
+  onOpenChange,
+  onChange,
+}: {
+  value: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onChange: (ymd: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const custom = value !== TODAY && value !== YESTERDAY;
+
+  const openPicker = () => {
+    onOpenChange(true);
+    // Defer so the input is mounted / focused before the browser picker opens.
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      try {
+        el.showPicker?.();
+      } catch {
+        el.focus();
+      }
+    });
+  };
+
+  return (
+    <div style={{ position: "relative", display: "inline-flex" }}>
+      <button
+        type="button"
+        onClick={() => (open ? onOpenChange(false) : openPicker())}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+          ...datePillBase,
+          cursor: "pointer",
+          color: "var(--f-dim)",
+          borderColor: custom ? "rgba(167,139,250,.5)" : "var(--f-line)",
+        }}
+      >
+        <CalendarDays size={14} strokeWidth={1.6} />
+        {custom ? prettyDate(value) : "Pick a day"}
+      </button>
+      {open && (
+        <>
+          <div onClick={() => onOpenChange(false)} style={{ position: "fixed", inset: 0, zIndex: 80 }} />
+          <div
+            style={{
+              position: "absolute",
+              top: "calc(100% + 6px)",
+              left: 0,
+              zIndex: 81,
+              padding: 12,
+              borderRadius: 12,
+              background: "rgba(16,16,18,.98)",
+              border: "1px solid var(--f-line)",
+              boxShadow: "0 12px 32px -12px rgba(0,0,0,.8)",
+            }}
+          >
+            <div style={{ fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--f-faint)", marginBottom: 8 }}>
+              Choose date
+            </div>
+            <input
+              ref={inputRef}
+              type="date"
+              value={value}
+              max={TODAY}
+              autoFocus
+              onChange={(e) => {
+                if (!e.target.value) return;
+                onChange(e.target.value);
+                onOpenChange(false);
+              }}
+              onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
+              className="fglass-input"
+              style={{ ...modalInput, colorScheme: "dark", cursor: "pointer", minWidth: 180 }}
+            />
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
