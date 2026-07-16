@@ -6,10 +6,12 @@ import re
 import hashlib
 import time
 import requests as http_req
+from pathlib import Path
 from dotenv import load_dotenv
 from datetime import datetime, timezone, timedelta
 
-load_dotenv()
+_BACKEND_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(_BACKEND_ROOT / ".env")
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware

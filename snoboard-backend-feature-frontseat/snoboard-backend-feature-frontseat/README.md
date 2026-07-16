@@ -179,6 +179,9 @@ LINKEDIN_ACTOR_ID=supreme_coder/linkedin-post
 TWITTER_ACTOR_ID=kaitoeasyapi/twitter-x-data-tweet-scraper-pay-per-result-cheapest
 SUPABASE_URL=https://xxx.supabase.co
 SUPABASE_KEY=your_key
+# Seeding module (direct Postgres via asyncpg) — copy URI from Supabase → Database → Connection string
+DATABASE_URL=postgresql://postgres:...@db.xxx.supabase.co:5432/postgres
+# Or: SUPABASE_DB_URL=...  or  SUPABASE_DB_PASSWORD=... (built from SUPABASE_URL project ref)
 REPORTS_DIR=reports/files/
 
 # Cloudinary — backend only (Tickets attachments + FSI Canvas node screenshots)

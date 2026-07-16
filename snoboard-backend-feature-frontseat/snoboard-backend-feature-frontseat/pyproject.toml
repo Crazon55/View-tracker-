@@ -17,7 +17,6 @@ dependencies = [
     "google-cloud-storage>=3.9.0",
     "python-multipart>=0.0.6",
     "google-api-python-client>=2.192.0",
-    "asyncpg>=0.29.0",
 ]
 
 [project.optional-dependencies]

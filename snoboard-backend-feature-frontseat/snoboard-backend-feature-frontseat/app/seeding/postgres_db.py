@@ -336,12 +336,57 @@ class Database:
 _db: Optional[Database] = None
 
 
+def resolve_database_dsn() -> str:
+    """Resolve a Postgres DSN from env / settings (seeding uses direct asyncpg)."""
+    import os
+    import re
+    from urllib.parse import quote_plus
+
+    from app.config import get_settings
+
+    settings = get_settings()
+    candidates = [
+        os.environ.get("DATABASE_URL", "").strip(),
+        os.environ.get("SUPABASE_DB_URL", "").strip(),
+        os.environ.get("POSTGRES_URL", "").strip(),
+        os.environ.get("DIRECT_URL", "").strip(),
+        settings.database_url.strip(),
+        settings.supabase_db_url.strip(),
+    ]
+    for dsn in candidates:
+        if dsn:
+            return dsn
+
+    password = (
+        os.environ.get("SUPABASE_DB_PASSWORD", "").strip()
+        or os.environ.get("DB_PASSWORD", "").strip()
+        or os.environ.get("POSTGRES_PASSWORD", "").strip()
+        or settings.supabase_db_password.strip()
+    )
+    supabase_url = (os.environ.get("SUPABASE_URL") or settings.supabase_url or "").strip().rstrip("/")
+    match = re.match(r"https://([a-z0-9]+)\.supabase\.co", supabase_url, re.I)
+    if password and match:
+        ref = match.group(1)
+        return f"postgresql://postgres:{quote_plus(password)}@db.{ref}.supabase.co:5432/postgres"
+
+    raise RuntimeError(
+        "DATABASE_URL or SUPABASE_DB_URL is required "
+        "(Supabase → Project Settings → Database → Connection string → URI)"
+    )
+
+
 def get_database() -> Database:
     global _db
     if _db is None:
-        import os
-        dsn = os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_DB_URL")
-        if not dsn:
-            raise RuntimeError("DATABASE_URL or SUPABASE_DB_URL is required")
-        _db = Database(dsn=dsn)
+        _db = Database(dsn=resolve_database_dsn())
     return _db
+
+
+class _LazyDatabase:
+    """Defer DSN resolution until first use so app import does not require DB env."""
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_database(), name)
+
+
+lazy_database = _LazyDatabase()

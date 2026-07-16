@@ -4,15 +4,18 @@ Loads configuration from environment variables.
 """
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_BACKEND_ROOT = Path(__file__).resolve().parent.parent
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(_BACKEND_ROOT / ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -27,6 +30,11 @@ class Settings(BaseSettings):
     supabase_key: str
     # Project JWT secret (Supabase → Project Settings → API → JWT Secret)
     supabase_jwt_secret: str = ""
+
+    # Direct Postgres (seeding module — Supabase → Project Settings → Database → URI)
+    database_url: str = ""
+    supabase_db_url: str = ""
+    supabase_db_password: str = ""
 
     # Apify Actor IDs
     instagram_actor_id: str = "apify/instagram-post-scraper"

@@ -18,13 +18,11 @@ import jwt
 
 # ----------------------------- Setup -----------------------------
 # Mounted inside the FSOS backend (app/main.py already load_dotenv()'d its .env).
-from app.seeding.postgres_db import get_database
+from app.seeding.postgres_db import lazy_database as db
 from app.seeding.storage import init_storage, put_object, get_object
 from app.auth import verify_token  # shared FSOS Supabase JWT verifier
 
 logger = logging.getLogger(__name__)
-
-db = get_database()
 
 APP_NAME = os.environ.get('APP_NAME', 'frontseat-seeding')
 SEED_ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get('SEED_ADMIN_EMAIL', 'jaskaran.sethi@owledmedia.com').split(',') if e.strip()}

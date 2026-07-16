@@ -9,8 +9,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, ExternalLink, Eye, Search, X, Check, CalendarDays, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { FramerPage, PageHeader } from "@/components/framer/Framer";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar as DayCalendar } from "@/components/ui/calendar";
 import { StatusBadge } from "@/components/seeding/StatusBadge";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -142,7 +140,6 @@ export default function IdeaEngineGallery() {
   const { role } = usePermissions();
 
   const [dayDate, setDayDate] = useState<string>(TODAY);
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [pbFilter, setPbFilter] = useState<PlaybookId | "all">("all");
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
@@ -256,24 +253,12 @@ export default function IdeaEngineGallery() {
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 22, flexWrap: "wrap" }}>
         <DatePill active={dayDate === YESTERDAY} onClick={() => setDayDate(YESTERDAY)}>Yesterday</DatePill>
         <DatePill active={dayDate === TODAY} onClick={() => setDayDate(TODAY)}>Today</DatePill>
-        <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-          <PopoverTrigger asChild>
-            <button type="button"
-              style={{ display: "inline-flex", alignItems: "center", gap: 8, ...datePillBase, cursor: "pointer", color: "var(--f-dim)", borderColor: dayDate !== TODAY && dayDate !== YESTERDAY ? "rgba(167,139,250,.5)" : "var(--f-line)" }}>
-              <CalendarDays size={14} strokeWidth={1.6} />
-              {dayDate !== TODAY && dayDate !== YESTERDAY ? prettyDate(dayDate) : "Pick a day"}
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-auto p-0 border-white/10 text-zinc-200" style={{ background: "#0a0a0d" }}>
-            <DayCalendar
-              mode="single"
-              selected={new Date(`${dayDate}T00:00:00`)}
-              onSelect={(d) => { if (d) { setDayDate(ymd(d)); setPickerOpen(false); } }}
-              disabled={{ after: new Date() }}
-              initialFocus
-            />
-          </PopoverContent>
-        </Popover>
+        <label style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 8, ...datePillBase, cursor: "pointer", borderColor: dayDate !== TODAY && dayDate !== YESTERDAY ? "rgba(167,139,250,.5)" : "var(--f-line)" }}>
+          <CalendarDays size={14} strokeWidth={1.6} />
+          {dayDate !== TODAY && dayDate !== YESTERDAY ? prettyDate(dayDate) : "Pick a day"}
+          <input type="date" value={dayDate} max={TODAY} onChange={(e) => e.target.value && setDayDate(e.target.value)}
+            style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", colorScheme: "dark" }} />
+        </label>
         <div style={{ flex: 1 }} />
         <div style={{ position: "relative", minWidth: 220 }}>
           <Search size={14} strokeWidth={1.6} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: "var(--f-faint)" }} />
@@ -495,11 +480,17 @@ function IdeaCard({ idea, sentTo, sending, onSend, onOpen }: {
 function AddIdeaModal({ defaultDay, defaultPlaybook, author, onClose, onCreated }: {
   defaultDay: string; defaultPlaybook: PlaybookId; author: string; onClose: () => void; onCreated: () => void;
 }) {
+  const [mode, setMode] = useState<"new" | "existing">("new");
   const [pb, setPb] = useState<PlaybookId>(defaultPlaybook);
   const [topic, setTopic] = useState("");
   const [refLink, setRefLink] = useState("");
   const [timestamps, setTimestamps] = useState("");
+  const [pageHandle, setPageHandle] = useState("");
   const [contentType, setContentType] = useState("Reel");
+  const [source, setSource] = useState("");
+  const [views, setViews] = useState("");
+  const [kalakar, setKalakar] = useState("");
+  const [drive, setDrive] = useState("");
   const [day, setDay] = useState(defaultDay);
   const [busy, setBusy] = useState(false);
 
@@ -511,17 +502,20 @@ function AddIdeaModal({ defaultDay, defaultPlaybook, author, onClose, onCreated 
     try {
       const link = refLink.trim();
       const ytLink = isYouTube(link);
-      // "New idea" only — a fresh idea carries just its reference link (comp / YouTube).
+      const existing = mode === "existing";
       await PB_API[pb].createIdea({
-        page_handle: "",
+        page_handle: existing ? pageHandle.split(",").map((s) => s.trim()).filter(Boolean).join(",") : "",
         topic: topic.trim(),
         content_type: contentType,
-        views: 0,
+        source: existing ? (source.trim() || undefined) : undefined,
+        views: existing ? (Number(views) || 0) : 0,
         day_date: day,
         created_by: author || undefined,
         comp_link: link && !ytLink ? link : undefined,
         yt_url: ytLink ? link : undefined,
         yt_timestamps: ytLink ? (timestamps.trim() || undefined) : undefined,
+        kalakar_link: existing ? (kalakar.trim() || undefined) : undefined,
+        drive_link: existing ? (drive.trim() || undefined) : undefined,
       });
       toast.success("Idea added.");
       onCreated();
@@ -536,11 +530,23 @@ function AddIdeaModal({ defaultDay, defaultPlaybook, author, onClose, onCreated 
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", backdropFilter: "blur(4px)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div onClick={(e) => e.stopPropagation()} className="fglass-panel" style={{ width: "min(520px, 100%)", padding: "22px 24px", maxHeight: "90vh", overflowY: "auto" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 600 }}>New idea</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 600 }}>Add idea</h2>
           <button type="button" onClick={onClose} style={{ ...ghostBtnSm, border: "none", padding: 4 }}><X size={18} /></button>
         </div>
 
         <div style={{ display: "grid", gap: 14 }}>
+          {/* New (just a reference link) vs Existing (full production detail) */}
+          <div style={{ display: "flex", gap: 8 }}>
+            {(["new", "existing"] as const).map((m) => (
+              <button key={m} type="button" onClick={() => setMode(m)}
+                style={{ ...datePillBase, cursor: "pointer", flex: 1, textAlign: "center",
+                  background: mode === m ? "#fff" : "transparent", color: mode === m ? "#000" : "var(--f-dim)",
+                  borderColor: mode === m ? "#fff" : "var(--f-line)", fontWeight: mode === m ? 600 : 500 }}>
+                {m === "new" ? "New idea" : "Existing idea"}
+              </button>
+            ))}
+          </div>
+
           <Field label="Playbook">
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {PLAYBOOKS.map((p) => (
@@ -570,6 +576,21 @@ function AddIdeaModal({ defaultDay, defaultPlaybook, author, onClose, onCreated 
             </Field>
             <Field label="Date"><input type="date" value={day} max={TODAY} onChange={(e) => setDay(e.target.value)} className="fglass-input" style={{ ...modalInput, colorScheme: "dark" }} /></Field>
           </div>
+
+          {/* Existing-idea detail — views, pages, and its production links. */}
+          {mode === "existing" && (
+            <>
+              <Field label="Pages (comma-separated handles)"><input value={pageHandle} onChange={(e) => setPageHandle(e.target.value)} placeholder="e.g. bizzindia, 101xfounders" className="fglass-input" style={modalInput} /></Field>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <Field label="Views so far"><input type="number" min={0} value={views} onChange={(e) => setViews(e.target.value)} placeholder="0" className="fglass-input" style={modalInput} /></Field>
+                <Field label="Source"><input value={source} onChange={(e) => setSource(e.target.value)} placeholder="Optional" className="fglass-input" style={modalInput} /></Field>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <Field label="Kalakar link"><input value={kalakar} onChange={(e) => setKalakar(e.target.value)} placeholder="Kalakar edit link" className="fglass-input" style={modalInput} /></Field>
+                <Field label="Drive / frame link"><input value={drive} onChange={(e) => setDrive(e.target.value)} placeholder="Base edit drive link" className="fglass-input" style={modalInput} /></Field>
+              </div>
+            </>
+          )}
         </div>
 
         <div style={{ display: "flex", gap: 8, marginTop: 22 }}>
