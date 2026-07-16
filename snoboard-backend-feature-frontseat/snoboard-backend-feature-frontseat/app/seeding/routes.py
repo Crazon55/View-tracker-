@@ -18,6 +18,8 @@ import jwt
 
 # ----------------------------- Setup -----------------------------
 # Mounted inside the FSOS backend (app/main.py already load_dotenv()'d its .env).
+# IMPORTANT: use lazy_database — never call get_database() at import time (crashes uvicorn
+# if DATABASE_URL is unset). Pool warm-up happens in init_seeding() on startup.
 from app.seeding.postgres_db import lazy_database as db
 from app.seeding.storage import init_storage, put_object, get_object
 from app.auth import verify_token  # shared FSOS Supabase JWT verifier

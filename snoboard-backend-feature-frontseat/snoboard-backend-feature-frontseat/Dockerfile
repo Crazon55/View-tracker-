@@ -22,5 +22,8 @@ ENV PATH="/app/.venv/bin:$PATH"
 # Copy the project into the image
 COPY . /app
 
+# Fail the image build if seeding import requires DATABASE_URL at import time.
+RUN python scripts/verify_boot.py
+
 # Run the application
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips", "*"]
