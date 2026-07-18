@@ -3886,7 +3886,7 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
                     readOnly={dragDisabled}
                     onDragStart={() => setDraggingId(idea.id)}
                     onClick={() => setDetailIdea(idea)}
-                    onDelete={opsOnly ? undefined : () => {
+                    onDelete={dragDisabled || opsOnly ? undefined : () => {
                       // Delete pool idea + all its page copies
                       const copies = (ideas as any[]).filter((i: any) => i.source_pool_id === idea.id);
                       copies.forEach((c: any) => deleteMut.mutate(c.id));

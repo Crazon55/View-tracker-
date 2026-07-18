@@ -98,8 +98,8 @@ export function isPlaybookViewOnly(role: string | null, playbookId: PlaybookId):
 
 // ── Per-role playbook view profile ─────────────────────────────────────────────
 // The daily loop splits a playbook across three roles. Each sees a different slice:
-//   VE (video editor) → ONLY the Production board.
-//   CS               → edit Frontseat, view everything else.
+//   VE (video editor) → see Content Distribution (view-only) + edit Production.
+//   CS               → edit Content Distribution, view everything else.
 //   CO (content ops) → edit everything, lands on Tracking.
 //   admin/senior_cs  → edit everything.
 //   view-only        → see everything, edit nothing.
@@ -111,33 +111,40 @@ export type PlaybookViewProfile = { tabs: PlaybookTabId[]; edit: PlaybookTabId[]
 // (frontseat), Production (idea-bank), Tracking.
 const ALL_PLAYBOOK_TABS: PlaybookTabId[] = ["frontseat", "idea-bank", "tracking"];
 
+/** Hard rule: video editors never get edit on Content Distribution (frontseat). */
+function stripFrontseatEdit(profile: PlaybookViewProfile): PlaybookViewProfile {
+  return { ...profile, edit: profile.edit.filter((t) => t !== "frontseat") };
+}
+
 /** Resolve which playbook tabs a role sees and which it can edit. Classifies by canonical
  *  role first (so aliases like "editors" → VE work), then falls back to the access level. */
 export function getPlaybookViewProfile(role: string | null, playbookId: PlaybookId): PlaybookViewProfile | null {
   const roles = (role || "").split(",").map((r) => canonicalRole(r.trim())).filter(Boolean);
   const has = (r: string) => roles.includes(r);
 
+  let profile: PlaybookViewProfile | null = null;
+
   if (has("admin") || has("senior_cs")) {
-    return { tabs: ALL_PLAYBOOK_TABS, edit: ALL_PLAYBOOK_TABS, defaultTab: "idea-bank" };
-  }
-  if (has("co")) {
-    return { tabs: ["tracking", "frontseat", "idea-bank"], edit: ALL_PLAYBOOK_TABS, defaultTab: "tracking" };
-  }
-  if (has("cs")) {
-    return { tabs: ALL_PLAYBOOK_TABS, edit: ["frontseat"], defaultTab: "frontseat" };
-  }
-  // VE / editors: Content Distribution (frontseat) + Production (idea-bank).
-  // Distribution is view/context by default; production is where they edit.
-  if (has("ve")) {
-    return { tabs: ["frontseat", "idea-bank"], edit: ["idea-bank"], defaultTab: "frontseat" };
+    profile = { tabs: ALL_PLAYBOOK_TABS, edit: ALL_PLAYBOOK_TABS, defaultTab: "idea-bank" };
+  } else if (has("co")) {
+    profile = { tabs: ["tracking", "frontseat", "idea-bank"], edit: ALL_PLAYBOOK_TABS, defaultTab: "tracking" };
+  } else if (has("cs")) {
+    profile = { tabs: ALL_PLAYBOOK_TABS, edit: ["frontseat"], defaultTab: "frontseat" };
+  } else if (has("ve")) {
+    // See Content Distribution (view-only) + edit Production only.
+    profile = { tabs: ["frontseat", "idea-bank"], edit: ["idea-bank"], defaultTab: "frontseat" };
+  } else {
+    // Other roles fall back to the coarse access level.
+    const access = getPlaybookAccess(role, playbookId);
+    if (access === "none") return null;
+    if (access === "edit") profile = { tabs: ALL_PLAYBOOK_TABS, edit: ALL_PLAYBOOK_TABS, defaultTab: "idea-bank" };
+    else if (access === "ops") profile = { tabs: ["tracking", "idea-bank", "frontseat"], edit: ["tracking"], defaultTab: "tracking" };
+    else profile = { tabs: ALL_PLAYBOOK_TABS, edit: [], defaultTab: "idea-bank" }; // view-only
   }
 
-  // Other roles fall back to the coarse access level.
-  const access = getPlaybookAccess(role, playbookId);
-  if (access === "none") return null;
-  if (access === "edit") return { tabs: ALL_PLAYBOOK_TABS, edit: ALL_PLAYBOOK_TABS, defaultTab: "idea-bank" };
-  if (access === "ops") return { tabs: ["tracking", "idea-bank", "frontseat"], edit: ["tracking"], defaultTab: "tracking" };
-  return { tabs: ALL_PLAYBOOK_TABS, edit: [], defaultTab: "idea-bank" }; // view-only
+  // Belt-and-suspenders: VE / editors can never edit Content Distribution.
+  if (profile && has("ve")) return stripFrontseatEdit(profile);
+  return profile;
 }
 
 export function accessiblePlaybookIds(role: string | null): PlaybookId[] {
