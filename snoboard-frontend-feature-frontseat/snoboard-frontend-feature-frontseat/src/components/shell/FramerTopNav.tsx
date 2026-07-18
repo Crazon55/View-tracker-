@@ -6,7 +6,8 @@
 import { NavLink } from "react-router-dom";
 import { ChevronDown, LogOut } from "lucide-react";
 import { navForRoles, type NavMenu, type NavLeaf } from "@/config/appNav";
-import { areaForRoute, canView, canSeeAnyNonSeeding, canonicalRole } from "@/lib/accessModel";
+import { areaForRoute, canView, canSeeAnyNonSeeding, canonicalRole, type PersonAccess } from "@/lib/accessModel";
+import { useAreaAccess } from "@/hooks/useAreaAccess";
 
 /** Role-aware nav label overrides (e.g. Fulfillment sees "All Approved Deals"). */
 function leafLabel(it: NavLeaf, role: string | null | undefined): string {
@@ -26,19 +27,23 @@ interface Props {
   right?: React.ReactNode; // optional extra controls (wrap button, animal picker, etc.)
 }
 
-function filterNavLeaves(items: NavLeaf[], role: string | null | undefined): NavLeaf[] {
+function filterNavLeaves(
+  items: NavLeaf[],
+  role: string | null | undefined,
+  personAccess?: PersonAccess | null,
+): NavLeaf[] {
   if (!role) return items;
   return items.filter((it) => {
     const area = areaForRoute(it.to);
-    if (area) return canView(role, area);
-    // external / unmapped (e.g. Pintu) — treat as a content tool: show only to
-    // roles that have some FSOS/content access (hidden for seeding-only BD/Fulfillment).
-    return canSeeAnyNonSeeding(role);
+    if (area) return canView(role, area, undefined, personAccess);
+    // external / unmapped — show only to roles that have some FSOS/content access.
+    return canSeeAnyNonSeeding(role, undefined, personAccess);
   });
 }
 
 export function FramerTopNav({ roles = [], role, userName, greeting, onSignOut, right }: Props) {
-  const menus = navForRoles(roles);
+  const { personAccess } = useAreaAccess();
+  const menus = navForRoles(roles, personAccess);
 
   return (
     <header className="f-topwrap">
@@ -59,7 +64,7 @@ export function FramerTopNav({ roles = [], role, userName, greeting, onSignOut, 
                 {m.label}
               </NavLink>
             ) : (
-              <Dropdown key={i} menu={m} role={role} />
+              <Dropdown key={i} menu={m} role={role} personAccess={personAccess} />
             )
           )}
         </nav>
@@ -83,8 +88,16 @@ export function FramerTopNav({ roles = [], role, userName, greeting, onSignOut, 
   );
 }
 
-function Dropdown({ menu, role }: { menu: Extract<NavMenu, { items: unknown }>; role?: string | null }) {
-  const items = filterNavLeaves(menu.items, role);
+function Dropdown({
+  menu,
+  role,
+  personAccess,
+}: {
+  menu: Extract<NavMenu, { items: unknown }>;
+  role?: string | null;
+  personAccess?: PersonAccess | null;
+}) {
+  const items = filterNavLeaves(menu.items, role, personAccess);
   if (items.length === 0) return null;
   const wide = items.length > 4;
   return (

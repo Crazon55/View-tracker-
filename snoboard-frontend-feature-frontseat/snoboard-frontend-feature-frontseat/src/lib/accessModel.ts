@@ -140,8 +140,10 @@ export const ROLE_ACCESS_DEFAULTS: Record<string, Record<AreaKey, AreaLevel>> = 
     news: "view", pintu: "view", growth: "view", ips: "view", fsi_canvas: "edit",
   }),
 
+  // VE: playbooks are their day-to-day surface (matches legacy VE_PERMISSIONS).
   ve: withOverrides("none", {
-    pintu: "view", growth: "view", fsi_canvas: "edit",
+    playbook_bpb: "edit", playbook_xf: "edit", playbook_tech: "edit",
+    pintu: "view", growth: "view", ips: "view", fsi_canvas: "edit",
   }),
 
   // BD: only their team dashboard (Overview) + Submit Brief. The dashboard already lists
@@ -198,6 +200,8 @@ export function canonicalRole(role: string): string {
 
 // ── Resolver ──────────────────────────────────────────────────────────────────
 export type AccessOverrides = Record<string, Partial<Record<AreaKey, AreaLevel>>>;
+/** Per-person matrix from Users & Roles (`user_access.json`), keyed by area. */
+export type PersonAccess = Partial<Record<AreaKey, AreaLevel>>;
 
 const RANK: Record<AreaLevel, number> = { none: 0, view: 1, edit: 2 };
 
@@ -215,12 +219,37 @@ export function resolveRoleAccess(
   return ov ? { ...base, ...ov } : base;
 }
 
-/** Effective access for a (possibly comma-joined multi-)role on one area — highest wins. */
+/** Role defaults (+ role overrides), then per-person matrix on top. */
+export function resolvePersonAccess(
+  role: string | null | undefined,
+  personAccess?: PersonAccess | null,
+  overrides?: AccessOverrides,
+): Record<AreaKey, AreaLevel> {
+  let base = all("none");
+  if (role) {
+    for (const raw of String(role).split(",").map((s) => s.trim()).filter(Boolean)) {
+      const m = resolveRoleAccess(raw, overrides);
+      for (const k of AREA_KEYS) {
+        if (RANK[m[k]] > RANK[base[k]]) base[k] = m[k];
+      }
+    }
+  }
+  return personAccess && Object.keys(personAccess).length
+    ? { ...base, ...personAccess }
+    : base;
+}
+
+/** Effective access for a (possibly comma-joined multi-)role on one area — highest wins.
+ * When `personAccess` has a value for the area (from Users & Roles Save), that wins. */
 export function getAreaLevel(
   role: string | null | undefined,
   area: AreaKey,
   overrides?: AccessOverrides,
+  personAccess?: PersonAccess | null,
 ): AreaLevel {
+  if (personAccess && personAccess[area] !== undefined) {
+    return personAccess[area]!;
+  }
   if (!role) return "none";
   let best: AreaLevel = "none";
   for (const raw of String(role).split(",").map((s) => s.trim()).filter(Boolean)) {
@@ -230,20 +259,34 @@ export function getAreaLevel(
   return best;
 }
 
-export const canView = (role: string | null | undefined, area: AreaKey, o?: AccessOverrides) =>
-  getAreaLevel(role, area, o) !== "none";
-export const canEditArea = (role: string | null | undefined, area: AreaKey, o?: AccessOverrides) =>
-  getAreaLevel(role, area, o) === "edit";
+export const canView = (
+  role: string | null | undefined,
+  area: AreaKey,
+  o?: AccessOverrides,
+  personAccess?: PersonAccess | null,
+) => getAreaLevel(role, area, o, personAccess) !== "none";
+export const canEditArea = (
+  role: string | null | undefined,
+  area: AreaKey,
+  o?: AccessOverrides,
+  personAccess?: PersonAccess | null,
+) => getAreaLevel(role, area, o, personAccess) === "edit";
 
 /** Map a nav route to its access area (exact, then prefix for sub-routes). */
 export function areaForRoute(route: string): AreaKey | null {
   const exact = AREAS.find((a) => a.route === route);
   if (exact) return exact.key;
-  const pre = AREAS.find((a) => route.startsWith(a.route + "/"));
+  const pre = AREAS.find((a) => !a.route.startsWith("http") && route.startsWith(a.route + "/"));
   return pre?.key ?? null;
 }
 
 /** True if the role can view any non-Seeding, non-Admin area (i.e. an FSOS/content user). */
-export function canSeeAnyNonSeeding(role: string | null | undefined, o?: AccessOverrides): boolean {
-  return AREAS.some((a) => a.group !== "Seeding" && a.group !== "Admin" && canView(role, a.key, o));
+export function canSeeAnyNonSeeding(
+  role: string | null | undefined,
+  o?: AccessOverrides,
+  personAccess?: PersonAccess | null,
+): boolean {
+  return AREAS.some(
+    (a) => a.group !== "Seeding" && a.group !== "Admin" && canView(role, a.key, o, personAccess),
+  );
 }

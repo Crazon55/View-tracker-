@@ -7,6 +7,7 @@ import { getDeadlines, getSixDayConfig, getSixDayDeadlines, getTickets } from "@
 import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate, Navigate, useParams } from "react-router-dom";
 import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, Scissors, ClipboardList, Trophy, Ticket, Newspaper, Sparkles, ShieldCheck, FlaskConical, Eye } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAreaAccess } from "@/hooks/useAreaAccess";
 import { isRouteAllowed, canAccessPintu } from "@/lib/permissions";
 import { PLAYBOOK_CONFIGS } from "@/lib/playbookExperimentConfig";
 import { useNotifications } from "@/hooks/useNotifications";
@@ -47,7 +48,7 @@ import { DebugBoundary } from "./components/shell/DebugBoundary";
 import SeedingOverview from "./pages/Seeding/SeedingOverview";
 import SeedingBDDashboard from "./pages/Seeding/SeedingBDDashboard";
 import SeedingApprovalQueue from "./pages/Seeding/SeedingApprovalQueue";
-import { canonicalRole, canSeeAnyNonSeeding } from "./lib/accessModel";
+import { canonicalRole } from "./lib/accessModel";
 import SeedingAllDeals from "./pages/Seeding/SeedingAllDeals";
 import SeedingTeamwise from "./pages/Seeding/SeedingTeamwise";
 import SeedingFulfillmentBoard from "./pages/Seeding/SeedingFulfillmentBoard";
@@ -485,6 +486,7 @@ function SeedingHome() {
 const CS_LANDED_KEY = "fsos-cs-landed";
 function Home() {
   const { role } = usePermissions();
+  const { canSeeContent } = useAreaAccess();
   const roles = String(role || "").split(",").map((r) => canonicalRole(r.trim()));
   const isCs = roles.includes("cs");
   // Read (don't mutate) during render; the one-shot flag is set in the effect below.
@@ -493,7 +495,7 @@ function Home() {
     if (isCs) sessionStorage.setItem(CS_LANDED_KEY, "1");
   }, [isCs]);
 
-  if (!canSeeAnyNonSeeding(role)) return <Navigate to="/seeding" replace />;
+  if (!canSeeContent()) return <Navigate to="/seeding" replace />;
   if (shouldLandCs) return <Navigate to="/idea-engine" replace />;
   return <FramerHome />;
 }

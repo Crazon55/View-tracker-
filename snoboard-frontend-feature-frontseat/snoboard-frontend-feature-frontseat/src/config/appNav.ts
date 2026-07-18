@@ -8,7 +8,7 @@ import {
   Users, ShieldCheck, LayoutDashboard, type LucideIcon,
 } from "lucide-react";
 import { PLAYBOOK_CONFIGS, type PlaybookId } from "@/lib/playbookExperimentConfig";
-import { canSeeAnyNonSeeding } from "@/lib/accessModel";
+import { canSeeAnyNonSeeding, type PersonAccess } from "@/lib/accessModel";
 
 export type Gate = "seeding" | "admin"; // undefined = everyone
 export type NavLeaf = { to: string; label: string; desc?: string; icon: LucideIcon; external?: boolean };
@@ -76,11 +76,11 @@ export function gates(roles: string[]) {
 /** Filter the nav to what this user's roles may see. Home is hidden for seeding-only
  * roles (BD/Fulfillment) who have no FSOS/content access — leaf-level filtering in
  * FramerTopNav then scopes each menu's items by the access model. */
-export function navForRoles(roles: string[]): NavMenu[] {
+export function navForRoles(roles: string[], personAccess?: PersonAccess | null): NavMenu[] {
   const g = gates(roles);
   const roleStr = roles.join(",");
   return NAV.filter((m) => {
-    if ("link" in m && m.link === "/") return canSeeAnyNonSeeding(roleStr);
+    if ("link" in m && m.link === "/") return canSeeAnyNonSeeding(roleStr, undefined, personAccess);
     return !m.requires || g[m.requires];
   });
 }
