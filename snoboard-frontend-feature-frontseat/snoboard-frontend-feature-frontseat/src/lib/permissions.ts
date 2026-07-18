@@ -126,8 +126,10 @@ export function getPlaybookViewProfile(role: string | null, playbookId: Playbook
   if (has("cs")) {
     return { tabs: ALL_PLAYBOOK_TABS, edit: ["frontseat"], defaultTab: "frontseat" };
   }
+  // VE / editors: Content Distribution (frontseat) + Production (idea-bank).
+  // Distribution is view/context by default; production is where they edit.
   if (has("ve")) {
-    return { tabs: ["idea-bank"], edit: ["idea-bank"], defaultTab: "idea-bank" };
+    return { tabs: ["frontseat", "idea-bank"], edit: ["idea-bank"], defaultTab: "frontseat" };
   }
 
   // Other roles fall back to the coarse access level.

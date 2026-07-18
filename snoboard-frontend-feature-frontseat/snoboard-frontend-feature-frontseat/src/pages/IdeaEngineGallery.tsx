@@ -23,12 +23,11 @@ const PLAYBOOKS: PlaybookId[] = ["bpb", "xf", "tech"];
 const PB_SHORT: Record<PlaybookId, string> = { bpb: "Bizz", xf: "XF", tech: "Tech" };
 const PB_ACCENT: Record<PlaybookId, string> = { bpb: "#a78bfa", xf: "#f472b6", tech: "#38bdf8" };
 
-// Where a playbook shortcut should land, by role: CS → Content Distribution
-// (frontseat), VE → Production (idea-bank). Others use the playbook's own default.
+// Where a playbook shortcut should land, by role: CS + VE → Content Distribution
+// (frontseat). Others use the playbook's own default.
 function shortcutTabForRole(role: string | null | undefined): "frontseat" | "idea-bank" | null {
   const roles = String(role || "").split(",").map((r) => canonicalRole(r.trim()));
-  if (roles.includes("ve")) return "idea-bank";
-  if (roles.includes("cs")) return "frontseat";
+  if (roles.includes("ve") || roles.includes("cs")) return "frontseat";
   return null;
 }
 
