@@ -521,7 +521,7 @@ function IdeaCard({idea,niches,onClick,isSelected}: {idea:any;niches:any[];onCli
                 rel="noopener noreferrer"
                 style={{fontSize:10,color:"#F0A050",fontWeight:500}}
               >
-                Frame ↗
+                Drive ↗
               </a>
             )}
             {idea.kalakar_link && (
@@ -1403,7 +1403,7 @@ export default function ContentTracker(){
           <div><label style={ls}>Created by</label><div style={{...is,background:"#27272a",color:"#a1a1aa"}}>{user?.user_metadata?.full_name || user?.email?.split("@")[0] || "—"}</div></div>
           <div><label style={ls}>Hook variations (one per line)</label><textarea className="fglass-input" value={newIdea.hook_variations} onChange={e=>setNewIdea(p=>({...p,hook_variations:e.target.value}))} rows={4} placeholder={"Hook variation 1\nHook variation 2\nHook variation 3"} style={{...is,resize:"vertical",minHeight:80}}/></div>
           <div><label style={ls}>Music reference / suggestions</label><input value={newIdea.music_ref} onChange={e=>setNewIdea(p=>({...p,music_ref:e.target.value}))} placeholder="e.g. Dark cinematic, trending audio XYZ" style={is}/></div>
-          <div><label style={ls}>Frame link</label><input value={newIdea.frame_link} onChange={e=>setNewIdea(p=>({...p,frame_link:e.target.value}))} placeholder="Google Drive / reference frames link" style={is}/></div>
+          <div><label style={ls}>Drive link (base edit link)</label><input value={newIdea.frame_link} onChange={e=>setNewIdea(p=>({...p,frame_link:e.target.value}))} placeholder="Google Drive base edit link" style={is}/></div>
           {newIdea.source==="original"&&(
             <div style={{display:"flex",gap:10}}>
               <div style={{flex:1}}><label style={ls}>YT link (original source)</label><input value={newIdea.yt_url} onChange={e=>setNewIdea(p=>({...p,yt_url:e.target.value}))} placeholder="https://youtube.com/watch?v=..." style={is}/></div>
@@ -1491,7 +1491,7 @@ export default function ContentTracker(){
             <div style={{display:"flex",gap:10}}>
               <div style={{flex:1}}><label style={ls}>Music reference / suggestions</label><SafeTextInput value={cd.music_ref} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{music_ref:v}})} placeholder="e.g. Dark cinematic, trending audio" style={is}/></div>
             </div>
-            <div><label style={ls}>Frame link</label><SafeTextInput value={cd.frame_link} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{frame_link:v}})} placeholder="Google Drive / reference frames link" style={is}/></div>
+            <div><label style={ls}>Drive link (base edit link)</label><SafeTextInput value={cd.frame_link} onSave={v=>updateIdeaMut.mutate({id:cd.id,data:{frame_link:v}})} placeholder="Google Drive base edit link" style={is}/></div>
             {cd.frame_link&&<a href={cd.frame_link} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#4A7FD4",wordBreak:"break-all"}}>{cd.frame_link}</a>}
             {cdStage==="base_edit"&&(
               <div>

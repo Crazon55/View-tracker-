@@ -334,7 +334,7 @@ export default function PageDetail() {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <Label>Frame Link</Label>
+                      <Label>Drive link (base edit link)</Label>
                       <Input value={form.frame_link} onChange={(e) => setForm({ ...form, frame_link: e.target.value })} />
                     </div>
                     <div className="space-y-1.5">
@@ -767,13 +767,13 @@ export default function PageDetail() {
                       {isEditing ? (
                         <div className="space-y-1">
                           <Input className="h-7 text-xs w-44" placeholder="Instagram URL" value={editData.url ?? entry.url ?? ""} onChange={(e) => setEditData({ ...editData, url: e.target.value })} />
-                          <Input className="h-7 text-xs w-44" placeholder="Frame Link" value={editData.frame_link ?? entry.frame_link ?? ""} onChange={(e) => setEditData({ ...editData, frame_link: e.target.value })} />
+                          <Input className="h-7 text-xs w-44" placeholder="Google Drive base edit link" value={editData.frame_link ?? entry.frame_link ?? ""} onChange={(e) => setEditData({ ...editData, frame_link: e.target.value })} />
                           <Input className="h-7 text-xs w-44" placeholder="Comp Link" value={editData.comp_link ?? entry.comp_link ?? ""} onChange={(e) => setEditData({ ...editData, comp_link: e.target.value })} />
                         </div>
                       ) : (
                         <div className="flex items-center gap-1">
                           {entry.url && <a href={entry.url} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-300"><ExternalLink className="w-3.5 h-3.5" /></a>}
-                          {entry.frame_link && <a href={entry.frame_link} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 text-[9px]">Frame</a>}
+                          {entry.frame_link && <a href={entry.frame_link} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 text-[9px]">Drive</a>}
                           {entry.comp_link && <a href={entry.comp_link} target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:text-amber-300 text-[9px]">Comp</a>}
                         </div>
                       )}
@@ -905,8 +905,8 @@ export default function PageDetail() {
                         <Input className="h-8 text-xs" placeholder="https://instagram.com/..." value={calEditData.url ?? calSelectedEntry.url ?? ""} onChange={(e) => setCalEditData({ ...calEditData, url: e.target.value })} />
                       </div>
                       <div className="space-y-1">
-                        <span className="text-zinc-500 text-xs">Frame Link</span>
-                        <Input className="h-8 text-xs" placeholder="frame.io or drive link" value={calEditData.frame_link ?? calSelectedEntry.frame_link ?? ""} onChange={(e) => setCalEditData({ ...calEditData, frame_link: e.target.value })} />
+                        <span className="text-zinc-500 text-xs">Drive link (base edit link)</span>
+                        <Input className="h-8 text-xs" placeholder="Google Drive base edit link" value={calEditData.frame_link ?? calSelectedEntry.frame_link ?? ""} onChange={(e) => setCalEditData({ ...calEditData, frame_link: e.target.value })} />
                       </div>
                       <div className="space-y-1">
                         <span className="text-zinc-500 text-xs">Comp / Drive Link</span>
@@ -946,7 +946,7 @@ export default function PageDetail() {
                     )}
                     <div className="mt-4 pt-3 border-t border-zinc-700 flex flex-wrap items-center gap-3">
                       {calSelectedEntry.url && <a href={calSelectedEntry.url} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:underline text-xs flex items-center gap-1"><ExternalLink className="w-3 h-3" /> Instagram</a>}
-                      {calSelectedEntry.frame_link && <a href={calSelectedEntry.frame_link} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline text-xs flex items-center gap-1"><ExternalLink className="w-3 h-3" /> Frame Link</a>}
+                      {calSelectedEntry.frame_link && <a href={calSelectedEntry.frame_link} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline text-xs flex items-center gap-1"><ExternalLink className="w-3 h-3" /> Drive link</a>}
                       {calSelectedEntry.comp_link && <a href={calSelectedEntry.comp_link} target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:underline text-xs flex items-center gap-1"><ExternalLink className="w-3 h-3" /> Comp Link</a>}
                       {!calSelectedEntry.url && !calSelectedEntry.frame_link && !calSelectedEntry.comp_link && <span className="text-zinc-600 text-xs">No links added</span>}
                     </div>

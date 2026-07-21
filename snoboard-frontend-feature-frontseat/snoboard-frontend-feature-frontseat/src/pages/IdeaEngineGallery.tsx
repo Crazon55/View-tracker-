@@ -348,7 +348,7 @@ function IdeaLinks({ idea, full }: { idea: any; full: boolean }) {
         <IdeaLinkChip href={comp} label="Comp" accent="#D4952A" />
       ) : null}
       {full && kalakar ? <IdeaLinkChip href={kalakar} label="Kalakar" accent="#a78bfa" /> : null}
-      {full && drive ? <IdeaLinkChip href={drive} label="Drive / frame" accent="#4A7FD4" /> : null}
+      {full && drive ? <IdeaLinkChip href={drive} label="Drive link" accent="#4A7FD4" /> : null}
     </div>
   );
 }

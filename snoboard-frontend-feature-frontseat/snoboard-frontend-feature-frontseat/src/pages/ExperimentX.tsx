@@ -701,7 +701,7 @@ function OpsKanbanCard({ idea, onClick, isSelected }: { idea: any; onClick: () =
             onClick={e => e.stopPropagation()}
             style={{ fontSize: 10, color: "#4A7FD4", fontWeight: 600 }}
           >
-            Frame ↗
+            Drive ↗
           </a>
         )}
         {idea.comp_link && (
@@ -1085,8 +1085,8 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
 
         {/* Frame link */}
         <div>
-          <label style={ls}>Frame link</label>
-          <SafeField readOnly={readOnly} value={idea.frame_link} onSave={v => onUpdate(idea.id, { frame_link: v })} placeholder="Google Drive / reference frames link" />
+          <label style={ls}>Drive link (base edit link)</label>
+          <SafeField readOnly={readOnly} value={idea.frame_link} onSave={v => onUpdate(idea.id, { frame_link: v })} placeholder="Google Drive base edit link" />
           {idea.frame_link && <a href={idea.frame_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block", marginTop: 4 }}>{idea.frame_link}</a>}
         </div>
 
@@ -1398,7 +1398,7 @@ function WorkingIdeaDetailModal({ item, onClose }: { item: any; onClose: () => v
               </div>
             </div>
             <div>
-              <label style={ls}>Frame link</label>
+              <label style={ls}>Drive link (base edit link)</label>
               {idea.frame_link
                 ? <a href={idea.frame_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block" }}>{idea.frame_link}</a>
                 : <div style={{ ...fieldStyle, color: "#3f3f46" }}>—</div>
@@ -1651,9 +1651,9 @@ function AddIdeaModal({ open, onAdd, onClose }: {
 
         {/* Frame link */}
         <div>
-          <label style={ls}>Frame link</label>
+          <label style={ls}>Drive link (base edit link)</label>
           <input className="fglass-input" value={frameLink} onChange={e => setFrameLink(e.target.value)}
-            placeholder="Google Drive / reference frames link" style={{ ...is, color: "#e4e4e7" }} />
+            placeholder="Google Drive base edit link" style={{ ...is, color: "#e4e4e7" }} />
         </div>
 
         {/* YT / Comp links */}
@@ -1741,7 +1741,7 @@ function OpsViewOnlyLinks({ idea }: { idea: any }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingBottom: 12, borderBottom: "1px solid #27272a" }}>
       <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "#52525b", letterSpacing: "0.06em", textTransform: "uppercase" }}>View only</p>
       <div>
-        <label style={ls}>Frame link</label>
+        <label style={ls}>Drive link (base edit link)</label>
         {idea.frame_link ? (
           <a href={idea.frame_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#4A7FD4", wordBreak: "break-all" }}>{idea.frame_link}</a>
         ) : (
@@ -1790,7 +1790,7 @@ function PerPageIdeaPanel({ idea, onUpdate, canEditSchedule, canEditPerformance,
     <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "14px 0 4px", borderTop: "1px solid #27272a" }}>
       {showFrameLink && (
         <div>
-          <label style={ls}>Frame link</label>
+          <label style={ls}>Drive link (base edit link)</label>
           {idea.frame_link ? (
             <a href={idea.frame_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#4A7FD4", wordBreak: "break-all" }}>{idea.frame_link}</a>
           ) : (
@@ -2759,8 +2759,8 @@ function ProductionDetailModal({ group, pageColors, readOnly, onAdvance, onSaveG
 
       {/* Frame link */}
       <div>
-        <label style={ls}>Frame link</label>
-        <SafeField readOnly={readOnly} value={src.frame_link} onSave={(v) => onSaveGroup({ frame_link: v })} placeholder="Google Drive / reference frames link" />
+        <label style={ls}>Drive link (base edit link)</label>
+        <SafeField readOnly={readOnly} value={src.frame_link} onSave={(v) => onSaveGroup({ frame_link: v })} placeholder="Google Drive base edit link" />
         {src.frame_link && <a href={src.frame_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block", marginTop: 4 }}>{src.frame_link}</a>}
       </div>
 
