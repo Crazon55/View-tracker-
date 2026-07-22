@@ -24,8 +24,7 @@ export default function Login() {
     <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
       <div className="w-full max-w-sm mx-auto space-y-8 px-6">
         <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold text-white tracking-tight">View Tracker</h1>
-          <p className="text-sm text-zinc-500">Sign in with your Owled Media account</p>
+          <h1 className="text-3xl font-bold text-white tracking-tight">Frontseat OS</h1>
         </div>
 
         <Button
