@@ -8,6 +8,12 @@ import type { SeedingDeal } from "@/services/seeding/mockData";
 
 const PAY_OPTS = [{ value: "", label: "All" }, ...PAYMENT_STATUSES.map((s) => ({ value: s, label: s }))];
 
+function isCancelledDeal(d: SeedingDeal) {
+  const status = String(d.deal_status ?? "").trim().toLowerCase();
+  const review = String(d.admin_review_status ?? "").trim().toLowerCase();
+  return status === "cancelled" || review === "cancelled";
+}
+
 export default function SeedingTeamwise() {
   const [rows, setRows] = useState<SeedingDeal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,16 +48,23 @@ export default function SeedingTeamwise() {
   }, [rows, teamFilter, payFilter]);
 
   const stats = useMemo(() => {
-    // Cancelled deals stay visible for history, but must not count toward revenue.
-    const active = filtered.filter((d) => d.deal_status !== "Cancelled");
-    const revenue = active.reduce((s, d) => s + (d.price_closed_at || 0), 0);
-    const paid = active.filter((d) => d.payment_status === "Paid").reduce((s, d) => s + (d.price_closed_at || 0), 0);
-    const pending = active.filter((d) => d.payment_status && d.payment_status !== "Paid").length;
+    // Cancelled deals stay visible for history, but must not count toward revenue / collected.
+    const active = filtered.filter((d) => !isCancelledDeal(d));
+    const revenue = active.reduce((s, d) => s + Number(d.price_closed_at || 0), 0);
+    const paid = active
+      .filter((d) => String(d.payment_status || "") === "Paid")
+      .reduce((s, d) => s + Number(d.price_closed_at || 0), 0);
+    const pending = active.filter((d) => {
+      const ps = d.payment_status ?? "Not Raised";
+      return ps !== "Paid";
+    }).length;
     return { deals: active.length, revenue, paid, pending };
   }, [filtered]);
 
   const handleUpdate = (updated: SeedingDeal) => {
-    setRows((prev) => prev.map((d) => (d.deal_id === updated.deal_id ? updated : d)));
+    setRows((prev) =>
+      prev.map((d) => (d.deal_id === updated.deal_id ? { ...d, ...updated } : d)),
+    );
   };
 
   return (

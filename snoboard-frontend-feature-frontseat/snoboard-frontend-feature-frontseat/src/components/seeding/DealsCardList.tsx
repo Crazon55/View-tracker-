@@ -17,9 +17,22 @@ type Props = {
   empty?: string;
 };
 
-async function patchDeal(dealId: string, body: Record<string, unknown>, onUpdate: (d: SeedingDeal) => void) {
-  const { data } = await api.patch<SeedingDeal>(`/deals/${dealId}`, body);
-  onUpdate(data);
+/** Merge patch into the existing row so API responses that omit fields don't wipe local state. */
+async function patchDeal(
+  current: SeedingDeal,
+  body: Record<string, unknown>,
+  onUpdate: (d: SeedingDeal) => void,
+) {
+  const optimistic = { ...current, ...body } as SeedingDeal;
+  onUpdate(optimistic);
+  try {
+    const { data } = await api.patch<SeedingDeal>(`/deals/${current.deal_id}`, body);
+    // Body wins last so deal_status/payment_status always stick even if the API omits them.
+    onUpdate({ ...current, ...(data || {}), ...body } as SeedingDeal);
+  } catch (err) {
+    onUpdate(current);
+    throw err;
+  }
 }
 
 export function DealsCardList({ rows, onUpdate, showReview = true, showDealStatus = true, empty }: Props) {
@@ -48,7 +61,7 @@ export function DealsCardList({ rows, onUpdate, showReview = true, showDealStatu
                 <select
                   className="seeding-inline-select"
                   value={d.admin_review_status}
-                  onChange={(e) => patchDeal(d.deal_id, { admin_review_status: e.target.value }, onUpdate)}
+                  onChange={(e) => patchDeal(d, { admin_review_status: e.target.value }, onUpdate)}
                 >
                   {ADMIN_REVIEW_STATUSES.map((s) => (
                     <option key={s} value={s}>{s}</option>
@@ -63,7 +76,7 @@ export function DealsCardList({ rows, onUpdate, showReview = true, showDealStatu
                 <select
                   className="seeding-inline-select"
                   value={d.deal_status ?? ""}
-                  onChange={(e) => patchDeal(d.deal_id, { deal_status: e.target.value || null }, onUpdate)}
+                  onChange={(e) => patchDeal(d, { deal_status: e.target.value || null }, onUpdate)}
                 >
                   <option value="">—</option>
                   {DEAL_STATUSES.map((s) => (
@@ -83,7 +96,7 @@ export function DealsCardList({ rows, onUpdate, showReview = true, showDealStatu
               <select
                 className="seeding-inline-select"
                 value={d.payment_status ?? "Not Raised"}
-                onChange={(e) => patchDeal(d.deal_id, { payment_status: e.target.value }, onUpdate)}
+                onChange={(e) => patchDeal(d, { payment_status: e.target.value }, onUpdate)}
               >
                 {PAYMENT_STATUSES.map((s) => (
                   <option key={s} value={s}>{s}</option>
@@ -100,7 +113,7 @@ export function DealsCardList({ rows, onUpdate, showReview = true, showDealStatu
                 onBlur={(e) => {
                   const v = Number(e.target.value);
                   if (!Number.isFinite(v) || v === d.price_closed_at) return;
-                  patchDeal(d.deal_id, { price_closed_at: v }, onUpdate);
+                  patchDeal(d, { price_closed_at: v }, onUpdate);
                 }}
               />
               <span className="seeding-price-hint">{formatCurrency(d.price_closed_at)}</span>
