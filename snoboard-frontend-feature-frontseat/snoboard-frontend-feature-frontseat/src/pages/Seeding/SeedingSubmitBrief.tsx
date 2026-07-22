@@ -124,7 +124,7 @@ export default function SeedingSubmitBrief() {
           };
         }),
       });
-      navigate("/seeding/approvals");
+      navigate("/seeding");
     } catch {
       setError("Could not submit brief. Try again.");
     } finally {

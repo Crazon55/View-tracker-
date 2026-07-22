@@ -174,7 +174,7 @@ export default function SeedingSectionPage() {
             rows={filteredDeals}
             empty={dealEmpty}
             onUpdated={handleDealUpdated}
-            showApprovalActions={section === "approvals"}
+            showApprovalActions={section === "approvals" && String(role || "").split(",").some((r) => canonicalRole(r.trim()) === "admin")}
           />
         </div>
       )}

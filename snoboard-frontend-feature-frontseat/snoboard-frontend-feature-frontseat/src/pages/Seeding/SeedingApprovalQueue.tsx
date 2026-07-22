@@ -1,6 +1,6 @@
 // Admin Approval Queue — full brief cards with editable Price / Go-live / Payment-due,
 // brief text + link, and Approve / Needs Info / Reject / Cancel. Framer-styled port of
-// the original FS-Seeding AdminApprovalQueue.
+// the original FS-Seeding AdminApprovalQueue. Approve actions are admin-only.
 import { useCallback, useEffect, useState } from "react";
 import { Check, X, MessageCircleWarning, Ban, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
@@ -8,6 +8,7 @@ import { FramerPage, PageHeader } from "@/components/framer/Framer";
 import { StatusBadge } from "@/components/seeding/StatusBadge";
 import { api } from "@/services/seeding/client";
 import { formatDateTime, toDatetimeLocalValue, toDateInputValue } from "@/services/seeding/constants";
+import { useAreaAccess } from "@/hooks/useAreaAccess";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -73,6 +74,8 @@ function ActionBar({ deal, onAction }: { deal: any; onAction: () => void }) {
 }
 
 export default function SeedingApprovalQueue() {
+  const { canEditArea } = useAreaAccess();
+  const canReview = canEditArea("seeding_approvals");
   const [briefs, setBriefs] = useState<any[]>([]);
   const [delivByDeal, setDelivByDeal] = useState<Record<string, any[]>>({});
   const [loading, setLoading] = useState(true);
@@ -96,7 +99,7 @@ export default function SeedingApprovalQueue() {
   useEffect(() => { load(); }, [load]);
 
   const saveField = async (dealId: string, field: string, value: any, current: any) => {
-    if (value === current) return;
+    if (!canReview || value === current) return;
     await api.put(`/deals/${dealId}`, { [field]: value });
     load();
   };
@@ -128,18 +131,30 @@ export default function SeedingApprovalQueue() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
                 <div>
                   <div style={fieldLabel}>Price</div>
-                  <input type="number" min={0} defaultValue={d.price_closed_at ?? ""} className={inputCls}
-                    onBlur={(e) => saveField(d.deal_id, "price_closed_at", e.target.value === "" ? 0 : Number(e.target.value), d.price_closed_at)} />
+                  {canReview ? (
+                    <input type="number" min={0} defaultValue={d.price_closed_at ?? ""} className={inputCls}
+                      onBlur={(e) => saveField(d.deal_id, "price_closed_at", e.target.value === "" ? 0 : Number(e.target.value), d.price_closed_at)} />
+                  ) : (
+                    <div style={{ fontSize: 13, color: "var(--f-dim)", paddingTop: 6 }}>{d.price_closed_at ?? "—"}</div>
+                  )}
                 </div>
                 <div>
                   <div style={fieldLabel}>Go-live</div>
-                  <input type="datetime-local" defaultValue={toDatetimeLocalValue(d.go_live_date_time)} className={inputCls} style={{ colorScheme: "dark" }}
-                    onBlur={(e) => e.target.value && saveField(d.deal_id, "go_live_date_time", new Date(e.target.value).toISOString(), d.go_live_date_time)} />
+                  {canReview ? (
+                    <input type="datetime-local" defaultValue={toDatetimeLocalValue(d.go_live_date_time)} className={inputCls} style={{ colorScheme: "dark" }}
+                      onBlur={(e) => e.target.value && saveField(d.deal_id, "go_live_date_time", new Date(e.target.value).toISOString(), d.go_live_date_time)} />
+                  ) : (
+                    <div style={{ fontSize: 13, color: "var(--f-dim)", paddingTop: 6 }}>{formatDateTime(d.go_live_date_time)}</div>
+                  )}
                 </div>
                 <div>
                   <div style={fieldLabel}>Payment due</div>
-                  <input type="date" defaultValue={toDateInputValue(d.payment_due_date)} className={inputCls} style={{ colorScheme: "dark" }}
-                    onBlur={(e) => e.target.value && saveField(d.deal_id, "payment_due_date", new Date(e.target.value).toISOString(), d.payment_due_date)} />
+                  {canReview ? (
+                    <input type="date" defaultValue={toDateInputValue(d.payment_due_date)} className={inputCls} style={{ colorScheme: "dark" }}
+                      onBlur={(e) => e.target.value && saveField(d.deal_id, "payment_due_date", new Date(e.target.value).toISOString(), d.payment_due_date)} />
+                  ) : (
+                    <div style={{ fontSize: 13, color: "var(--f-dim)", paddingTop: 6 }}>{formatDateTime(d.payment_due_date)}</div>
+                  )}
                 </div>
                 <div>
                   <div style={fieldLabel}>Submitted</div>
@@ -171,7 +186,7 @@ export default function SeedingApprovalQueue() {
                 </a>
               ) : null}
 
-              <ActionBar deal={d} onAction={load} />
+              {canReview ? <ActionBar deal={d} onAction={load} /> : null}
             </div>
           ))}
         </div>

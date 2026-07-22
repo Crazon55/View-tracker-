@@ -9,6 +9,7 @@ import { formatCurrency, formatDate } from "@/services/seeding/constants";
 import { StatusBadge } from "@/components/seeding/StatusBadge";
 import { FramerPage, PageHeader, DataTable } from "@/components/framer/Framer";
 import { Reveal } from "@/components/framer/Reveal";
+import { useAreaAccess } from "@/hooks/useAreaAccess";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const formatChartDate = (iso: string) => {
@@ -61,6 +62,8 @@ const PanelHead = ({ title, link, linkLabel }: any) => (
 );
 
 export default function SeedingOverview() {
+  const { canViewArea } = useAreaAccess();
+  const canSeeApprovals = canViewArea("seeding_approvals");
   const [data, setData] = useState<any>(null);
   const [pendingBriefs, setPendingBriefs] = useState<any[]>([]);
   const [activeDeals, setActiveDeals] = useState<any[]>([]);
@@ -190,7 +193,11 @@ export default function SeedingOverview() {
 
       <Reveal><section style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 16, alignItems: "stretch" }} className="seeding-lists">
         <Panel>
-          <PanelHead title="Briefs waiting for approval" link="/seeding/approvals" linkLabel="Approval queue" />
+          <PanelHead
+            title="Briefs waiting for approval"
+            link={canSeeApprovals ? "/seeding/approvals" : undefined}
+            linkLabel={canSeeApprovals ? "Approval queue" : undefined}
+          />
           <div style={{ display: "grid", gap: 8 }}>
             {pendingBriefs.map((d) => (
               <Link key={d.deal_id} to={`/seeding/deals/${d.deal_id}`} className="fglass-card fglass-purple-shadow" style={{ display: "block", borderRadius: 12, padding: 12 }}>

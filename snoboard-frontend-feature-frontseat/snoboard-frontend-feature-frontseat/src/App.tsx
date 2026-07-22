@@ -62,6 +62,7 @@ import { stashWrapMonthFromUrl } from "@/lib/monthlyWrap";
 import { RolePreviewBanner } from "./components/RolePreviewBanner";
 import { RolePreviewPicker } from "./components/RolePreviewPicker";
 import { RolePreviewRouteGuard } from "./components/RolePreviewRouteGuard";
+import { RequireArea } from "./components/RequireArea";
 import {
   Select,
   SelectContent,
@@ -570,7 +571,7 @@ function AppLayout() {
           <SeedingPreviewBanner />
           <Routes>
             <Route path="/seeding" element={<SeedingHome />} />
-            <Route path="/seeding/approvals" element={<SeedingApprovalQueue />} />
+            <Route path="/seeding/approvals" element={<RequireArea area="seeding_approvals"><SeedingApprovalQueue /></RequireArea>} />
             <Route path="/seeding/deals" element={<SeedingAllDeals />} />
             <Route path="/seeding/deals/:dealId" element={<SeedingDealDetail />} />
             <Route path="/seeding/fulfillment" element={<SeedingFulfillmentBoard />} />
