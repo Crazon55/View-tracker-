@@ -42,7 +42,6 @@ export default function SeedingSubmitBrief() {
   const defaultTeam = TEAMS[0].id;
 
   const [teamId, setTeamId] = useState(defaultTeam);
-  const [brandName, setBrandName] = useState("");
   const [agency, setAgency] = useState("");
   const [briefLink, setBriefLink] = useState("");
   const [briefText, setBriefText] = useState("");
@@ -83,8 +82,8 @@ export default function SeedingSubmitBrief() {
     e.preventDefault();
     setError("");
 
-    if (!brandName.trim() || !agency.trim()) {
-      setError("Brand name and agency / client are required.");
+    if (!agency.trim()) {
+      setError("Agency / client name is required.");
       return;
     }
     if (!briefLink.trim() && !briefText.trim()) {
@@ -99,9 +98,10 @@ export default function SeedingSubmitBrief() {
     const team = TEAMS.find((t) => t.id === teamId);
     setSubmitting(true);
     try {
+      const agencyName = agency.trim();
       await api.post("/deals", {
-        brand_name: brandName.trim(),
-        agency_or_client_name: agency.trim(),
+        brand_name: agencyName,
+        agency_or_client_name: agencyName,
         brief_link: briefLink.trim() || undefined,
         brief_text: briefText.trim() || undefined,
         assets_links: assetsLinks.trim() || undefined,
@@ -156,16 +156,10 @@ export default function SeedingSubmitBrief() {
             <span className="seeding-submit-hint">Revenue and deal visibility will count under this BD team.</span>
           </label>
 
-          <div className="seeding-submit-row">
-            <label className="seeding-submit-field">
-              <span>Brand name {req}</span>
-              <input className={inputCls} placeholder="e.g. Razorpay" value={brandName} onChange={(e) => setBrandName(e.target.value)} required />
-            </label>
-            <label className="seeding-submit-field">
-              <span>Agency / Client name {req}</span>
-              <input className={inputCls} placeholder="e.g. Wavemaker or Direct" value={agency} onChange={(e) => setAgency(e.target.value)} required />
-            </label>
-          </div>
+          <label className="seeding-submit-field seeding-submit-field--full">
+            <span>Agency / Client name {req}</span>
+            <input className={inputCls} placeholder="e.g. Wavemaker or Direct" value={agency} onChange={(e) => setAgency(e.target.value)} required />
+          </label>
 
           <label className="seeding-submit-field seeding-submit-field--full">
             <span>Brief link (one of brief link / text required)</span>

@@ -52,15 +52,18 @@ function DealEditPanel({
     }
   };
 
-  const saveAll = () => save({
-    brand_name: draft.brand_name,
-    agency_or_client_name: draft.agency_or_client_name,
-    price_closed_at: Number(draft.price_closed_at) || 0,
-    admin_review_status: draft.admin_review_status,
-    deal_status: draft.deal_status,
-    payment_status: draft.payment_status,
-    brief_text: draft.brief_text,
-  });
+  const saveAll = () => {
+    const agencyName = draft.agency_or_client_name;
+    save({
+      brand_name: agencyName,
+      agency_or_client_name: agencyName,
+      price_closed_at: Number(draft.price_closed_at) || 0,
+      admin_review_status: draft.admin_review_status,
+      deal_status: draft.deal_status,
+      payment_status: draft.payment_status,
+      brief_text: draft.brief_text,
+    });
+  };
 
   return (
     <div
@@ -75,7 +78,7 @@ function DealEditPanel({
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 16 }}>
         <div>
           <div className="f-eyebrow">EDIT DEAL</div>
-          <h3 style={{ fontSize: 16, fontWeight: 600, marginTop: 6 }}>{deal.brand_name}</h3>
+          <h3 style={{ fontSize: 16, fontWeight: 600, marginTop: 6 }}>{deal.agency_or_client_name || deal.brand_name}</h3>
         </div>
         <button type="button" onClick={onClose} className="f-ghost" style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid var(--f-line)", display: "grid", placeItems: "center" }} aria-label="Close editor">
           <X size={14} />
@@ -84,11 +87,7 @@ function DealEditPanel({
 
       <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
         <label style={{ display: "grid", gap: 6 }}>
-          <span className="f-eyebrow">Brand</span>
-          <input className={inputCls} value={draft.brand_name} onChange={(e) => setDraft((d) => ({ ...d, brand_name: e.target.value }))} />
-        </label>
-        <label style={{ display: "grid", gap: 6 }}>
-          <span className="f-eyebrow">Client / agency</span>
+          <span className="f-eyebrow">Agency / Client</span>
           <input className={inputCls} value={draft.agency_or_client_name} onChange={(e) => setDraft((d) => ({ ...d, agency_or_client_name: e.target.value }))} />
         </label>
         <label style={{ display: "grid", gap: 6 }}>

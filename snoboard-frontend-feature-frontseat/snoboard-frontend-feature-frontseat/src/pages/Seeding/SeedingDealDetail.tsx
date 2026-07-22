@@ -112,9 +112,10 @@ export default function SeedingDealDetail() {
 
   const saveBrief = () => {
     if (!draft) return;
+    const agencyName = draft.agency_or_client_name;
     save({
-      brand_name: draft.brand_name,
-      agency_or_client_name: draft.agency_or_client_name,
+      brand_name: agencyName,
+      agency_or_client_name: agencyName,
       brief_link: draft.brief_link,
       brief_text: draft.brief_text,
       assets_links: draft.assets_links,
@@ -151,8 +152,7 @@ export default function SeedingDealDetail() {
         </Link>
 
         <header className="seeding-detail-header">
-          <div className="seeding-detail-eyebrow">{deal.agency_or_client_name.toUpperCase()}</div>
-          <h1 className="seeding-detail-title">{deal.brand_name}</h1>
+          <h1 className="seeding-detail-title">{deal.agency_or_client_name || deal.brand_name}</h1>
           <div className="seeding-detail-badges">
             <StatusBadge status={deal.admin_review_status} />
             {deal.deal_status ? <StatusBadge status={deal.deal_status} /> : null}
@@ -175,12 +175,8 @@ export default function SeedingDealDetail() {
 
         <Section title="Original brief">
           <div className="seeding-detail-form">
-            <label className="seeding-detail-field">
-              <span>Brand name</span>
-              <input className={inputCls} value={draft.brand_name} onChange={(e) => setDraft({ ...draft, brand_name: e.target.value })} />
-            </label>
-            <label className="seeding-detail-field">
-              <span>Agency / client</span>
+            <label className="seeding-detail-field seeding-detail-field--full">
+              <span>Agency / Client name</span>
               <input className={inputCls} value={draft.agency_or_client_name} onChange={(e) => setDraft({ ...draft, agency_or_client_name: e.target.value })} />
             </label>
             <label className="seeding-detail-field seeding-detail-field--full">
