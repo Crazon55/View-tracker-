@@ -224,10 +224,16 @@ class BriefUpdate(BaseModel):
     brief_text: Optional[str] = None
     brief_link: Optional[str] = None
     assets_or_reference_links: Optional[List[str]] = None
+    # Frontend deal cards send a newline-joined string under this alias.
+    assets_links: Optional[str] = None
     go_live_date_time: Optional[str] = None
     price_closed_at: Optional[float] = None
     payment_due_date: Optional[str] = None
     notes: Optional[str] = None
+    # Inline Teamwise / All-Deals editors PATCH these on /deals/{id}.
+    deal_status: Optional[str] = None
+    admin_review_status: Optional[str] = None
+    payment_status: Optional[str] = None
 
 
 class AdminReviewAction(BaseModel):
@@ -532,6 +538,17 @@ async def _enrich_deal(deal: dict) -> dict:
     return deal
 
 
+async def _attach_payment_status(deal: dict) -> dict:
+    """Flatten payments.status → deal.payment_status for the frontend cards."""
+    payment = await db.payments.find_one({"deal_id": deal["deal_id"]}, {"_id": 0, "status": 1, "amount_received": 1, "payment_due_date": 1})
+    if payment:
+        deal["payment"] = payment
+        deal["payment_status"] = payment.get("status") or "Not Raised"
+    else:
+        deal["payment_status"] = deal.get("payment_status") or "Not Raised"
+    return deal
+
+
 def _deal_role_filter(user: dict) -> dict:
     """Mongo filter based on role to enforce data scoping."""
     if user["role"] == "admin":
@@ -673,11 +690,13 @@ async def list_deals(
         d = await _enrich_deal(d)
         d = scrub_deal_for_user(d, user)
         if user["role"] in {"admin", "bd"}:
-            d["payment"] = payments_map.get(d["deal_id"])
+            pay = payments_map.get(d["deal_id"])
+            d["payment"] = pay
+            d["payment_status"] = (pay or {}).get("status") or "Not Raised"
         out.append(d)
 
     if payment_status and user["role"] in {"admin", "bd"}:
-        out = [d for d in out if (d.get("payment") or {}).get("status") == payment_status]
+        out = [d for d in out if (d.get("payment_status") or "Not Raised") == payment_status]
 
     return out
 
@@ -721,6 +740,7 @@ async def get_deal(deal_id: str, user: dict = Depends(get_current_user)):
 
 
 @api.put("/deals/{deal_id}")
+@api.patch("/deals/{deal_id}")
 async def update_deal(deal_id: str, payload: BriefUpdate, user: dict = Depends(get_current_user)):
     if user["role"] not in {"admin", "bd"}:
         raise HTTPException(403, "Forbidden")
@@ -736,18 +756,68 @@ async def update_deal(deal_id: str, payload: BriefUpdate, user: dict = Depends(g
             raise HTTPException(403, "Forbidden")
         if deal.get("admin_review_status") not in {"Submitted", "Needs More Info"}:
             raise HTTPException(403, "BD can only edit before approval")
-    upd = {k: v for k, v in payload.model_dump().items() if v is not None}
-    upd["updated_at"] = now_iso()
+
+    raw = payload.model_dump(exclude_unset=True)
+    # payment_status lives on seeding_payments, not seeding_deals
+    payment_status = raw.pop("payment_status", None)
+    assets_links = raw.pop("assets_links", None)
+    if assets_links is not None and "assets_or_reference_links" not in raw:
+        links = [ln.strip() for ln in str(assets_links).splitlines() if ln.strip()]
+        raw["assets_or_reference_links"] = links
+
+    if "deal_status" in raw and raw["deal_status"] is not None and raw["deal_status"] not in DEAL_STATUSES:
+        raise HTTPException(400, f"Invalid deal_status: {raw['deal_status']}")
+    if "admin_review_status" in raw and raw["admin_review_status"] not in ADMIN_REVIEW_STATUSES + ["Archived"]:
+        raise HTTPException(400, f"Invalid admin_review_status: {raw['admin_review_status']}")
+
+    # Keep review + deal status in sync when cancelling from the review control.
+    if raw.get("admin_review_status") == "Cancelled" and "deal_status" not in raw:
+        raw["deal_status"] = "Cancelled"
+
+    if user["role"] == "bd":
+        # BD must not flip review / deal status via the generic update.
+        raw.pop("admin_review_status", None)
+        raw.pop("deal_status", None)
+        payment_status = None
+
+    upd = {k: v for k, v in raw.items() if v is not None or k in {"deal_status", "notes", "brief_text", "brief_link"}}
     if user["role"] == "bd" and deal.get("admin_review_status") == "Needs More Info":
         upd["admin_review_status"] = "Submitted"
         upd["needs_more_info_comment"] = ""
-    await db.deals.update_one({"deal_id": deal_id}, {"$set": upd})
-    if "payment_due_date" in upd:
+
+    if upd:
+        upd["updated_at"] = now_iso()
+        await db.deals.update_one({"deal_id": deal_id}, {"$set": upd})
+        if "payment_due_date" in upd:
+            await db.payments.update_one(
+                {"deal_id": deal_id},
+                {"$set": {
+                    "payment_due_date": upd["payment_due_date"],
+                    "last_updated_by": user["user_id"],
+                    "last_updated_by_name": user.get("name"),
+                    "last_updated_at": now_iso(),
+                }},
+            )
+
+    if payment_status is not None:
+        if payment_status not in PAYMENT_STATUSES:
+            raise HTTPException(400, f"Invalid payment_status: {payment_status}")
         await db.payments.update_one(
             {"deal_id": deal_id},
-            {"$set": {"payment_due_date": upd["payment_due_date"], "updated_at": now_iso()}},
+            {"$set": {
+                "status": payment_status,
+                "last_updated_by": user["user_id"],
+                "last_updated_by_name": user.get("name"),
+                "last_updated_at": now_iso(),
+            }},
+            upsert=True,
         )
-    return await db.deals.find_one({"deal_id": deal_id}, {"_id": 0})
+
+    updated = await db.deals.find_one({"deal_id": deal_id}, {"_id": 0})
+    updated = await _enrich_deal(updated)
+    if user["role"] in {"admin", "bd"}:
+        updated = await _attach_payment_status(updated)
+    return scrub_deal_for_user(updated, user)
 
 
 @api.post("/deals/{deal_id}/review")
