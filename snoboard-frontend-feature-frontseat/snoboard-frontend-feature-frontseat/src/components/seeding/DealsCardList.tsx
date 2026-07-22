@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
 import { api } from "@/services/seeding/client";
 import {
   ADMIN_REVIEW_STATUSES,
@@ -31,6 +32,7 @@ async function patchDeal(
     onUpdate({ ...current, ...(data || {}), ...body } as SeedingDeal);
   } catch (err) {
     onUpdate(current);
+    toast.error("Couldn't save deal — check you're on the live API, then try again.");
     throw err;
   }
 }

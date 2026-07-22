@@ -5,6 +5,9 @@ WORKDIR /app
 
 ARG VITE_BASE_API_URL
 ENV VITE_BASE_API_URL='https://snoboard-backend-32085867405.asia-south1.run.app'
+ENV VITE_API_URL='https://snoboard-backend-32085867405.asia-south1.run.app'
+ENV VITE_SEEDING_API='https://snoboard-backend-32085867405.asia-south1.run.app/api/seeding'
+ENV VITE_SEEDING_MOCK='false'
 ENV VITE_SUPABASE_URL='https://fxsfhooszmzpmwcaclsd.supabase.co'
 ENV VITE_SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ4c2Zob29zem16cG13Y2FjbHNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzNDU4NTEsImV4cCI6MjA4NTkyMTg1MX0.l_KXhMjIE7_GueM4SZQh5o_yTghDe1d8TCP7FxwIFDs'
 

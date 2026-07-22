@@ -2,13 +2,25 @@
 // Seeding API client — axios-compatible shim over fetch so the FS-Seeding pages
 // port with minimal edits (they call api.get(path,{params}).then(({data})=>…)).
 // Preserves the session_token + X-Impersonate-As behaviour from FS-Seeding.
-// In local dev, VITE_SEEDING_MOCK=true serves fixtures from mockData.ts.
+// Mock is OPT-IN: set VITE_SEEDING_MOCK=true for local fixtures only.
 // ─────────────────────────────────────────────────────────────────────────────
 import { mockSeedingGet, mockSeedingPatch, mockSeedingPost, mockSeedingDelete } from "./mockData";
 import { getAccessToken } from "../api"; // shared FSOS Supabase access token
 
-const BASE = (import.meta.env.VITE_SEEDING_API as string) || "/api/seeding";
-const USE_MOCK = (import.meta.env.VITE_SEEDING_MOCK ?? "true") === "true";
+function resolveSeedingBase(): string {
+  const explicit = import.meta.env.VITE_SEEDING_API as string | undefined;
+  if (explicit) return explicit.replace(/\/$/, "");
+  const apiRoot =
+    (import.meta.env.VITE_API_URL as string | undefined) ||
+    (import.meta.env.VITE_BASE_API_URL as string | undefined) ||
+    "";
+  if (apiRoot) return `${apiRoot.replace(/\/$/, "")}/api/seeding`;
+  return "/api/seeding";
+}
+
+const BASE = resolveSeedingBase();
+// Default OFF so production writes hit Postgres. Opt in with VITE_SEEDING_MOCK=true.
+const USE_MOCK = import.meta.env.VITE_SEEDING_MOCK === "true";
 const PREVIEW_KEY = "preview_as_email";
 
 type Cfg = { params?: Record<string, unknown>; headers?: Record<string, string> };
@@ -67,6 +79,8 @@ export const api = {
   patch: <T = unknown>(p: string, body?: unknown, cfg?: Cfg) => req<T>("PATCH", p, body, cfg),
   delete: <T = unknown>(p: string, cfg?: Cfg) => req<T>("DELETE", p, undefined, cfg),
 };
+
+export const isSeedingMock = USE_MOCK;
 
 export const setSessionToken = (t: string | null) =>
   t ? localStorage.setItem("session_token", t) : localStorage.removeItem("session_token");

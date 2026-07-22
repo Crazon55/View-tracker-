@@ -1,5 +1,5 @@
 // Local seeding fixtures — migrated from migrations/seeding_data_export.sql
-// Used when VITE_SEEDING_MOCK=true (default in dev) so redesign work has real shapes.
+// Used when VITE_SEEDING_MOCK=true (opt-in). Mutations persist to localStorage so refresh keeps edits.
 
 export type SeedingTeam = { team_id: string; team_name: string };
 export type SeedingUser = { user_id: string; name: string; email?: string };
@@ -168,6 +168,32 @@ export const MOCK_DEALS: SeedingDeal[] = [
     created_at: "2026-07-03T09:34:10.086422+00:00",
   },
 ];
+
+const MOCK_DEALS_KEY = "seeding_mock_deals_v1";
+
+function persistMockDeals() {
+  try {
+    if (typeof localStorage === "undefined") return;
+    localStorage.setItem(MOCK_DEALS_KEY, JSON.stringify(MOCK_DEALS));
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+function hydrateMockDeals() {
+  try {
+    if (typeof localStorage === "undefined") return;
+    const raw = localStorage.getItem(MOCK_DEALS_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as SeedingDeal[];
+    if (!Array.isArray(parsed) || !parsed.length) return;
+    MOCK_DEALS.splice(0, MOCK_DEALS.length, ...parsed);
+  } catch {
+    /* ignore corrupt cache */
+  }
+}
+
+hydrateMockDeals();
 
 const MOCK_DELIVERABLES: Record<string, SeedingDeliverable[]> = {
   deal_d273b4661595: [
@@ -347,6 +373,7 @@ export function mockSeedingPost<T>(path: string, body: Record<string, unknown>):
     else if (action === "Archive") { patch.admin_review_status = "Archived"; }
     else throw new Error(`Unknown review action: ${action}`);
     MOCK_DEALS[idx] = { ...MOCK_DEALS[idx], ...patch } as SeedingDeal;
+    persistMockDeals();
     return enrichDeal(MOCK_DEALS[idx]) as T;
   }
 
@@ -421,6 +448,7 @@ export function mockSeedingPost<T>(path: string, body: Record<string, unknown>):
       created_at: new Date().toISOString(),
     };
     MOCK_DEALS.unshift(deal);
+    persistMockDeals();
     const drafts = body.deliverable_drafts as { page_name: string; deliverable_type: string; quantity: number }[] | undefined;
     if (drafts?.length) {
       MOCK_DELIVERABLES[deal.deal_id] = drafts.flatMap((d, i) =>
@@ -453,6 +481,7 @@ export function mockSeedingPatch<T>(path: string, body: Record<string, unknown>)
     const idx = MOCK_DEALS.findIndex((d) => d.deal_id === dealMatch[1]);
     if (idx >= 0) {
       MOCK_DEALS[idx] = { ...MOCK_DEALS[idx], ...body } as SeedingDeal;
+      persistMockDeals();
       return enrichDeal(MOCK_DEALS[idx]) as T;
     }
   }
