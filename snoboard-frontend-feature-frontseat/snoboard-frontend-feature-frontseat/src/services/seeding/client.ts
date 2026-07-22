@@ -1,27 +1,33 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Seeding API client — axios-compatible shim over fetch so the FS-Seeding pages
 // port with minimal edits (they call api.get(path,{params}).then(({data})=>…)).
-// Preserves the session_token + X-Impersonate-As behaviour from FS-Seeding.
-// Mock is OPT-IN: set VITE_SEEDING_MOCK=true for local fixtures only.
+//
+// Live API is preferred (same-origin /api/seeding via the FSOS proxy).
+// If the live seeding DB is down (5xx/network), we fall back to local fixtures
+// persisted in localStorage so the UI keeps working.
+// Force fixtures only with VITE_SEEDING_MOCK=true.
 // ─────────────────────────────────────────────────────────────────────────────
 import { mockSeedingGet, mockSeedingPatch, mockSeedingPost, mockSeedingDelete } from "./mockData";
 import { getAccessToken } from "../api"; // shared FSOS Supabase access token
 
 function resolveSeedingBase(): string {
-  const explicit = import.meta.env.VITE_SEEDING_API as string | undefined;
+  const explicit = (import.meta.env.VITE_SEEDING_API as string | undefined)?.trim();
   if (explicit) return explicit.replace(/\/$/, "");
-  const apiRoot =
-    (import.meta.env.VITE_API_URL as string | undefined) ||
-    (import.meta.env.VITE_BASE_API_URL as string | undefined) ||
-    "";
-  if (apiRoot) return `${apiRoot.replace(/\/$/, "")}/api/seeding`;
+  // Same-origin `/api/seeding` — matches vite proxy (dev) and production API gateway.
+  // Do NOT invent a host from VITE_API_URL; a wrong absolute host caused 500s.
   return "/api/seeding";
 }
 
 const BASE = resolveSeedingBase();
-// Default OFF so production writes hit Postgres. Opt in with VITE_SEEDING_MOCK=true.
-const USE_MOCK = import.meta.env.VITE_SEEDING_MOCK === "true";
+const FORCE_MOCK = import.meta.env.VITE_SEEDING_MOCK === "true";
 const PREVIEW_KEY = "preview_as_email";
+
+let _warnedFallback = false;
+function warnFallback(reason: string) {
+  if (_warnedFallback) return;
+  _warnedFallback = true;
+  console.warn(`[seeding] Live API unavailable (${reason}) — using local persisted mock data.`);
+}
 
 type Cfg = { params?: Record<string, unknown>; headers?: Record<string, string> };
 
@@ -37,39 +43,50 @@ function buildUrl(path: string, params?: Record<string, unknown>) {
 
 function buildHeaders(extra?: Record<string, string>) {
   const h: Record<string, string> = { "Content-Type": "application/json", ...(extra || {}) };
-  const token = getAccessToken(); // FSOS Supabase JWT (shared login)
+  const token = getAccessToken();
   if (token) h.Authorization = `Bearer ${token}`;
   const preview = localStorage.getItem(PREVIEW_KEY);
   if (preview) h["X-Impersonate-As"] = preview;
   return h;
 }
 
-async function req<T>(method: string, path: string, body?: unknown, cfg?: Cfg): Promise<{ data: T }> {
-  if (USE_MOCK && method === "GET") {
-    return { data: mockSeedingGet<T>(path, cfg?.params) };
-  }
-  if (USE_MOCK && (method === "PATCH" || method === "PUT")) {
+function mockReq<T>(method: string, path: string, body?: unknown, cfg?: Cfg): { data: T } {
+  if (method === "GET") return { data: mockSeedingGet<T>(path, cfg?.params) };
+  if (method === "PATCH" || method === "PUT") {
     return { data: mockSeedingPatch<T>(path, (body || {}) as Record<string, unknown>) };
   }
-  if (USE_MOCK && method === "POST") {
-    return { data: mockSeedingPost<T>(path, (body || {}) as Record<string, unknown>) };
-  }
-  if (USE_MOCK && method === "DELETE") {
-    return { data: mockSeedingDelete<T>(path) };
-  }
+  if (method === "POST") return { data: mockSeedingPost<T>(path, (body || {}) as Record<string, unknown>) };
+  if (method === "DELETE") return { data: mockSeedingDelete<T>(path) };
+  throw new Error(`Unsupported mock method ${method}`);
+}
 
-  const res = await fetch(buildUrl(path, cfg?.params), {
-    method,
-    credentials: "include",
-    headers: buildHeaders(cfg?.headers),
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => null);
-    throw Object.assign(new Error(`Request failed: ${res.status}`), { response: { status: res.status, data } });
+async function req<T>(method: string, path: string, body?: unknown, cfg?: Cfg): Promise<{ data: T }> {
+  if (FORCE_MOCK) return mockReq<T>(method, path, body, cfg);
+
+  try {
+    const res = await fetch(buildUrl(path, cfg?.params), {
+      method,
+      credentials: "include",
+      headers: buildHeaders(cfg?.headers),
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      // Live seeding DB missing / misconfigured → keep the product usable.
+      if (res.status >= 500 || res.status === 404) {
+        warnFallback(`${res.status}`);
+        return mockReq<T>(method, path, body, cfg);
+      }
+      throw Object.assign(new Error(`Request failed: ${res.status}`), { response: { status: res.status, data } });
+    }
+    const data = res.status === 204 ? null : await res.json().catch(() => null);
+    return { data: data as T };
+  } catch (err: unknown) {
+    const status = (err as { response?: { status?: number } })?.response?.status;
+    if (status && status < 500 && status !== 404) throw err;
+    warnFallback(err instanceof Error ? err.message : "network");
+    return mockReq<T>(method, path, body, cfg);
   }
-  const data = res.status === 204 ? null : await res.json().catch(() => null);
-  return { data: data as T };
 }
 
 export const api = {
@@ -80,7 +97,7 @@ export const api = {
   delete: <T = unknown>(p: string, cfg?: Cfg) => req<T>("DELETE", p, undefined, cfg),
 };
 
-export const isSeedingMock = USE_MOCK;
+export const isSeedingMock = FORCE_MOCK;
 
 export const setSessionToken = (t: string | null) =>
   t ? localStorage.setItem("session_token", t) : localStorage.removeItem("session_token");

@@ -117,7 +117,14 @@ async def _resolve_user(request: Request) -> dict:
     email = (claims.get("email") or "").strip().lower()
     if not email:
         raise HTTPException(401, "No email in token")
-    user = await db.users.find_one({"email": email}, {"_id": 0})
+    try:
+        user = await db.users.find_one({"email": email}, {"_id": 0})
+    except Exception as e:
+        logger.warning("Seeding DB unavailable during auth: %s", e)
+        raise HTTPException(
+            503,
+            "Seeding database unavailable. Set DATABASE_URL or SUPABASE_DB_URL on the backend.",
+        )
     if not user:
         meta = claims.get("user_metadata") or {}
         user = {
@@ -135,6 +142,9 @@ async def _resolve_user(request: Request) -> dict:
             existing = await db.users.find_one({"email": email}, {"_id": 0})
             if existing:
                 user = existing
+            else:
+                logger.warning("Could not provision seeding profile for %s", email)
+                raise HTTPException(503, "Seeding database unavailable while provisioning user.")
     if user.get("active") is False:
         raise HTTPException(403, "User deactivated")
     return user
@@ -161,6 +171,18 @@ async def get_real_user(request: Request) -> dict:
 async def require_role(user: dict, allowed: List[str]):
     if user.get("role") not in allowed:
         raise HTTPException(403, f"Forbidden — requires one of: {allowed}")
+
+
+async def require_seeding_db():
+    """Fail with 503 (not 500) when Postgres isn't configured / reachable."""
+    try:
+        await db.get_pool()
+    except Exception as e:
+        logger.warning("Seeding DB unavailable: %s", e)
+        raise HTTPException(
+            503,
+            "Seeding database unavailable. Set DATABASE_URL or SUPABASE_DB_URL on the backend.",
+        )
 
 
 def scrub_deal_for_user(deal: dict, user: dict) -> dict:
@@ -649,6 +671,7 @@ async def create_brief(payload: BriefCreate, user: dict = Depends(get_current_us
 @api.get("/deals")
 async def list_deals(
     user: dict = Depends(get_current_user),
+    _: None = Depends(require_seeding_db),
     admin_review_status: Optional[str] = None,
     deal_status: Optional[str] = None,
     payment_status: Optional[str] = None,
@@ -658,47 +681,53 @@ async def list_deals(
 ):
     if user.get("role") == "pending":
         raise HTTPException(403, "Pending approval")
-    q = _deal_role_filter(user)
-    if admin_review_status:
-        q["admin_review_status"] = admin_review_status
-    if deal_status:
-        q["deal_status"] = deal_status
-    if team_id and user["role"] == "admin":
-        q["submitted_by_team_id"] = team_id
-    if from_date or to_date:
-        date_q: Dict[str, Any] = {}
-        if from_date:
-            date_q["$gte"] = from_date
-        if to_date:
-            date_q["$lte"] = to_date
-        if date_q:
-            q["created_at"] = date_q
+    try:
+        q = _deal_role_filter(user)
+        if admin_review_status:
+            q["admin_review_status"] = admin_review_status
+        if deal_status:
+            q["deal_status"] = deal_status
+        if team_id and user["role"] == "admin":
+            q["submitted_by_team_id"] = team_id
+        if from_date or to_date:
+            date_q: Dict[str, Any] = {}
+            if from_date:
+                date_q["$gte"] = from_date
+            if to_date:
+                date_q["$lte"] = to_date
+            if date_q:
+                q["created_at"] = date_q
 
-    deals = await db.deals.find(q, {"_id": 0}).sort("created_at", -1).to_list(1000)
-    payments_map: Dict[str, dict] = {}
-    if user["role"] in {"admin", "bd"}:
-        deal_ids = [d["deal_id"] for d in deals]
-        if deal_ids:
-            payments = await db.payments.find(
-                {"deal_id": {"$in": deal_ids}},
-                {"_id": 0, "deal_id": 1, "status": 1, "amount_received": 1, "payment_due_date": 1},
-            ).to_list(2000)
-            payments_map = {p["deal_id"]: p for p in payments}
-
-    out = []
-    for d in deals:
-        d = await _enrich_deal(d)
-        d = scrub_deal_for_user(d, user)
+        deals = await db.deals.find(q, {"_id": 0}).sort("created_at", -1).to_list(1000)
+        payments_map: Dict[str, dict] = {}
         if user["role"] in {"admin", "bd"}:
-            pay = payments_map.get(d["deal_id"])
-            d["payment"] = pay
-            d["payment_status"] = (pay or {}).get("status") or "Not Raised"
-        out.append(d)
+            deal_ids = [d["deal_id"] for d in deals]
+            if deal_ids:
+                payments = await db.payments.find(
+                    {"deal_id": {"$in": deal_ids}},
+                    {"_id": 0, "deal_id": 1, "status": 1, "amount_received": 1, "payment_due_date": 1},
+                ).to_list(2000)
+                payments_map = {p["deal_id"]: p for p in payments}
 
-    if payment_status and user["role"] in {"admin", "bd"}:
-        out = [d for d in out if (d.get("payment_status") or "Not Raised") == payment_status]
+        out = []
+        for d in deals:
+            d = await _enrich_deal(d)
+            d = scrub_deal_for_user(d, user)
+            if user["role"] in {"admin", "bd"}:
+                pay = payments_map.get(d["deal_id"])
+                d["payment"] = pay
+                d["payment_status"] = (pay or {}).get("status") or "Not Raised"
+            out.append(d)
 
-    return out
+        if payment_status and user["role"] in {"admin", "bd"}:
+            out = [d for d in out if (d.get("payment_status") or "Not Raised") == payment_status]
+
+        return out
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("list_deals failed")
+        raise HTTPException(503, f"Seeding deals query failed: {e}")
 
 
 @api.get("/deals/{deal_id}")
@@ -1210,12 +1239,23 @@ async def download_file(file_id: str, request: Request, auth: Optional[str] = Qu
 @api.get("/reports/overview")
 async def reports_overview(
     user: dict = Depends(get_current_user),
+    _: None = Depends(require_seeding_db),
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
 ):
     if user["role"] == "pending":
         raise HTTPException(403, "Pending")
 
+    try:
+        return await _reports_overview_body(user, from_date, to_date)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("reports_overview failed")
+        raise HTTPException(503, f"Seeding overview query failed: {e}")
+
+
+async def _reports_overview_body(user: dict, from_date: Optional[str], to_date: Optional[str]):
     q = _deal_role_filter(user)
     date_q: Dict[str, Any] = {}
     if from_date:

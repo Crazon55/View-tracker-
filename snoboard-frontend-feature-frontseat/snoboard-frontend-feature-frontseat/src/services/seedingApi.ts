@@ -1,26 +1,15 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Seeding API service for FramerHome bento. Shares fixtures with seeding/client.
-// Mock is OPT-IN via VITE_SEEDING_MOCK=true — production hits the real backend.
+// Seeding API service for FramerHome bento.
+// Same-origin /api/seeding; falls back to fixtures if live seeding is down.
 // ─────────────────────────────────────────────────────────────────────────────
 import { getAccessToken } from "./api";
 import { buildOverviewReport, MOCK_DEALS, type SeedingDeal } from "./seeding/mockData";
 
-function resolveSeedingBase(): string {
-  const explicit = import.meta.env.VITE_SEEDING_API as string | undefined;
-  if (explicit) return explicit.replace(/\/$/, "");
-  const apiRoot =
-    (import.meta.env.VITE_API_URL as string | undefined) ||
-    (import.meta.env.VITE_BASE_API_URL as string | undefined) ||
-    "";
-  if (apiRoot) return `${apiRoot.replace(/\/$/, "")}/api/seeding`;
-  return "/api/seeding";
-}
-
-const BASE = resolveSeedingBase();
-const USE_MOCK = import.meta.env.VITE_SEEDING_MOCK === "true";
+const BASE = ((import.meta.env.VITE_SEEDING_API as string | undefined)?.trim() || "/api/seeding").replace(/\/$/, "");
+const FORCE_MOCK = import.meta.env.VITE_SEEDING_MOCK === "true";
 
 async function get<T>(path: string, fallback: T): Promise<T> {
-  if (USE_MOCK) return fallback;
+  if (FORCE_MOCK) return fallback;
   try {
     const token = getAccessToken();
     const res = await fetch(`${BASE}${path}`, {
