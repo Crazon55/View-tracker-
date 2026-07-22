@@ -1157,11 +1157,13 @@ async def reports_overview(
 
     deals = await db.deals.find(q, {"_id": 0}).to_list(2000)
     approved = [d for d in deals if d.get("admin_review_status") == "Approved"]
-    completed = [d for d in approved if d.get("deal_status") == "Completed"]
+    # Cancelled deals stay in Approved history but drop out of revenue / payment totals.
+    revenue_deals = [d for d in approved if d.get("deal_status") != "Cancelled"]
+    completed = [d for d in revenue_deals if d.get("deal_status") == "Completed"]
     pending_review = [d for d in deals if d.get("admin_review_status") == "Submitted"]
     needs_info = [d for d in deals if d.get("admin_review_status") == "Needs More Info"]
 
-    revenue = sum(float(d.get("price_closed_at") or 0) for d in approved) if user["role"] != "fulfillment" else 0
+    revenue = sum(float(d.get("price_closed_at") or 0) for d in revenue_deals) if user["role"] != "fulfillment" else 0
 
     # team-wise revenue (admin only)
     team_revenue = []
@@ -1169,7 +1171,7 @@ async def reports_overview(
     if user["role"] == "admin":
         teams = await db.business_teams.find({}, {"_id": 0}).to_list(100)
         for t in teams:
-            t_approved = [d for d in approved if d.get("submitted_by_team_id") == t["team_id"]]
+            t_approved = [d for d in revenue_deals if d.get("submitted_by_team_id") == t["team_id"]]
             team_revenue.append({
                 "team_id": t["team_id"],
                 "team_name": t["team_name"],
@@ -1179,8 +1181,8 @@ async def reports_overview(
             team_deals.append({"team_name": t["team_name"], "count": len(t_approved)})
 
     # payments
-    deal_ids = [d["deal_id"] for d in approved]
-    deal_price_by_id = {d["deal_id"]: float(d.get("price_closed_at") or 0) for d in approved}
+    deal_ids = [d["deal_id"] for d in revenue_deals]
+    deal_price_by_id = {d["deal_id"]: float(d.get("price_closed_at") or 0) for d in revenue_deals}
     payments = []
     if user["role"] != "fulfillment":
         payments = await db.payments.find({"deal_id": {"$in": deal_ids}}, {"_id": 0}).to_list(2000)
@@ -1223,6 +1225,8 @@ async def reports_overview(
             cur += timedelta(days=1)
 
         for d in all_approved:
+            if d.get("deal_status") == "Cancelled":
+                continue
             day = parse_day(d.get("approved_at") or d.get("created_at") or "")
             if not day or day < start_day or day > end_day:
                 continue
@@ -1241,7 +1245,7 @@ async def reports_overview(
     if user["role"] == "admin":
         teams = await db.business_teams.find({}, {"_id": 0}).to_list(100)
         for t in teams:
-            t_deal_ids = [d["deal_id"] for d in approved if d.get("submitted_by_team_id") == t["team_id"]]
+            t_deal_ids = [d["deal_id"] for d in revenue_deals if d.get("submitted_by_team_id") == t["team_id"]]
             t_views = sum(int(dv.get("views") or 0) for dv in delivs if dv["deal_id"] in t_deal_ids)
             team_views.append({"team_name": t["team_name"], "views": t_views})
 
@@ -1255,7 +1259,7 @@ async def reports_overview(
             team_payments.append({
                 "team_id": t["team_id"],
                 "team_name": t["team_name"],
-                "revenue": sum(float(d.get("price_closed_at") or 0) for d in approved if d.get("submitted_by_team_id") == t["team_id"]),
+                "revenue": sum(float(d.get("price_closed_at") or 0) for d in revenue_deals if d.get("submitted_by_team_id") == t["team_id"]),
                 "deals_approved": len(t_deal_ids),
                 "payment_pending_count": len(t_pending),
                 "payment_pending_amount": t_pending_amount,
@@ -1268,7 +1272,7 @@ async def reports_overview(
 
     return {
         "revenue_closed": revenue,
-        "deals_approved": len(approved),
+        "deals_approved": len(revenue_deals),
         "deals_submitted_pending": len(pending_review),
         "deals_needs_info": len(needs_info),
         "deals_completed": len(completed),

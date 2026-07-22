@@ -230,7 +230,7 @@ function enrichDeal(deal: SeedingDeal): SeedingDealDetail {
 }
 
 function approvedDeals() {
-  return MOCK_DEALS.filter((d) => d.admin_review_status === "Approved");
+  return MOCK_DEALS.filter((d) => d.admin_review_status === "Approved" && d.deal_status !== "Cancelled");
 }
 
 function buildTeamPayments() {

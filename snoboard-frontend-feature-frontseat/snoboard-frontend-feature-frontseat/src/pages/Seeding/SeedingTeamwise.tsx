@@ -42,10 +42,12 @@ export default function SeedingTeamwise() {
   }, [rows, teamFilter, payFilter]);
 
   const stats = useMemo(() => {
-    const revenue = filtered.reduce((s, d) => s + d.price_closed_at, 0);
-    const paid = filtered.filter((d) => d.payment_status === "Paid").reduce((s, d) => s + d.price_closed_at, 0);
-    const pending = filtered.filter((d) => d.payment_status && d.payment_status !== "Paid").length;
-    return { deals: filtered.length, revenue, paid, pending };
+    // Cancelled deals stay visible for history, but must not count toward revenue.
+    const active = filtered.filter((d) => d.deal_status !== "Cancelled");
+    const revenue = active.reduce((s, d) => s + (d.price_closed_at || 0), 0);
+    const paid = active.filter((d) => d.payment_status === "Paid").reduce((s, d) => s + (d.price_closed_at || 0), 0);
+    const pending = active.filter((d) => d.payment_status && d.payment_status !== "Paid").length;
+    return { deals: active.length, revenue, paid, pending };
   }, [filtered]);
 
   const handleUpdate = (updated: SeedingDeal) => {
