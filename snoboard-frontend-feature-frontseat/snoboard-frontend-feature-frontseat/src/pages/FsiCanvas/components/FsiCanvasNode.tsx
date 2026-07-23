@@ -9,6 +9,10 @@ import { uploadFsiNodeScreenshotFiles } from "../lib/fsiNodeMedia";
 import { getScreenshotImageUrl, isScreenshotNode } from "../lib/fsiHierarchy";
 import { clipboardImageFiles } from "../lib/fsiScreenshotNode";
 import {
+  formatMetricDisplay,
+  normalizeMetricStorage,
+} from "../lib/fsiMetricFormat";
+import {
   COMPACT_NODE_HEIGHT,
   COMPACT_NODE_WIDTH,
   isCarouselBodyNode,
@@ -48,23 +52,60 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
   } = nodeData;
 
   const [title, setTitle] = useState(fsiNode.display_title);
-  const [body, setBody] = useState(fsiNode.raw_body_text ?? "");
+  const [body, setBody] = useState(() => {
+    const raw = fsiNode.raw_body_text ?? "";
+    if (raw.trim()) return raw;
+    // Legacy hook nodes often stored copy only in display_title
+    const t = fsiNode.display_title ?? "";
+    if (
+      t &&
+      !isUnsetNodeTitle(t, fsiNode.node_type) &&
+      ["Written Hook", "Visual Hook", "Hook Pattern", "Hook Example"].includes(fsiNode.node_type)
+    ) {
+      return t;
+    }
+    return "";
+  });
   const [linkUrl, setLinkUrl] = useState(() => String(fsiNode.structured_payload?.url ?? ""));
   const payload = fsiNode.structured_payload ?? {};
   const [fieldValues, setFieldValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(fieldDefs.map((def) => [def.key, String(payload[def.key] ?? "")])),
+    Object.fromEntries(
+      fieldDefs.map((def) => [
+        def.key,
+        def.inputType === "number"
+          ? formatMetricDisplay(payload[def.key]) || String(payload[def.key] ?? "")
+          : String(payload[def.key] ?? ""),
+      ]),
+    ),
   );
 
   useEffect(() => {
     setTitle(fsiNode.display_title);
-    setBody(fsiNode.raw_body_text ?? "");
+    const raw = fsiNode.raw_body_text ?? "";
+    if (raw.trim()) {
+      setBody(raw);
+    } else if (
+      ["Written Hook", "Visual Hook", "Hook Pattern", "Hook Example"].includes(fsiNode.node_type) &&
+      fsiNode.display_title &&
+      !isUnsetNodeTitle(fsiNode.display_title, fsiNode.node_type)
+    ) {
+      setBody(fsiNode.display_title);
+    } else {
+      setBody("");
+    }
     setLinkUrl(String(fsiNode.structured_payload?.url ?? ""));
-  }, [fsiNode.id, fsiNode.display_title, fsiNode.raw_body_text, fsiNode.structured_payload?.url]);
+  }, [fsiNode.id, fsiNode.display_title, fsiNode.raw_body_text, fsiNode.node_type, fsiNode.structured_payload?.url]);
 
   useEffect(() => {
     setFieldValues(
       Object.fromEntries(
-        fieldDefs.map((def) => [def.key, String(fsiNode.structured_payload?.[def.key] ?? "")]),
+        fieldDefs.map((def) => [
+          def.key,
+          def.inputType === "number"
+            ? formatMetricDisplay(fsiNode.structured_payload?.[def.key]) ||
+              String(fsiNode.structured_payload?.[def.key] ?? "")
+            : String(fsiNode.structured_payload?.[def.key] ?? ""),
+        ]),
       ),
     );
   }, [fsiNode.id, fieldDefs, fsiNode.structured_payload]);
@@ -178,6 +219,9 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       );
     }
+    if (def.inputType === "number") {
+      return <div className={fieldInputClass}>{formatMetricDisplay(val) || "—"}</div>;
+    }
     return <div className={fieldInputClass}>{val || "—"}</div>;
   };
 
@@ -219,9 +263,31 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
         <div className={fieldInputClass}>{val || "Average"}</div>
       );
     }
+    if (def.inputType === "number") {
+      return editing ? (
+        <input
+          type="text"
+          inputMode="decimal"
+          value={val}
+          onChange={(e) => setFieldValues((prev) => ({ ...prev, [def.key]: e.target.value }))}
+          onBlur={(e) => {
+            const stored = normalizeMetricStorage(e.target.value);
+            const display = formatMetricDisplay(stored) || stored;
+            setFieldValues((prev) => ({ ...prev, [def.key]: display }));
+            commitField(def.key, stored);
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          placeholder="e.g. 31k"
+          className={fieldInputClass}
+        />
+      ) : (
+        renderFieldValue(def, val)
+      );
+    }
     return editing ? (
       <input
-        type={def.inputType === "number" ? "number" : "text"}
+        type="text"
         value={val}
         onChange={(e) => setFieldValues((prev) => ({ ...prev, [def.key]: e.target.value }))}
         onBlur={(e) => commitField(def.key, e.target.value)}
@@ -285,8 +351,9 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
     return (
       <div
         ref={rootRef}
-        className={`relative w-[280px] overflow-visible rounded-md border-2 border-pink-500/80 bg-zinc-950 shadow-lg ${selected ? "ring-[3px] ring-sky-400 shadow-[0_0_0_5px_rgba(56,189,248,0.28)]" : ""
-          }`}
+        className={`relative overflow-visible ${
+          selected ? "ring-[3px] ring-sky-400 shadow-[0_0_0_5px_rgba(56,189,248,0.28)] rounded-sm" : ""
+        }`}
         onPaste={(e) => {
           if (!editing) return;
           const files = clipboardImageFiles(e.clipboardData);
@@ -296,26 +363,21 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
           void replaceScreenshot(files);
         }}
       >
-        <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-pink-200/90">
-          Visual
-        </div>
         {screenshotUrl ? (
           <img
             src={screenshotUrl}
             alt="Canvas screenshot"
-            className="pointer-events-none block max-h-72 w-full object-contain bg-black/40"
+            className="pointer-events-none block max-h-80 max-w-[280px] rounded-sm object-contain"
             draggable={false}
             onLoad={() => updateNodeInternals(id)}
           />
         ) : (
-          <div className="flex min-h-[120px] items-center justify-center px-3 text-xs text-zinc-400">
-            {replacingScreenshot ? "Uploading…" : "Paste or drop an image"}
-          </div>
-        )}
-        {editing && canEdit && (
-          <div className="flex items-center justify-between border-t border-pink-500/30 px-2 py-1.5">
-            <span className="text-[9px] text-pink-200/70">Drag to move · paste to replace</span>
-            {replacingScreenshot && <Loader2 className="h-3.5 w-3.5 animate-spin text-pink-200" />}
+          <div className="flex h-[160px] w-[120px] items-center justify-center rounded-sm border border-dashed border-zinc-600 bg-zinc-900/60 px-2 text-center text-[11px] text-zinc-400">
+            {replacingScreenshot ? (
+              <Loader2 className="h-4 w-4 animate-spin text-zinc-300" />
+            ) : (
+              "Paste image"
+            )}
           </div>
         )}
         <FsiNodeHandles
@@ -407,6 +469,31 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
                 {linkUrl}
               </a>
             )
+          ) : hookHasBody ? (
+            // Hook nodes: one content field only (no separate name + hook copy).
+            canEdit ? (
+              <textarea
+                rows={uiExpanded ? 5 : 2}
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                onBlur={(e) => {
+                  const next = e.target.value;
+                  commitBody(next);
+                  // Keep title in sync so lists/search still have a label.
+                  if (next.trim() && (titleEmpty || title === nodeData.nodeType)) {
+                    commitTitle(next.trim().slice(0, 80));
+                  }
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                placeholder="Hook copy…"
+                className={`${NODE_BODY_BOX_CLASS} mt-2 min-h-[40px] ${uiExpanded ? "min-h-[80px]" : ""}`}
+              />
+            ) : (
+              <div className={`${NODE_BODY_BOX_CLASS} mt-2 min-h-[40px] whitespace-pre-wrap`}>
+                {body ? <FsiLinkifiedText text={body} /> : "—"}
+              </div>
+            )
           ) : canEdit ? (
             <input
               value={titleEmpty ? "" : title}
@@ -423,19 +510,6 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
             <div className={NODE_TITLE_EMPTY_CLASS}>{nodeData.nodeType}</div>
           ) : (
             <div className={NODE_TITLE_DISPLAY_CLASS}>{title}</div>
-          )}
-          {uiExpanded && hookHasBody && (
-            <textarea
-              rows={5}
-              disabled={!canEdit}
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              onBlur={(e) => commitBody(e.target.value)}
-              onPointerDown={(e) => e.stopPropagation()}
-              onMouseDown={(e) => e.stopPropagation()}
-              placeholder="Hook copy…"
-              className={`${NODE_BODY_BOX_CLASS} mt-2 min-h-[80px]`}
-            />
           )}
           {uiExpanded && carousel && (
             <FsiCarouselSlidesEditor

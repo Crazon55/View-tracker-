@@ -416,6 +416,16 @@ input[style*="colorScheme"]::-webkit-calendar-picker-indicator {
   overflow: visible;
 }
 
+.fsi-flow-canvas .react-flow__selection {
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.85);
+}
+
+.fsi-flow-canvas .react-flow__nodesselection-rect {
+  border: 1px solid rgba(56, 189, 248, 0.85);
+  background: transparent;
+}
+
 .fsi-flow-canvas .react-flow__handle {
   opacity: 0 !important;
   background: transparent !important;

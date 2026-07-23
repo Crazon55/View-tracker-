@@ -80,7 +80,7 @@ export default function FsiCanvasWorkspace() {
 
   const [selectedNode, setSelectedNode] = useState<FsiNodeRecord | null>(null);
   const [multiSelectedIds, setMultiSelectedIds] = useState<string[]>([]);
-  const [boxSelectMode, setBoxSelectMode] = useState(false);
+  const [boxSelectMode, setBoxSelectMode] = useState(true);
   const [fitTrigger, setFitTrigger] = useState(0);
   const [resetOpen, setResetOpen] = useState(false);
   const [canvasTheme, setCanvasTheme] = useState<FsiCanvasTheme>(() => loadCanvasTheme());

@@ -929,8 +929,8 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         edgesFocusable
-        selectionOnDrag={boxSelectMode}
-        panOnDrag={[1, 2]}
+        selectionOnDrag={canEdit && boxSelectMode}
+        panOnDrag={boxSelectMode ? [1, 2] : true}
         selectionMode={SelectionMode.Partial}
         deleteKeyCode={null}
         // Double-click is how you select a word in a text field — don't let the canvas
