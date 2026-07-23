@@ -295,7 +295,11 @@ function revenueOverTime(from?: string, to?: string) {
 }
 
 export function buildOverviewReport(params?: Record<string, unknown>) {
-  const approved = approvedDeals();
+  const teamName = typeof params?.team_name === "string" ? params.team_name : "";
+  const pool = teamName
+    ? MOCK_DEALS.filter((d) => (d.submitted_by_team?.team_name || "") === teamName)
+    : MOCK_DEALS;
+  const approved = pool.filter((d) => d.admin_review_status === "Approved" && d.deal_status !== "Cancelled");
   const revenueClosed = approved.reduce((s, d) => s + d.price_closed_at, 0);
   const collected = approved.filter((d) => d.payment_status === "Paid").reduce((s, d) => s + d.price_closed_at, 0);
 
@@ -305,40 +309,45 @@ export function buildOverviewReport(params?: Record<string, unknown>) {
     outstanding: revenueClosed - collected,
     collection_pct: revenueClosed ? Math.round((collected / revenueClosed) * 100) : 0,
     deals_approved: approved.length,
-    deals_submitted_pending: MOCK_DEALS.filter((d) => d.admin_review_status === "Submitted").length,
+    deals_submitted_pending: pool.filter((d) => d.admin_review_status === "Submitted").length,
     payment_pending_count: approved.filter((d) => d.payment_status && !["Paid"].includes(d.payment_status)).length,
     deals_completed: approved.filter((d) => d.deal_status === "Completed").length,
-    total_views: 170500,
-    blocked_deliverables: 2,
-    deals_needs_info: MOCK_DEALS.filter((d) => d.admin_review_status === "Needs More Info").length,
+    total_views: teamName ? (teamName === "Snoball" ? 170500 : 0) : 170500,
+    blocked_deliverables: teamName ? 0 : 2,
+    deals_needs_info: pool.filter((d) => d.admin_review_status === "Needs More Info").length,
     revenue_over_time: revenueOverTime(params?.from_date as string | undefined, params?.to_date as string | undefined),
-    team_revenue: [
-      { team_id: "team_460502b4ecd2", team_name: "OWLED Core", revenue: 520000, deals: 1 },
-      { team_id: "team_21e60310db54", team_name: "Snoball", revenue: 320000, deals: 1 },
-      { team_id: "team_56b4ab680ceb", team_name: "Hooc", revenue: 240000, deals: 1 },
-      { team_id: "team_99c4b4a0d63d", team_name: "AY", revenue: 0, deals: 0 },
-    ],
-    team_views: [
-      { team_name: "Snoball", views: 170500 },
-      { team_name: "OWLED Core", views: 0 },
-      { team_name: "Hooc", views: 0 },
-      { team_name: "AY", views: 0 },
-    ],
-    team_payments: buildTeamPayments(),
-    // compact shape for FramerHome bento
-    revenue_by_team: [
-      { team: "OWLED Core", value: 520000 },
-      { team: "Snoball", value: 320000 },
-      { team: "Hooc", value: 240000 },
-      { team: "AY", value: 0 },
-    ],
+    team_revenue: teamName
+      ? [{ team_id: approved[0]?.submitted_by_team?.team_id || "", team_name: teamName, revenue: revenueClosed, deals: approved.length }]
+      : [
+          { team_id: "team_460502b4ecd2", team_name: "OWLED Core", revenue: 520000, deals: 1 },
+          { team_id: "team_21e60310db54", team_name: "Snoball", revenue: 320000, deals: 1 },
+          { team_id: "team_56b4ab680ceb", team_name: "Hooc", revenue: 240000, deals: 1 },
+          { team_id: "team_99c4b4a0d63d", team_name: "AY", revenue: 0, deals: 0 },
+        ],
+    team_views: teamName
+      ? [{ team_name: teamName, views: teamName === "Snoball" ? 170500 : 0 }]
+      : [
+          { team_name: "Snoball", views: 170500 },
+          { team_name: "OWLED Core", views: 0 },
+          { team_name: "Hooc", views: 0 },
+          { team_name: "AY", views: 0 },
+        ],
+    team_payments: buildTeamPayments().filter((t) => !teamName || t.team_name === teamName),
+    revenue_by_team: teamName
+      ? [{ team: teamName, value: revenueClosed }]
+      : [
+          { team: "OWLED Core", value: 520000 },
+          { team: "Snoball", value: 320000 },
+          { team: "Hooc", value: 240000 },
+          { team: "AY", value: 0 },
+        ],
     pipeline: [
       { label: "Not started", count: 6, color: "#3b476b" },
       { label: "Designing", count: 2, color: "var(--accent)" },
       { label: "Blocked", count: 2, color: "#f2555a" },
       { label: "Completed", count: 2, color: "#22c55e" },
     ],
-    recent_deals: MOCK_DEALS,
+    recent_deals: pool,
   };
 }
 
@@ -347,6 +356,14 @@ export function filterDeals(params?: Record<string, unknown>) {
   const status = params?.admin_review_status;
   if (typeof status === "string" && status) {
     rows = rows.filter((d) => d.admin_review_status === status);
+  }
+  const teamName = params?.team_name;
+  if (typeof teamName === "string" && teamName) {
+    rows = rows.filter((d) => (d.submitted_by_team?.team_name || "") === teamName);
+  }
+  const teamId = params?.team_id;
+  if (typeof teamId === "string" && teamId) {
+    rows = rows.filter((d) => d.submitted_by_team?.team_id === teamId);
   }
   return rows;
 }

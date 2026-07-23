@@ -5,6 +5,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { TrendingUp, FileText, CheckCircle2, AlertCircle, Eye, Wallet, Plus } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { bdTeamNameForRole } from "@/lib/accessModel";
 import { api } from "@/services/seeding/client";
 import { formatCurrency, formatDate } from "@/services/seeding/constants";
 import { StatusBadge } from "@/components/seeding/StatusBadge";
@@ -28,6 +30,8 @@ const FILTERS: [string, string][] = [
 ];
 
 export default function SeedingBDDashboard() {
+  const { role } = useAuth();
+  const lockedTeamName = bdTeamNameForRole(role);
   const [data, setData] = useState<any>(null);
   const [deals, setDeals] = useState<any[]>([]);
   const [filter, setFilter] = useState("all");
@@ -37,15 +41,28 @@ export default function SeedingBDDashboard() {
     const from_date = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
     const to_date = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
     Promise.all([
-      api.get<any>("/reports/overview", { params: { from_date, to_date } }),
-      api.get<any[]>("/deals"),
+      api.get<any>("/reports/overview", {
+        params: {
+          from_date,
+          to_date,
+          ...(lockedTeamName ? { team_name: lockedTeamName } : {}),
+        },
+      }),
+      api.get<any[]>("/deals", { params: lockedTeamName ? { team_name: lockedTeamName } : {} }),
     ]).then(([{ data: rep }, { data: dlist }]) => {
       setData(rep);
-      setDeals(dlist || []);
+      // Defense in depth: never show another team's briefs on the BD dashboard.
+      const rows = dlist || [];
+      setDeals(lockedTeamName
+        ? rows.filter((d) => (d.submitted_by_team?.team_name || "") === lockedTeamName)
+        : rows);
     }).catch(() => { /* backend scopes to the caller's team */ });
-  }, []);
+  }, [lockedTeamName]);
 
-  const teamName = useMemo(() => deals[0]?.submitted_by_team?.team_name || "Your team", [deals]);
+  const teamName = useMemo(
+    () => lockedTeamName || deals[0]?.submitted_by_team?.team_name || "Your team",
+    [lockedTeamName, deals],
+  );
 
   const filtered = deals.filter((d) => {
     if (filter === "all") return true;

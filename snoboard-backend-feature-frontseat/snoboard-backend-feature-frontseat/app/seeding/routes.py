@@ -146,6 +146,21 @@ async def _sync_seeding_from_fsos(user: dict) -> dict:
                 team = await db.business_teams.find_one({"team_name": team_name}, {"_id": 0})
             except Exception:
                 team = None
+            if not team:
+                # Ensure the four BD teams exist so role assignment always scopes correctly.
+                tid = new_id("team")
+                try:
+                    await db.business_teams.insert_one({
+                        "team_id": tid,
+                        "team_name": team_name,
+                        "created_at": now_iso(),
+                    })
+                    team = {"team_id": tid, "team_name": team_name}
+                except Exception:
+                    try:
+                        team = await db.business_teams.find_one({"team_name": team_name}, {"_id": 0})
+                    except Exception:
+                        team = None
             if team and team.get("team_id"):
                 team_id = team["team_id"]
                 break
@@ -640,7 +655,11 @@ def _deal_role_filter(user: dict) -> dict:
     if user["role"] == "admin":
         return {}
     if user["role"] == "bd":
-        return {"submitted_by_team_id": user.get("business_team_id")}
+        team_id = user.get("business_team_id")
+        # No team assigned → see nothing (never leak other teams' deals).
+        if not team_id:
+            return {"_id": "__none__"}
+        return {"submitted_by_team_id": team_id}
     if user["role"] == "fulfillment":
         return {"admin_review_status": "Approved"}
     return {"_id": "__none__"}  # pending users get nothing
@@ -662,8 +681,11 @@ async def create_brief(payload: BriefCreate, user: dict = Depends(get_current_us
         if not team:
             raise HTTPException(400, "Invalid team")
         team_id = payload.submitted_by_team_id
-    elif not team_id:
-        raise HTTPException(400, "BD user must belong to a team")
+    else:
+        # BD: always stamp the deal with THEIR team — never accept another team's id from the client.
+        if not team_id:
+            raise HTTPException(400, "BD user must belong to a team")
+        team_id = user["business_team_id"]
 
     deal_id = new_id("deal")
     deal = {
@@ -730,6 +752,55 @@ async def create_brief(payload: BriefCreate, user: dict = Depends(get_current_us
     })
 
     return await _enrich_deal(deal)
+
+
+@api.post("/deals")
+async def create_deal_compat(request: Request, user: dict = Depends(get_current_user)):
+    """Frontend Submit Brief posts here; map to /briefs and force BD team from profile
+    so one BD cannot attribute deals to another team's id."""
+    await require_role(user, ["bd", "admin"])
+    body = await request.json()
+    drafts = body.get("deliverable_drafts") or body.get("deliverables_spec") or []
+    specs = []
+    for d in drafts:
+        if not d.get("page_id"):
+            continue
+        specs.append(BriefDeliverableSpec(
+            page_id=str(d["page_id"]),
+            deliverable_type=d.get("deliverable_type") or "Reel",
+            quantity=max(1, int(d.get("quantity") or 1)),
+        ))
+    assets = body.get("assets_or_reference_links")
+    if assets is None and body.get("assets_links"):
+        assets = [ln.strip() for ln in str(body["assets_links"]).splitlines() if ln.strip()]
+    team_from_body = None
+    submitted = body.get("submitted_by_team") or {}
+    if isinstance(submitted, dict):
+        team_from_body = submitted.get("team_id")
+    team_from_body = team_from_body or body.get("submitted_by_team_id")
+
+    # BD always uses their assigned team — never trust client team_id (isolation).
+    if user["role"] == "bd":
+        submitted_by_team_id = user.get("business_team_id")
+        if not submitted_by_team_id:
+            raise HTTPException(400, "BD user must belong to a team — ask Admin to assign HOOC/AY/OWLED Core/Snoball BD")
+    else:
+        submitted_by_team_id = team_from_body
+
+    payload = BriefCreate(
+        brand_name=body.get("brand_name") or body.get("agency_or_client_name") or "",
+        agency_or_client_name=body.get("agency_or_client_name") or body.get("brand_name") or "",
+        brief_text=body.get("brief_text") or "",
+        brief_link=body.get("brief_link") or "",
+        assets_or_reference_links=assets or [],
+        deliverables_spec=specs,
+        go_live_date_time=str(body.get("go_live_date_time") or ""),
+        price_closed_at=float(body.get("price_closed_at") or 0),
+        payment_due_date=str(body.get("payment_due_date") or ""),
+        notes=body.get("notes") or "",
+        submitted_by_team_id=submitted_by_team_id,
+    )
+    return await create_brief(payload, user)
 
 
 @api.get("/deals")
