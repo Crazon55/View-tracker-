@@ -4,6 +4,7 @@ Uses asyncpg with a subset of Motor query syntax ($in, $ne, $gte, $lte).
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from dataclasses import dataclass, field
@@ -219,14 +220,29 @@ class Collection:
             if not existing:
                 if not upsert:
                     return UpdateResult(matched_count=0)
-                # upsert: merge filter keys into new row
+                # upsert: merge filter keys into new row — insert on SAME connection
+                # (nested pool.acquire via insert_one deadlocks under load).
                 new_row = {k: v for k, v in filt.items() if not isinstance(v, dict)}
                 new_row.update(set_doc)
                 if self.table == "seeding_payments" and "payment_id" not in new_row:
                     from uuid import uuid4
                     new_row.setdefault("payment_id", f"pay_{uuid4().hex[:12]}")
-                await self.insert_one(new_row)
-                return UpdateResult(matched_count=0, modified_count=1, upserted_id=new_row.get(list(filt.keys())[0]))
+                row = dict(new_row)
+                for col in JSONB_COLUMNS:
+                    if col in row and not isinstance(row[col], str):
+                        row[col] = json.dumps(row[col])
+                cols = list(row.keys())
+                placeholders = ", ".join(f"${i + 1}" for i in range(len(cols)))
+                col_names = ", ".join(f'"{c}"' for c in cols)
+                vals = [row[c] if c in TEXT_DATE_COLUMNS else _parse_value(row[c]) for c in cols]
+                sql = f'INSERT INTO "{self.table}" ({col_names}) VALUES ({placeholders})'
+                await conn.execute(sql, *vals)
+                pk = list(filt.keys())[0] if filt else None
+                return UpdateResult(
+                    matched_count=0,
+                    modified_count=1,
+                    upserted_id=new_row.get(pk) if pk else None,
+                )
 
             set_parts: List[str] = []
             set_params: List[Any] = list(params)
@@ -268,15 +284,26 @@ class Collection:
 class Database:
     dsn: str
     _pool: Optional[asyncpg.Pool] = field(default=None, repr=False)
+    _pool_lock: Optional[asyncio.Lock] = field(default=None, repr=False)
 
     async def get_pool(self) -> asyncpg.Pool:
-        if self._pool is None:
-            # statement_cache_size=0 is required for Supabase's transaction pooler
-            # (pgbouncer in transaction mode does not support prepared statements).
-            self._pool = await asyncpg.create_pool(
-                self.dsn, min_size=1, max_size=10, statement_cache_size=0
-            )
-        return self._pool
+        if self._pool is not None:
+            return self._pool
+        if self._pool_lock is None:
+            self._pool_lock = asyncio.Lock()
+        async with self._pool_lock:
+            if self._pool is None:
+                # statement_cache_size=0 is required for Supabase's transaction pooler
+                # (pgbouncer in transaction mode does not support prepared statements).
+                self._pool = await asyncpg.create_pool(
+                    self.dsn,
+                    min_size=1,
+                    max_size=10,
+                    statement_cache_size=0,
+                    command_timeout=30,
+                    max_inactive_connection_lifetime=300,
+                )
+            return self._pool
 
     async def close(self) -> None:
         if self._pool:

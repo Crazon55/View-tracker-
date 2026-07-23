@@ -50,13 +50,19 @@ from app.experiment_playbooks import (
     exp_sum_views,
 )
 from app.routers.fsi import router as fsi_router
-from app.seeding.routes import api as seeding_router, init_seeding, close_seeding
+from app.seeding.routes import (
+    api as seeding_router,
+    init_seeding,
+    close_seeding,
+    register_seeding_middleware,
+)
 
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="View Tracker", version="1.0.0")
 app.include_router(fsi_router, prefix="/api/v1/fsi")
 app.include_router(seeding_router, prefix="/api/seeding")  # merged Seeding backend
+register_seeding_middleware(app)
 
 app.add_middleware(
     CORSMiddleware,

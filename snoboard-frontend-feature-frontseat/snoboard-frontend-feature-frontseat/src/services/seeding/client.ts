@@ -2,10 +2,9 @@
 // Seeding API client — axios-compatible shim over fetch so the FS-Seeding pages
 // port with minimal edits (they call api.get(path,{params}).then(({data})=>…)).
 //
-// Live API is preferred (same-origin /api/seeding via the FSOS proxy).
-// If the live seeding DB is down (5xx/network), we fall back to local fixtures
-// persisted in localStorage so the UI keeps working.
-// Force fixtures only with VITE_SEEDING_MOCK=true.
+// Live API only (same-origin /api/seeding). Mock fixtures are OPT-IN via
+// VITE_SEEDING_MOCK=true — never auto-fallback on 5xx/404/network (that caused
+// silent "fake success" / data flip-flops when the backend blipped).
 // ─────────────────────────────────────────────────────────────────────────────
 import { mockSeedingGet, mockSeedingPatch, mockSeedingPost, mockSeedingDelete } from "./mockData";
 import { getAccessToken } from "../api"; // shared FSOS Supabase access token
@@ -23,14 +22,11 @@ const BASE = resolveSeedingBase();
 const FORCE_MOCK = import.meta.env.VITE_SEEDING_MOCK === "true";
 const PREVIEW_KEY = "preview_as_email";
 
-let _warnedFallback = false;
-function warnFallback(reason: string) {
-  if (_warnedFallback) return;
-  _warnedFallback = true;
-  console.warn(`[seeding] Live API unavailable (${reason}) — using local persisted mock data.`);
-}
-
 type Cfg = { params?: Record<string, unknown>; headers?: Record<string, string> };
+
+export type SeedingApiError = Error & {
+  response?: { status: number; data: unknown };
+};
 
 function buildUrl(path: string, params?: Record<string, unknown>) {
   if (!params) return `${BASE}${path}`;
@@ -74,33 +70,26 @@ function mockReq<T>(method: string, path: string, body?: unknown, cfg?: Cfg): { 
   throw new Error(`Unsupported mock method ${method}`);
 }
 
+function httpError(status: number, data: unknown, message?: string): SeedingApiError {
+  return Object.assign(new Error(message || `Request failed: ${status}`), {
+    response: { status, data },
+  });
+}
+
 async function req<T>(method: string, path: string, body?: unknown, cfg?: Cfg): Promise<{ data: T }> {
   if (FORCE_MOCK) return mockReq<T>(method, path, body, cfg);
 
-  try {
-    const res = await fetch(buildUrl(path, cfg?.params), {
-      method,
-      credentials: "include",
-      headers: buildHeaders(cfg?.headers),
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      // Live seeding DB missing / misconfigured → keep the product usable.
-      if (res.status >= 500 || res.status === 404) {
-        warnFallback(`${res.status}`);
-        return mockReq<T>(method, path, body, cfg);
-      }
-      throw Object.assign(new Error(`Request failed: ${res.status}`), { response: { status: res.status, data } });
-    }
-    const data = res.status === 204 ? null : await res.json().catch(() => null);
-    return { data: data as T };
-  } catch (err: unknown) {
-    const status = (err as { response?: { status?: number } })?.response?.status;
-    if (status && status < 500 && status !== 404) throw err;
-    warnFallback(err instanceof Error ? err.message : "network");
-    return mockReq<T>(method, path, body, cfg);
+  const res = await fetch(buildUrl(path, cfg?.params), {
+    method,
+    credentials: "include",
+    headers: buildHeaders(cfg?.headers),
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  const data = res.status === 204 ? null : await res.json().catch(() => null);
+  if (!res.ok) {
+    throw httpError(res.status, data);
   }
+  return { data: data as T };
 }
 
 export const api = {

@@ -11,6 +11,7 @@ from typing import List, Optional, Any, Dict, Literal
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict
 from pathlib import Path
+import asyncio
 import os
 import logging
 import uuid
@@ -32,8 +33,54 @@ ALLOWED_DOMAIN = os.environ.get('ALLOWED_EMAIL_DOMAIN', 'owledmedia.com').lower(
 SUPABASE_URL = os.environ.get('SUPABASE_URL', '').rstrip('/')
 SUPABASE_JWT_SECRET = os.environ.get('SUPABASE_JWT_SECRET', '')
 
+
+async def require_seeding_db():
+    """Fail with 503 (not 500) when Postgres isn't configured / reachable."""
+    try:
+        await db.get_pool()
+    except Exception as e:
+        logger.warning("Seeding DB unavailable: %s", e)
+        raise HTTPException(
+            503,
+            "Seeding database unavailable. Set DATABASE_URL or SUPABASE_DB_URL on the backend.",
+        )
+
+
+def _is_db_connectivity_error(exc: BaseException) -> bool:
+    """True for pool / connection / timeout failures that should surface as 503."""
+    import asyncpg
+
+    if isinstance(
+        exc,
+        (
+            asyncpg.PostgresConnectionError,
+            asyncpg.InterfaceError,
+            asyncpg.TooManyConnectionsError,
+            TimeoutError,
+            asyncio.TimeoutError,
+            ConnectionError,
+            OSError,
+        ),
+    ):
+        return True
+    msg = str(exc).lower()
+    needles = (
+        "connection was closed",
+        "connection does not exist",
+        "too many connections",
+        "remaining connection slots",
+        "timeout",
+        "could not connect",
+        "database unavailable",
+        "pool is closing",
+    )
+    return any(n in msg for n in needles)
+
+
 # Router mounted at /api/seeding by app/main.py (no internal prefix here).
-api = APIRouter()
+# Every route requires a reachable seeding pool (503 if DATABASE_URL missing / down).
+# Pool blips mid-request are mapped to 503 by register_seeding_middleware.
+api = APIRouter(dependencies=[Depends(require_seeding_db)])
 
 # Cached JWKS client for verifying Supabase's asymmetric (ECC/RSA) login tokens.
 # PyJWKClient fetches Supabase's public keys once and caches them in memory, so
@@ -299,18 +346,6 @@ async def get_real_user(request: Request) -> dict:
 async def require_role(user: dict, allowed: List[str]):
     if user.get("role") not in allowed:
         raise HTTPException(403, f"Forbidden — requires one of: {allowed}")
-
-
-async def require_seeding_db():
-    """Fail with 503 (not 500) when Postgres isn't configured / reachable."""
-    try:
-        await db.get_pool()
-    except Exception as e:
-        logger.warning("Seeding DB unavailable: %s", e)
-        raise HTTPException(
-            503,
-            "Seeding database unavailable. Set DATABASE_URL or SUPABASE_DB_URL on the backend.",
-        )
 
 
 def scrub_deal_for_user(deal: dict, user: dict) -> dict:
@@ -679,13 +714,46 @@ async def delete_page(page_id: str, user: dict = Depends(get_current_user)):
 
 
 # ----------------------------- Briefs / Deals -----------------------------
+async def _enrich_deals(deals: List[dict]) -> List[dict]:
+    """Batch-attach submitter + team info (avoids N+1 pool exhaustion)."""
+    if not deals:
+        return deals
+    user_ids = list({d.get("submitted_by_user_id") for d in deals if d.get("submitted_by_user_id")})
+    team_ids = list({d.get("submitted_by_team_id") for d in deals if d.get("submitted_by_team_id")})
+    users_map: Dict[str, dict] = {}
+    teams_map: Dict[str, dict] = {}
+    if user_ids:
+        users = await db.users.find(
+            {"user_id": {"$in": user_ids}},
+            {"_id": 0, "user_id": 1, "name": 1, "email": 1},
+        ).to_list(len(user_ids) + 10)
+        users_map = {
+            u["user_id"]: {"name": u.get("name"), "email": u.get("email")}
+            for u in users
+            if u.get("user_id")
+        }
+    if team_ids:
+        teams = await db.business_teams.find(
+            {"team_id": {"$in": team_ids}},
+            {"_id": 0, "team_id": 1, "team_name": 1},
+        ).to_list(len(team_ids) + 10)
+        teams_map = {
+            t["team_id"]: {"team_name": t.get("team_name")}
+            for t in teams
+            if t.get("team_id")
+        }
+    for deal in deals:
+        uid = deal.get("submitted_by_user_id")
+        tid = deal.get("submitted_by_team_id")
+        deal["submitted_by_user"] = users_map.get(uid) if uid else None
+        deal["submitted_by_team"] = teams_map.get(tid) if tid else None
+    return deals
+
+
 async def _enrich_deal(deal: dict) -> dict:
     """Add submitter and team info to a deal."""
-    submitter = await db.users.find_one({"user_id": deal.get("submitted_by_user_id")}, {"_id": 0, "name": 1, "email": 1})
-    team = await db.business_teams.find_one({"team_id": deal.get("submitted_by_team_id")}, {"_id": 0, "team_name": 1})
-    deal["submitted_by_user"] = submitter
-    deal["submitted_by_team"] = team
-    return deal
+    enriched = await _enrich_deals([deal])
+    return enriched[0]
 
 
 async def _attach_payment_status(deal: dict) -> dict:
@@ -855,7 +923,6 @@ async def create_deal_compat(request: Request, user: dict = Depends(get_current_
 @api.get("/deals")
 async def list_deals(
     user: dict = Depends(get_current_user),
-    _: None = Depends(require_seeding_db),
     admin_review_status: Optional[str] = None,
     deal_status: Optional[str] = None,
     payment_status: Optional[str] = None,
@@ -894,8 +961,8 @@ async def list_deals(
                 payments_map = {p["deal_id"]: p for p in payments}
 
         out = []
+        deals = await _enrich_deals(deals)
         for d in deals:
-            d = await _enrich_deal(d)
             d = scrub_deal_for_user(d, user)
             if user["role"] in {"admin", "bd"}:
                 pay = payments_map.get(d["deal_id"])
@@ -1423,7 +1490,6 @@ async def download_file(file_id: str, request: Request, auth: Optional[str] = Qu
 @api.get("/reports/overview")
 async def reports_overview(
     user: dict = Depends(get_current_user),
-    _: None = Depends(require_seeding_db),
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
 ):
@@ -1834,3 +1900,26 @@ async def close_seeding():
         await db.close()
     except Exception:
         pass
+
+
+async def seeding_connectivity_middleware(request: Request, call_next):
+    """Turn seeding pool/connection failures into 503 instead of opaque 500s."""
+    try:
+        return await call_next(request)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        path = request.url.path or ""
+        if path.startswith("/api/seeding") and _is_db_connectivity_error(exc):
+            logger.warning("Seeding DB connectivity error on %s: %s", path, exc)
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "detail": "Seeding database unavailable. Set DATABASE_URL or SUPABASE_DB_URL on the backend.",
+                },
+            )
+        raise
+
+
+def register_seeding_middleware(app: FastAPI) -> None:
+    app.middleware("http")(seeding_connectivity_middleware)
