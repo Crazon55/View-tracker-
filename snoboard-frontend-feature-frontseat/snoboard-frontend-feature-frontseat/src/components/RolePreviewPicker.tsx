@@ -1,9 +1,10 @@
 // Admin-only "preview as role" entry — a black dropdown in the top nav. Activates the
 // existing preview engine (AuthContext.setRolePreview → effectiveRole drives all gating).
+// Each team BD (HOOC / AY / OWLED Core / Snoball) is a first-class preview target.
 import { useEffect, useRef, useState } from "react";
 import { Eye, ChevronDown, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { ALL_ROLES } from "@/lib/accessModel";
+import { PREVIEW_ROLES } from "@/lib/accessModel";
 
 const optStyle = (active: boolean): React.CSSProperties => ({
   display: "block", width: "100%", textAlign: "left", padding: "8px 10px", fontSize: 12,
@@ -25,7 +26,7 @@ export function RolePreviewPicker() {
 
   if (!canUseRolePreview) return null;
 
-  const current = ALL_ROLES.find((r) => r.key === rolePreview);
+  const current = PREVIEW_ROLES.find((r) => r.key === rolePreview);
 
   return (
     <div ref={ref} style={{ position: "relative", flexShrink: 0 }}>
@@ -47,7 +48,7 @@ export function RolePreviewPicker() {
       {open && (
         <div
           style={{
-            position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 80, minWidth: 240, maxHeight: 360, overflowY: "auto",
+            position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 80, minWidth: 260, maxHeight: 420, overflowY: "auto",
             background: "#08080a", border: "1px solid var(--f-line)", borderRadius: 10,
             boxShadow: "0 14px 36px -10px rgba(0,0,0,.85)", padding: 4,
           }}
@@ -62,7 +63,7 @@ export function RolePreviewPicker() {
               <X size={13} /> Exit preview (back to my access)
             </button>
           )}
-          {ALL_ROLES.map((r) => (
+          {PREVIEW_ROLES.map((r) => (
             <button key={r.key} type="button" onClick={() => { setRolePreview(r.key); setOpen(false); }} style={optStyle(rolePreview === r.key)}>
               {r.label}
             </button>

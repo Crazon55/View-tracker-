@@ -3,7 +3,7 @@ import type { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { setAccessToken, getUserRole, setUserRole } from "@/services/api";
 import { hasPermission } from "@/lib/permissions";
-import { ALL_ROLES, canonicalRole, isAwaitingAccess } from "@/lib/accessModel";
+import { ALL_ROLES, canonicalRole, isAwaitingAccess, ROLE_PREVIEW_STORAGE_KEY } from "@/lib/accessModel";
 
 const ALLOWED_DOMAIN = "owledmedia.com";
 /** Valid preview targets: legacy preview roles OR any unified/legacy access-model role. */
@@ -16,6 +16,11 @@ const ROLE_PREVIEW_PREFIX = "role_preview_";
 
 function rolePreviewStorageKey(email: string) {
   return `${ROLE_PREVIEW_PREFIX}${email}`;
+}
+
+function persistSeedingPreviewRole(role: string | null) {
+  if (role) sessionStorage.setItem(ROLE_PREVIEW_STORAGE_KEY, role);
+  else sessionStorage.removeItem(ROLE_PREVIEW_STORAGE_KEY);
 }
 
 /** Retired roles mapped to their replacement (content_creators → cs). */
@@ -106,6 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const clearStoredPreview = (email?: string | null) => {
     if (email) sessionStorage.removeItem(rolePreviewStorageKey(email));
+    persistSeedingPreviewRole(null);
     setRolePreviewState(null);
   };
 
@@ -116,6 +122,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     const stored = sessionStorage.getItem(rolePreviewStorageKey(email));
     if (stored && isValidPreviewRole(stored)) {
+      persistSeedingPreviewRole(stored);
       setRolePreviewState(stored);
     } else {
       clearStoredPreview(email);
@@ -199,6 +206,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user?.email || !actualRole || !isAdminRole(actualRole)) return;
     if (!isValidPreviewRole(previewRole)) return;
     sessionStorage.setItem(rolePreviewStorageKey(user.email), previewRole);
+    persistSeedingPreviewRole(previewRole);
     setRolePreviewState(previewRole);
   };
 

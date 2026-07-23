@@ -9,6 +9,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { mockSeedingGet, mockSeedingPatch, mockSeedingPost, mockSeedingDelete } from "./mockData";
 import { getAccessToken } from "../api"; // shared FSOS Supabase access token
+import { ROLE_PREVIEW_STORAGE_KEY, bdTeamNameForRole } from "@/lib/accessModel";
 
 function resolveSeedingBase(): string {
   const explicit = (import.meta.env.VITE_SEEDING_API as string | undefined)?.trim();
@@ -47,11 +48,24 @@ function buildHeaders(extra?: Record<string, string>) {
   if (token) h.Authorization = `Bearer ${token}`;
   const preview = localStorage.getItem(PREVIEW_KEY);
   if (preview) h["X-Impersonate-As"] = preview;
+  // Admin role-preview (HOOC-BD, SNOBALL-BD, …) — backend scopes seeding to that team.
+  const previewRole = sessionStorage.getItem(ROLE_PREVIEW_STORAGE_KEY);
+  if (previewRole) h["X-Preview-Role"] = previewRole;
   return h;
 }
 
+function withPreviewTeamParams(path: string, params?: Record<string, unknown>) {
+  const previewRole = sessionStorage.getItem(ROLE_PREVIEW_STORAGE_KEY);
+  const teamName = bdTeamNameForRole(previewRole);
+  if (!teamName) return params;
+  if (path !== "/deals" && path !== "/reports/overview") return params;
+  if (params?.team_name) return params;
+  return { ...(params || {}), team_name: teamName };
+}
+
 function mockReq<T>(method: string, path: string, body?: unknown, cfg?: Cfg): { data: T } {
-  if (method === "GET") return { data: mockSeedingGet<T>(path, cfg?.params) };
+  const params = method === "GET" ? withPreviewTeamParams(path, cfg?.params) : cfg?.params;
+  if (method === "GET") return { data: mockSeedingGet<T>(path, params) };
   if (method === "PATCH" || method === "PUT") {
     return { data: mockSeedingPatch<T>(path, (body || {}) as Record<string, unknown>) };
   }

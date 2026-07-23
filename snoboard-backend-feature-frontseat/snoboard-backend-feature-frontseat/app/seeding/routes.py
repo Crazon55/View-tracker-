@@ -230,7 +230,8 @@ async def _resolve_user(request: Request) -> dict:
 
 
 async def get_current_user(request: Request) -> dict:
-    """Shared Supabase JWT → seeding profile, honouring admin `X-Impersonate-As`."""
+    """Shared Supabase JWT → seeding profile, honouring admin `X-Impersonate-As`
+    and Admin UI role preview (`X-Preview-Role` for HOOC-BD / AY-BD / etc.)."""
     user = await _resolve_user(request)
     impersonate = (request.headers.get("x-impersonate-as") or "").strip().lower()
     if impersonate and user.get("role") == "admin":
@@ -239,7 +240,55 @@ async def get_current_user(request: Request) -> dict:
             target["_real_admin_id"] = user["user_id"]
             target["_real_admin_email"] = user.get("email")
             return target
+
+    preview_role = (request.headers.get("x-preview-role") or "").strip().lower()
+    if preview_role and user.get("role") == "admin":
+        scoped = await _apply_admin_role_preview(user, preview_role)
+        if scoped is not None:
+            return scoped
     return user
+
+
+async def _ensure_business_team(team_name: str) -> Optional[dict]:
+    try:
+        team = await db.business_teams.find_one({"team_name": team_name}, {"_id": 0})
+    except Exception:
+        team = None
+    if team:
+        return team
+    tid = new_id("team")
+    row = {"team_id": tid, "team_name": team_name, "created_at": now_iso()}
+    try:
+        await db.business_teams.insert_one(dict(row))
+        return row
+    except Exception:
+        try:
+            return await db.business_teams.find_one({"team_name": team_name}, {"_id": 0})
+        except Exception:
+            return None
+
+
+async def _apply_admin_role_preview(admin: dict, preview_role: str) -> Optional[dict]:
+    """When Admin previews as a team BD (or fulfillment/pending), scope seeding like that role."""
+    base = {
+        **admin,
+        "_preview_role": preview_role,
+        "_real_admin_id": admin.get("user_id"),
+        "_real_admin_email": admin.get("email"),
+    }
+    if preview_role in _FSOS_BD_TEAM_ROLES:
+        team = await _ensure_business_team(_FSOS_BD_TEAM_ROLES[preview_role])
+        if not team:
+            return {**base, "role": "bd", "business_team_id": None}
+        return {**base, "role": "bd", "business_team_id": team.get("team_id")}
+    if preview_role == "bd":
+        # Generic BD with no team — same as an unassigned BD (sees nothing until teamed).
+        return {**base, "role": "bd", "business_team_id": None}
+    if preview_role == "fulfillment":
+        return {**base, "role": "fulfillment", "business_team_id": None}
+    if preview_role == "pending":
+        return {**base, "role": "pending", "business_team_id": None}
+    return None
 
 
 async def get_real_user(request: Request) -> dict:

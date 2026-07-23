@@ -124,6 +124,12 @@ export const ALL_ROLES: RoleDef[] = (() => {
   return [...ROLES, ...LEGACY_ROLES.filter((r) => !seen.has(r.key))];
 })();
 
+/** Roles shown in the Admin "Preview as…" picker (includes each team BD). */
+export const PREVIEW_ROLES: RoleDef[] = ALL_ROLES.filter((r) => r.key !== "pending");
+
+/** sessionStorage key shared with the seeding API client for team-scoped preview. */
+export const ROLE_PREVIEW_STORAGE_KEY = "fsos_role_preview";
+
 const all = (level: AreaLevel): Record<AreaKey, AreaLevel> =>
   Object.fromEntries(AREA_KEYS.map((k) => [k, level])) as Record<AreaKey, AreaLevel>;
 

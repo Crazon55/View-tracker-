@@ -1,6 +1,6 @@
 import { Eye, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { ALL_ROLES } from "@/lib/accessModel";
+import { PREVIEW_ROLES } from "@/lib/accessModel";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -36,8 +36,8 @@ export function RolePreviewBanner() {
         <SelectTrigger className="h-8 w-[220px] border-amber-500/30 bg-amber-900/40 text-xs text-amber-50">
           <SelectValue placeholder="Switch role" />
         </SelectTrigger>
-        <SelectContent className="bg-zinc-950 border-zinc-800">
-          {ALL_ROLES.map(({ key, label }) => (
+        <SelectContent className="bg-zinc-950 border-zinc-800 max-h-80">
+          {PREVIEW_ROLES.map(({ key, label }) => (
             <SelectItem key={key} value={key} className="text-sm">
               {label}
             </SelectItem>
