@@ -1,5 +1,7 @@
 export const COMPACT_NODE_WIDTH = 200;
 export const COMPACT_NODE_HEIGHT = 80;
+/** Collapsed accordion header height (Written Hook / Performance / Link). */
+export const DROPDOWN_COLLAPSED_HEIGHT = 44;
 export const LINK_NODE_WIDTH = COMPACT_NODE_WIDTH;
 export const LINK_NODE_HEIGHT = COMPACT_NODE_HEIGHT;
 export const DEFAULT_EXPANDED_WIDTH = 320;

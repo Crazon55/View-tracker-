@@ -22,6 +22,7 @@ export const WHITEBOARD_DEFAULT_STUDY_TYPE = "Whiteboard";
 export {
   COMPACT_NODE_WIDTH,
   COMPACT_NODE_HEIGHT,
+  DROPDOWN_COLLAPSED_HEIGHT,
   LINK_NODE_WIDTH,
   LINK_NODE_HEIGHT,
   DEFAULT_EXPANDED_WIDTH,
@@ -77,6 +78,11 @@ export function isWrittenHookNode(node: FsiNodeRecord): boolean {
 
 export function isPerformanceNode(node: FsiNodeRecord): boolean {
   return node.node_type === "Performance" || node.node_type === "Performance Insight";
+}
+
+/** Written Hook / Performance / Link — single accordion box with dropdown body. */
+export function isDropdownCardNode(node: FsiNodeRecord): boolean {
+  return isLinkNode(node) || isWrittenHookNode(node) || isPerformanceNode(node);
 }
 
 export function isVisualNode(node: FsiNodeRecord): boolean {

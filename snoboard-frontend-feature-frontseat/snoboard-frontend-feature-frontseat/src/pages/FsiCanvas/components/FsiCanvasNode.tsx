@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { NodeResizer, type NodeProps, useUpdateNodeInternals } from "@xyflow/react";
-import { ExternalLink, Loader2 } from "lucide-react";
+import { ChevronDown, ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { FsiNodeData } from "../lib/fsiFlowAdapter";
 import { PERFORMANCE_LABELS } from "../lib/fsiNodeSchemas";
@@ -15,7 +15,9 @@ import {
 import {
   COMPACT_NODE_HEIGHT,
   COMPACT_NODE_WIDTH,
+  DROPDOWN_COLLAPSED_HEIGHT,
   isCarouselBodyNode,
+  isDropdownCardNode,
   isLinkNode,
   isNodeUiExpanded,
   NODE_BODY_BOX_CLASS,
@@ -32,6 +34,7 @@ import {
 import FsiNodeHandles from "./FsiNodeHandles";
 import FsiNodeExpandToggle from "./FsiNodeExpandToggle";
 import FsiCarouselSlidesEditor from "./FsiCarouselSlidesEditor";
+import { cn } from "@/lib/utils";
 
 function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as FsiNodeData;
@@ -300,15 +303,16 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
     );
   };
 
-  const renderFields = () => {
-    if (fieldDefs.length === 0 || !uiExpanded) return null;
+  const renderFields = (opts?: { forceShow?: boolean }) => {
+    if (fieldDefs.length === 0) return null;
+    if (!opts?.forceShow && !uiExpanded) return null;
     const visibleDefs = fieldDefs.filter(
       (def) => canEdit || Boolean((fieldValues[def.key] ?? "").trim()),
     );
     if (visibleDefs.length === 0) return null;
 
     return (
-      <div className="max-h-40 space-y-2 overflow-y-auto border-t border-black/10 px-2 pb-2 pt-2">
+      <div className="max-h-40 space-y-2 overflow-y-auto border-t border-black/10 px-1 pb-1 pt-2">
         {visibleDefs.map((def) => {
           const val = fieldValues[def.key] ?? "";
           return (
@@ -329,6 +333,10 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
     nodeData.nodeType === "Visual Hook" ||
     nodeData.nodeType === "Hook Pattern" ||
     nodeData.nodeType === "Hook Example";
+
+  const isWrittenHookOnly =
+    nodeData.nodeType === "Written Hook" ||
+    (nodeData.nodeType === "Hook Example" && fsiNode.structured_payload?.hook_kind === "written");
 
   if (isScreenshot) {
     const replaceScreenshot = async (files: File[]) => {
@@ -395,6 +403,149 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
     const slides = parseSlidesContent(payload);
     const titleEmpty = isUnsetNodeTitle(title, nodeData.nodeType);
     const linkUrlEmpty = !linkUrl.trim();
+    const isDropdown = isDropdownCardNode(fsiNode);
+    const collapsedH = isDropdown ? DROPDOWN_COLLAPSED_HEIGHT : COMPACT_NODE_HEIGHT;
+    const toggleExpanded = () => patchPayload({ ui_expanded: !uiExpanded });
+
+    const dropdownLabel = isLinkCard
+      ? "Link"
+      : nodeData.nodeType === "Performance Insight" || nodeData.nodeType === "Performance"
+        ? "Performance"
+        : isWrittenHookOnly || nodeData.nodeType === "Written Hook"
+          ? "Written Hook"
+          : nodeData.nodeType;
+
+    const renderLinkBody = () =>
+      canEdit ? (
+        <div className="mt-1 flex min-w-0 items-center gap-1.5">
+          <input
+            type="url"
+            value={linkUrl}
+            onChange={(e) => setLinkUrl(e.target.value)}
+            onBlur={(e) => commitField("url", e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerDownCapture={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            className={`${NODE_FIELD_INPUT_CLASS} min-w-0 flex-1`}
+            placeholder="https://..."
+          />
+          {!linkUrlEmpty ? (
+            <a
+              href={normalizeLinkHref(linkUrl)}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open link"
+              className="nodrag nopan flex h-7 w-7 shrink-0 items-center justify-center self-center rounded text-black/60 hover:bg-black/10 hover:text-black"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+            </a>
+          ) : null}
+        </div>
+      ) : linkUrlEmpty ? (
+        <div className={NODE_TITLE_EMPTY_CLASS}>https://...</div>
+      ) : (
+        <a
+          href={normalizeLinkHref(linkUrl)}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={linkUrl}
+          className={`${NODE_TITLE_DISPLAY_CLASS} cursor-pointer underline decoration-black/40 hover:decoration-black`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {linkUrl}
+        </a>
+      );
+
+    const renderHookBody = () =>
+      canEdit ? (
+        <textarea
+          rows={5}
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          onBlur={(e) => {
+            const next = e.target.value;
+            commitBody(next);
+            if (next.trim() && (titleEmpty || title === nodeData.nodeType)) {
+              commitTitle(next.trim().slice(0, 80));
+            }
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          placeholder="Hook copy…"
+          className={`${NODE_BODY_BOX_CLASS} mt-1 min-h-[80px]`}
+        />
+      ) : (
+        <div className={`${NODE_BODY_BOX_CLASS} mt-1 min-h-[80px] whitespace-pre-wrap`}>
+          {body ? <FsiLinkifiedText text={body} /> : "—"}
+        </div>
+      );
+
+    // Accordion dropdown cards: Written Hook / Performance / Link
+    if (isDropdown) {
+      return (
+        <div
+          ref={rootRef}
+          className={`relative box-border flex flex-col overflow-hidden rounded-2xl border-2 shadow-lg ${
+            selected ? "ring-[3px] ring-sky-400 shadow-[0_0_0_5px_rgba(56,189,248,0.28)] ring-offset-0" : ""
+          }`}
+          style={{
+            width: cardW,
+            height: uiExpanded ? cardH : collapsedH,
+            borderColor: nodeData.color,
+            backgroundColor: nodeData.color,
+          }}
+        >
+          {uiExpanded && canEdit && selected && (
+            <NodeResizer
+              minWidth={COMPACT_NODE_WIDTH}
+              minHeight={DROPDOWN_COLLAPSED_HEIGHT + 80}
+              onResizeEnd={(_event, params) => {
+                patchPayload({
+                  card_width: Math.round(params.width),
+                  card_height: Math.round(params.height),
+                });
+              }}
+            />
+          )}
+          <button
+            type="button"
+            title={uiExpanded ? `Collapse ${dropdownLabel}` : `Expand ${dropdownLabel}`}
+            className="nodrag nopan flex h-11 w-full shrink-0 items-center justify-between gap-2 px-3 text-left hover:bg-black/5"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleExpanded();
+            }}
+          >
+            <span className={NODE_TYPE_LABEL_CLASS}>{dropdownLabel}</span>
+            <ChevronDown
+              className={cn(
+                "h-4 w-4 shrink-0 text-black/70 transition-transform duration-150",
+                uiExpanded && "rotate-180",
+              )}
+            />
+          </button>
+          {uiExpanded && (
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-3">
+              {isLinkCard
+                ? renderLinkBody()
+                : isWrittenHookOnly || hookHasBody
+                  ? renderHookBody()
+                  : renderFields({ forceShow: true })}
+            </div>
+          )}
+          <FsiNodeHandles
+            canStartConnection={canEdit}
+            canAcceptConnection={nodeData.isConnecting}
+            requiredAnchors={connectionAnchors}
+            showConnectionDots={showConnectionDots || selected}
+          />
+        </div>
+      );
+    }
 
     return (
       <div
@@ -422,55 +573,11 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
         )}
         <FsiNodeExpandToggle
           expanded={uiExpanded}
-          onToggle={() => patchPayload({ ui_expanded: !uiExpanded })}
+          onToggle={toggleExpanded}
         />
         <div className="flex min-h-0 flex-1 flex-col px-3 py-2.5 pr-7">
           <div className={NODE_TYPE_LABEL_CLASS}>{nodeData.nodeType}</div>
-          {isLinkCard ? (
-            canEdit ? (
-              <div className="mt-2.5 flex min-w-0 items-center gap-1.5">
-                <input
-                  type="url"
-                  value={linkUrl}
-                  onChange={(e) => setLinkUrl(e.target.value)}
-                  onBlur={(e) => commitField("url", e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onPointerDownCapture={(e) => e.stopPropagation()}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  className={`${NODE_FIELD_INPUT_CLASS} min-w-0 flex-1`}
-                  placeholder="https://..."
-                />
-                {!linkUrlEmpty ? (
-                  <a
-                    href={normalizeLinkHref(linkUrl)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="Open link"
-                    className="nodrag nopan flex h-7 w-7 shrink-0 items-center justify-center self-center rounded text-black/60 hover:bg-black/10 hover:text-black"
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                  </a>
-                ) : null}
-              </div>
-            ) : linkUrlEmpty ? (
-              <div className={NODE_TITLE_EMPTY_CLASS}>https://...</div>
-            ) : (
-              <a
-                href={normalizeLinkHref(linkUrl)}
-                target="_blank"
-                rel="noopener noreferrer"
-                title={linkUrl}
-                className={`${NODE_TITLE_DISPLAY_CLASS} cursor-pointer underline decoration-black/40 hover:decoration-black`}
-                onClick={(e) => e.stopPropagation()}
-              >
-                {linkUrl}
-              </a>
-            )
-          ) : hookHasBody ? (
-            // Hook nodes: one content field only (no separate name + hook copy).
+          {hookHasBody ? (
             canEdit ? (
               <textarea
                 rows={uiExpanded ? 5 : 2}
@@ -479,7 +586,6 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
                 onBlur={(e) => {
                   const next = e.target.value;
                   commitBody(next);
-                  // Keep title in sync so lists/search still have a label.
                   if (next.trim() && (titleEmpty || title === nodeData.nodeType)) {
                     commitTitle(next.trim().slice(0, 80));
                   }

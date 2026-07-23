@@ -1,6 +1,18 @@
 import { isNoteNode, isScreenshotNode } from "./fsiHierarchy";
 import type { FsiNodeRecord } from "./fsiNodeSchemas";
-import { isCompactLabelNode, isFrameNode, isSimpleLabelNode, isCarouselBodyNode, isNodeUiExpanded, nodeCardWidth, nodeCardHeight, COMPACT_NODE_HEIGHT, COMPACT_NODE_WIDTH } from "./fsiWhiteboardTypes";
+import {
+  isCompactLabelNode,
+  isDropdownCardNode,
+  isFrameNode,
+  isSimpleLabelNode,
+  isCarouselBodyNode,
+  isNodeUiExpanded,
+  nodeCardWidth,
+  nodeCardHeight,
+  COMPACT_NODE_HEIGHT,
+  COMPACT_NODE_WIDTH,
+  DROPDOWN_COLLAPSED_HEIGHT,
+} from "./fsiWhiteboardTypes";
 
 const FRAME_PADDING = 48;
 const FRAME_HEADER = 44;
@@ -30,15 +42,18 @@ export function estimateNodeSize(node: FsiNodeRecord): { width: number; height: 
     };
   }
   if (isScreenshotNode(node)) {
-    // w-[280px] + header + max-h-72 image + footer bar
     return { width: 280, height: 360 };
   }
   if (isNoteNode(node)) return { width: 220, height: 120 };
-  if (isCarouselBodyNode(node)) {
+  if (isDropdownCardNode(node) || isCarouselBodyNode(node)) {
     const expanded = isNodeUiExpanded(node.structured_payload ?? {});
     return {
       width: nodeCardWidth(node.structured_payload, expanded),
-      height: nodeCardHeight(node.structured_payload, expanded),
+      height: expanded
+        ? nodeCardHeight(node.structured_payload, true)
+        : isDropdownCardNode(node)
+          ? DROPDOWN_COLLAPSED_HEIGHT
+          : COMPACT_NODE_HEIGHT,
     };
   }
   if (isCompactLabelNode(node) || isSimpleLabelNode(node)) {
