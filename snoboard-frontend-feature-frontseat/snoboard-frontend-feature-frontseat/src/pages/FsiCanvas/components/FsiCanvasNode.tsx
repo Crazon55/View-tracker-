@@ -34,6 +34,7 @@ import {
 import FsiNodeHandles from "./FsiNodeHandles";
 import FsiNodeExpandToggle from "./FsiNodeExpandToggle";
 import FsiCarouselSlidesEditor from "./FsiCarouselSlidesEditor";
+import FsiNodeDuplicateCorners, { type DuplicateCorner } from "./FsiNodeDuplicateCorners";
 import { cn } from "@/lib/utils";
 
 function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
@@ -52,6 +53,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
     onPayloadChange,
     onStructuredPayloadPatch,
     showConnectionDots = false,
+    onRequestDuplicate,
   } = nodeData;
 
   const [title, setTitle] = useState(fsiNode.display_title);
@@ -141,6 +143,14 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
       onStructuredPayloadPatch?.(fsiNode.id, patch);
     },
     [fsiNode.id, onStructuredPayloadPatch],
+  );
+
+  const showDuplicateCorners = Boolean(selected && canEdit && onRequestDuplicate);
+  const handleCornerDuplicate = useCallback(
+    (corner: DuplicateCorner) => {
+      onRequestDuplicate?.(fsiNode.id, corner);
+    },
+    [fsiNode.id, onRequestDuplicate],
   );
 
   const uiExpanded = isNodeUiExpanded(payload);
@@ -388,6 +398,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
             )}
           </div>
         )}
+        <FsiNodeDuplicateCorners visible={showDuplicateCorners} onCornerClick={handleCornerDuplicate} />
         <FsiNodeHandles
           canStartConnection={canEdit}
           canAcceptConnection={nodeData.isConnecting}
@@ -537,6 +548,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
                   : renderFields({ forceShow: true })}
             </div>
           )}
+          <FsiNodeDuplicateCorners visible={showDuplicateCorners} onCornerClick={handleCornerDuplicate} />
           <FsiNodeHandles
             canStartConnection={canEdit}
             canAcceptConnection={nodeData.isConnecting}
@@ -626,6 +638,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
           )}
           {renderFields()}
         </div>
+        <FsiNodeDuplicateCorners visible={showDuplicateCorners} onCornerClick={handleCornerDuplicate} />
         <FsiNodeHandles
           canStartConnection={canEdit}
           canAcceptConnection={nodeData.isConnecting}
@@ -715,6 +728,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
         </>
       )}
 
+      <FsiNodeDuplicateCorners visible={showDuplicateCorners} onCornerClick={handleCornerDuplicate} />
       <FsiNodeHandles
         canStartConnection={canEdit}
         canAcceptConnection={nodeData.isConnecting}

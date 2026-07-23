@@ -34,6 +34,8 @@ export type FsiNodeData = {
   onPayloadChange?: (nodeId: string, key: string, value: string) => void;
   onStructuredPayloadPatch?: (nodeId: string, patch: Record<string, unknown>) => void;
   onScreenshotsChange?: (nodeId: string, screenshots: string[]) => void;
+  /** Selected-node corner "+" → open duplicate confirm (with connectors option). */
+  onRequestDuplicate?: (nodeId: string, corner: "top-left" | "top-right" | "bottom-left" | "bottom-right") => void;
   connectionAnchors?: string[];
   /** True while user is dragging a new connection line. */
   isConnecting?: boolean;
@@ -52,6 +54,10 @@ export function graphToFlow(
     onEdgeDelete?: (edgeId: string) => void;
     onEdgeLabelChange?: (edgeId: string, label: string) => void;
     onScreenshotsChange?: (nodeId: string, screenshots: string[]) => void;
+    onRequestDuplicate?: (
+      nodeId: string,
+      corner: "top-left" | "top-right" | "bottom-left" | "bottom-right",
+    ) => void;
   },
 ): { nodes: Node[]; edges: Edge[] } {
   const visible = nodes.filter(isCanvasNode);
@@ -98,6 +104,7 @@ export function graphToFlow(
           onBodyChange: options?.onBodyChange,
           onPayloadChange: options?.onPayloadChange,
           onScreenshotsChange: options?.onScreenshotsChange,
+          onRequestDuplicate: options?.onRequestDuplicate,
         } satisfies FsiNodeData,
       };
     }
@@ -135,6 +142,7 @@ export function graphToFlow(
         onPayloadChange: options?.onPayloadChange,
         onStructuredPayloadPatch: options?.onStructuredPayloadPatch,
         onScreenshotsChange: options?.onScreenshotsChange,
+        onRequestDuplicate: options?.onRequestDuplicate,
         connectionAnchors,
       } satisfies FsiNodeData,
     };

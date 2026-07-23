@@ -98,6 +98,10 @@ type FlowInnerProps = {
   onPayloadChange: (nodeId: string, key: string, value: string) => void;
   onStructuredPayloadPatch: (nodeId: string, patch: Record<string, unknown>) => void;
   onScreenshotsChange: (nodeId: string, screenshots: string[]) => void;
+  onRequestDuplicate?: (
+    nodeId: string,
+    corner: "top-left" | "top-right" | "bottom-left" | "bottom-right",
+  ) => void;
   canvasTheme?: FsiCanvasTheme;
 };
 
@@ -130,6 +134,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     onPayloadChange,
     onStructuredPayloadPatch,
     onScreenshotsChange,
+    onRequestDuplicate,
     canvasTheme = "dark",
   },
   ref,
@@ -232,6 +237,15 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     onScreenshotsChangeRef.current(id, screenshots);
   }, []);
 
+  const onRequestDuplicateRef = useRef(onRequestDuplicate);
+  onRequestDuplicateRef.current = onRequestDuplicate;
+  const stableRequestDuplicate = useCallback(
+    (id: string, corner: "top-left" | "top-right" | "bottom-left" | "bottom-right") => {
+      onRequestDuplicateRef.current?.(id, corner);
+    },
+    [],
+  );
+
   const onEdgeDeleteRef = useRef(onEdgeDelete);
   onEdgeDeleteRef.current = onEdgeDelete;
   const stableEdgeDelete = useCallback((id: string) => {
@@ -294,8 +308,9 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         onEdgeDelete: stableEdgeDelete,
         onEdgeLabelChange: stableEdgeLabelChange,
         onScreenshotsChange: stableScreenshotsChange,
+        onRequestDuplicate: stableRequestDuplicate,
       }),
-    [structureSignature, positionSignature, canEdit, stableTitleChange, stableBodyChange, stablePayloadChange, stableStructuredPayloadPatch, stableEdgeDelete, stableEdgeLabelChange, stableScreenshotsChange],
+    [structureSignature, positionSignature, canEdit, stableTitleChange, stableBodyChange, stablePayloadChange, stableStructuredPayloadPatch, stableEdgeDelete, stableEdgeLabelChange, stableScreenshotsChange, stableRequestDuplicate],
   );
 
   const flowEdges = flowGraph.edges;
