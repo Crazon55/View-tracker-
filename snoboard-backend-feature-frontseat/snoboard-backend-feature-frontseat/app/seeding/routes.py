@@ -105,6 +105,70 @@ DELIVERABLE_TYPES = ["Reel", "Static", "Carousel"]
 OUTPUT_TYPES = ["Writeup", "Canva Link", "Drive Link", "Google Doc Link", "Content Link", "Other"]
 FEEDBACK_STATUSES = ["Open", "In Progress", "Resolved"]
 
+# FSOS Users & Roles → seeding profile (team BD roles map to business team by name).
+_FSOS_ADMIN_ROLES = frozenset({"admin", "boss_man", "ai_dev", "ai_automations", "seeding_admin"})
+_FSOS_BD_TEAM_ROLES = {
+    "hooc_bd": "Hooc",
+    "ay_bd": "AY",
+    "owled_core_bd": "OWLED Core",
+    "snoball_bd": "Snoball",
+}
+
+
+async def _sync_seeding_from_fsos(user: dict) -> dict:
+    """Align seeding role/team with FSOS user_roles when Admin assigns access there."""
+    email = (user.get("email") or "").strip().lower()
+    if not email or email in SEED_ADMIN_EMAILS:
+        return user
+    try:
+        from app.database.client import get_supabase_client
+        rows = get_supabase_client().table("user_roles").select("role").eq("email", email).execute().data or []
+    except Exception as e:
+        logger.debug("FSOS role lookup skipped for %s: %s", email, e)
+        return user
+    if not rows:
+        return user
+    parts = [p.strip().lower() for p in str(rows[0].get("role") or "").split(",") if p.strip()]
+    if not parts:
+        return user
+
+    patch: dict = {}
+    if any(p in _FSOS_ADMIN_ROLES for p in parts):
+        if user.get("role") != "admin":
+            patch = {"role": "admin", "business_team_id": None}
+    elif any(p in _FSOS_BD_TEAM_ROLES or p == "bd" for p in parts):
+        team_id = user.get("business_team_id")
+        for p in parts:
+            team_name = _FSOS_BD_TEAM_ROLES.get(p)
+            if not team_name:
+                continue
+            try:
+                team = await db.business_teams.find_one({"team_name": team_name}, {"_id": 0})
+            except Exception:
+                team = None
+            if team and team.get("team_id"):
+                team_id = team["team_id"]
+                break
+        if user.get("role") != "bd" or (team_id and user.get("business_team_id") != team_id):
+            patch = {"role": "bd"}
+            if team_id:
+                patch["business_team_id"] = team_id
+    elif "fulfillment" in parts:
+        if user.get("role") != "fulfillment":
+            patch = {"role": "fulfillment", "business_team_id": None}
+    elif parts == ["pending"]:
+        if user.get("role") != "pending":
+            patch = {"role": "pending", "business_team_id": None}
+
+    if not patch:
+        return user
+    try:
+        await db.users.update_one({"email": email}, {"$set": patch})
+    except Exception as e:
+        logger.warning("Could not sync seeding profile for %s: %s", email, e)
+        return user
+    return {**user, **patch}
+
 
 # ----------------------------- Auth -----------------------------
 async def _resolve_user(request: Request) -> dict:
@@ -147,7 +211,7 @@ async def _resolve_user(request: Request) -> dict:
                 raise HTTPException(503, "Seeding database unavailable while provisioning user.")
     if user.get("active") is False:
         raise HTTPException(403, "User deactivated")
-    return user
+    return await _sync_seeding_from_fsos(user)
 
 
 async def get_current_user(request: Request) -> dict:

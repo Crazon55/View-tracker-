@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Check, Trash2, User } from "lucide-react";
 import { FramerPage } from "@/components/framer/Framer";
 import { useAuth } from "@/contexts/AuthContext";
+import { bdTeamNameForRole } from "@/lib/accessModel";
 import { api } from "@/services/seeding/client";
 import { DELIVERABLE_TYPES } from "@/services/seeding/constants";
 import { SeedingSelect } from "@/components/seeding/SeedingSelect";
@@ -37,9 +38,11 @@ function newRow(pageId = ""): DeliverableRow {
 
 export default function SeedingSubmitBrief() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const displayName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "User";
-  const defaultTeam = TEAMS[0].id;
+  const lockedTeamName = bdTeamNameForRole(role);
+  const lockedTeam = lockedTeamName ? TEAMS.find((t) => t.name === lockedTeamName) : undefined;
+  const defaultTeam = lockedTeam?.id || TEAMS[0].id;
 
   const [teamId, setTeamId] = useState(defaultTeam);
   const [agency, setAgency] = useState("");
@@ -54,6 +57,10 @@ export default function SeedingSubmitBrief() {
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (lockedTeam?.id) setTeamId(lockedTeam.id);
+  }, [lockedTeam?.id]);
 
   const teamName = useMemo(() => TEAMS.find((t) => t.id === teamId)?.name ?? "Snoball", [teamId]);
 
@@ -148,12 +155,21 @@ export default function SeedingSubmitBrief() {
         <form className="seeding-surface seeding-submit-form" onSubmit={handleSubmit}>
           <label className="seeding-submit-field seeding-submit-field--full">
             <span>Submit for team {req}</span>
-            <SeedingSelect
-              value={teamId}
-              onChange={setTeamId}
-              options={TEAMS.map((t) => ({ value: t.id, label: t.name }))}
-            />
-            <span className="seeding-submit-hint">Revenue and deal visibility will count under this BD team.</span>
+            {lockedTeam ? (
+              <>
+                <input className={inputCls} value={lockedTeam.name} readOnly />
+                <span className="seeding-submit-hint">Locked to your BD team role.</span>
+              </>
+            ) : (
+              <>
+                <SeedingSelect
+                  value={teamId}
+                  onChange={setTeamId}
+                  options={TEAMS.map((t) => ({ value: t.id, label: t.name }))}
+                />
+                <span className="seeding-submit-hint">Revenue and deal visibility will count under this BD team.</span>
+              </>
+            )}
           </label>
 
           <label className="seeding-submit-field seeding-submit-field--full">

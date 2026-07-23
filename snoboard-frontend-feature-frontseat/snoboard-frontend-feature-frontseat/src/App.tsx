@@ -686,6 +686,7 @@ function AuthGate() {
     return <Login />;
   }
 
+  // New joiners land as pending — Admin assigns roles; no self-serve role pick.
   if (needsRole) {
     return <RoleSelect />;
   }

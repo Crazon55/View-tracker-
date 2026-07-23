@@ -67,13 +67,40 @@ export const ROLES: RoleDef[] = [
   { key: "co", label: "CO · Content Operator", short: "CO" },
   { key: "ve", label: "VE · Video Editor", short: "VE" },
   { key: "bd", label: "BD · Business Dev", short: "BD" },
+  // Team-scoped BD roles (same seeding access as BD; deals scoped to that team).
+  { key: "hooc_bd", label: "HOOC-BD", short: "HOOC BD" },
+  { key: "ay_bd", label: "AY-BD", short: "AY BD" },
+  { key: "owled_core_bd", label: "OWLED CORE-BD", short: "CORE BD" },
+  { key: "snoball_bd", label: "SNOBALL-BD", short: "SNO BD" },
   { key: "fulfillment", label: "Fulfillment", short: "FULFILL" },
   // Playbook-specific roles — access scoped to one playbook.
   { key: "bizz_playbook", label: "Bizz Playbook", short: "BIZZ PB" },
   { key: "xf_playbook", label: "XF Playbook", short: "XF PB" },
   { key: "tech_playbook", label: "Tech Playbook", short: "TECH PB" },
   { key: "news_playbook", label: "News Playbook", short: "NEWS PB" },
+  { key: "pending", label: "Pending (awaiting access)", short: "PENDING" },
 ];
+
+/** BD team role key → seeding business team display name. */
+export const BD_TEAM_ROLE_TO_NAME: Record<string, string> = {
+  hooc_bd: "Hooc",
+  ay_bd: "AY",
+  owled_core_bd: "OWLED Core",
+  snoball_bd: "Snoball",
+};
+
+export function isTeamBdRole(role: string | null | undefined): boolean {
+  if (!role) return false;
+  return String(role).split(",").map((r) => r.trim().toLowerCase()).some((r) => r in BD_TEAM_ROLE_TO_NAME);
+}
+
+export function bdTeamNameForRole(role: string | null | undefined): string | null {
+  if (!role) return null;
+  for (const raw of String(role).split(",").map((r) => r.trim().toLowerCase())) {
+    if (raw in BD_TEAM_ROLE_TO_NAME) return BD_TEAM_ROLE_TO_NAME[raw];
+  }
+  return null;
+}
 
 // Previous/legacy roles kept as first-class, independently-editable roles for finer
 // granularity (e.g. Editor vs Carousel Designer vs Designer can differ). Their default
@@ -89,7 +116,6 @@ export const LEGACY_ROLES: RoleDef[] = [
   { key: "smm", label: "Social Media Manager", short: "SMM" },
   { key: "experiment_x", label: "Experiment Creator", short: "EXP-X" },
   { key: "content_ops_intern", label: "Content Ops Intern", short: "CONTENT OPS" },
-  { key: "pending", label: "Pending (no access)", short: "PENDING" },
 ];
 
 /** Every assignable/editable role — unified first, then legacy (deduped by key). */
@@ -105,6 +131,10 @@ const withOverrides = (
   base: AreaLevel,
   overrides: Partial<Record<AreaKey, AreaLevel>>,
 ): Record<AreaKey, AreaLevel> => ({ ...all(base), ...overrides });
+
+const BD_ACCESS = withOverrides("none", {
+  seeding_overview: "edit", seeding_submit: "edit",
+});
 
 // Default matrices — STARTING POINT (tune in the UI). "?" cells in the plan default
 // to the conservative choice; nothing is locked.
@@ -146,11 +176,12 @@ export const ROLE_ACCESS_DEFAULTS: Record<string, Record<AreaKey, AreaLevel>> = 
     pintu: "view", growth: "view", ips: "view", fsi_canvas: "edit",
   }),
 
-  // BD: only their team dashboard (Overview) + Submit Brief. The dashboard already lists
-  // their deals, so no separate All-Deals tab.
-  bd: withOverrides("none", {
-    seeding_overview: "edit", seeding_submit: "edit",
-  }),
+  // BD: only their team dashboard (Overview) + Submit Brief.
+  bd: BD_ACCESS,
+  hooc_bd: BD_ACCESS,
+  ay_bd: BD_ACCESS,
+  owled_core_bd: BD_ACCESS,
+  snoball_bd: BD_ACCESS,
 
   fulfillment: withOverrides("none", {
     seeding_fulfillment: "edit", seeding_deals: "view",
@@ -172,6 +203,9 @@ export const ROLE_ACCESS_DEFAULTS: Record<string, Record<AreaKey, AreaLevel>> = 
   news_playbook: withOverrides("none", {
     news: "edit", pintu: "view", growth: "view", fsi_canvas: "edit",
   }),
+
+  // New joiners — no tabs until Admin assigns a real role.
+  pending: all("none"),
 };
 
 /** Legacy/alias role keys → canonical role above (so existing DB values keep working). */
@@ -190,12 +224,27 @@ export const ROLE_ALIASES: Record<string, string> = {
   content_creators: "cs",
   smm: "co",
   cdi: "ve",
+  // Team BD roles behave like BD for nav / home routing.
+  hooc_bd: "bd",
+  ay_bd: "bd",
+  owled_core_bd: "bd",
+  snoball_bd: "bd",
   // `pending` intentionally NOT aliased → resolves to all-none (awaiting a real role).
 };
 
 export function canonicalRole(role: string): string {
   const r = role.trim().toLowerCase();
   return ROLE_ALIASES[r] ?? r;
+}
+
+/** True when the user has no usable role yet (Admin must assign one). */
+export function isAwaitingAccess(role: string | null | undefined): boolean {
+  if (!role || !String(role).trim()) return true;
+  const parts = String(role)
+    .split(",")
+    .map((r) => r.trim().toLowerCase())
+    .filter(Boolean);
+  return parts.length === 0 || parts.every((r) => r === "pending");
 }
 
 // ── Resolver ──────────────────────────────────────────────────────────────────

@@ -3,7 +3,7 @@ import type { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { setAccessToken, getUserRole, setUserRole } from "@/services/api";
 import { hasPermission } from "@/lib/permissions";
-import { ALL_ROLES, canonicalRole } from "@/lib/accessModel";
+import { ALL_ROLES, canonicalRole, isAwaitingAccess } from "@/lib/accessModel";
 
 const ALLOWED_DOMAIN = "owledmedia.com";
 /** Valid preview targets: legacy preview roles OR any unified/legacy access-model role. */
@@ -34,19 +34,11 @@ function normalizeRole(role: string): string {
   return out.join(",");
 }
 
-const ROLES = [
-  { value: "senior_cs",         label: "Senior CS" },
-  { value: "boss_man",          label: "Content growth & operations" },
-  { value: "ai_dev",            label: "AI Dev" },
-  { value: "cs",                label: "CS (Content Strategist)" },
-  { value: "cw",                label: "Content Writer (CW)" },
-  { value: "editors",           label: "Editor" },
-  { value: "carousel_designer", label: "Carousel Designer" },
-  { value: "design",            label: "Designer" },
-  { value: "smm",               label: "Social Media Manager (SMM)" },
-  { value: "experiment_x",      label: "Experiment Creator (The Bizz / XF / TECH)" },
-  { value: "content_ops_intern",  label: "Content Ops Intern" },
-];
+/** Dropdown options for Team Roles / preview — mirrors assignable access-model roles. */
+const ROLES = ALL_ROLES.filter((r) => r.key !== "pending").map((r) => ({
+  value: r.key,
+  label: r.label,
+}));
 
 function roleLabel(roleValue: string | null): string | null {
   if (!roleValue) return null;
@@ -162,7 +154,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error("Failed to save role to backend (using local fallback):", err);
     }
     setActualRole(newRole);
-    setNeedsRole(false);
+    setNeedsRole(isAwaitingAccess(newRole));
     loadStoredPreview(user.email, newRole);
   };
 
@@ -170,30 +162,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const role = normalizeRole(rawRole);
     localStorage.setItem(`role_${email}`, role);
     setActualRole(role);
-    setNeedsRole(false);
+    setNeedsRole(isAwaitingAccess(role));
     loadStoredPreview(email, role);
     if (role !== rawRole && name !== undefined) {
       setUserRole({ email, role, name }).catch(() => {});
     }
   };
 
-  const fetchRole = async (email: string) => {
-    const localRole = localStorage.getItem(`role_${email}`);
-    if (localRole) {
-      applyRole(email, localRole);
-    }
+  const fetchRole = async (email: string, displayName?: string) => {
+    const name = displayName || email.split("@")[0] || "";
     try {
       const data = await getUserRole(email);
       if (data?.role) {
-        applyRole(email, data.role, data.name || "");
-      } else if (!localRole) {
-        clearStoredPreview(email);
-        setNeedsRole(true);
+        applyRole(email, data.role, data.name || name);
+        return;
       }
+      // First login / no row yet — Admin assigns real access later.
+      try {
+        await setUserRole({ email, role: "pending", name });
+      } catch (err) {
+        console.error("Failed to provision pending role:", err);
+      }
+      applyRole(email, "pending", name);
     } catch {
-      if (!localRole) {
+      const localRole = localStorage.getItem(`role_${email}`);
+      if (localRole) {
+        applyRole(email, localRole);
+      } else {
         clearStoredPreview(email);
-        setNeedsRole(true);
+        applyRole(email, "pending", name);
       }
     }
   };
@@ -209,13 +206,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearStoredPreview(user?.email);
   };
 
-  const validateAndSetUser = (session: Session | null) => {
+  const validateAndSetUser = async (session: Session | null) => {
     if (!session?.user) {
       setUser(null);
       setSession(null);
       setDomainError(false);
       setActualRole(null);
       setRolePreviewState(null);
+      setNeedsRole(false);
       return;
     }
 
@@ -234,19 +232,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(session.user);
     setSession(session);
     setDomainError(false);
-    fetchRole(email);
+    const displayName =
+      session.user.user_metadata?.full_name ||
+      session.user.user_metadata?.name ||
+      email.split("@")[0] ||
+      "";
+    await fetchRole(email, displayName);
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      validateAndSetUser(session);
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      await validateAndSetUser(session);
       setLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
-        validateAndSetUser(session);
-        setLoading(false);
+        void (async () => {
+          await validateAndSetUser(session);
+          setLoading(false);
+        })();
       }
     );
 
