@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Calendar, Image, Link2, Paperclip, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, Calendar, Send, Trash2 } from "lucide-react";
 import { FramerPage } from "@/components/framer/Framer";
 import { StatusBadge } from "@/components/seeding/StatusBadge";
 import { api } from "@/services/seeding/client";
@@ -12,11 +12,12 @@ import {
   OUTPUT_STATUSES,
   PAYMENT_STATUSES,
   formatCurrency,
-  formatDate,
   formatDateTime,
   toDateInputValue,
 } from "@/services/seeding/constants";
-import type { SeedingDealDetail, SeedingDeliverable } from "@/services/seeding/mockData";
+import type { SeedingDealDetail, SeedingDeliverable, SeedingFeedback, SeedingOutput } from "@/services/seeding/mockData";
+import { usePermissions } from "@/hooks/usePermissions";
+import { canonicalRole } from "@/lib/accessModel";
 
 const inputCls = "fglass-input w-full rounded-lg px-3 py-2 text-sm";
 
@@ -33,12 +34,20 @@ function normalizeDealDetail(raw: unknown): SeedingDealDetail {
       ? assetsRaw
       : "";
 
+  const allFeedback: SeedingFeedback[] = body.client_feedback ?? d.general_comments ?? [];
+  const rawOutputs: SeedingOutput[] = body.fulfillment_outputs ?? body.outputs ?? d.outputs ?? [];
+  const outputs = rawOutputs.map((o) => ({
+    ...o,
+    comments: allFeedback.filter((f) => f.output_id && f.output_id === o.output_id),
+  }));
+  const general_comments = allFeedback.filter((f) => !f.output_id);
+
   return {
     ...(d as SeedingDealDetail),
     assets_links,
     deliverables: body.deliverables ?? d.deliverables ?? [],
-    outputs: body.fulfillment_outputs ?? body.outputs ?? d.outputs ?? [],
-    general_comments: body.client_feedback ?? d.general_comments ?? [],
+    outputs,
+    general_comments,
     internal_notes: body.internal_notes ?? d.internal_notes ?? [],
     payment_status: payment?.status ?? d.payment_status ?? "Not Raised",
     payment_due_date: payment?.payment_due_date ?? d.payment_due_date,
@@ -61,18 +70,91 @@ function Section({ title, action, children }: { title: string; action?: ReactNod
   );
 }
 
+function CommentThread({
+  comments,
+  draft,
+  onDraftChange,
+  onPost,
+  posting,
+  placeholder,
+}: {
+  comments: SeedingFeedback[];
+  draft: string;
+  onDraftChange: (v: string) => void;
+  onPost: () => void;
+  posting?: boolean;
+  placeholder: string;
+}) {
+  return (
+    <div style={{ marginTop: 12, borderTop: "1px solid var(--f-line)", paddingTop: 12 }}>
+      {comments.length ? (
+        <div style={{ display: "grid", gap: 8, marginBottom: 10 }}>
+          {comments.map((c) => (
+            <div key={c.feedback_id} style={{ padding: "8px 10px", borderRadius: 8, background: "rgba(255,255,255,0.03)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
+                <span style={{ fontSize: 11, fontWeight: 600, color: "var(--f-ink)" }}>
+                  {c.added_by_name || "Someone"}
+                  {c.added_by_role ? (
+                    <span style={{ color: "var(--f-faint)", fontWeight: 500 }}> · {c.added_by_role}</span>
+                  ) : null}
+                </span>
+                {c.created_at ? (
+                  <span style={{ fontSize: 10, color: "var(--f-faint)", flexShrink: 0 }}>{formatDateTime(c.created_at)}</span>
+                ) : null}
+              </div>
+              <p style={{ fontSize: 13, color: "var(--f-dim)", whiteSpace: "pre-wrap", margin: 0 }}>{c.feedback_text}</p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="seeding-muted" style={{ marginBottom: 8, fontSize: 12 }}>No comments yet.</p>
+      )}
+      <div className="seeding-comment-compose">
+        <textarea
+          className={inputCls}
+          rows={2}
+          placeholder={placeholder}
+          value={draft}
+          onChange={(e) => onDraftChange(e.target.value)}
+        />
+        <div className="seeding-comment-toolbar">
+          <span style={{ fontSize: 11, color: "var(--f-faint)" }}>Comment on this output</span>
+          <button type="button" className="seeding-detail-post" disabled={!draft.trim() || posting} onClick={onPost}>
+            <Send size={13} /> {posting ? "Posting…" : "Post"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SeedingDealDetail() {
   const { dealId } = useParams();
   const [search] = useSearchParams();
+  const { role } = usePermissions();
   const from = search.get("from");
   const backTo = from === "fulfillment" ? "/seeding/fulfillment" : "/seeding/deals";
   const backLabel = from === "fulfillment" ? "Back to fulfillment" : "Back to deals";
 
+  const roleParts = useMemo(
+    () => String(role || "").split(",").map((r) => canonicalRole(r.trim())).filter(Boolean),
+    [role],
+  );
+  const isFulfillment = roleParts.includes("fulfillment");
+  const isBD = roleParts.includes("bd");
+  const isAdmin = roleParts.includes("admin");
+  // Money is BD/admin only — fulfillment must never see Payment / Revenue.
+  const canSeeMoney = !isFulfillment || isAdmin;
+  const canManageOutputs = isFulfillment || isAdmin;
+  const canComment = isBD || isFulfillment || isAdmin;
+
   const [deal, setDeal] = useState<SeedingDealDetail | null>(null);
   const [draft, setDraft] = useState<SeedingDealDetail | null>(null);
   const [comment, setComment] = useState("");
+  const [outputComments, setOutputComments] = useState<Record<string, string>>({});
   const [internalNote, setInternalNote] = useState("");
   const [saving, setSaving] = useState(false);
+  const [posting, setPosting] = useState(false);
 
   const [pages, setPages] = useState<any[]>([]);
   const [showAddDeliv, setShowAddDeliv] = useState(false);
@@ -126,6 +208,22 @@ export default function SeedingDealDetail() {
     setNewOutput({ type: "Writeup", title: "", writeup_text: "", link: "", status: "Draft", visible_to_bd: false });
     setShowAddOutput(false);
     load();
+  };
+
+  const postFeedback = async (outputId: string | null, text: string, clear: () => void) => {
+    if (!dealId || !text.trim()) return;
+    setPosting(true);
+    try {
+      await api.post("/feedback", {
+        deal_id: dealId,
+        output_id: outputId,
+        feedback_text: text.trim(),
+      });
+      clear();
+      await load();
+    } finally {
+      setPosting(false);
+    }
   };
 
   const save = async (patch: Partial<SeedingDealDetail>) => {
@@ -234,7 +332,9 @@ export default function SeedingDealDetail() {
           title={`Deliverables (${draft.deliverables?.length ?? 0})`}
           action={
             <div className="seeding-detail-section-actions">
-              <button type="button" className="seeding-detail-ghost-btn" onClick={() => setShowAddDeliv((v) => !v)}>+ Add</button>
+              {canManageOutputs ? (
+                <button type="button" className="seeding-detail-ghost-btn" onClick={() => setShowAddDeliv((v) => !v)}>+ Add</button>
+              ) : null}
               <select
                 className="seeding-inline-select"
                 value={draft.deal_status || ""}
@@ -245,7 +345,7 @@ export default function SeedingDealDetail() {
             </div>
           }
         >
-          {showAddDeliv && (
+          {showAddDeliv && canManageOutputs && (
             <div className="seeding-surface-nested" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", padding: 12, borderRadius: 12, marginBottom: 12 }}>
               <select className="seeding-inline-select" style={{ flex: "1 1 180px" }} value={newDeliv.page_id} onChange={(e) => setNewDeliv((d) => ({ ...d, page_id: e.target.value }))}>
                 {!pages.length && <option value="">No pages</option>}
@@ -267,9 +367,11 @@ export default function SeedingDealDetail() {
                     <p className="seeding-deliverable-sub">Go live {formatDateTime(del.go_live_date_time)}</p>
                   </div>
                   <div className="seeding-deliverable-head-actions">
-                    <button type="button" className="seeding-detail-icon-btn" aria-label="Remove deliverable" onClick={() => removeDeliverable(del.deliverable_id)}>
-                      <Trash2 size={14} />
-                    </button>
+                    {canManageOutputs ? (
+                      <button type="button" className="seeding-detail-icon-btn" aria-label="Remove deliverable" onClick={() => removeDeliverable(del.deliverable_id)}>
+                        <Trash2 size={14} />
+                      </button>
+                    ) : null}
                     <select
                       className="seeding-inline-select"
                       value={del.status}
@@ -320,8 +422,18 @@ export default function SeedingDealDetail() {
           </div>
         </Section>
 
-        <Section title={`Outputs & changes (${draft.outputs?.length ?? 0})`} action={<button type="button" className="seeding-detail-ghost-btn" onClick={() => setShowAddOutput((v) => !v)}>+ Add output</button>}>
-          {showAddOutput && (
+        <Section
+          title={`Outputs & changes (${draft.outputs?.length ?? 0})`}
+          action={canManageOutputs ? (
+            <button type="button" className="seeding-detail-ghost-btn" onClick={() => setShowAddOutput((v) => !v)}>+ Add output</button>
+          ) : undefined}
+        >
+          {isBD && !isAdmin ? (
+            <p className="seeding-detail-hint" style={{ marginBottom: 10 }}>
+              Comment on each output below (like Frame.io). Fulfillment shares items when they mark them visible to BD.
+            </p>
+          ) : null}
+          {showAddOutput && canManageOutputs && (
             <div className="seeding-surface-nested" style={{ display: "grid", gap: 8, padding: 14, borderRadius: 12, marginBottom: 12 }}>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <select className="seeding-inline-select" style={{ flex: "1 1 160px" }} value={newOutput.type} onChange={(e) => setNewOutput((o) => ({ ...o, type: e.target.value }))}>
@@ -344,20 +456,38 @@ export default function SeedingDealDetail() {
             </div>
           )}
           {!draft.outputs?.length ? (
-            <p className="seeding-muted">No outputs yet — add the first one above.</p>
+            <p className="seeding-muted">
+              {isBD && !isAdmin
+                ? "No outputs shared with you yet — fulfillment will mark items Visible to BD."
+                : "No outputs yet — add the first one above."}
+            </p>
           ) : (
             <div style={{ display: "grid", gap: 8 }}>
-              {(draft.outputs as any[]).map((o) => (
+              {(draft.outputs as SeedingOutput[]).map((o) => (
                 <article key={o.output_id} className="seeding-surface-nested" style={{ padding: 14, borderRadius: 12 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 600 }}>{o.title}</div>
-                      <div style={{ fontSize: 11, color: "var(--f-faint)", marginTop: 2 }}>{o.output_type}{o.visible_to_bd ? " · visible to BD" : ""}</div>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>{o.title || o.label}</div>
+                      <div style={{ fontSize: 11, color: "var(--f-faint)", marginTop: 2 }}>
+                        {o.output_type}{o.visible_to_bd ? " · visible to BD" : ""}
+                        {(o.comments?.length ?? 0) > 0 ? ` · ${o.comments!.length} comment${o.comments!.length === 1 ? "" : "s"}` : ""}
+                      </div>
                     </div>
                     <StatusBadge status={o.status} />
                   </div>
                   {o.link ? <a href={o.link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "var(--accent-2)", display: "inline-block", marginTop: 8, wordBreak: "break-all" }}>{o.link}</a> : null}
                   {o.writeup_text ? <p style={{ fontSize: 12, color: "var(--f-dim)", marginTop: 8, whiteSpace: "pre-wrap" }}>{o.writeup_text}</p> : null}
+                  {canComment ? (
+                    <CommentThread
+                      comments={o.comments || []}
+                      draft={outputComments[o.output_id] || ""}
+                      onDraftChange={(v) => setOutputComments((prev) => ({ ...prev, [o.output_id]: v }))}
+                      posting={posting}
+                      placeholder="Leave feedback on this output…"
+                      onPost={() => postFeedback(o.output_id, outputComments[o.output_id] || "", () =>
+                        setOutputComments((prev) => ({ ...prev, [o.output_id]: "" })))}
+                    />
+                  ) : null}
                 </article>
               ))}
             </div>
@@ -368,106 +498,129 @@ export default function SeedingDealDetail() {
           <p className="seeding-detail-hint">
             For comments that aren&apos;t about a specific output. Most client feedback should live on the output card above.
           </p>
-          {!draft.general_comments?.length ? (
-            <p className="seeding-muted">No general comments.</p>
-          ) : null}
-          <div className="seeding-comment-compose">
-            <textarea
-              className={inputCls}
-              rows={3}
-              placeholder="Add a general comment about this deal…"
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-            />
-            <div className="seeding-comment-toolbar">
-              <span><Image size={14} /> Image</span>
-              <span><Paperclip size={14} /> File</span>
-              <span><Link2 size={14} /> Link</span>
-              <button type="button" className="seeding-detail-post" disabled={!comment.trim()}>
-                <Send size={13} /> Post
-              </button>
+          {(draft.general_comments || []).length ? (
+            <div style={{ display: "grid", gap: 8, marginBottom: 10 }}>
+              {(draft.general_comments || []).map((c) => (
+                <div key={c.feedback_id} style={{ padding: "8px 10px", borderRadius: 8, background: "rgba(255,255,255,0.03)" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 4 }}>
+                    {c.added_by_name || "Someone"}
+                    {c.added_by_role ? <span style={{ color: "var(--f-faint)", fontWeight: 500 }}> · {c.added_by_role}</span> : null}
+                  </div>
+                  <p style={{ fontSize: 13, color: "var(--f-dim)", whiteSpace: "pre-wrap", margin: 0 }}>{c.feedback_text}</p>
+                </div>
+              ))}
             </div>
-          </div>
-        </Section>
-
-        <Section title="Payment">
-          <div className="seeding-detail-form seeding-detail-form--row">
-            <label className="seeding-detail-field">
-              <span>Status</span>
-              <select
-                className="seeding-inline-select"
-                value={draft.payment_status || "Not Raised"}
-                onChange={(e) => save({ payment_status: e.target.value })}
-              >
-                {PAYMENT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </label>
-            <label className="seeding-detail-field">
-              <span>Due date</span>
-              <input
-                type="date"
+          ) : (
+            <p className="seeding-muted">No general comments.</p>
+          )}
+          {canComment ? (
+            <div className="seeding-comment-compose">
+              <textarea
                 className={inputCls}
-                value={toDateInputValue(draft.payment_due_date)}
-                onChange={(e) => save({ payment_due_date: e.target.value ? `${e.target.value}T00:00:00` : undefined })}
+                rows={3}
+                placeholder="Add a general comment about this deal…"
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
               />
-            </label>
-            <label className="seeding-detail-field">
-              <span>Amount received</span>
-              <input
-                type="number"
-                className={inputCls}
-                value={draft.amount_received ?? 0}
-                onChange={(e) => setDraft({ ...draft, amount_received: Number(e.target.value) || 0 })}
-                onBlur={() => save({ amount_received: draft.amount_received ?? 0 })}
-              />
-            </label>
-            {draft.payment_updated_by ? (
-              <div className="seeding-detail-field">
-                <span>Last updated by</span>
-                <p className="seeding-detail-static">{draft.payment_updated_by}</p>
-                <p className="seeding-detail-static-sub">{formatDateTime(draft.payment_updated_at)}</p>
+              <div className="seeding-comment-toolbar">
+                <span style={{ fontSize: 11, color: "var(--f-faint)" }}>Deal-level only</span>
+                <button
+                  type="button"
+                  className="seeding-detail-post"
+                  disabled={!comment.trim() || posting}
+                  onClick={() => postFeedback(null, comment, () => setComment(""))}
+                >
+                  <Send size={13} /> {posting ? "Posting…" : "Post"}
+                </button>
               </div>
-            ) : null}
-          </div>
-          <label className="seeding-detail-field seeding-detail-field--full" style={{ marginTop: 12 }}>
-            <span>Payment notes</span>
-            <textarea
-              className={inputCls}
-              rows={3}
-              placeholder="Add payment notes…"
-              value={draft.payment_notes || ""}
-              onChange={(e) => setDraft({ ...draft, payment_notes: e.target.value })}
-              onBlur={() => save({ payment_notes: draft.payment_notes })}
-            />
-          </label>
+            </div>
+          ) : null}
         </Section>
 
-        <Section title="Revenue">
-          <label className="seeding-detail-field">
-            <span>Closed at</span>
-            <input
-              type="number"
-              className={inputCls}
-              value={draft.price_closed_at}
-              onChange={(e) => setDraft({ ...draft, price_closed_at: Number(e.target.value) || 0 })}
-              onBlur={() => save({ price_closed_at: draft.price_closed_at })}
-            />
-            <span className="seeding-price-hint">{formatCurrency(draft.price_closed_at)}</span>
-          </label>
-        </Section>
+        {canSeeMoney ? (
+          <>
+            <Section title="Payment">
+              <div className="seeding-detail-form seeding-detail-form--row">
+                <label className="seeding-detail-field">
+                  <span>Status</span>
+                  <select
+                    className="seeding-inline-select"
+                    value={draft.payment_status || "Not Raised"}
+                    onChange={(e) => save({ payment_status: e.target.value })}
+                  >
+                    {PAYMENT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </label>
+                <label className="seeding-detail-field">
+                  <span>Due date</span>
+                  <input
+                    type="date"
+                    className={inputCls}
+                    value={toDateInputValue(draft.payment_due_date)}
+                    onChange={(e) => save({ payment_due_date: e.target.value ? `${e.target.value}T00:00:00` : undefined })}
+                  />
+                </label>
+                <label className="seeding-detail-field">
+                  <span>Amount received</span>
+                  <input
+                    type="number"
+                    className={inputCls}
+                    value={draft.amount_received ?? 0}
+                    onChange={(e) => setDraft({ ...draft, amount_received: Number(e.target.value) || 0 })}
+                    onBlur={() => save({ amount_received: draft.amount_received ?? 0 })}
+                  />
+                </label>
+                {draft.payment_updated_by ? (
+                  <div className="seeding-detail-field">
+                    <span>Last updated by</span>
+                    <p className="seeding-detail-static">{draft.payment_updated_by}</p>
+                    <p className="seeding-detail-static-sub">{formatDateTime(draft.payment_updated_at)}</p>
+                  </div>
+                ) : null}
+              </div>
+              <label className="seeding-detail-field seeding-detail-field--full" style={{ marginTop: 12 }}>
+                <span>Payment notes</span>
+                <textarea
+                  className={inputCls}
+                  rows={3}
+                  placeholder="Add payment notes…"
+                  value={draft.payment_notes || ""}
+                  onChange={(e) => setDraft({ ...draft, payment_notes: e.target.value })}
+                  onBlur={() => save({ payment_notes: draft.payment_notes })}
+                />
+              </label>
+            </Section>
 
-        <Section title="Internal notes (fulfillment + admin only)">
-          {!draft.internal_notes?.length ? <p className="seeding-muted">No notes.</p> : null}
-          <div className="seeding-internal-note-row">
-            <input
-              className={inputCls}
-              placeholder="Add an internal note…"
-              value={internalNote}
-              onChange={(e) => setInternalNote(e.target.value)}
-            />
-            <button type="button" className="seeding-detail-save seeding-detail-save--compact">Add</button>
-          </div>
-        </Section>
+            <Section title="Revenue">
+              <label className="seeding-detail-field">
+                <span>Closed at</span>
+                <input
+                  type="number"
+                  className={inputCls}
+                  value={draft.price_closed_at}
+                  onChange={(e) => setDraft({ ...draft, price_closed_at: Number(e.target.value) || 0 })}
+                  onBlur={() => save({ price_closed_at: draft.price_closed_at })}
+                />
+                <span className="seeding-price-hint">{formatCurrency(draft.price_closed_at)}</span>
+              </label>
+            </Section>
+          </>
+        ) : null}
+
+        {(isFulfillment || isAdmin) ? (
+          <Section title="Internal notes (fulfillment + admin only)">
+            {!draft.internal_notes?.length ? <p className="seeding-muted">No notes.</p> : null}
+            <div className="seeding-internal-note-row">
+              <input
+                className={inputCls}
+                placeholder="Add an internal note…"
+                value={internalNote}
+                onChange={(e) => setInternalNote(e.target.value)}
+              />
+              <button type="button" className="seeding-detail-save seeding-detail-save--compact">Add</button>
+            </div>
+          </Section>
+        ) : null}
       </div>
     </FramerPage>
   );

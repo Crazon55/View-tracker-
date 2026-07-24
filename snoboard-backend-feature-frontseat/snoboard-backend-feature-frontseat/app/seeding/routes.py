@@ -378,8 +378,11 @@ async def require_admin(user: dict):
 def scrub_deal_for_user(deal: dict, user: dict) -> dict:
     """Remove restricted fields based on role. Fulfillment cannot see price/payment."""
     if user.get("role") == "fulfillment":
-        d = {k: v for k, v in deal.items() if k not in {"price_closed_at", "payment"}}
-        return d
+        money = {
+            "price_closed_at", "payment", "payment_status", "payment_due_date",
+            "amount_received", "payment_notes", "payment_updated_by", "payment_updated_at",
+        }
+        return {k: v for k, v in deal.items() if k not in money}
     return deal
 
 

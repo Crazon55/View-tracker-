@@ -41,10 +41,34 @@ export type SeedingDeliverable = {
   assigned_to?: string;
 };
 
+export type SeedingFeedback = {
+  feedback_id: string;
+  deal_id?: string;
+  output_id?: string | null;
+  feedback_text: string;
+  added_by_name?: string;
+  added_by_role?: string;
+  added_by_team?: string;
+  created_at?: string;
+  status?: string;
+};
+
+export type SeedingOutput = {
+  output_id: string;
+  title?: string;
+  label?: string;
+  output_type?: string;
+  writeup_text?: string;
+  link?: string;
+  status: string;
+  visible_to_bd?: boolean;
+  comments?: SeedingFeedback[];
+};
+
 export type SeedingDealDetail = SeedingDeal & {
   deliverables?: SeedingDeliverable[];
-  outputs?: { output_id: string; label: string; status: string }[];
-  general_comments?: { comment_id: string; text: string; author?: string; created_at?: string }[];
+  outputs?: SeedingOutput[];
+  general_comments?: SeedingFeedback[];
   internal_notes?: { note_id: string; text: string; author?: string; created_at?: string }[];
 };
 
@@ -235,6 +259,7 @@ const MOCK_DELIVERABLES: Record<string, SeedingDeliverable[]> = {
 
 // Outputs added via the deal detail page, keyed by deal_id (mock-mode only).
 const MOCK_OUTPUTS: Record<string, any[]> = {};
+const MOCK_FEEDBACK: Record<string, any[]> = {};
 
 function enrichDeal(deal: SeedingDeal): SeedingDealDetail {
   const extras: Partial<SeedingDealDetail> = {};
@@ -435,6 +460,23 @@ export function mockSeedingPost<T>(path: string, body: Record<string, unknown>):
     return output as T;
   }
 
+  // Output / deal comments — POST /feedback
+  if (clean === "/feedback") {
+    const dealId = String(body.deal_id || "");
+    const fb = {
+      feedback_id: `fb_${Math.random().toString(36).slice(2, 10)}`,
+      deal_id: dealId,
+      output_id: (body.output_id as string | null | undefined) ?? null,
+      feedback_text: String(body.feedback_text || ""),
+      added_by_name: "You",
+      added_by_role: "bd",
+      created_at: new Date().toISOString(),
+      status: "Open",
+    };
+    (MOCK_FEEDBACK[dealId] ??= []).push(fb);
+    return fb as T;
+  }
+
   if (clean === "/pages") {
     const page = {
       page_id: `page_${Math.random().toString(36).slice(2, 10)}`,
@@ -549,12 +591,13 @@ export function mockSeedingGet<T>(path: string, params?: Record<string, unknown>
     const deal = MOCK_DEALS.find((d) => d.deal_id === dealMatch[1]);
     if (!deal) return null as T;
     const detail = enrichDeal(deal);
+    const feedback = MOCK_FEEDBACK[deal.deal_id] || detail.general_comments || [];
     // Match live API envelope so the deal detail page unwraps consistently.
     return {
       deal: detail,
       deliverables: detail.deliverables || [],
       fulfillment_outputs: detail.outputs || [],
-      client_feedback: detail.general_comments || [],
+      client_feedback: feedback,
       payment: {
         status: detail.payment_status || "Not Raised",
         payment_due_date: detail.payment_due_date,
