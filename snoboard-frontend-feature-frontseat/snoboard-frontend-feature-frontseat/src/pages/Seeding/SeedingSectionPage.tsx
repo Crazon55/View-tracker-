@@ -138,13 +138,17 @@ export default function SeedingSectionPage() {
   }, [users, fsosUsers]);
 
   const handleFsosRoleSaved = useCallback((email: string, role: string | null, name: string) => {
+    const key = email.trim().toLowerCase();
     setFsosUsers((prev) => {
-      const key = email.trim().toLowerCase();
       const others = prev.filter((u) => String(u.email).trim().toLowerCase() !== key);
       if (!role) return others;
       const existingName = prev.find((u) => String(u.email).trim().toLowerCase() === key)?.name || name;
       return [...others, { email, name: existingName, role }];
     });
+    if (!role) {
+      // Drop from seeding list too so trash actually clears the row.
+      setUsers((prev) => prev.filter((u) => String(u.email || "").trim().toLowerCase() !== key));
+    }
   }, []);
 
   const dealEmpty = section === "approvals" ? "No briefs waiting for approval." : "Nothing here.";

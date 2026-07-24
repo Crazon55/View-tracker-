@@ -1493,12 +1493,24 @@ async def _remove_user_role_impl(email: str):
     client = get_supabase_client()
     normalized = email.strip().lower()
     existing = client.table("user_roles").select("id,email").eq("email", normalized).execute().data
-    if not existing:
-        raise HTTPException(status_code=404, detail="User not found")
-    result = client.table("user_roles").delete().eq("email", normalized).execute()
-    if getattr(result, "error", None):
-        raise HTTPException(status_code=500, detail=str(result.error))
-    return {"success": True, "data": {"email": normalized}}
+    removed_role = False
+    if existing:
+        result = client.table("user_roles").delete().eq("email", normalized).execute()
+        if getattr(result, "error", None):
+            raise HTTPException(status_code=500, detail=str(result.error))
+        removed_role = True
+    # Always clear per-person access matrix so removed people don't keep ghost access.
+    try:
+        access = _read_user_access()
+        if normalized in access:
+            del access[normalized]
+            _write_user_access(access)
+    except Exception:
+        pass
+    if not removed_role and not existing:
+        # Still OK — caller may be removing a seeding-only / access-only entry.
+        return {"success": True, "data": {"email": normalized, "role_removed": False}}
+    return {"success": True, "data": {"email": normalized, "role_removed": removed_role}}
 
 
 # --- Idea Thread: Assignments + Comments ---

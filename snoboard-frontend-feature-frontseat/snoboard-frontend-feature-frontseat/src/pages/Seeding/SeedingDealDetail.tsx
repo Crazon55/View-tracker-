@@ -157,6 +157,8 @@ export default function SeedingDealDetail() {
   const [posting, setPosting] = useState(false);
 
   const [pages, setPages] = useState<any[]>([]);
+  const [assignees, setAssignees] = useState<{ user_id: string; name: string; email?: string }[]>([]);
+  const [delivsView, setDelivsView] = useState<"see" | "close">("see");
   const [showAddDeliv, setShowAddDeliv] = useState(false);
   const [newDeliv, setNewDeliv] = useState({ page_id: "", deliverable_type: "Reel", quantity: 1 });
   const [showAddOutput, setShowAddOutput] = useState(false);
@@ -176,6 +178,9 @@ export default function SeedingDealDetail() {
       setPages(data || []);
       setNewDeliv((d) => (d.page_id ? d : { ...d, page_id: (data || [])[0]?.page_id || "" }));
     }).catch(() => {});
+    api.get<{ user_id: string; name: string; email?: string }[]>("/users/fulfillment")
+      .then(({ data }) => setAssignees(data || []))
+      .catch(() => setAssignees([]));
   }, []);
 
   const addDeliverables = async () => {
@@ -258,6 +263,19 @@ export default function SeedingDealDetail() {
     });
   };
 
+  const saveDeliverable = async (id: string, patch: Record<string, unknown>) => {
+    try {
+      await api.put(`/deliverables/${id}`, patch);
+      await load();
+    } catch (err: any) {
+      window.alert(err?.message || "Couldn't save deliverable");
+      await load();
+    }
+  };
+
+  const assigneeId = (del: SeedingDeliverable) =>
+    del.assigned_fulfillment_user_id || del.assigned_to || "";
+
   if (!deal || !draft) {
     return (
       <FramerPage>
@@ -332,6 +350,15 @@ export default function SeedingDealDetail() {
           title={`Deliverables (${draft.deliverables?.length ?? 0})`}
           action={
             <div className="seeding-detail-section-actions">
+              <select
+                className="seeding-inline-select"
+                value={delivsView}
+                onChange={(e) => setDelivsView(e.target.value as "see" | "close")}
+                title="Show or hide deliverable cards"
+              >
+                <option value="see">See</option>
+                <option value="close">Close</option>
+              </select>
               {canManageOutputs ? (
                 <button type="button" className="seeding-detail-ghost-btn" onClick={() => setShowAddDeliv((v) => !v)}>+ Add</button>
               ) : null}
@@ -345,6 +372,10 @@ export default function SeedingDealDetail() {
             </div>
           }
         >
+          {delivsView === "close" ? (
+            <p className="seeding-muted">Deliverables closed — switch to See to expand.</p>
+          ) : (
+            <>
           {showAddDeliv && canManageOutputs && (
             <div className="seeding-surface-nested" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", padding: 12, borderRadius: 12, marginBottom: 12 }}>
               <select className="seeding-inline-select" style={{ flex: "1 1 180px" }} value={newDeliv.page_id} onChange={(e) => setNewDeliv((d) => ({ ...d, page_id: e.target.value }))}>
@@ -375,7 +406,11 @@ export default function SeedingDealDetail() {
                     <select
                       className="seeding-inline-select"
                       value={del.status}
-                      onChange={(e) => updateDeliverable(del.deliverable_id, { status: e.target.value })}
+                      onChange={(e) => {
+                        const status = e.target.value;
+                        updateDeliverable(del.deliverable_id, { status });
+                        saveDeliverable(del.deliverable_id, { status });
+                      }}
                     >
                       {DELIVERABLE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                     </select>
@@ -389,12 +424,14 @@ export default function SeedingDealDetail() {
                         className={inputCls}
                         value={del.live_link || ""}
                         onChange={(e) => updateDeliverable(del.deliverable_id, { live_link: e.target.value })}
+                        onBlur={(e) => saveDeliverable(del.deliverable_id, { live_link: e.target.value })}
                       />
                       <input
                         className={`${inputCls} seeding-views-input`}
                         type="number"
                         value={del.views ?? 0}
                         onChange={(e) => updateDeliverable(del.deliverable_id, { views: Number(e.target.value) || 0 })}
+                        onBlur={(e) => saveDeliverable(del.deliverable_id, { views: Number(e.target.value) || 0 })}
                       />
                     </div>
                   </label>
@@ -404,22 +441,37 @@ export default function SeedingDealDetail() {
                       className={inputCls}
                       value={del.notes || ""}
                       onChange={(e) => updateDeliverable(del.deliverable_id, { notes: e.target.value })}
+                      onBlur={(e) => saveDeliverable(del.deliverable_id, { notes: e.target.value })}
                     />
                   </label>
                   <label className="seeding-detail-field">
                     <span>Assignment</span>
                     <select
                       className="seeding-inline-select"
-                      value={del.assigned_to || ""}
-                      onChange={(e) => updateDeliverable(del.deliverable_id, { assigned_to: e.target.value })}
+                      value={assigneeId(del)}
+                      onChange={(e) => {
+                        const assigned_fulfillment_user_id = e.target.value || null;
+                        updateDeliverable(del.deliverable_id, {
+                          assigned_fulfillment_user_id: assigned_fulfillment_user_id || "",
+                          assigned_to: assigned_fulfillment_user_id || "",
+                        });
+                        saveDeliverable(del.deliverable_id, { assigned_fulfillment_user_id });
+                      }}
                     >
                       <option value="">Unassigned</option>
+                      {assignees.map((u) => (
+                        <option key={u.user_id} value={u.user_id}>
+                          {u.name || u.email || u.user_id}
+                        </option>
+                      ))}
                     </select>
                   </label>
                 </div>
               </article>
             ))}
           </div>
+            </>
+          )}
         </Section>
 
         <Section

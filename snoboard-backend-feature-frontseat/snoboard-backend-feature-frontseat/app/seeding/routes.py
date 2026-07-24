@@ -466,6 +466,8 @@ class DeliverableUpdate(BaseModel):
     views: Optional[int] = None
     notes: Optional[str] = None
     assigned_fulfillment_user_id: Optional[str] = None
+    # Frontend alias — mapped in update_deliverable
+    assigned_to: Optional[str] = None
 
 
 class DeliverableAdd(BaseModel):
@@ -656,18 +658,104 @@ async def auth_logout(request: Request, response: Response):
 @api.get("/users")
 async def list_users(user: dict = Depends(get_current_user)):
     await require_role(user, ["admin"])
-    users = await db.users.find({}, {"_id": 0}).to_list(1000)
+    users = await db.users.find({"active": {"$ne": False}}, {"_id": 0}).to_list(1000)
     return users
 
 
 @api.get("/users/fulfillment")
 async def list_fulfillment_users(user: dict = Depends(get_current_user)):
-    await require_role(user, ["admin", "fulfillment"])
-    users = await db.users.find(
-        {"role": "fulfillment", "active": True},
-        {"_id": 0, "user_id": 1, "name": 1, "email": 1},
-    ).to_list(100)
-    return users
+    """People who can be assigned to deliverables (fulfillment + production roles)."""
+    await require_role(user, ["admin", "fulfillment", "bd"])
+    assignable_roles = {
+        "fulfillment", "ve", "cw", "cs", "co", "editors", "design",
+        "carousel_designer", "content_ops_intern", "senior_cs",
+    }
+    by_email: Dict[str, dict] = {}
+
+    seeding = await db.users.find(
+        {"active": {"$ne": False}, "role": {"$in": ["fulfillment", "admin"]}},
+        {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1},
+    ).to_list(200)
+    for u in seeding:
+        em = (u.get("email") or "").strip().lower()
+        if not em:
+            continue
+        if u.get("role") == "admin":
+            continue
+        by_email[em] = {
+            "user_id": u["user_id"],
+            "name": u.get("name") or em.split("@")[0],
+            "email": em,
+            "role": u.get("role") or "fulfillment",
+        }
+
+    # Pull FSOS roster so people like Arohi show up once they have a production role.
+    try:
+        from app.database.client import get_supabase_client
+        rows = get_supabase_client().table("user_roles").select("email,name,role").execute().data or []
+    except Exception as e:
+        logger.warning("list_fulfillment_users FSOS lookup failed: %s", e)
+        rows = []
+
+    for r in rows:
+        em = (r.get("email") or "").strip().lower()
+        if not em:
+            continue
+        parts = [p.strip().lower() for p in str(r.get("role") or "").split(",") if p.strip()]
+        if not any(p in assignable_roles for p in parts):
+            continue
+        existing = by_email.get(em)
+        display = (r.get("name") or (existing or {}).get("name") or em.split("@")[0]).strip()
+        if existing:
+            existing["name"] = display or existing["name"]
+            existing["role"] = ",".join(parts)
+            continue
+        # Ensure a seeding profile exists so assigned_fulfillment_user_id FK is valid.
+        doc = await db.users.find_one({"email": em}, {"_id": 0})
+        if not doc:
+            uid = new_id("user")
+            doc = {
+                "user_id": uid,
+                "email": em,
+                "name": display,
+                "role": "fulfillment",
+                "business_team_id": None,
+                "active": True,
+                "created_at": now_iso(),
+                "updated_at": now_iso(),
+            }
+            try:
+                await db.users.insert_one(dict(doc))
+            except Exception as e:
+                logger.warning("Could not provision seeding user %s: %s", em, e)
+                continue
+        elif doc.get("active") is False:
+            await db.users.update_one({"user_id": doc["user_id"]}, {"$set": {"active": True, "updated_at": now_iso()}})
+        by_email[em] = {
+            "user_id": doc["user_id"],
+            "name": display or doc.get("name") or em.split("@")[0],
+            "email": em,
+            "role": ",".join(parts) or "fulfillment",
+        }
+
+    return sorted(by_email.values(), key=lambda x: (x.get("name") or "").lower())
+
+
+@api.delete("/users/by-email")
+async def deactivate_user_by_email(email: str, user: dict = Depends(get_current_user)):
+    """Soft-remove a seeding workspace user (Users & Roles trash)."""
+    await require_admin(user)
+    normalized = (email or "").strip().lower()
+    if not normalized:
+        raise HTTPException(400, "email required")
+    existing = await db.users.find_one({"email": normalized}, {"_id": 0})
+    if not existing:
+        return {"ok": True, "email": normalized, "seeding": False}
+    await db.users.update_one(
+        {"user_id": existing["user_id"]},
+        {"$set": {"active": False, "updated_at": now_iso()}},
+    )
+    return {"ok": True, "email": normalized, "seeding": True}
 
 
 @api.put("/users/{user_id}/assign")
@@ -1276,9 +1364,17 @@ async def delete_deliverable(deliverable_id: str, user: dict = Depends(get_curre
 @api.put("/deliverables/{deliverable_id}")
 async def update_deliverable(deliverable_id: str, payload: DeliverableUpdate, user: dict = Depends(get_current_user)):
     await require_role(user, ["admin", "fulfillment"])
-    upd = {k: v for k, v in payload.model_dump().items() if v is not None}
+    raw = payload.model_dump(exclude_unset=True)
+    # Accept assigned_to as alias; empty string clears assignment.
+    if "assigned_to" in raw:
+        raw["assigned_fulfillment_user_id"] = raw.pop("assigned_to") or None
+    if "assigned_fulfillment_user_id" in raw and raw["assigned_fulfillment_user_id"] == "":
+        raw["assigned_fulfillment_user_id"] = None
+    upd = {k: v for k, v in raw.items() if k != "assigned_to"}
     if not upd:
         raise HTTPException(400, "No fields to update")
+    if "status" in upd and upd["status"] not in DELIVERABLE_STATUSES:
+        raise HTTPException(400, f"Invalid status: {upd['status']}")
     upd["updated_at"] = now_iso()
     res = await db.deliverables.update_one({"deliverable_id": deliverable_id}, {"$set": upd})
     if res.matched_count == 0:

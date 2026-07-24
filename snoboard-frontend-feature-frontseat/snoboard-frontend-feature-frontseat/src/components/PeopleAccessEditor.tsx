@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { getUserAccess, setUserAccess, setUserRole, deleteUserRole } from "@/services/api";
+import { api as seedingApi } from "@/services/seeding/client";
 import { StatusBadge } from "@/components/seeding/StatusBadge";
 import { AccessMatrix } from "@/components/AccessMatrix";
 import { ALL_ROLES, AREA_KEYS, resolvePersonAccess, type AreaKey, type AreaLevel } from "@/lib/accessModel";
@@ -119,9 +120,27 @@ export function PeopleAccessEditor({
     onError: () => toast.error("Failed to save"),
   });
 
-  const del = (p: Person) => {
+  const del = async (p: Person) => {
     if (!window.confirm(`Remove ${p.name || p.email}'s role & access?`)) return;
-    deleteUserRole(p.email).then(() => onRoleChanged(p.email, null, p.name)).catch(() => toast.error("Failed to remove"));
+    const email = p.email;
+    try {
+      await deleteUserRole(email);
+    } catch (err: any) {
+      // Backend now treats missing FSOS role as success; keep going for seeding cleanup.
+      const msg = String(err?.message || "");
+      if (!/not found/i.test(msg)) {
+        toast.error(msg || "Failed to remove role");
+        return;
+      }
+    }
+    try {
+      await setUserAccess(email, {});
+    } catch { /* optional */ }
+    try {
+      await seedingApi.delete(`/users/by-email?email=${encodeURIComponent(email)}`);
+    } catch { /* seeding profile may not exist */ }
+    onRoleChanged(email, null, p.name);
+    toast.success(`Removed ${p.name || email}`);
   };
 
   return (

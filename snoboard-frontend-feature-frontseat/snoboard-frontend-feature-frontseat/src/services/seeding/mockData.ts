@@ -39,6 +39,7 @@ export type SeedingDeliverable = {
   views?: number;
   notes?: string;
   assigned_to?: string;
+  assigned_fulfillment_user_id?: string;
 };
 
 export type SeedingFeedback = {
@@ -528,14 +529,33 @@ export function mockSeedingPost<T>(path: string, body: Record<string, unknown>):
 }
 
 export function mockSeedingPatch<T>(path: string, body: Record<string, unknown>): T {
-  const pageMatch = path.split("?")[0].match(/^\/pages\/([^/]+)$/);
+  const clean = path.split("?")[0];
+  const pageMatch = clean.match(/^\/pages\/([^/]+)$/);
   if (pageMatch) {
     const idx = MOCK_PAGES.findIndex((p) => p.page_id === pageMatch[1]);
     if (idx < 0) throw new Error("Page not found");
     MOCK_PAGES[idx] = { ...MOCK_PAGES[idx], ...body } as (typeof MOCK_PAGES)[number];
     return MOCK_PAGES[idx] as T;
   }
-  const dealMatch = path.match(/^\/deals\/([^/]+)$/);
+  const delivMatch = clean.match(/^\/deliverables\/([^/]+)$/);
+  if (delivMatch) {
+    for (const dealId of Object.keys(MOCK_DELIVERABLES)) {
+      const rows = MOCK_DELIVERABLES[dealId];
+      const idx = rows.findIndex((d) => d.deliverable_id === delivMatch[1]);
+      if (idx >= 0) {
+        const assigned = body.assigned_fulfillment_user_id ?? body.assigned_to;
+        rows[idx] = {
+          ...rows[idx],
+          ...body,
+          assigned_fulfillment_user_id: assigned === null || assigned === "" ? undefined : String(assigned ?? rows[idx].assigned_fulfillment_user_id || ""),
+          assigned_to: assigned === null || assigned === "" ? "" : String(assigned ?? rows[idx].assigned_to || ""),
+        } as SeedingDeliverable;
+        return rows[idx] as T;
+      }
+    }
+    throw new Error("Deliverable not found");
+  }
+  const dealMatch = clean.match(/^\/deals\/([^/]+)$/);
   if (dealMatch) {
     const idx = MOCK_DEALS.findIndex((d) => d.deal_id === dealMatch[1]);
     if (idx >= 0) {
@@ -549,6 +569,9 @@ export function mockSeedingPatch<T>(path: string, body: Record<string, unknown>)
 
 export function mockSeedingDelete<T>(path: string): T {
   const clean = path.split("?")[0];
+  if (clean === "/users/by-email") {
+    return { ok: true } as T;
+  }
   const pageMatch = clean.match(/^\/pages\/([^/]+)$/);
   if (pageMatch) {
     const idx = MOCK_PAGES.findIndex((p) => p.page_id === pageMatch[1]);
@@ -586,6 +609,14 @@ export function mockSeedingGet<T>(path: string, params?: Record<string, unknown>
     return pages as T;
   }
   if (clean === "/users") return MOCK_SEEDING_USERS as T;
+  if (clean === "/users/fulfillment") {
+    return MOCK_SEEDING_USERS.filter((u) => u.role === "fulfillment" || !u.role).map((u) => ({
+      user_id: u.user_id,
+      name: u.name,
+      email: u.email,
+      role: u.role || "fulfillment",
+    })) as T;
+  }
   const dealMatch = clean.match(/^\/deals\/([^/]+)$/);
   if (dealMatch) {
     const deal = MOCK_DEALS.find((d) => d.deal_id === dealMatch[1]);
