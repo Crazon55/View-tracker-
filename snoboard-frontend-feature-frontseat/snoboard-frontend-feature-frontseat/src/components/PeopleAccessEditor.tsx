@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { getUserAccess, setUserAccess, setUserRole, deleteUserRole } from "@/services/api";
 import { StatusBadge } from "@/components/seeding/StatusBadge";
 import { AccessMatrix } from "@/components/AccessMatrix";
-import { ALL_ROLES, AREA_KEYS, resolveRoleAccess, type AreaKey, type AreaLevel } from "@/lib/accessModel";
+import { ALL_ROLES, AREA_KEYS, resolvePersonAccess, type AreaKey, type AreaLevel } from "@/lib/accessModel";
 
 type Person = { name: string; email: string; seeding_role?: string | null; fsos_role?: string | null };
 
@@ -25,6 +25,17 @@ function parseRoles(roleStr: string | null | undefined): string[] {
 
 function rolesKey(roles: string[]): string {
   return [...roles].sort().join(",");
+}
+
+/** A prior bug saved multi-role as all-none. Ignore that so role defaults show. */
+function isBlankAllNone(
+  saved: Partial<Record<AreaKey, AreaLevel>> | undefined,
+  roleDefaults: Record<AreaKey, AreaLevel>,
+): boolean {
+  if (!saved || !Object.keys(saved).length) return true;
+  const savedAllNone = AREA_KEYS.every((k) => (saved[k] ?? "none") === "none");
+  const roleHasAccess = AREA_KEYS.some((k) => roleDefaults[k] !== "none");
+  return savedAllNone && roleHasAccess;
 }
 
 export function PeopleAccessEditor({
@@ -52,9 +63,11 @@ export function PeopleAccessEditor({
     const k = key(p.email);
     if (draft[k]) return draft[k];
     const role = roleStrFor(p) || "pending";
+    // Multi-role must use resolvePersonAccess (comma-join is not a single role key).
+    const roleDefaults = resolvePersonAccess(role, null);
     const saved = userAccess[k];
-    if (saved && Object.keys(saved).length) return { ...resolveRoleAccess(role), ...saved };
-    return resolveRoleAccess(role);
+    if (isBlankAllNone(saved, roleDefaults)) return roleDefaults;
+    return resolvePersonAccess(role, saved);
   };
 
   const setLevel = (p: Person, area: AreaKey, level: AreaLevel) =>
@@ -65,14 +78,22 @@ export function PeopleAccessEditor({
     const cur = rolesFor(p);
     const next = cur.includes(role) ? cur.filter((r) => r !== role) : [...cur, role];
     setRoleDraft((prev) => ({ ...prev, [k]: next }));
-    setDraft((prev) => ({ ...prev, [k]: resolveRoleAccess(next.join(",") || "pending") }));
+    // Rebuild matrix from the selected roles' defaults (highest wins per area).
+    setDraft((prev) => ({
+      ...prev,
+      [k]: resolvePersonAccess(next.join(",") || "pending", null),
+    }));
   };
 
   const dirty = (p: Person) => {
     const k = key(p.email);
     const rolesChanged = roleDraft[k] !== undefined
       && rolesKey(roleDraft[k]) !== rolesKey(parseRoles(p.fsos_role));
-    return !!draft[k] || rolesChanged;
+    if (rolesChanged || !!draft[k]) return true;
+    // Prompt Save when a corrupt all-none matrix is being healed from role defaults.
+    const role = roleStrFor(p) || "pending";
+    const roleDefaults = resolvePersonAccess(role, null);
+    return isBlankAllNone(userAccess[k], roleDefaults) && AREA_KEYS.some((a) => roleDefaults[a] !== "none");
   };
 
   const saveMut = useMutation({
