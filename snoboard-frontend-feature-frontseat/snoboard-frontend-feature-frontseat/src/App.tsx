@@ -342,24 +342,6 @@ function FsiCanvasMenuButton({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-function FsiCanvasQuickLink() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { role } = usePermissions();
-  if (location.pathname.startsWith("/fsi-canvas")) return null;
-  if (!isRouteAllowed(role, "/fsi-canvas")) return null;
-  return (
-    <button
-      type="button"
-      onClick={() => navigate("/fsi-canvas")}
-      className="fixed bottom-6 left-6 z-[60] flex items-center gap-2 rounded-full border border-amber-500/40 bg-amber-950/90 px-4 py-2.5 text-sm font-semibold text-amber-100 shadow-xl backdrop-blur hover:bg-amber-500/20"
-    >
-      <Sparkles className="h-4 w-4" />
-      FSI Canvas
-    </button>
-  );
-}
-
 function HamburgerMenu() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
@@ -549,6 +531,7 @@ function AppLayout() {
   // hide the global top nav so it isn't stacked above the canvas's own header.
   const isCanvasWorkspace = /^\/fsi-canvas\/[^/]+/.test(location.pathname);
   const isCanvasRoute = location.pathname.startsWith("/fsi-canvas");
+  const showFsiCanvasFab = !isCanvasRoute && isRouteAllowed(layoutRole, "/fsi-canvas");
 
   return (
     <>
@@ -564,7 +547,7 @@ function AppLayout() {
           right={<><RolePreviewPicker /><MonthlyWrapOpenButton /><AnimalPicker userId={user?.id} /></>}
         />
       )}
-      {!isCanvasRoute && <FsiCanvasFab />}
+      {showFsiCanvasFab && <FsiCanvasFab />}
       <DebugBoundary>
       {isSeeding ? (
         <div>
@@ -693,7 +676,6 @@ function AuthGate() {
 
   return (
     <MonthlyWrapRoot>
-      <FsiCanvasQuickLink />
       <AppLayout />
     </MonthlyWrapRoot>
   );
