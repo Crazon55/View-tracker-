@@ -547,8 +547,12 @@ export function mockSeedingPatch<T>(path: string, body: Record<string, unknown>)
         rows[idx] = {
           ...rows[idx],
           ...body,
-          assigned_fulfillment_user_id: assigned === null || assigned === "" ? undefined : String(assigned ?? rows[idx].assigned_fulfillment_user_id || ""),
-          assigned_to: assigned === null || assigned === "" ? "" : String(assigned ?? rows[idx].assigned_to || ""),
+            assigned_fulfillment_user_id: assigned === null || assigned === ""
+              ? undefined
+              : String(assigned ?? (rows[idx].assigned_fulfillment_user_id || "")),
+            assigned_to: assigned === null || assigned === ""
+              ? ""
+              : String(assigned ?? (rows[idx].assigned_to || "")),
         } as SeedingDeliverable;
         return rows[idx] as T;
       }
