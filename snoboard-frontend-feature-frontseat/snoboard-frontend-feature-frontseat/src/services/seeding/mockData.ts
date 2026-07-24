@@ -548,13 +548,16 @@ export function mockSeedingGet<T>(path: string, params?: Record<string, unknown>
   return [] as T;
 }
 
-// Mirrors the real backend monetisable_pages model: page_id, page_name, active, notes.
-// Mutable so add / edit / delete work in mock mode for local verification.
+// Official Frontseat monetisable pages (Current Page Pricing sheet).
 export const MOCK_PAGES = [
-  { page_id: "page_101xf", page_name: "101x Founders", active: true, notes: "@101xfounders · 1.24M followers" },
-  { page_id: "page_bizz", page_name: "Bizz India", active: true, notes: "@bizzindia · 890K followers" },
-  { page_id: "page_tco", page_name: "The Changing Order", active: true, notes: "@thechangingorder · 620K followers" },
-  { page_id: "page_startup", page_name: "Startup Coded", active: false, notes: "@startupcoded · 410K followers" },
+  { page_id: "page_101xfounders", page_name: "101x Founders", active: true, notes: "@101xfounders · excluded from Business bundle" },
+  { page_id: "page_bizzindia", page_name: "Bizz India", active: true, notes: "@bizzindia · Business bundle" },
+  { page_id: "page_indiabusinesscom", page_name: "India Business Com", active: true, notes: "@indiabusinesscom · Business bundle" },
+  { page_id: "page_indiafoundersco", page_name: "India Founders Co", active: true, notes: "@indiafoundersco · Business bundle" },
+  { page_id: "page_indiafounderscore", page_name: "India Founders Core", active: true, notes: "@indiafounderscore · Business bundle" },
+  { page_id: "page_foundersinindia", page_name: "Founders in India", active: true, notes: "@foundersinindia · Business bundle" },
+  { page_id: "page_startupcoded", page_name: "Startup Coded", active: true, notes: "@startupcoded · Business bundle" },
+  { page_id: "page_indiastartupstory", page_name: "India Startup Story", active: true, notes: "@indiastartupstory · Business bundle" },
 ];
 
 export const MOCK_SEEDING_USERS = [
