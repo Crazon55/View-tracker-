@@ -1136,10 +1136,15 @@ async def get_deal(deal_id: str, user: dict = Depends(get_current_user)):
     deal = await _enrich_deal(deal)
     delivs = await db.deliverables.find({"deal_id": deal_id}, {"_id": 0}).to_list(500)
     outputs = await db.fulfillment_outputs.find({"deal_id": deal_id}, {"_id": 0}).sort("created_at", 1).to_list(500)
-    if user["role"] == "bd":
-        # BD sees outputs only when marked visible AND not in Draft
-        outputs = [o for o in outputs if o.get("visible_to_bd") and o.get("status") != "Draft"]
     feedback = await db.client_feedback.find({"deal_id": deal_id}, {"_id": 0}).sort("created_at", 1).to_list(500)
+    if user["role"] == "bd":
+        # BD sees anything marked visible (including Draft if explicitly shared).
+        outputs = [o for o in outputs if o.get("visible_to_bd")]
+        visible_ids = {o.get("output_id") for o in outputs}
+        feedback = [
+            f for f in feedback
+            if not f.get("output_id") or f.get("output_id") in visible_ids
+        ]
     payment = None
     if user["role"] in {"admin", "bd"}:
         payment = await db.payments.find_one({"deal_id": deal_id}, {"_id": 0})
@@ -1402,6 +1407,10 @@ async def list_deliverables(user: dict = Depends(get_current_user), status: Opti
 @api.post("/outputs")
 async def create_output(payload: FulfillmentOutputCreate, user: dict = Depends(get_current_user)):
     await require_role(user, ["fulfillment", "admin"])
+    status = payload.status or "Draft"
+    # Sharing with BD should never leave the item stuck as invisible Draft.
+    if payload.visible_to_bd and status == "Draft":
+        status = "Shared with BD"
     o = {
         "output_id": new_id("out"),
         "deal_id": payload.deal_id,
@@ -1412,7 +1421,7 @@ async def create_output(payload: FulfillmentOutputCreate, user: dict = Depends(g
         "link": payload.link or "",
         "file_attachment": payload.file_attachment or "",
         "visible_to_bd": payload.visible_to_bd,
-        "status": payload.status or "Draft",
+        "status": status,
         "created_by": user["user_id"],
         "created_by_name": user.get("name"),
         "created_by_role": user.get("role"),
@@ -1435,6 +1444,10 @@ async def update_output(output_id: str, payload: FulfillmentOutputUpdate, user: 
     upd = {k: v for k, v in payload.model_dump().items() if v is not None}
     if not upd:
         raise HTTPException(400, "No fields to update")
+    will_be_visible = upd.get("visible_to_bd", existing.get("visible_to_bd"))
+    next_status = upd.get("status", existing.get("status") or "Draft")
+    if will_be_visible and next_status == "Draft":
+        upd["status"] = "Shared with BD"
     upd["updated_at"] = now_iso()
     await db.fulfillment_outputs.update_one({"output_id": output_id}, {"$set": upd})
     return await db.fulfillment_outputs.find_one({"output_id": output_id}, {"_id": 0})

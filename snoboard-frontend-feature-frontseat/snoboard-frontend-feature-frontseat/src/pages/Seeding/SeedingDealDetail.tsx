@@ -17,7 +17,7 @@ import {
 } from "@/services/seeding/constants";
 import type { SeedingDealDetail, SeedingDeliverable, SeedingFeedback, SeedingOutput } from "@/services/seeding/mockData";
 import { usePermissions } from "@/hooks/usePermissions";
-import { canonicalRole } from "@/lib/accessModel";
+import { BD_TEAM_ROLE_TO_NAME, canonicalRole } from "@/lib/accessModel";
 
 const inputCls = "fglass-input w-full rounded-lg px-3 py-2 text-sm";
 
@@ -86,13 +86,25 @@ function CommentThread({
   placeholder: string;
 }) {
   return (
-    <div style={{ marginTop: 12, borderTop: "1px solid var(--f-line)", paddingTop: 12 }}>
+    <div
+      style={{
+        marginTop: 14,
+        borderTop: "1px solid var(--f-line)",
+        paddingTop: 12,
+        background: "rgba(255,255,255,0.02)",
+        borderRadius: 10,
+        padding: "12px 12px 10px",
+      }}
+    >
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--f-faint)", marginBottom: 10 }}>
+        Comments · {comments.length}
+      </div>
       {comments.length ? (
-        <div style={{ display: "grid", gap: 8, marginBottom: 10 }}>
+        <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
           {comments.map((c) => (
-            <div key={c.feedback_id} style={{ padding: "8px 10px", borderRadius: 8, background: "rgba(255,255,255,0.03)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
-                <span style={{ fontSize: 11, fontWeight: 600, color: "var(--f-ink)" }}>
+            <div key={c.feedback_id} style={{ padding: "10px 12px", borderRadius: 8, background: "rgba(0,0,0,0.28)", border: "1px solid var(--f-line)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--f-ink)" }}>
                   {c.added_by_name || "Someone"}
                   {c.added_by_role ? (
                     <span style={{ color: "var(--f-faint)", fontWeight: 500 }}> · {c.added_by_role}</span>
@@ -102,25 +114,28 @@ function CommentThread({
                   <span style={{ fontSize: 10, color: "var(--f-faint)", flexShrink: 0 }}>{formatDateTime(c.created_at)}</span>
                 ) : null}
               </div>
-              <p style={{ fontSize: 13, color: "var(--f-dim)", whiteSpace: "pre-wrap", margin: 0 }}>{c.feedback_text}</p>
+              <p style={{ fontSize: 13, color: "var(--f-dim)", whiteSpace: "pre-wrap", margin: 0, lineHeight: 1.45 }}>{c.feedback_text}</p>
             </div>
           ))}
         </div>
       ) : (
-        <p className="seeding-muted" style={{ marginBottom: 8, fontSize: 12 }}>No comments yet.</p>
+        <p className="seeding-muted" style={{ marginBottom: 10, fontSize: 12 }}>No comments yet — BD can leave feedback here.</p>
       )}
       <div className="seeding-comment-compose">
         <textarea
           className={inputCls}
-          rows={2}
+          rows={3}
           placeholder={placeholder}
           value={draft}
           onChange={(e) => onDraftChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && draft.trim() && !posting) onPost();
+          }}
         />
         <div className="seeding-comment-toolbar">
-          <span style={{ fontSize: 11, color: "var(--f-faint)" }}>Comment on this output</span>
+          <span style={{ fontSize: 11, color: "var(--f-faint)" }}>On this output · ⌘/Ctrl+Enter</span>
           <button type="button" className="seeding-detail-post" disabled={!draft.trim() || posting} onClick={onPost}>
-            <Send size={13} /> {posting ? "Posting…" : "Post"}
+            <Send size={13} /> {posting ? "Posting…" : "Post comment"}
           </button>
         </div>
       </div>
@@ -137,15 +152,16 @@ export default function SeedingDealDetail() {
   const backLabel = from === "fulfillment" ? "Back to fulfillment" : "Back to deals";
 
   const roleParts = useMemo(
-    () => String(role || "").split(",").map((r) => canonicalRole(r.trim())).filter(Boolean),
+    () => String(role || "").split(",").map((r) => r.trim().toLowerCase()).filter(Boolean),
     [role],
   );
-  const isFulfillment = roleParts.includes("fulfillment");
-  const isBD = roleParts.includes("bd");
-  const isAdmin = roleParts.includes("admin");
+  const isFulfillment = roleParts.some((r) => canonicalRole(r) === "fulfillment");
+  const isBD = roleParts.some((r) => canonicalRole(r) === "bd" || r in BD_TEAM_ROLE_TO_NAME);
+  const isAdmin = roleParts.some((r) => canonicalRole(r) === "admin");
   // Money is BD/admin only — fulfillment must never see Payment / Revenue.
   const canSeeMoney = !isFulfillment || isAdmin;
   const canManageOutputs = isFulfillment || isAdmin;
+  // Anyone reviewing the deal can comment on shared outputs (Frame.io-style).
   const canComment = isBD || isFulfillment || isAdmin;
 
   const [deal, setDeal] = useState<SeedingDealDetail | null>(null);
@@ -161,7 +177,14 @@ export default function SeedingDealDetail() {
   const [showAddDeliv, setShowAddDeliv] = useState(false);
   const [newDeliv, setNewDeliv] = useState({ page_id: "", deliverable_type: "Reel", quantity: 1 });
   const [showAddOutput, setShowAddOutput] = useState(false);
-  const [newOutput, setNewOutput] = useState({ type: "Writeup", title: "", writeup_text: "", link: "", status: "Draft", visible_to_bd: false });
+  const [newOutput, setNewOutput] = useState({
+    type: "Writeup",
+    title: "",
+    writeup_text: "",
+    link: "",
+    status: "Shared with BD",
+    visible_to_bd: true,
+  });
 
   const load = useCallback(async () => {
     if (!dealId) return;
@@ -200,16 +223,18 @@ export default function SeedingDealDetail() {
   };
   const addOutput = async () => {
     if (!dealId || !newOutput.title.trim()) return;
+    const visible = newOutput.visible_to_bd;
+    const status = visible && newOutput.status === "Draft" ? "Shared with BD" : newOutput.status;
     await api.post("/outputs", {
       deal_id: dealId,
       output_type: newOutput.type,
       title: newOutput.title,
       writeup_text: newOutput.writeup_text,
       link: newOutput.link,
-      status: newOutput.status,
-      visible_to_bd: newOutput.visible_to_bd,
+      status,
+      visible_to_bd: visible,
     });
-    setNewOutput({ type: "Writeup", title: "", writeup_text: "", link: "", status: "Draft", visible_to_bd: false });
+    setNewOutput({ type: "Writeup", title: "", writeup_text: "", link: "", status: "Shared with BD", visible_to_bd: true });
     setShowAddOutput(false);
     load();
   };
@@ -225,6 +250,8 @@ export default function SeedingDealDetail() {
       });
       clear();
       await load();
+    } catch (err: any) {
+      window.alert(err?.message || "Couldn't post comment");
     } finally {
       setPosting(false);
     }
@@ -484,11 +511,25 @@ export default function SeedingDealDetail() {
               </select>
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--f-dim)" }}>
-                  <input type="checkbox" checked={newOutput.visible_to_bd} onChange={(e) => setNewOutput((o) => ({ ...o, visible_to_bd: e.target.checked }))} /> Visible to BD
+                  <input
+                    type="checkbox"
+                    checked={newOutput.visible_to_bd}
+                    onChange={(e) => {
+                      const visible_to_bd = e.target.checked;
+                      setNewOutput((o) => ({
+                        ...o,
+                        visible_to_bd,
+                        status: visible_to_bd && o.status === "Draft" ? "Shared with BD" : o.status,
+                      }));
+                    }}
+                  /> Visible to BD
                 </label>
                 <button type="button" className="seeding-detail-save seeding-detail-save--compact" disabled={!newOutput.title.trim()} onClick={addOutput}>Save output</button>
                 <button type="button" className="seeding-detail-ghost-btn" onClick={() => setShowAddOutput(false)}>Cancel</button>
               </div>
+              <p className="seeding-detail-hint" style={{ margin: 0 }}>
+                When visible, BD can open this deal and comment on this output (Frame.io-style).
+              </p>
             </div>
           )}
           {!draft.outputs?.length ? (
@@ -519,7 +560,7 @@ export default function SeedingDealDetail() {
                       draft={outputComments[o.output_id] || ""}
                       onDraftChange={(v) => setOutputComments((prev) => ({ ...prev, [o.output_id]: v }))}
                       posting={posting}
-                      placeholder="Leave feedback on this output…"
+                      placeholder={isBD ? "Add client feedback on this output…" : "Reply to BD / note a change…"}
                       onPost={() => postFeedback(o.output_id, outputComments[o.output_id] || "", () =>
                         setOutputComments((prev) => ({ ...prev, [o.output_id]: "" })))}
                     />
