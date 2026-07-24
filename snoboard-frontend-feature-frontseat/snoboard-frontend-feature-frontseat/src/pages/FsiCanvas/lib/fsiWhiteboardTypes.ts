@@ -1,4 +1,5 @@
 import type { FsiNodeRecord } from "./fsiNodeSchemas";
+import { COMPACT_NODE_WIDTH, DROPDOWN_COLLAPSED_HEIGHT } from "./fsiNodeCardUi";
 
 /** Node types offered on the whiteboard toolbar. */
 export const WHITEBOARD_NODE_TYPES = [
@@ -7,10 +8,8 @@ export const WHITEBOARD_NODE_TYPES = [
   "Content Bucket",
   "Visual",
   "Visual Hook",
-  "Written Hook",
+  "Post Details",
   "Carousel Body",
-  "Performance",
-  "Link",
   "Sticky Note",
   "Frame",
 ] as const;
@@ -72,7 +71,8 @@ export function isWrittenHookNode(node: FsiNodeRecord): boolean {
     (node.node_type === "Hook Example" && node.structured_payload?.hook_kind === "written") ||
     (node.node_type === "Hook Pattern" &&
       node.structured_payload?.hook_kind !== "visual" &&
-      !node.structured_payload?.is_link_node)
+      !node.structured_payload?.is_link_node &&
+      !node.structured_payload?.is_post_details)
   );
 }
 
@@ -80,8 +80,16 @@ export function isPerformanceNode(node: FsiNodeRecord): boolean {
   return node.node_type === "Performance" || node.node_type === "Performance Insight";
 }
 
-/** Written Hook / Performance / Link — single accordion box with dropdown body. */
+/** Combined Written Hook + Performance + Link card. */
+export function isPostDetailsNode(node: FsiNodeRecord): boolean {
+  return (
+    node.node_type === "Post Details" || node.structured_payload?.is_post_details === true
+  );
+}
+
+/** Legacy single-section accordion cards (still render if already on a board). */
 export function isDropdownCardNode(node: FsiNodeRecord): boolean {
+  if (isPostDetailsNode(node)) return false;
   return isLinkNode(node) || isWrittenHookNode(node) || isPerformanceNode(node);
 }
 
@@ -108,6 +116,7 @@ export function isCarouselBodyNode(node: FsiNodeRecord): boolean {
 /** Nodes with user-controlled expand/collapse (corner toggle). */
 export function isCollapsibleCardNode(node: FsiNodeRecord): boolean {
   return (
+    isPostDetailsNode(node) ||
     isLinkNode(node) ||
     isCompactLabelNode(node) ||
     isCarouselBodyNode(node) ||
@@ -131,6 +140,7 @@ export function isSimpleLabelNode(node: FsiNodeRecord): boolean {
 export function displayNodeType(node: FsiNodeRecord): string {
   if (isFrameNode(node)) return "Frame";
   if (isStickyNode(node)) return "Sticky Note";
+  if (isPostDetailsNode(node)) return "Post Details";
   if (isLinkNode(node)) return "Link";
   if (isVisualNode(node)) return "Visual";
   if (isVisualHookNode(node)) return "Visual Hook";
@@ -172,11 +182,22 @@ export function specForWhiteboardType(type: WhiteboardNodeType): CreateNodeSpec 
         structured_payload: { ui_expanded: false },
         raw_body_text: "",
       };
-    case "Written Hook":
+    case "Post Details":
       return {
-        node_type: "Written Hook",
+        node_type: "Post Details",
         display_title: "",
-        structured_payload: { ui_expanded: false },
+        structured_payload: {
+          is_post_details: true,
+          hook_expanded: false,
+          performance_expanded: false,
+          link_expanded: false,
+          views: "",
+          likes: "",
+          shares: "",
+          comments: "",
+          followers_gained: "",
+          url: "",
+        },
         raw_body_text: "",
       };
     case "Carousel Body":
@@ -184,24 +205,6 @@ export function specForWhiteboardType(type: WhiteboardNodeType): CreateNodeSpec 
         node_type: "Carousel Body",
         display_title: "",
         structured_payload: { ui_expanded: false, slides_content: [""] },
-      };
-    case "Performance":
-      return {
-        node_type: "Performance",
-        display_title: "",
-        structured_payload: {
-          views: "",
-          likes: "",
-          shares: "",
-          comments: "",
-          followers_gained: "",
-        },
-      };
-    case "Link":
-      return {
-        node_type: "Link",
-        display_title: "",
-        structured_payload: { ui_expanded: false, url: "" },
       };
     case "Sticky Note":
       return {
@@ -219,4 +222,18 @@ export function specForWhiteboardType(type: WhiteboardNodeType): CreateNodeSpec 
     default:
       return { node_type: type, display_title: type, structured_payload: {} };
   }
+}
+
+export function postDetailsCardHeight(payload: Record<string, unknown> | undefined): number {
+  const p = payload ?? {};
+  let h = DROPDOWN_COLLAPSED_HEIGHT * 3;
+  if (p.hook_expanded === true) h += 100;
+  if (p.performance_expanded === true) h += 176;
+  if (p.link_expanded === true) h += 48;
+  return h;
+}
+
+export function postDetailsCardWidth(payload: Record<string, unknown> | undefined): number {
+  const w = Number(payload?.card_width);
+  return Number.isFinite(w) && w >= COMPACT_NODE_WIDTH ? w : 280;
 }

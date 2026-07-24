@@ -4,11 +4,14 @@ import {
   isCompactLabelNode,
   isDropdownCardNode,
   isFrameNode,
+  isPostDetailsNode,
   isSimpleLabelNode,
   isCarouselBodyNode,
   isNodeUiExpanded,
   nodeCardWidth,
   nodeCardHeight,
+  postDetailsCardHeight,
+  postDetailsCardWidth,
   COMPACT_NODE_HEIGHT,
   COMPACT_NODE_WIDTH,
   DROPDOWN_COLLAPSED_HEIGHT,
@@ -45,6 +48,13 @@ export function estimateNodeSize(node: FsiNodeRecord): { width: number; height: 
     return { width: 280, height: 360 };
   }
   if (isNoteNode(node)) return { width: 220, height: 120 };
+  if (isPostDetailsNode(node)) {
+    const payload = node.structured_payload ?? {};
+    return {
+      width: postDetailsCardWidth(payload),
+      height: postDetailsCardHeight(payload),
+    };
+  }
   if (isDropdownCardNode(node) || isCarouselBodyNode(node)) {
     const expanded = isNodeUiExpanded(node.structured_payload ?? {});
     return {

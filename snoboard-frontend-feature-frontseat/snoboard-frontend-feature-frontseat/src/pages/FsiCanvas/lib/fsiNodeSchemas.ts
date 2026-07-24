@@ -159,6 +159,7 @@ export const NODE_TYPE_COLORS: Record<string, string> = {
   "Visual Pattern": "#ec4899",
   "Visual Hook": "#a855f7",
   "Written Hook": "#c084fc",
+  "Post Details": "#a78bfa",
   "Carousel Body": "#6366f1",
   Performance: "#64748b",
   "Performance Insight": "#64748b",
@@ -190,6 +191,19 @@ export function defaultPayloadForType(nodeType: string): Record<string, unknown>
     case "Visual Hook":
     case "Written Hook":
       return { hook_text: "", ui_expanded: false };
+    case "Post Details":
+      return {
+        is_post_details: true,
+        hook_expanded: false,
+        performance_expanded: false,
+        link_expanded: false,
+        views: "",
+        likes: "",
+        shares: "",
+        comments: "",
+        followers_gained: "",
+        url: "",
+      };
     case "Carousel Body":
       return { ui_expanded: false, slides_content: [""] };
     case "Performance":
@@ -217,6 +231,7 @@ export function defaultTitleForType(nodeType: string): string {
       "Content Bucket",
       "Visual Hook",
       "Written Hook",
+      "Post Details",
       "Carousel Body",
       "Performance",
       "Performance Insight",

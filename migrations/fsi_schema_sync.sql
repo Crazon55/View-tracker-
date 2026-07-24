@@ -14,6 +14,7 @@ ALTER TYPE node_type_enum ADD VALUE IF NOT EXISTS 'Link';
 ALTER TYPE node_type_enum ADD VALUE IF NOT EXISTS 'Sticky Note';
 ALTER TYPE node_type_enum ADD VALUE IF NOT EXISTS 'Frame';
 ALTER TYPE node_type_enum ADD VALUE IF NOT EXISTS 'Carousel Body';
+ALTER TYPE node_type_enum ADD VALUE IF NOT EXISTS 'Post Details';
 
 -- legacy niche type (older installs)
 DO $$ BEGIN

@@ -20,6 +20,7 @@ import {
   isDropdownCardNode,
   isLinkNode,
   isNodeUiExpanded,
+  isPostDetailsNode,
   NODE_BODY_BOX_CLASS,
   NODE_TYPE_LABEL_CLASS,
   NODE_TITLE_DISPLAY_CLASS,
@@ -30,6 +31,8 @@ import {
   nodeCardHeight,
   nodeCardWidth,
   parseSlidesContent,
+  postDetailsCardHeight,
+  postDetailsCardWidth,
 } from "../lib/fsiWhiteboardTypes";
 import FsiNodeHandles from "./FsiNodeHandles";
 import FsiNodeExpandToggle from "./FsiNodeExpandToggle";
@@ -415,6 +418,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
     const titleEmpty = isUnsetNodeTitle(title, nodeData.nodeType);
     const linkUrlEmpty = !linkUrl.trim();
     const isDropdown = isDropdownCardNode(fsiNode);
+    const isCombinedDetails = isPostDetailsNode(fsiNode);
     const collapsedH = isDropdown ? DROPDOWN_COLLAPSED_HEIGHT : COMPACT_NODE_HEIGHT;
     const toggleExpanded = () => patchPayload({ ui_expanded: !uiExpanded });
 
@@ -494,7 +498,92 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       );
 
-    // Accordion dropdown cards: Written Hook / Performance / Link
+    const renderSectionToggle = (
+      label: string,
+      expanded: boolean,
+      onToggle: () => void,
+      accentClass: string,
+    ) => (
+      <button
+        type="button"
+        title={expanded ? `Collapse ${label}` : `Expand ${label}`}
+        className={cn(
+          "nodrag nopan flex h-11 w-full shrink-0 items-center justify-between gap-2 px-3 text-left hover:bg-black/5",
+          accentClass,
+        )}
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle();
+        }}
+      >
+        <span className={NODE_TYPE_LABEL_CLASS}>{label}</span>
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 shrink-0 text-black/70 transition-transform duration-150",
+            expanded && "rotate-180",
+          )}
+        />
+      </button>
+    );
+
+    // One box: Written Hook + Performance + Link as three dropdowns
+    if (isCombinedDetails) {
+      const hookOpen = payload.hook_expanded === true;
+      const perfOpen = payload.performance_expanded === true;
+      const linkOpen = payload.link_expanded === true;
+      const detailsW = postDetailsCardWidth(payload);
+      const detailsH = postDetailsCardHeight(payload);
+
+      return (
+        <div
+          ref={rootRef}
+          className={`relative box-border flex flex-col overflow-hidden rounded-2xl border-2 shadow-lg ${
+            selected ? "ring-[3px] ring-sky-400 shadow-[0_0_0_5px_rgba(56,189,248,0.28)] ring-offset-0" : ""
+          }`}
+          style={{
+            width: detailsW,
+            height: detailsH,
+            borderColor: nodeData.color,
+            backgroundColor: nodeData.color,
+          }}
+        >
+          {canEdit && selected && (
+            <NodeResizer
+              minWidth={COMPACT_NODE_WIDTH}
+              minHeight={DROPDOWN_COLLAPSED_HEIGHT * 3}
+              onResizeEnd={(_event, params) => {
+                patchPayload({ card_width: Math.round(params.width) });
+              }}
+            />
+          )}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {renderSectionToggle("Written Hook", hookOpen, () => patchPayload({ hook_expanded: !hookOpen }), "bg-violet-300/40")}
+            {hookOpen && <div className="px-3 pb-2">{renderHookBody()}</div>}
+
+            {renderSectionToggle(
+              "Performance",
+              perfOpen,
+              () => patchPayload({ performance_expanded: !perfOpen }),
+              "bg-slate-300/50",
+            )}
+            {perfOpen && <div className="px-2 pb-2">{renderFields({ forceShow: true })}</div>}
+
+            {renderSectionToggle("Link", linkOpen, () => patchPayload({ link_expanded: !linkOpen }), "bg-sky-300/40")}
+            {linkOpen && <div className="px-3 pb-2">{renderLinkBody()}</div>}
+          </div>
+          <FsiNodeDuplicateCorners visible={showDuplicateCorners} onCornerClick={handleCornerDuplicate} />
+          <FsiNodeHandles
+            canStartConnection={canEdit}
+            canAcceptConnection={nodeData.isConnecting}
+            requiredAnchors={connectionAnchors}
+            showConnectionDots={showConnectionDots || selected}
+          />
+        </div>
+      );
+    }
+
+    // Legacy single accordion cards: Written Hook / Performance / Link
     if (isDropdown) {
       return (
         <div

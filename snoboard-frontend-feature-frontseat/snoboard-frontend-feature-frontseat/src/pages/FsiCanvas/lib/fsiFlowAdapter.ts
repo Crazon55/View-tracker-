@@ -13,8 +13,11 @@ import {
   isSimpleLabelNode,
   isCarouselBodyNode,
   isNodeUiExpanded,
+  isPostDetailsNode,
   nodeCardWidth,
   nodeCardHeight,
+  postDetailsCardHeight,
+  postDetailsCardWidth,
 } from "./fsiWhiteboardTypes";
 import { toFlowPosition } from "./fsiNodePositions";
 
@@ -110,8 +113,12 @@ export function graphToFlow(
     }
 
     const isSimple = isSimpleLabelNode(n);
-    const isPerf = n.node_type === "Performance" || n.node_type === "Performance Insight";
+    const isPerf =
+      n.node_type === "Performance" ||
+      n.node_type === "Performance Insight" ||
+      isPostDetailsNode(n);
     const expanded = isNodeUiExpanded(payload);
+    const postDetails = isPostDetailsNode(n);
 
     const flowNode: Node = {
       id: n.id,
@@ -119,7 +126,10 @@ export function graphToFlow(
       position: toFlowPosition(n, nodesById),
       draggable: true,
       ...(isSimple
-        ? { width: nodeCardWidth(payload, expanded), height: nodeCardHeight(payload, expanded) }
+        ? {
+            width: postDetails ? postDetailsCardWidth(payload) : nodeCardWidth(payload, expanded),
+            height: postDetails ? postDetailsCardHeight(payload) : nodeCardHeight(payload, expanded),
+          }
         : {}),
       data: {
         fsiNode: n,

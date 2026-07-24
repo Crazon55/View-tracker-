@@ -19,6 +19,13 @@ export const NODE_FIELD_DEFS: Record<string, FieldDef[]> = {
   "Visual Pattern": [],
   "Visual Hook": [],
   "Written Hook": [],
+  "Post Details": [
+    { key: "views", label: "Views", inputType: "number" },
+    { key: "likes", label: "Likes", inputType: "number" },
+    { key: "shares", label: "Shares", inputType: "number" },
+    { key: "comments", label: "Comments", inputType: "number" },
+    { key: "followers_gained", label: "Followers gained", inputType: "number" },
+  ],
   Performance: [
     { key: "views", label: "Views", inputType: "number" },
     { key: "likes", label: "Likes", inputType: "number" },

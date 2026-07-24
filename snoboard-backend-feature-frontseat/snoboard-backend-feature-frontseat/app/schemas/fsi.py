@@ -24,6 +24,7 @@ NODE_TYPES = [
     "Visual",
     "Visual Hook",
     "Written Hook",
+    "Post Details",
     "Carousel Body",
     "Performance",
     "Link",
