@@ -547,7 +547,24 @@ export function mockSeedingGet<T>(path: string, params?: Record<string, unknown>
   const dealMatch = clean.match(/^\/deals\/([^/]+)$/);
   if (dealMatch) {
     const deal = MOCK_DEALS.find((d) => d.deal_id === dealMatch[1]);
-    return (deal ? enrichDeal(deal) : null) as T;
+    if (!deal) return null as T;
+    const detail = enrichDeal(deal);
+    // Match live API envelope so the deal detail page unwraps consistently.
+    return {
+      deal: detail,
+      deliverables: detail.deliverables || [],
+      fulfillment_outputs: detail.outputs || [],
+      client_feedback: detail.general_comments || [],
+      payment: {
+        status: detail.payment_status || "Not Raised",
+        payment_due_date: detail.payment_due_date,
+        amount_received: detail.amount_received ?? 0,
+        payment_notes: detail.payment_notes || "",
+        updated_by: detail.payment_updated_by,
+        updated_at: detail.payment_updated_at,
+      },
+      internal_notes: detail.internal_notes || [],
+    } as T;
   }
   return [] as T;
 }

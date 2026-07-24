@@ -1,16 +1,31 @@
-// Per-PERSON access editor. Each person: a role dropdown (quick preset) + their own
-// View/Edit-per-tab matrix beside it. Role picks a starting matrix; then tune per person.
+// Per-PERSON access editor. Each person: multi-role checkboxes + View/Edit-per-tab matrix.
+// Roles are stored as a comma-joined string (same convention as Team Roles).
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { getUserAccess, setUserAccess, setUserRole, deleteUserRole } from "@/services/api";
 import { StatusBadge } from "@/components/seeding/StatusBadge";
-import { RoleSelect } from "@/components/RoleSelect";
 import { AccessMatrix } from "@/components/AccessMatrix";
-import { AREA_KEYS, resolveRoleAccess, type AreaKey, type AreaLevel } from "@/lib/accessModel";
+import { ALL_ROLES, AREA_KEYS, resolveRoleAccess, type AreaKey, type AreaLevel } from "@/lib/accessModel";
 
 type Person = { name: string; email: string; seeding_role?: string | null; fsos_role?: string | null };
+
+function parseRoles(roleStr: string | null | undefined): string[] {
+  if (!roleStr) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of String(roleStr).split(",").map((r) => r.trim().toLowerCase()).filter(Boolean)) {
+    if (seen.has(raw)) continue;
+    seen.add(raw);
+    out.push(raw);
+  }
+  return out;
+}
+
+function rolesKey(roles: string[]): string {
+  return [...roles].sort().join(",");
+}
 
 export function PeopleAccessEditor({
   people,
@@ -26,15 +41,17 @@ export function PeopleAccessEditor({
   });
   const [open, setOpen] = useState<string | null>(null);
   const [draft, setDraft] = useState<Record<string, Record<AreaKey, AreaLevel>>>({});
-  const [roleDraft, setRoleDraft] = useState<Record<string, string>>({});
+  const [roleDraft, setRoleDraft] = useState<Record<string, string[]>>({});
+  const [pickerOpen, setPickerOpen] = useState<string | null>(null);
 
   const key = (e: string) => e.trim().toLowerCase();
-  const roleFor = (p: Person) => roleDraft[key(p.email)] ?? p.fsos_role ?? "";
+  const rolesFor = (p: Person) => roleDraft[key(p.email)] ?? parseRoles(p.fsos_role);
+  const roleStrFor = (p: Person) => rolesFor(p).join(",");
 
   const matrixFor = (p: Person): Record<AreaKey, AreaLevel> => {
     const k = key(p.email);
     if (draft[k]) return draft[k];
-    const role = roleFor(p) || "pending";
+    const role = roleStrFor(p) || "pending";
     const saved = userAccess[k];
     if (saved && Object.keys(saved).length) return { ...resolveRoleAccess(role), ...saved };
     return resolveRoleAccess(role);
@@ -43,22 +60,28 @@ export function PeopleAccessEditor({
   const setLevel = (p: Person, area: AreaKey, level: AreaLevel) =>
     setDraft((prev) => ({ ...prev, [key(p.email)]: { ...matrixFor(p), [area]: level } }));
 
-  const pickRole = (p: Person, role: string) => {
+  const toggleRole = (p: Person, role: string) => {
     const k = key(p.email);
-    setRoleDraft((prev) => ({ ...prev, [k]: role }));
-    setDraft((prev) => ({ ...prev, [k]: resolveRoleAccess(role || "pending") }));
+    const cur = rolesFor(p);
+    const next = cur.includes(role) ? cur.filter((r) => r !== role) : [...cur, role];
+    setRoleDraft((prev) => ({ ...prev, [k]: next }));
+    setDraft((prev) => ({ ...prev, [k]: resolveRoleAccess(next.join(",") || "pending") }));
   };
 
   const dirty = (p: Person) => {
     const k = key(p.email);
-    return !!draft[k] || (roleDraft[k] !== undefined && roleDraft[k] !== (p.fsos_role ?? ""));
+    const rolesChanged = roleDraft[k] !== undefined
+      && rolesKey(roleDraft[k]) !== rolesKey(parseRoles(p.fsos_role));
+    return !!draft[k] || rolesChanged;
   };
 
   const saveMut = useMutation({
     mutationFn: async (p: Person) => {
-      const role = roleFor(p);
-      if (role !== (p.fsos_role ?? "")) {
-        if (!role) await deleteUserRole(p.email);
+      const roles = rolesFor(p);
+      const role = roles.join(",");
+      const prev = p.fsos_role ?? "";
+      if (rolesKey(roles) !== rolesKey(parseRoles(prev))) {
+        if (!roles.length) await deleteUserRole(p.email);
         else await setUserRole({ email: p.email, role, name: p.name });
         onRoleChanged(p.email, role || null, p.name);
       }
@@ -85,7 +108,9 @@ export function PeopleAccessEditor({
       {people.map((p) => {
         const k = key(p.email);
         const isOpen = open === k;
+        const isPickerOpen = pickerOpen === k;
         const matrix = matrixFor(p);
+        const selected = rolesFor(p);
         const editCount = AREA_KEYS.filter((a) => matrix[a] === "edit").length;
         const viewCount = AREA_KEYS.filter((a) => matrix[a] === "view").length;
         const saving = saveMut.isPending && saveMut.variables?.email === p.email;
@@ -99,7 +124,35 @@ export function PeopleAccessEditor({
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
                 {p.seeding_role ? <StatusBadge status={p.seeding_role} /> : null}
-                <RoleSelect value={roleFor(p)} onChange={(r) => pickRole(p, r)} disabled={saving} />
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end", maxWidth: 320 }}>
+                  {selected.length ? selected.map((r) => {
+                    const label = ALL_ROLES.find((x) => x.key === r)?.short ?? r;
+                    return (
+                      <span
+                        key={r}
+                        style={{
+                          fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 999,
+                          border: "1px solid var(--f-line)", color: "var(--f-ink)", textTransform: "uppercase",
+                          letterSpacing: "0.04em",
+                        }}
+                      >
+                        {label}
+                      </span>
+                    );
+                  }) : (
+                    <span style={{ fontSize: 11, color: "var(--f-faint)" }}>No roles</span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="f-ghost"
+                  disabled={saving}
+                  onClick={() => setPickerOpen(isPickerOpen ? null : k)}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, border: "1px solid var(--f-line)", borderRadius: 8, padding: "6px 10px" }}
+                >
+                  Edit roles
+                  <ChevronDown size={12} style={{ transform: isPickerOpen ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
+                </button>
                 <button
                   type="button"
                   className="f-ghost"
@@ -113,7 +166,13 @@ export function PeopleAccessEditor({
                   type="button"
                   className="f-primary"
                   disabled={!dirty(p) || saving}
-                  onClick={() => saveMut.mutate(p)}
+                  onClick={() => {
+                    if (!rolesFor(p).length) {
+                      toast.error("Select at least one role");
+                      return;
+                    }
+                    saveMut.mutate(p);
+                  }}
                   style={{ fontSize: 12, padding: "6px 14px", opacity: dirty(p) ? 1 : 0.5 }}
                 >
                   {saving ? "Saving…" : "Save"}
@@ -129,6 +188,34 @@ export function PeopleAccessEditor({
                 </button>
               </div>
             </div>
+            {isPickerOpen && (
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--f-line)", display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {ALL_ROLES.filter((r) => r.key !== "pending").map((r) => {
+                  const checked = selected.includes(r.key);
+                  return (
+                    <label
+                      key={r.key}
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12,
+                        padding: "6px 10px", borderRadius: 8, cursor: "pointer",
+                        border: `1px solid ${checked ? "rgba(139,92,246,.45)" : "var(--f-line)"}`,
+                        background: checked ? "rgba(139,92,246,.14)" : "transparent",
+                        color: checked ? "#c4b5fd" : "var(--f-ink)",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={saving}
+                        onChange={() => toggleRole(p, r.key)}
+                        style={{ accentColor: "#8b5cf6" }}
+                      />
+                      {r.label}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
             {isOpen && (
               <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--f-line)" }}>
                 <AccessMatrix value={matrix} onChange={(area, level) => setLevel(p, area, level)} />

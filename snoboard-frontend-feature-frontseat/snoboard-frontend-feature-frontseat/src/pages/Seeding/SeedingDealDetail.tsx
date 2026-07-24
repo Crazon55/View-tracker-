@@ -20,6 +20,35 @@ import type { SeedingDealDetail, SeedingDeliverable } from "@/services/seeding/m
 
 const inputCls = "fglass-input w-full rounded-lg px-3 py-2 text-sm";
 
+/** Live GET /deals/:id returns { deal, deliverables, fulfillment_outputs, payment, … }.
+ * Mock may still return a flat deal. Normalize both into one SeedingDealDetail. */
+function normalizeDealDetail(raw: unknown): SeedingDealDetail {
+  const body = (raw ?? {}) as Record<string, any>;
+  const d = (body.deal ?? body) as Record<string, any>;
+  const payment = (body.payment ?? null) as Record<string, any> | null;
+  const assetsRaw = d.assets_or_reference_links ?? d.assets_links;
+  const assets_links = Array.isArray(assetsRaw)
+    ? assetsRaw.filter(Boolean).join("\n")
+    : typeof assetsRaw === "string"
+      ? assetsRaw
+      : "";
+
+  return {
+    ...(d as SeedingDealDetail),
+    assets_links,
+    deliverables: body.deliverables ?? d.deliverables ?? [],
+    outputs: body.fulfillment_outputs ?? body.outputs ?? d.outputs ?? [],
+    general_comments: body.client_feedback ?? d.general_comments ?? [],
+    internal_notes: body.internal_notes ?? d.internal_notes ?? [],
+    payment_status: payment?.status ?? d.payment_status ?? "Not Raised",
+    payment_due_date: payment?.payment_due_date ?? d.payment_due_date,
+    amount_received: payment?.amount_received ?? d.amount_received ?? 0,
+    payment_notes: payment?.payment_notes ?? d.payment_notes ?? "",
+    payment_updated_by: payment?.updated_by ?? d.payment_updated_by,
+    payment_updated_at: payment?.updated_at ?? d.payment_updated_at,
+  };
+}
+
 function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
     <section className="seeding-surface seeding-detail-section">
@@ -53,9 +82,10 @@ export default function SeedingDealDetail() {
 
   const load = useCallback(async () => {
     if (!dealId) return;
-    const { data } = await api.get<SeedingDealDetail>(`/deals/${dealId}`);
-    setDeal(data);
-    setDraft(data);
+    const { data } = await api.get<unknown>(`/deals/${dealId}`);
+    const detail = normalizeDealDetail(data);
+    setDeal(detail);
+    setDraft(detail);
   }, [dealId]);
 
   useEffect(() => { load().catch(() => { setDeal(null); setDraft(null); }); }, [load]);
@@ -102,9 +132,8 @@ export default function SeedingDealDetail() {
     if (!dealId) return;
     setSaving(true);
     try {
-      const { data } = await api.patch<SeedingDealDetail>(`/deals/${dealId}`, patch);
-      setDeal(data);
-      setDraft(data);
+      await api.patch(`/deals/${dealId}`, patch);
+      await load();
     } finally {
       setSaving(false);
     }
@@ -177,7 +206,7 @@ export default function SeedingDealDetail() {
           <div className="seeding-detail-form">
             <label className="seeding-detail-field seeding-detail-field--full">
               <span>Agency / Client name</span>
-              <input className={inputCls} value={draft.agency_or_client_name} onChange={(e) => setDraft({ ...draft, agency_or_client_name: e.target.value })} />
+              <input className={inputCls} value={draft.agency_or_client_name || ""} onChange={(e) => setDraft({ ...draft, agency_or_client_name: e.target.value })} />
             </label>
             <label className="seeding-detail-field seeding-detail-field--full">
               <span>Brief link</span>
