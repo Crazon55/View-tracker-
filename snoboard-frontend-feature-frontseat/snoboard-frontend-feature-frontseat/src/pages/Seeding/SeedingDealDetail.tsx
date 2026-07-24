@@ -174,6 +174,7 @@ export default function SeedingDealDetail() {
 
   const [pages, setPages] = useState<any[]>([]);
   const [assignees, setAssignees] = useState<{ user_id: string; name: string; email?: string }[]>([]);
+  const [delivPageFilter, setDelivPageFilter] = useState("");
   const [showAddDeliv, setShowAddDeliv] = useState(false);
   const [newDeliv, setNewDeliv] = useState({ page_id: "", deliverable_type: "Reel", quantity: 1 });
   const [showAddOutput, setShowAddOutput] = useState(false);
@@ -302,6 +303,20 @@ export default function SeedingDealDetail() {
   const assigneeId = (del: SeedingDeliverable) =>
     del.assigned_fulfillment_user_id || del.assigned_to || "";
 
+  const deliverablePageOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const d of draft?.deliverables || []) {
+      if (d.page_name) names.add(d.page_name);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [draft?.deliverables]);
+
+  const visibleDeliverables = useMemo(() => {
+    const rows = draft?.deliverables || [];
+    if (!delivPageFilter) return rows;
+    return rows.filter((d) => d.page_name === delivPageFilter);
+  }, [draft?.deliverables, delivPageFilter]);
+
   if (!deal || !draft) {
     return (
       <FramerPage>
@@ -373,9 +388,20 @@ export default function SeedingDealDetail() {
         </Section>
 
         <Section
-          title={`Deliverables (${draft.deliverables?.length ?? 0})`}
+          title={`Deliverables (${visibleDeliverables.length}${delivPageFilter ? ` · ${delivPageFilter}` : ""} / ${draft.deliverables?.length ?? 0})`}
           action={
             <div className="seeding-detail-section-actions">
+              <select
+                className="seeding-inline-select"
+                value={delivPageFilter}
+                onChange={(e) => setDelivPageFilter(e.target.value)}
+                title="Filter by page"
+              >
+                <option value="">All pages</option>
+                {deliverablePageOptions.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
               {canManageOutputs ? (
                 <button type="button" className="seeding-detail-ghost-btn" onClick={() => setShowAddDeliv((v) => !v)}>+ Add</button>
               ) : null}
@@ -403,7 +429,7 @@ export default function SeedingDealDetail() {
             </div>
           )}
           <div className="seeding-deliverables-stack">
-            {(draft.deliverables || []).map((del) => (
+            {visibleDeliverables.map((del) => (
               <article key={del.deliverable_id} className="seeding-surface-nested seeding-deliverable-card">
                 <div className="seeding-deliverable-head">
                   <div>
