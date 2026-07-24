@@ -60,7 +60,7 @@ export default function SeedingDealDetail() {
 
   useEffect(() => { load().catch(() => { setDeal(null); setDraft(null); }); }, [load]);
   useEffect(() => {
-    api.get<any[]>("/pages").then(({ data }) => {
+    api.get<any[]>("/pages", { params: { only_active: true } }).then(({ data }) => {
       setPages(data || []);
       setNewDeliv((d) => (d.page_id ? d : { ...d, page_id: (data || [])[0]?.page_id || "" }));
     }).catch(() => {});

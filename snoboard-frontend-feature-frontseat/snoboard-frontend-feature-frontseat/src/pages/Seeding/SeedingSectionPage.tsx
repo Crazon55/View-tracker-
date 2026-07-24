@@ -67,7 +67,7 @@ export default function SeedingSectionPage() {
   }, [section]);
 
   const loadPages = useCallback(async () => {
-    const { data } = await api.get<any[]>("/pages");
+    const { data } = await api.get<any[]>("/pages", { params: { only_active: true } });
     setPages(data || []);
   }, []);
 

@@ -700,7 +700,8 @@ async def create_team(payload: TeamCreate, user: dict = Depends(get_current_user
 
 # ----------------------------- Monetisable Pages -----------------------------
 @api.get("/pages")
-async def list_pages(only_active: bool = False, user: dict = Depends(get_current_user)):
+async def list_pages(only_active: bool = True, user: dict = Depends(get_current_user)):
+    """Deal-eligible pages. Defaults to active-only (brief + monetisation catalog)."""
     q = {"active": True} if only_active else {}
     return await db.monetisable_pages.find(q, {"_id": 0}).to_list(1000)
 

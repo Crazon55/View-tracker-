@@ -68,7 +68,9 @@ export default function SeedingSubmitBrief() {
   const eligiblePages = useMemo(() => pages.filter((p) => p.active !== false), [pages]);
 
   useEffect(() => {
-    api.get<SeedingPage[]>("/pages").then(({ data }) => setPages(data || [])).catch(() => setPages([]));
+    api.get<SeedingPage[]>("/pages", { params: { only_active: true } })
+      .then(({ data }) => setPages(data || []))
+      .catch(() => setPages([]));
   }, []);
 
   // Once pages load, default any empty page selection to the first eligible page.

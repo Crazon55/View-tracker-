@@ -538,7 +538,11 @@ export function mockSeedingGet<T>(path: string, params?: Record<string, unknown>
     const dealId = params?.deal_id;
     return (dealId ? flat.filter((r) => r.deal_id === dealId) : flat) as T;
   }
-  if (clean === "/pages" || clean === "/monetisable-pages") return MOCK_PAGES as T;
+  if (clean === "/pages" || clean === "/monetisable-pages") {
+    const onlyActive = params?.only_active === true || params?.only_active === "true" || params?.only_active == null;
+    const pages = onlyActive ? MOCK_PAGES.filter((p) => p.active !== false) : MOCK_PAGES;
+    return pages as T;
+  }
   if (clean === "/users") return MOCK_SEEDING_USERS as T;
   const dealMatch = clean.match(/^\/deals\/([^/]+)$/);
   if (dealMatch) {
