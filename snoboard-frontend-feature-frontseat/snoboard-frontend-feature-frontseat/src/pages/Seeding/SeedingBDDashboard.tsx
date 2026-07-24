@@ -1,10 +1,10 @@
-// BD dashboard — a BD sees only THEIR team's briefs, deals & revenue (backend scopes
-// /reports/overview + /deals to the caller's team). Submit Brief + the deal list live
-// here, so there's no separate "All Deals" page for BD. Framer-styled port of the
-// original FS-Seeding BDDashboard.
+// BD dashboard — a BD sees only THEIR team's briefs & deals (backend scopes
+// /reports/overview + /deals to the caller's team). Revenue totals stay admin-only.
+// Submit Brief + the deal list live here, so there's no separate "All Deals" page
+// for BD. Framer-styled port of the original FS-Seeding BDDashboard.
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { TrendingUp, FileText, CheckCircle2, AlertCircle, Eye, Wallet, Plus } from "lucide-react";
+import { FileText, CheckCircle2, AlertCircle, Eye, Wallet, Plus } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { bdTeamNameForRole } from "@/lib/accessModel";
 import { api } from "@/services/seeding/client";
@@ -80,7 +80,7 @@ export default function SeedingBDDashboard() {
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16 }}>
         <div>
           <h1 className="f-h1">{teamName}</h1>
-          <p className="f-lead">Your team's briefs, deals and revenue — this month.</p>
+          <p className="f-lead">Your team's briefs and deals — this month.</p>
         </div>
         <Link to="/seeding/submit" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#fff", color: "#000", borderRadius: 8, padding: "10px 16px", fontSize: 13, fontWeight: 600, flexShrink: 0 }}>
           <Plus size={15} strokeWidth={2.25} /> Submit New Brief
@@ -88,7 +88,6 @@ export default function SeedingBDDashboard() {
       </div>
 
       <section style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginTop: 26 }} className="seeding-stats">
-        <Stat icon={TrendingUp} label="Team revenue closed" value={formatCurrency(data?.revenue_closed ?? 0)} accent="text-emerald-400" />
         <Stat icon={FileText} label="Briefs submitted" value={submitted} />
         <Stat icon={CheckCircle2} label="Briefs approved" value={data?.deals_approved ?? 0} accent="text-emerald-400" />
         <Stat icon={CheckCircle2} label="Deals completed" value={data?.deals_completed ?? 0} />

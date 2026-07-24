@@ -1523,7 +1523,12 @@ async def _reports_overview_body(user: dict, from_date: Optional[str], to_date: 
     pending_review = [d for d in deals if d.get("admin_review_status") == "Submitted"]
     needs_info = [d for d in deals if d.get("admin_review_status") == "Needs More Info"]
 
-    revenue = sum(float(d.get("price_closed_at") or 0) for d in revenue_deals) if user["role"] != "fulfillment" else 0
+    # Revenue totals are admin-facing; BD/fulfillment dashboards do not surface them.
+    revenue = (
+        sum(float(d.get("price_closed_at") or 0) for d in revenue_deals)
+        if user["role"] == "admin"
+        else 0
+    )
 
     # team-wise revenue (admin only)
     team_revenue = []
