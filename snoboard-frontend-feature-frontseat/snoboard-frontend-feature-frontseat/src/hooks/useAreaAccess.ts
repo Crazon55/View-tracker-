@@ -7,6 +7,7 @@ import { getUserAccess } from "@/services/api";
 import {
   canEditArea,
   canSeeAnyNonSeeding,
+  canSeeAnySeeding,
   canView,
   getAreaLevel,
   type AreaKey,
@@ -42,6 +43,7 @@ export function useAreaAccess() {
       getLevel: (area: AreaKey): AreaLevel =>
         getAreaLevel(role, area, undefined, personAccess),
       canSeeContent: () => canSeeAnyNonSeeding(role, undefined, personAccess),
+      canSeeSeeding: () => canSeeAnySeeding(role, undefined, personAccess),
     }),
     [role, personAccess],
   );

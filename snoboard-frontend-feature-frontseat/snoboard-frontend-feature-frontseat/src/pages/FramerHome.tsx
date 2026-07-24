@@ -9,6 +9,7 @@ import { getDashboard, getSixDayMonth } from "@/services/api";
 import { TEAM_ROSTERS, normTeamHandle } from "@/lib/teamRosters";
 import { getOverview, fmtINR } from "@/services/seedingApi";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAreaAccess } from "@/hooks/useAreaAccess";
 import { gates } from "@/config/appNav";
 import { RingStat, RankList } from "@/components/framer/Framer";
 
@@ -250,8 +251,10 @@ const SAMPLE = {
 
 export default function FramerHome() {
   const { role } = usePermissions();
+  const { canSeeSeeding } = useAreaAccess();
   const roles = String(role || "").split(",").map((s) => s.trim()).filter(Boolean);
-  const canSeeding = gates(roles).seeding;
+  // Respect Users & Roles matrix (not just bd/fulfillment role names).
+  const canSeeding = canSeeSeeding() || gates(roles).seeding;
   const [viewPeriod, setViewPeriod] = useState<ViewPeriod>("all");
   const [trackerMonth, setTrackerMonth] = useState(() => new Date().toISOString().slice(0, 7));
 

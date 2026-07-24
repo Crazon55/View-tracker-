@@ -8,7 +8,7 @@ import {
   Users, ShieldCheck, LayoutDashboard, type LucideIcon,
 } from "lucide-react";
 import { PLAYBOOK_CONFIGS, type PlaybookId } from "@/lib/playbookExperimentConfig";
-import { canSeeAnyNonSeeding, type PersonAccess } from "@/lib/accessModel";
+import { canSeeAnyNonSeeding, canSeeAnySeeding, canView, type PersonAccess } from "@/lib/accessModel";
 
 export type Gate = "seeding" | "admin"; // undefined = everyone
 export type NavLeaf = { to: string; label: string; desc?: string; icon: LucideIcon; external?: boolean };
@@ -64,8 +64,8 @@ export const NAV: NavMenu[] = [
 
 // ── RBAC (TEMP combined FSOS + Seeding roles; redone when models merge) ──
 const ADMIN_TIER = ["admin", "boss_man", "ai_dev", "senior_cs", "ai_automations"];
-const SEEDING_ONLY = ["bd", "fulfillment", "pending"];
 
+/** @deprecated Prefer canSeeAnySeeding / canView — kept for callers until migrated. */
 export function gates(roles: string[]) {
   const r = roles.map((x) => x.trim().toLowerCase());
   const isAdmin = r.some((x) => ADMIN_TIER.includes(x));
@@ -73,14 +73,14 @@ export function gates(roles: string[]) {
   return { admin: isAdmin, seeding: canSeeding };
 }
 
-/** Filter the nav to what this user's roles may see. Home is hidden for seeding-only
- * roles (BD/Fulfillment) who have no FSOS/content access — leaf-level filtering in
- * FramerTopNav then scopes each menu's items by the access model. */
+/** Filter the nav to what this user may see. Menu gates respect the per-person
+ * access matrix from Users & Roles (not only hard-coded role names). */
 export function navForRoles(roles: string[], personAccess?: PersonAccess | null): NavMenu[] {
-  const g = gates(roles);
   const roleStr = roles.join(",");
   return NAV.filter((m) => {
     if ("link" in m && m.link === "/") return canSeeAnyNonSeeding(roleStr, undefined, personAccess);
-    return !m.requires || g[m.requires];
+    if (m.requires === "seeding") return canSeeAnySeeding(roleStr, undefined, personAccess);
+    if (m.requires === "admin") return canView(roleStr, "users_roles", undefined, personAccess);
+    return true;
   });
 }

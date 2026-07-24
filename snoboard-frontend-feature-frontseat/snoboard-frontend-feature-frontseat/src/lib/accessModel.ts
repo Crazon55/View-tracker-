@@ -345,3 +345,14 @@ export function canSeeAnyNonSeeding(
     (a) => a.group !== "Seeding" && a.group !== "Admin" && canView(role, a.key, o, personAccess),
   );
 }
+
+/** True if the user can view any Seeding area (role defaults or saved per-person matrix). */
+export function canSeeAnySeeding(
+  role: string | null | undefined,
+  o?: AccessOverrides,
+  personAccess?: PersonAccess | null,
+): boolean {
+  return AREAS.some(
+    (a) => a.group === "Seeding" && canView(role, a.key, o, personAccess),
+  );
+}

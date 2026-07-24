@@ -553,15 +553,15 @@ function AppLayout() {
         <div>
           <SeedingPreviewBanner />
           <Routes>
-            <Route path="/seeding" element={<SeedingHome />} />
+            <Route path="/seeding" element={<RequireArea area="seeding_overview"><SeedingHome /></RequireArea>} />
             <Route path="/seeding/approvals" element={<RequireArea area="seeding_approvals"><SeedingApprovalQueue /></RequireArea>} />
-            <Route path="/seeding/deals" element={<SeedingAllDeals />} />
-            <Route path="/seeding/deals/:dealId" element={<SeedingDealDetail />} />
-            <Route path="/seeding/fulfillment" element={<SeedingFulfillmentBoard />} />
-            <Route path="/seeding/submit" element={<SeedingSubmitBrief />} />
-            <Route path="/seeding/pages" element={<SeedingSectionPage />} />
-            <Route path="/seeding/teamwise" element={<SeedingTeamwise />} />
-            <Route path="/seeding/users" element={<SeedingSectionPage />} />
+            <Route path="/seeding/deals" element={<RequireArea area="seeding_deals"><SeedingAllDeals /></RequireArea>} />
+            <Route path="/seeding/deals/:dealId" element={<RequireArea area="seeding_deals"><SeedingDealDetail /></RequireArea>} />
+            <Route path="/seeding/fulfillment" element={<RequireArea area="seeding_fulfillment"><SeedingFulfillmentBoard /></RequireArea>} />
+            <Route path="/seeding/submit" element={<RequireArea area="seeding_submit"><SeedingSubmitBrief /></RequireArea>} />
+            <Route path="/seeding/pages" element={<RequireArea area="seeding_pages"><SeedingSectionPage /></RequireArea>} />
+            <Route path="/seeding/teamwise" element={<RequireArea area="seeding_teamwise"><SeedingTeamwise /></RequireArea>} />
+            <Route path="/seeding/users" element={<RequireArea area="users_roles"><SeedingSectionPage /></RequireArea>} />
           </Routes>
         </div>
       ) : isFullScreen ? (
