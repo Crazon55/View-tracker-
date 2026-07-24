@@ -146,7 +146,7 @@ def parse_iso(v: Any) -> Optional[datetime]:
 ROLES = {"pending", "admin", "bd", "fulfillment"}
 ADMIN_REVIEW_STATUSES = ["Submitted", "Needs More Info", "Rejected", "Approved", "Cancelled"]
 DEAL_STATUSES = ["Accepted", "In Progress", "Client Review", "Approved", "Scheduled", "Posted", "Completed", "Cancelled"]
-DELIVERABLE_STATUSES = ["Not Started", "Writing", "Designing", "Client Review", "Approved", "Scheduled", "Posted", "Completed", "Blocked"]
+DELIVERABLE_STATUSES = ["Not Started", "Clipping", "Writing", "Designing", "Editing", "Client Review", "Approved", "Scheduled", "Posted", "Completed", "Blocked"]
 PAYMENT_STATUSES = ["Not Raised", "Raised", "Payment Pending", "Partially Paid", "Paid"]
 DELIVERABLE_TYPES = ["Reel", "Static", "Carousel"]
 OUTPUT_TYPES = ["Writeup", "Canva Link", "Drive Link", "Google Doc Link", "Content Link", "Other"]

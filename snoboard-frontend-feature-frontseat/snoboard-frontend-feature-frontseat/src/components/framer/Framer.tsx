@@ -39,7 +39,7 @@ export function Badge({ children, tone = "accent" }: { children: ReactNode; tone
 /* status pill — maps common deal/deliverable states to a tone */
 const PILL_TONE: Record<string, string> = {
   Paid: "ok", Completed: "ok", Approved: "ok", Resolved: "ok",
-  "In Progress": "work", Accepted: "work", Designing: "work", Writing: "work", Open: "work",
+  "In Progress": "work", Accepted: "work", Designing: "work", Writing: "work", Clipping: "work", Editing: "work", Open: "work",
   Raised: "wait", "Payment Pending": "wait", Awaiting: "wait", "Needs More Info": "wait", "Client Review": "wait",
   Rejected: "no", Blocked: "no", Cancelled: "no",
 };

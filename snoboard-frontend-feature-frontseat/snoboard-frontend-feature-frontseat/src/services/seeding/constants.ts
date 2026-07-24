@@ -3,7 +3,7 @@
 export const ROLES = ["pending", "admin", "bd", "fulfillment"];
 export const ADMIN_REVIEW_STATUSES = ["Submitted", "Needs More Info", "Rejected", "Approved", "Cancelled", "Archived"];
 export const DEAL_STATUSES = ["Accepted", "In Progress", "Client Review", "Approved", "Scheduled", "Posted", "Completed", "Cancelled"];
-export const DELIVERABLE_STATUSES = ["Not Started", "Writing", "Designing", "Client Review", "Approved", "Scheduled", "Posted", "Completed", "Blocked"];
+export const DELIVERABLE_STATUSES = ["Not Started", "Clipping", "Writing", "Designing", "Editing", "Client Review", "Approved", "Scheduled", "Posted", "Completed", "Blocked"];
 export const PAYMENT_STATUSES = ["Not Raised", "Raised", "Payment Pending", "Partially Paid", "Paid"];
 export const DELIVERABLE_TYPES = ["Reel", "Static", "Carousel"];
 export const OUTPUT_TYPES = ["Writeup", "Canva Link", "Drive Link", "Google Doc Link", "Content Link", "Other"];
