@@ -1,5 +1,5 @@
--- Official Frontseat monetisable pages (from Current Page Pricing sheet).
--- Safe to re-run. Upserts by page_id; renames legacy seed rows where handles match.
+-- Official Frontseat monetisable pages ONLY (Current Page Pricing sheet).
+-- Safe to re-run. Upserts the 8 pages and deactivates everything else.
 
 create table if not exists public.seeding_monetisable_pages (
     page_id       text primary key,
@@ -13,21 +13,21 @@ create table if not exists public.seeding_monetisable_pages (
 
 insert into public.seeding_monetisable_pages (page_id, page_name, active, notes, created_at, updated_at)
 values
-  ('page_101xfounders',      '101x Founders',        true, '@101xfounders · excluded from Business bundle', now(), now()),
-  ('page_bizzindia',         'Bizz India',           true, '@bizzindia · Business bundle', now(), now()),
-  ('page_indiabusinesscom',  'India Business Com',   true, '@indiabusinesscom · Business bundle', now(), now()),
-  ('page_indiafoundersco',   'India Founders Co',    true, '@indiafoundersco · Business bundle', now(), now()),
-  ('page_indiafounderscore', 'India Founders Core',  true, '@indiafounderscore · Business bundle', now(), now()),
-  ('page_foundersinindia',   'Founders in India',    true, '@foundersinindia · Business bundle', now(), now()),
-  ('page_startupcoded',      'Startup Coded',        true, '@startupcoded · Business bundle', now(), now()),
-  ('page_indiastartupstory', 'India Startup Story',  true, '@indiastartupstory · Business bundle', now(), now())
+  ('page_101xfounders',      '101xFounders',       true, 'Excluded from Business bundle', now(), now()),
+  ('page_bizzindia',         'BizzIndia',          true, 'Business bundle', now(), now()),
+  ('page_indiabusinesscom',  'IndiaBusinessCom',   true, 'Business bundle', now(), now()),
+  ('page_indiafoundersco',   'IndiaFoundersCo',    true, 'Business bundle', now(), now()),
+  ('page_indiafounderscore', 'IndiaFoundersCore',  true, 'Business bundle', now(), now()),
+  ('page_foundersinindia',   'FoundersInIndia',    true, 'Business bundle', now(), now()),
+  ('page_startupcoded',      'StartupCoded',       true, 'Business bundle', now(), now()),
+  ('page_indiastartupstory', 'IndiaStartupStory',  true, 'Business bundle', now(), now())
 on conflict (page_id) do update set
   page_name  = excluded.page_name,
-  active     = excluded.active,
+  active     = true,
   notes      = excluded.notes,
   updated_at = now();
 
--- Soft-deactivate legacy demo pages that are not on the pricing sheet.
+-- Only these 8 stay active — everything else is off.
 update public.seeding_monetisable_pages
 set active = false, updated_at = now()
 where page_id not in (
@@ -39,11 +39,4 @@ where page_id not in (
   'page_foundersinindia',
   'page_startupcoded',
   'page_indiastartupstory'
-)
-and page_name in (
-  'Startup by Dog',
-  'The Changing Order',
-  'Biz India',
-  'Indian Founders Co',
-  'Startupcoded'
 );

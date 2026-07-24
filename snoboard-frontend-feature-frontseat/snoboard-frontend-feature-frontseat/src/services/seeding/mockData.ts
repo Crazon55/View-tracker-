@@ -548,16 +548,16 @@ export function mockSeedingGet<T>(path: string, params?: Record<string, unknown>
   return [] as T;
 }
 
-// Official Frontseat monetisable pages (Current Page Pricing sheet).
+// Official Frontseat monetisable pages ONLY (Current Page Pricing sheet).
 export const MOCK_PAGES = [
-  { page_id: "page_101xfounders", page_name: "101x Founders", active: true, notes: "@101xfounders · excluded from Business bundle" },
-  { page_id: "page_bizzindia", page_name: "Bizz India", active: true, notes: "@bizzindia · Business bundle" },
-  { page_id: "page_indiabusinesscom", page_name: "India Business Com", active: true, notes: "@indiabusinesscom · Business bundle" },
-  { page_id: "page_indiafoundersco", page_name: "India Founders Co", active: true, notes: "@indiafoundersco · Business bundle" },
-  { page_id: "page_indiafounderscore", page_name: "India Founders Core", active: true, notes: "@indiafounderscore · Business bundle" },
-  { page_id: "page_foundersinindia", page_name: "Founders in India", active: true, notes: "@foundersinindia · Business bundle" },
-  { page_id: "page_startupcoded", page_name: "Startup Coded", active: true, notes: "@startupcoded · Business bundle" },
-  { page_id: "page_indiastartupstory", page_name: "India Startup Story", active: true, notes: "@indiastartupstory · Business bundle" },
+  { page_id: "page_101xfounders", page_name: "101xFounders", active: true, notes: "Excluded from Business bundle" },
+  { page_id: "page_bizzindia", page_name: "BizzIndia", active: true, notes: "Business bundle" },
+  { page_id: "page_indiabusinesscom", page_name: "IndiaBusinessCom", active: true, notes: "Business bundle" },
+  { page_id: "page_indiafoundersco", page_name: "IndiaFoundersCo", active: true, notes: "Business bundle" },
+  { page_id: "page_indiafounderscore", page_name: "IndiaFoundersCore", active: true, notes: "Business bundle" },
+  { page_id: "page_foundersinindia", page_name: "FoundersInIndia", active: true, notes: "Business bundle" },
+  { page_id: "page_startupcoded", page_name: "StartupCoded", active: true, notes: "Business bundle" },
+  { page_id: "page_indiastartupstory", page_name: "IndiaStartupStory", active: true, notes: "Business bundle" },
 ];
 
 export const MOCK_SEEDING_USERS = [
