@@ -59,6 +59,8 @@ export type FsiFlowCanvasHandle = {
   focusCanvas: () => void;
   /** Select every canvas node (not frames). */
   selectAllNodes: () => void;
+  /** Select specific nodes (clears prior selection). Retries until ids appear in flow. */
+  selectNodeIds: (nodeIds: string[]) => void;
   /** Bounding box that covers all listed nodes using measured canvas sizes. */
   getBoundsForNodeIds: (nodeIds: string[]) => ReturnType<typeof boundsFromExtents> | null;
   /** Node ids currently selected on the canvas (live React Flow state). */
@@ -447,6 +449,38 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
           onSelectionChange({ nodes: selectedNodes, edges: [] });
         });
       },
+      selectNodeIds: (nodeIds: string[]) => {
+        if (nodeIds.length === 0) return;
+        const idSet = new Set(nodeIds);
+        let attempts = 0;
+        const maxAttempts = 20;
+
+        const apply = () => {
+          attempts += 1;
+          const current = getNodes();
+          const presentCount = nodeIds.filter((id) => current.some((n) => n.id === id)).length;
+          if (presentCount < nodeIds.length && attempts < maxAttempts) {
+            requestAnimationFrame(apply);
+            return;
+          }
+
+          setNodes((nds) =>
+            nds.map((n) => ({
+              ...n,
+              selected: idSet.has(n.id) && n.type !== "fsiFrame",
+            })),
+          );
+          queueMicrotask(() => {
+            const selectedNodes = getNodes().filter(
+              (n) => idSet.has(n.id) && n.type !== "fsiFrame",
+            );
+            onSelectionChange({ nodes: selectedNodes, edges: [] });
+            paneRef.current?.focus();
+          });
+        };
+
+        requestAnimationFrame(apply);
+      },
       getBoundsForNodeIds: (nodeIds: string[]) => {
         if (nodeIds.length === 0) return null;
         const dbById = new Map(dbNodes.map((n) => [n.id, n]));
@@ -505,6 +539,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
       persistViewport,
       selectedNodeId,
       setCenter,
+      setNodes,
       onSelectionChange,
     ],
   );

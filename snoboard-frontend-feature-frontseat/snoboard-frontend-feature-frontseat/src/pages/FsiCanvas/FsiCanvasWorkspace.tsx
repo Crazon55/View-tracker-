@@ -552,8 +552,16 @@ export default function FsiCanvasWorkspace() {
     },
   });
 
+  const selectDuplicatedNodes = useCallback((createdIds: string[]) => {
+    if (createdIds.length === 0) return;
+    canvasRef.current?.selectNodeIds(createdIds);
+  }, []);
+
   const runDuplicateNode = useCallback(
-    async (source: FsiNodeRecord, opts: { offsetX: number; offsetY: number }) => {
+    async (
+      source: FsiNodeRecord,
+      opts: { offsetX: number; offsetY: number; silent?: boolean },
+    ) => {
       // Corner "+" always copies the node alone — no connectors.
       // Cloning edges into the existing graph (or a half-cluster) created messy tangles.
       const created = (await duplicateNodeMutation.mutateAsync({
@@ -561,7 +569,7 @@ export default function FsiCanvasWorkspace() {
         offsetX: opts.offsetX,
         offsetY: opts.offsetY,
       })) as FsiNodeRecord;
-      toast.success("Node duplicated");
+      if (!opts.silent) toast.success("Node duplicated");
       return created;
     },
     [duplicateNodeMutation],
@@ -862,33 +870,58 @@ export default function FsiCanvasWorkspace() {
     const sources = g.nodes.filter((n) => ids.includes(n.id) && isCanvasNode(n));
     if (sources.length === 0) return;
 
+    const createdIds: string[] = [];
     for (const source of sources) {
-      await duplicateNodeMutation.mutateAsync({ source });
+      const created = (await duplicateNodeMutation.mutateAsync({ source })) as FsiNodeRecord;
+      createdIds.push(created.id);
     }
+    selectDuplicatedNodes(createdIds);
     if (sources.length > 1) {
       toast.success(`Duplicated ${sources.length} nodes`);
     } else {
       toast.success("Node duplicated");
     }
-  }, [canEdit, duplicateNodeMutation, multiSelectedIds, selectedNode]);
+  }, [canEdit, duplicateNodeMutation, multiSelectedIds, selectDuplicatedNodes, selectedNode]);
 
   const handleRequestDuplicate = useCallback(
     async (nodeId: string, corner: DuplicateCorner) => {
       if (!canEdit || duplicateBusy) return;
       const g = graphRef.current;
-      const source = g?.nodes.find((n) => n.id === nodeId);
-      if (!source || !isCanvasNode(source)) return;
+      if (!g) return;
+
+      const live = canvasRef.current?.getSelectedNodeIds() ?? [];
+      const selectionIds =
+        live.length > 1 && live.includes(nodeId)
+          ? live
+          : multiSelectedIds.length > 1 && multiSelectedIds.includes(nodeId)
+            ? multiSelectedIds
+            : [nodeId];
+      const sources = g.nodes.filter((n) => selectionIds.includes(n.id) && isCanvasNode(n));
+      if (sources.length === 0) return;
+
       const offset = offsetForDuplicateCorner(corner);
       setDuplicateBusy(true);
       try {
-        await runDuplicateNode(source, { offsetX: offset.x, offsetY: offset.y });
+        const createdIds: string[] = [];
+        for (const source of sources) {
+          const created = await runDuplicateNode(source, {
+            offsetX: offset.x,
+            offsetY: offset.y,
+            silent: true,
+          });
+          createdIds.push(created.id);
+        }
+        selectDuplicatedNodes(createdIds);
+        toast.success(
+          sources.length > 1 ? `Duplicated ${sources.length} nodes` : "Node duplicated",
+        );
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Duplicate failed");
       } finally {
         setDuplicateBusy(false);
       }
     },
-    [canEdit, duplicateBusy, runDuplicateNode],
+    [canEdit, duplicateBusy, multiSelectedIds, runDuplicateNode, selectDuplicatedNodes],
   );
 
   const handleDeleteSelection = useCallback(() => {
