@@ -610,12 +610,14 @@ export function mockSeedingGet<T>(path: string, params?: Record<string, unknown>
   }
   if (clean === "/users") return MOCK_SEEDING_USERS as T;
   if (clean === "/users/fulfillment") {
-    return MOCK_SEEDING_USERS.filter((u) => u.role === "fulfillment" || !u.role).map((u) => ({
-      user_id: u.user_id,
-      name: u.name,
-      email: u.email,
-      role: u.role || "fulfillment",
-    })) as T;
+    const pool = [
+      ...MOCK_SEEDING_USERS,
+      { user_id: "user_arohi", name: "Arohi", email: "arohi@owledmedia.com", role: "fulfillment" },
+      { user_id: "user_om", name: "Om", email: "om@owledmedia.com", role: "fulfillment" },
+    ];
+    return pool
+      .filter((u) => ["fulfillment", "ve", "cw", "cs", "co", "editors", "design"].includes(String(u.role || "")))
+      .map((u) => ({ user_id: u.user_id, name: u.name, email: u.email, role: u.role || "fulfillment" })) as T;
   }
   const dealMatch = clean.match(/^\/deals\/([^/]+)$/);
   if (dealMatch) {
