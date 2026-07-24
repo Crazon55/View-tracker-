@@ -158,7 +158,6 @@ export default function SeedingDealDetail() {
 
   const [pages, setPages] = useState<any[]>([]);
   const [assignees, setAssignees] = useState<{ user_id: string; name: string; email?: string }[]>([]);
-  const [delivsView, setDelivsView] = useState<"see" | "close">("see");
   const [showAddDeliv, setShowAddDeliv] = useState(false);
   const [newDeliv, setNewDeliv] = useState({ page_id: "", deliverable_type: "Reel", quantity: 1 });
   const [showAddOutput, setShowAddOutput] = useState(false);
@@ -350,15 +349,6 @@ export default function SeedingDealDetail() {
           title={`Deliverables (${draft.deliverables?.length ?? 0})`}
           action={
             <div className="seeding-detail-section-actions">
-              <select
-                className="seeding-inline-select"
-                value={delivsView}
-                onChange={(e) => setDelivsView(e.target.value as "see" | "close")}
-                title="Show or hide deliverable cards"
-              >
-                <option value="see">See</option>
-                <option value="close">Close</option>
-              </select>
               {canManageOutputs ? (
                 <button type="button" className="seeding-detail-ghost-btn" onClick={() => setShowAddDeliv((v) => !v)}>+ Add</button>
               ) : null}
@@ -372,10 +362,6 @@ export default function SeedingDealDetail() {
             </div>
           }
         >
-          {delivsView === "close" ? (
-            <p className="seeding-muted">Deliverables closed — switch to See to expand.</p>
-          ) : (
-            <>
           {showAddDeliv && canManageOutputs && (
             <div className="seeding-surface-nested" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", padding: 12, borderRadius: 12, marginBottom: 12 }}>
               <select className="seeding-inline-select" style={{ flex: "1 1 180px" }} value={newDeliv.page_id} onChange={(e) => setNewDeliv((d) => ({ ...d, page_id: e.target.value }))}>
@@ -470,8 +456,6 @@ export default function SeedingDealDetail() {
               </article>
             ))}
           </div>
-            </>
-          )}
         </Section>
 
         <Section
