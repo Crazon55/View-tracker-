@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { NodeResizer, type NodeProps, useUpdateNodeInternals } from "@xyflow/react";
-import { ChevronDown, ExternalLink, Loader2 } from "lucide-react";
+import { ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { FsiNodeData } from "../lib/fsiFlowAdapter";
 import { PERFORMANCE_LABELS } from "../lib/fsiNodeSchemas";
@@ -27,6 +27,7 @@ import {
   NODE_TITLE_EMPTY_CLASS,
   NODE_TITLE_INPUT_CLASS,
   NODE_FIELD_INPUT_CLASS,
+  NODE_FIELD_FOCUSED_DRAG_LOCK,
   isUnsetNodeTitle,
   nodeCardHeight,
   nodeCardWidth,
@@ -37,6 +38,7 @@ import {
 import FsiNodeHandles from "./FsiNodeHandles";
 import FsiNodeExpandToggle from "./FsiNodeExpandToggle";
 import FsiCarouselSlidesEditor from "./FsiCarouselSlidesEditor";
+import FsiDragSafeToggle from "./FsiDragSafeToggle";
 import FsiNodeDuplicateCorners, { type DuplicateCorner } from "./FsiNodeDuplicateCorners";
 import { cn } from "@/lib/utils";
 
@@ -60,6 +62,12 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
   } = nodeData;
 
   const [title, setTitle] = useState(fsiNode.display_title);
+  const [fieldFocused, setFieldFocused] = useState(false);
+  const dragLockWhenFocused = fieldFocused ? NODE_FIELD_FOCUSED_DRAG_LOCK : "";
+  const fieldFocusProps = {
+    onFocus: () => setFieldFocused(true),
+    onBlurCapture: () => setFieldFocused(false),
+  };
   const [body, setBody] = useState(() => {
     const raw = fsiNode.raw_body_text ?? "";
     if (raw.trim()) return raw;
@@ -161,7 +169,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
   const cardH = nodeCardHeight(payload, uiExpanded);
 
   const inputClass =
-    "nodrag nopan nowheel w-full rounded border border-emerald-900/40 bg-emerald-950/30 px-2 py-1 text-xs text-emerald-950 placeholder:text-emerald-900/40 focus:border-emerald-700 focus:outline-none";
+    "nowheel w-full rounded border border-emerald-900/40 bg-emerald-950/30 px-2 py-1 text-xs text-emerald-950 placeholder:text-emerald-900/40 focus:border-emerald-700 focus:outline-none";
 
   // Fields are editable based on edit permission alone (not selection).
   const editing = canEdit;
@@ -178,19 +186,22 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
     return () => ro.disconnect();
   }, [id, updateNodeInternals, isScreenshot, screenshotUrl, fieldDefs.length]);
 
-  // Interacting with a node's form field must NOT select/drag the node. React Flow's
-  // node selection & drag run on NATIVE listeners on the parent .react-flow__node, so
-  // React's synthetic stopPropagation on the input fires too late. Stop these events
-  // natively at the node root (a child of .react-flow__node) whenever the target is an
-  // editable field — clicks on the rest of the node still select/drag as normal.
+  // Only block node drag when the user is already editing a field (focused).
+  // Unfocused inputs stay draggable so grabbing a title/body still moves the card.
   useEffect(() => {
     const el = rootRef.current;
     if (!el) return;
     const stopFieldEvents = (e: Event) => {
       const t = e.target as HTMLElement | null;
-      if (t && t.closest("input, textarea, select, [contenteditable='true']")) {
-        e.stopPropagation();
+      if (!t) return;
+      const field = t.closest("input, textarea, select, [contenteditable='true']") as
+        | HTMLElement
+        | null;
+      if (!field) return;
+      if (document.activeElement !== field && (e.type === "pointerdown" || e.type === "mousedown")) {
+        return;
       }
+      e.stopPropagation();
     };
     el.addEventListener("pointerdown", stopFieldEvents);
     el.addEventListener("mousedown", stopFieldEvents);
@@ -207,9 +218,9 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
   const isLinkCard = isLinkNode(fsiNode);
   const isNiche = nodeData.nodeType === "Niche";
   const noteInputClass =
-    "nodrag nopan nowheel w-full rounded-sm border border-amber-900/20 bg-amber-50/80 px-2.5 py-2 text-xs text-zinc-900 placeholder:text-zinc-500 focus:border-amber-700 focus:outline-none";
+    "nowheel w-full rounded-sm border border-amber-900/20 bg-amber-50/80 px-2.5 py-2 text-xs text-zinc-900 placeholder:text-zinc-500 focus:border-amber-700 focus:outline-none";
   const nicheFieldClass =
-    "nodrag nopan nowheel w-full rounded border border-amber-950/45 bg-amber-950/35 px-2 py-1.5 text-xs text-emerald-950 placeholder:text-emerald-900/35 focus:border-amber-900 focus:outline-none";
+    "nowheel w-full rounded border border-amber-950/45 bg-amber-950/35 px-2 py-1.5 text-xs text-emerald-950 placeholder:text-emerald-900/35 focus:border-amber-900 focus:outline-none";
   const fieldInputClass = isNiche ? nicheFieldClass : inputClass;
   const borderClass = isNiche ? "border-amber-950/30" : "border-emerald-900/30";
 
@@ -249,9 +260,8 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
           value={val}
           onChange={(e) => setFieldValues((prev) => ({ ...prev, [def.key]: e.target.value }))}
           onBlur={(e) => commitField(def.key, e.target.value)}
-          onPointerDown={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
-          className={`${fieldInputClass} resize-none`}
+          {...fieldFocusProps}
+          className={cn(fieldInputClass, "resize-none", dragLockWhenFocused)}
         />
       ) : (
         renderFieldValue(def, val)
@@ -265,9 +275,8 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
             setFieldValues((prev) => ({ ...prev, [def.key]: e.target.value }));
             commitField(def.key, e.target.value);
           }}
-          onPointerDown={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
-          className={fieldInputClass}
+          {...fieldFocusProps}
+          className={cn(fieldInputClass, dragLockWhenFocused)}
         >
           {(def.selectOptions ?? PERFORMANCE_LABELS).map((o) => (
             <option key={o} value={o}>
@@ -292,10 +301,9 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
             setFieldValues((prev) => ({ ...prev, [def.key]: display }));
             commitField(def.key, stored);
           }}
-          onPointerDown={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
+          {...fieldFocusProps}
           placeholder="e.g. 31k"
-          className={fieldInputClass}
+          className={cn(fieldInputClass, dragLockWhenFocused)}
         />
       ) : (
         renderFieldValue(def, val)
@@ -307,9 +315,8 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
         value={val}
         onChange={(e) => setFieldValues((prev) => ({ ...prev, [def.key]: e.target.value }))}
         onBlur={(e) => commitField(def.key, e.target.value)}
-        onPointerDown={(e) => e.stopPropagation()}
-        onMouseDown={(e) => e.stopPropagation()}
-        className={fieldInputClass}
+        {...fieldFocusProps}
+        className={cn(fieldInputClass, dragLockWhenFocused)}
       />
     ) : (
       renderFieldValue(def, val)
@@ -372,7 +379,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
     return (
       <div
         ref={rootRef}
-        className={`relative overflow-visible ${
+        className={`relative cursor-grab overflow-visible ${
           selected ? "ring-[3px] ring-sky-400 shadow-[0_0_0_5px_rgba(56,189,248,0.28)] rounded-sm" : ""
         }`}
         onPaste={(e) => {
@@ -403,7 +410,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
         )}
         <FsiNodeDuplicateCorners visible={showDuplicateCorners} onCornerClick={handleCornerDuplicate} />
         <FsiNodeHandles
-          canStartConnection={canEdit}
+          canStartConnection={canEdit && selected}
           canAcceptConnection={nodeData.isConnecting}
           requiredAnchors={connectionAnchors}
           showConnectionDots={showConnectionDots || selected}
@@ -439,11 +446,15 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
             onChange={(e) => setLinkUrl(e.target.value)}
             onBlur={(e) => commitField("url", e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-            onPointerDown={(e) => e.stopPropagation()}
-            onPointerDownCapture={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-            className={`${NODE_FIELD_INPUT_CLASS} min-w-0 flex-1`}
+            onPointerDown={(e) => {
+              if (document.activeElement === e.currentTarget) e.stopPropagation();
+            }}
+            onMouseDown={(e) => {
+              if (document.activeElement === e.currentTarget) e.stopPropagation();
+            }}
+            className={cn(NODE_FIELD_INPUT_CLASS, "min-w-0 flex-1", dragLockWhenFocused)}
             placeholder="https://..."
+            {...fieldFocusProps}
           />
           {!linkUrlEmpty ? (
             <a
@@ -487,45 +498,21 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
               commitTitle(next.trim().slice(0, 80));
             }
           }}
-          onPointerDown={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => {
+            if (document.activeElement === e.currentTarget) e.stopPropagation();
+          }}
+          onMouseDown={(e) => {
+            if (document.activeElement === e.currentTarget) e.stopPropagation();
+          }}
           placeholder="Hook copy…"
-          className={`${NODE_BODY_BOX_CLASS} mt-1 min-h-[80px]`}
+          className={cn(NODE_BODY_BOX_CLASS, "mt-1 min-h-[80px]", dragLockWhenFocused)}
+          {...fieldFocusProps}
         />
       ) : (
         <div className={`${NODE_BODY_BOX_CLASS} mt-1 min-h-[80px] whitespace-pre-wrap`}>
           {body ? <FsiLinkifiedText text={body} /> : "—"}
         </div>
       );
-
-    const renderSectionToggle = (
-      label: string,
-      expanded: boolean,
-      onToggle: () => void,
-      accentClass: string,
-    ) => (
-      <button
-        type="button"
-        title={expanded ? `Collapse ${label}` : `Expand ${label}`}
-        className={cn(
-          "nodrag nopan flex h-11 w-full shrink-0 items-center justify-between gap-2 px-3 text-left hover:bg-black/5",
-          accentClass,
-        )}
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggle();
-        }}
-      >
-        <span className={NODE_TYPE_LABEL_CLASS}>{label}</span>
-        <ChevronDown
-          className={cn(
-            "h-4 w-4 shrink-0 text-black/70 transition-transform duration-150",
-            expanded && "rotate-180",
-          )}
-        />
-      </button>
-    );
 
     // One box: Written Hook + Performance + Link as three dropdowns
     if (isCombinedDetails) {
@@ -538,7 +525,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
       return (
         <div
           ref={rootRef}
-          className={`relative box-border flex flex-col overflow-hidden rounded-2xl border-2 shadow-lg ${
+          className={`relative box-border flex cursor-grab flex-col overflow-hidden rounded-2xl border-2 shadow-lg active:cursor-grabbing ${
             selected ? "ring-[3px] ring-sky-400 shadow-[0_0_0_5px_rgba(56,189,248,0.28)] ring-offset-0" : ""
           }`}
           style={{
@@ -558,23 +545,33 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
             />
           )}
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            {renderSectionToggle("Written Hook", hookOpen, () => patchPayload({ hook_expanded: !hookOpen }), "bg-violet-300/40")}
+            <FsiDragSafeToggle
+              label="Written Hook"
+              expanded={hookOpen}
+              onToggle={() => patchPayload({ hook_expanded: !hookOpen })}
+              className="bg-violet-300/40"
+            />
             {hookOpen && <div className="px-3 pb-2">{renderHookBody()}</div>}
 
-            {renderSectionToggle(
-              "Performance",
-              perfOpen,
-              () => patchPayload({ performance_expanded: !perfOpen }),
-              "bg-slate-300/50",
-            )}
+            <FsiDragSafeToggle
+              label="Performance"
+              expanded={perfOpen}
+              onToggle={() => patchPayload({ performance_expanded: !perfOpen })}
+              className="bg-slate-300/50"
+            />
             {perfOpen && <div className="px-2 pb-2">{renderFields({ forceShow: true })}</div>}
 
-            {renderSectionToggle("Link", linkOpen, () => patchPayload({ link_expanded: !linkOpen }), "bg-sky-300/40")}
+            <FsiDragSafeToggle
+              label="Link"
+              expanded={linkOpen}
+              onToggle={() => patchPayload({ link_expanded: !linkOpen })}
+              className="bg-sky-300/40"
+            />
             {linkOpen && <div className="px-3 pb-2">{renderLinkBody()}</div>}
           </div>
           <FsiNodeDuplicateCorners visible={showDuplicateCorners} onCornerClick={handleCornerDuplicate} />
           <FsiNodeHandles
-            canStartConnection={canEdit}
+            canStartConnection={canEdit && selected}
             canAcceptConnection={nodeData.isConnecting}
             requiredAnchors={connectionAnchors}
             showConnectionDots={showConnectionDots || selected}
@@ -588,7 +585,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
       return (
         <div
           ref={rootRef}
-          className={`relative box-border flex flex-col overflow-hidden rounded-2xl border-2 shadow-lg ${
+          className={`relative box-border flex cursor-grab flex-col overflow-hidden rounded-2xl border-2 shadow-lg active:cursor-grabbing ${
             selected ? "ring-[3px] ring-sky-400 shadow-[0_0_0_5px_rgba(56,189,248,0.28)] ring-offset-0" : ""
           }`}
           style={{
@@ -610,24 +607,11 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
               }}
             />
           )}
-          <button
-            type="button"
-            title={uiExpanded ? `Collapse ${dropdownLabel}` : `Expand ${dropdownLabel}`}
-            className="nodrag nopan flex h-11 w-full shrink-0 items-center justify-between gap-2 px-3 text-left hover:bg-black/5"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleExpanded();
-            }}
-          >
-            <span className={NODE_TYPE_LABEL_CLASS}>{dropdownLabel}</span>
-            <ChevronDown
-              className={cn(
-                "h-4 w-4 shrink-0 text-black/70 transition-transform duration-150",
-                uiExpanded && "rotate-180",
-              )}
-            />
-          </button>
+          <FsiDragSafeToggle
+            label={dropdownLabel}
+            expanded={uiExpanded}
+            onToggle={toggleExpanded}
+          />
           {uiExpanded && (
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-3">
               {isLinkCard
@@ -639,7 +623,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
           )}
           <FsiNodeDuplicateCorners visible={showDuplicateCorners} onCornerClick={handleCornerDuplicate} />
           <FsiNodeHandles
-            canStartConnection={canEdit}
+            canStartConnection={canEdit && selected}
             canAcceptConnection={nodeData.isConnecting}
             requiredAnchors={connectionAnchors}
             showConnectionDots={showConnectionDots || selected}
@@ -651,7 +635,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
     return (
       <div
         ref={rootRef}
-        className={`relative box-border flex flex-col overflow-hidden rounded-2xl border-2 shadow-lg ${selected ? "ring-[3px] ring-sky-400 shadow-[0_0_0_5px_rgba(56,189,248,0.28)] ring-offset-0" : ""
+        className={`relative box-border flex cursor-grab flex-col overflow-hidden rounded-2xl border-2 shadow-lg active:cursor-grabbing ${selected ? "ring-[3px] ring-sky-400 shadow-[0_0_0_5px_rgba(56,189,248,0.28)] ring-offset-0" : ""
           }`}
         style={{
           width: cardW,
@@ -691,10 +675,14 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
                     commitTitle(next.trim().slice(0, 80));
                   }
                 }}
-                onPointerDown={(e) => e.stopPropagation()}
-                onMouseDown={(e) => e.stopPropagation()}
+                {...fieldFocusProps}
                 placeholder="Hook copy…"
-                className={`${NODE_BODY_BOX_CLASS} mt-2 min-h-[40px] ${uiExpanded ? "min-h-[80px]" : ""}`}
+                className={cn(
+                  NODE_BODY_BOX_CLASS,
+                  "mt-2 min-h-[40px]",
+                  uiExpanded && "min-h-[80px]",
+                  dragLockWhenFocused,
+                )}
               />
             ) : (
               <div className={`${NODE_BODY_BOX_CLASS} mt-2 min-h-[40px] whitespace-pre-wrap`}>
@@ -707,10 +695,8 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
               onChange={(e) => setTitle(e.target.value)}
               onBlur={(e) => commitTitle(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-              onPointerDown={(e) => e.stopPropagation()}
-              onPointerDownCapture={(e) => e.stopPropagation()}
-              onMouseDown={(e) => e.stopPropagation()}
-              className={NODE_TITLE_INPUT_CLASS}
+              {...fieldFocusProps}
+              className={cn(NODE_TITLE_INPUT_CLASS, dragLockWhenFocused)}
               placeholder={nodeData.nodeType}
             />
           ) : titleEmpty ? (
@@ -729,7 +715,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
         </div>
         <FsiNodeDuplicateCorners visible={showDuplicateCorners} onCornerClick={handleCornerDuplicate} />
         <FsiNodeHandles
-          canStartConnection={canEdit}
+          canStartConnection={canEdit && selected}
           canAcceptConnection={nodeData.isConnecting}
           requiredAnchors={connectionAnchors}
           showConnectionDots={showConnectionDots || selected}
@@ -741,7 +727,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
   return (
     <div
       ref={rootRef}
-      className={`relative overflow-visible min-w-[200px] max-w-[300px] rounded-md border-2 shadow-lg ${selected ? "ring-[3px] ring-sky-400 shadow-[0_0_0_5px_rgba(56,189,248,0.28)]" : ""
+      className={`relative min-w-[200px] max-w-[300px] cursor-grab overflow-visible rounded-md border-2 shadow-lg active:cursor-grabbing ${selected ? "ring-[3px] ring-sky-400 shadow-[0_0_0_5px_rgba(56,189,248,0.28)]" : ""
         }`}
       style={{
         borderColor: isNote ? "#eab308" : nodeData.color,
@@ -762,10 +748,9 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 onBlur={(e) => commitBody(e.target.value)}
-                onPointerDown={(e) => e.stopPropagation()}
-                onMouseDown={(e) => e.stopPropagation()}
+                {...fieldFocusProps}
                 placeholder="post_id, views, url…"
-                className={`${noteInputClass} resize-none`}
+                className={cn(noteInputClass, "resize-none", dragLockWhenFocused)}
               />
             ) : (
               <div className={`${noteInputClass} min-h-[3rem] whitespace-pre-wrap`}>
@@ -782,10 +767,9 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 onBlur={(e) => commitTitle(e.target.value)}
-                onPointerDown={(e) => e.stopPropagation()}
-                onMouseDown={(e) => e.stopPropagation()}
+                {...fieldFocusProps}
                 placeholder="Niche name"
-                className={`${nicheFieldClass} mb-1 text-sm font-bold`}
+                className={cn(nicheFieldClass, "mb-1 text-sm font-bold", dragLockWhenFocused)}
               />
             ) : (
               <div className="text-sm font-bold leading-tight text-emerald-950">{title || "Niche"}</div>
@@ -802,9 +786,8 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 onBlur={(e) => commitTitle(e.target.value)}
-                onPointerDown={(e) => e.stopPropagation()}
-                onMouseDown={(e) => e.stopPropagation()}
-                className={`${inputClass} mb-1 text-sm font-bold`}
+                {...fieldFocusProps}
+                className={cn(inputClass, "mb-1 text-sm font-bold", dragLockWhenFocused)}
               />
             ) : (
               <div className="text-sm font-bold leading-tight text-emerald-950">{title}</div>
@@ -819,9 +802,10 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
 
       <FsiNodeDuplicateCorners visible={showDuplicateCorners} onCornerClick={handleCornerDuplicate} />
       <FsiNodeHandles
-        canStartConnection={canEdit}
+        canStartConnection={canEdit && selected}
         canAcceptConnection={nodeData.isConnecting}
         requiredAnchors={connectionAnchors}
+        showConnectionDots={showConnectionDots || selected}
       />
     </div>
   );

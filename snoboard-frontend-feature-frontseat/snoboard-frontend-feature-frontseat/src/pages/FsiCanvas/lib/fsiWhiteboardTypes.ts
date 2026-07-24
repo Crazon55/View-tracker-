@@ -37,6 +37,7 @@ export {
   NODE_TITLE_EMPTY_CLASS,
   NODE_TITLE_DISPLAY_CLASS,
   NODE_FIELD_INPUT_CLASS,
+  NODE_FIELD_FOCUSED_DRAG_LOCK,
   isUnsetNodeTitle,
 } from "./fsiNodeCardUi";
 

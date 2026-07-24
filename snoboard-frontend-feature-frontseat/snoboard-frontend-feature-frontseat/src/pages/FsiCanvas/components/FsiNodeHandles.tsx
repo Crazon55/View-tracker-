@@ -42,7 +42,7 @@ function anchorPointStyle(side: AnchorSide, pct: number): CSSProperties {
 }
 
 function edgeStripStyle(side: AnchorSide, large: boolean): CSSProperties {
-  const thickness = large ? 18 : 12;
+  const thickness = large ? 14 : 8;
   switch (side) {
     case "top":
       return { left: "0%", width: "100%", height: thickness, top: 0, transform: "translateY(-50%)" };
@@ -58,7 +58,7 @@ function edgeStripStyle(side: AnchorSide, large: boolean): CSSProperties {
 }
 
 const stripClass = cn(
-  "!z-[50] !border-0 !bg-transparent !opacity-0 !rounded-none nodrag nopan",
+  "!z-[50] !border-0 !bg-transparent !opacity-0 !rounded-none",
 );
 const pointClass = cn(
   "!z-[30] !h-1 !w-1 !min-h-0 !min-w-0 !border-0 !bg-transparent !opacity-0 !pointer-events-none nodrag nopan",
@@ -88,8 +88,12 @@ export default function FsiNodeHandles({
   requiredAnchors = [],
   showConnectionDots = false,
 }: Props) {
-  const sourcePointer = canStartConnection ? "!pointer-events-auto" : "!pointer-events-none";
-  const targetPointer = canAcceptConnection ? "!pointer-events-auto" : "!pointer-events-none";
+  const sourcePointer = canStartConnection
+    ? "!pointer-events-auto nodrag nopan"
+    : "!pointer-events-none";
+  const targetPointer = canAcceptConnection
+    ? "!pointer-events-auto nodrag nopan"
+    : "!pointer-events-none";
   const anchorIds = collectAnchorIds(requiredAnchors);
 
   return (
