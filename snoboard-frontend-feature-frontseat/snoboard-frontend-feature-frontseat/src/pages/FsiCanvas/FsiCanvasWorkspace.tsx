@@ -332,9 +332,30 @@ export default function FsiCanvasWorkspace() {
         raw_body_text: source.raw_body_text ?? undefined,
         tags: source.tags ?? [],
       }),
-    onSuccess: appendCreatedNode,
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const appendDuplicatedNodes = useCallback(
+    (created: FsiNodeRecord[]) => {
+      if (created.length === 0) return;
+      const g = graphRef.current;
+      if (!g) {
+        for (const node of created) appendCreatedNode(node);
+        return;
+      }
+      if (!history.isApplying.current) {
+        for (const node of created) {
+          history.pushEntry({ type: "node_add", node });
+        }
+      }
+      let next = g;
+      for (const node of created) {
+        next = appendGraphNode(next, node);
+      }
+      setGraph(next);
+    },
+    [appendCreatedNode, history, setGraph],
+  );
 
   const createScreenshotMutation = useMutation({
     mutationFn: async ({ files, x, y }: { files: File[]; x: number; y: number }) => {
@@ -556,24 +577,6 @@ export default function FsiCanvasWorkspace() {
     if (createdIds.length === 0) return;
     canvasRef.current?.selectNodeIds(createdIds);
   }, []);
-
-  const runDuplicateNode = useCallback(
-    async (
-      source: FsiNodeRecord,
-      opts: { offsetX: number; offsetY: number; silent?: boolean },
-    ) => {
-      // Corner "+" always copies the node alone — no connectors.
-      // Cloning edges into the existing graph (or a half-cluster) created messy tangles.
-      const created = (await duplicateNodeMutation.mutateAsync({
-        source,
-        offsetX: opts.offsetX,
-        offsetY: opts.offsetY,
-      })) as FsiNodeRecord;
-      if (!opts.silent) toast.success("Node duplicated");
-      return created;
-    },
-    [duplicateNodeMutation],
-  );
 
   const deleteConnectionMutation = useMutation({
     mutationFn: (id: string) => {
@@ -870,18 +873,25 @@ export default function FsiCanvasWorkspace() {
     const sources = g.nodes.filter((n) => ids.includes(n.id) && isCanvasNode(n));
     if (sources.length === 0) return;
 
-    const createdIds: string[] = [];
+    const created: FsiNodeRecord[] = [];
     for (const source of sources) {
-      const created = (await duplicateNodeMutation.mutateAsync({ source })) as FsiNodeRecord;
-      createdIds.push(created.id);
+      created.push((await duplicateNodeMutation.mutateAsync({ source })) as FsiNodeRecord);
     }
-    selectDuplicatedNodes(createdIds);
+    appendDuplicatedNodes(created);
+    selectDuplicatedNodes(created.map((n) => n.id));
     if (sources.length > 1) {
       toast.success(`Duplicated ${sources.length} nodes`);
     } else {
       toast.success("Node duplicated");
     }
-  }, [canEdit, duplicateNodeMutation, multiSelectedIds, selectDuplicatedNodes, selectedNode]);
+  }, [
+    appendDuplicatedNodes,
+    canEdit,
+    duplicateNodeMutation,
+    multiSelectedIds,
+    selectDuplicatedNodes,
+    selectedNode,
+  ]);
 
   const handleRequestDuplicate = useCallback(
     async (nodeId: string, corner: DuplicateCorner) => {
@@ -902,16 +912,18 @@ export default function FsiCanvasWorkspace() {
       const offset = offsetForDuplicateCorner(corner);
       setDuplicateBusy(true);
       try {
-        const createdIds: string[] = [];
+        const created: FsiNodeRecord[] = [];
         for (const source of sources) {
-          const created = await runDuplicateNode(source, {
-            offsetX: offset.x,
-            offsetY: offset.y,
-            silent: true,
-          });
-          createdIds.push(created.id);
+          created.push(
+            (await duplicateNodeMutation.mutateAsync({
+              source,
+              offsetX: offset.x,
+              offsetY: offset.y,
+            })) as FsiNodeRecord,
+          );
         }
-        selectDuplicatedNodes(createdIds);
+        appendDuplicatedNodes(created);
+        selectDuplicatedNodes(created.map((n) => n.id));
         toast.success(
           sources.length > 1 ? `Duplicated ${sources.length} nodes` : "Node duplicated",
         );
@@ -921,7 +933,14 @@ export default function FsiCanvasWorkspace() {
         setDuplicateBusy(false);
       }
     },
-    [canEdit, duplicateBusy, multiSelectedIds, runDuplicateNode, selectDuplicatedNodes],
+    [
+      appendDuplicatedNodes,
+      canEdit,
+      duplicateBusy,
+      duplicateNodeMutation,
+      multiSelectedIds,
+      selectDuplicatedNodes,
+    ],
   );
 
   const handleDeleteSelection = useCallback(() => {
@@ -1171,71 +1190,96 @@ export default function FsiCanvasWorkspace() {
     [canEdit, history, setGraph, updateNodeMutation],
   );
 
-  const handleNodeDragStart = useCallback((nodeId: string, x: number, y: number) => {
-    const node = graphRef.current?.nodes.find((n) => n.id === nodeId);
-    dragOriginRef.current.set(
-      nodeId,
-      node ? { x: node.canvas_x, y: node.canvas_y } : { x, y },
-    );
+  const handleNodeDragStart = useCallback((moves: Array<{ id: string; x: number; y: number }>) => {
+    const g = graphRef.current;
+    for (const m of moves) {
+      const node = g?.nodes.find((n) => n.id === m.id);
+      dragOriginRef.current.set(
+        m.id,
+        node ? { x: node.canvas_x, y: node.canvas_y } : { x: m.x, y: m.y },
+      );
+    }
   }, []);
 
   const handleNodeDragStop = useCallback(
-    (nodeId: string, absX: number, absY: number) => {
-      if (!canEdit || !graphRef.current) return;
+    (moves: Array<{ id: string; x: number; y: number }>) => {
+      if (!canEdit || !graphRef.current || moves.length === 0) return;
       const g = graphRef.current;
-      const node = g.nodes.find((n) => n.id === nodeId);
-      if (!node) return;
 
-      const from = dragOriginRef.current.get(nodeId) ?? {
-        x: node.canvas_x ?? 0,
-        y: node.canvas_y ?? 0,
-      };
-      dragOriginRef.current.delete(nodeId);
+      const updates: Array<{ id: string; x: number; y: number }> = [];
+      const seen = new Set<string>();
+      const historyMoves: Array<{
+        nodeId: string;
+        before: { x: number; y: number };
+        after: { x: number; y: number };
+      }> = [];
 
-      const prevX = node.canvas_x ?? 0;
-      const prevY = node.canvas_y ?? 0;
-      const dx = absX - prevX;
-      const dy = absY - prevY;
+      for (const m of moves) {
+        const node = g.nodes.find((n) => n.id === m.id);
+        if (!node) continue;
 
-      let updates: Array<{ id: string; x: number; y: number }>;
+        const from = dragOriginRef.current.get(m.id) ?? {
+          x: node.canvas_x ?? 0,
+          y: node.canvas_y ?? 0,
+        };
+        dragOriginRef.current.delete(m.id);
 
-      if (isFrameNode(node) && (dx !== 0 || dy !== 0)) {
-        updates = [{ id: nodeId, x: absX, y: absY }];
-        for (const child of g.nodes.filter((n) => n.parent_node_id === nodeId)) {
-          updates.push({
-            id: child.id,
-            x: (child.canvas_x ?? 0) + dx,
-            y: (child.canvas_y ?? 0) + dy,
-          });
+        const prevX = node.canvas_x ?? 0;
+        const prevY = node.canvas_y ?? 0;
+        const dx = m.x - prevX;
+        const dy = m.y - prevY;
+
+        if (!seen.has(m.id)) {
+          updates.push({ id: m.id, x: m.x, y: m.y });
+          seen.add(m.id);
+          if (m.x !== prevX || m.y !== prevY) {
+            historyMoves.push({ nodeId: m.id, before: from, after: { x: m.x, y: m.y } });
+          }
         }
-      } else {
-        updates = [{ id: nodeId, x: absX, y: absY }];
+
+        if (isFrameNode(node) && (dx !== 0 || dy !== 0)) {
+          for (const child of g.nodes.filter((n) => n.parent_node_id === m.id)) {
+            if (seen.has(child.id)) continue;
+            const childFrom = {
+              x: child.canvas_x ?? 0,
+              y: child.canvas_y ?? 0,
+            };
+            const childTo = { x: childFrom.x + dx, y: childFrom.y + dy };
+            updates.push({ id: child.id, x: childTo.x, y: childTo.y });
+            seen.add(child.id);
+            historyMoves.push({ nodeId: child.id, before: childFrom, after: childTo });
+          }
+        }
       }
 
       const moved = updates.some((u) => {
         const n = g.nodes.find((x) => x.id === u.id);
         return n && (n.canvas_x !== u.x || n.canvas_y !== u.y);
       });
+      if (!moved) return;
 
-      if (moved && !history.isApplying.current && updates.length === 1) {
-        history.pushEntry({
-          type: "node_move",
-          nodeId,
-          before: from,
-          after: { x: absX, y: absY },
-        });
+      if (!history.isApplying.current) {
+        if (historyMoves.length === 1) {
+          const only = historyMoves[0]!;
+          history.pushEntry({
+            type: "node_move",
+            nodeId: only.nodeId,
+            before: only.before,
+            after: only.after,
+          });
+        } else if (historyMoves.length > 1) {
+          history.pushEntry({ type: "batch_move", moves: historyMoves });
+        }
       }
 
-      if (moved) {
-        const roundedUpdates = updates.map((u) => ({
-          ...u,
-          x: Math.round(u.x),
-          y: Math.round(u.y),
-        }));
-        setGraph(patchGraphNodePositions(g, roundedUpdates));
-        for (const u of roundedUpdates) {
-          updateNodeMutation.mutate({ id: u.id, patch: { canvas_x: u.x, canvas_y: u.y } });
-        }
+      const roundedUpdates = updates.map((u) => ({
+        ...u,
+        x: Math.round(u.x),
+        y: Math.round(u.y),
+      }));
+      setGraph(patchGraphNodePositions(g, roundedUpdates));
+      for (const u of roundedUpdates) {
+        updateNodeMutation.mutate({ id: u.id, patch: { canvas_x: u.x, canvas_y: u.y } });
       }
     },
     [canEdit, history, setGraph, updateNodeMutation],

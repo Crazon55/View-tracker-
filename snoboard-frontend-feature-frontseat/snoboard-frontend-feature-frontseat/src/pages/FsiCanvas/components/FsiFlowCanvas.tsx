@@ -80,8 +80,9 @@ type FlowInnerProps = {
   onPaneClick?: () => void;
   onSelectionChange: OnSelectionChangeFunc;
   onPaneDoubleClick: (flowX: number, flowY: number, screenX: number, screenY: number) => void;
-  onNodeDragStart: (nodeId: string, x: number, y: number) => void;
-  onNodeDragStop: (nodeId: string, x: number, y: number) => void;
+  /** Absolute canvas positions for every node moved in this drag (multi-select aware). */
+  onNodeDragStart: (moves: Array<{ id: string; x: number; y: number }>) => void;
+  onNodeDragStop: (moves: Array<{ id: string; x: number; y: number }>) => void;
   onConnect: (
     source: string,
     target: string,
@@ -159,6 +160,9 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   const [isConnecting, setIsConnecting] = useState(false);
   const connectCompletedRef = useRef(false);
   const dragPositionLockRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  /** Select these ids once they appear in the flow (avoids rAF races with first drag). */
+  const pendingSelectIdsRef = useRef<string[] | null>(null);
+  const lastDragPersistAtRef = useRef(0);
 
   function positionsNearlyEqual(a: { x: number; y: number }, b: { x: number; y: number }) {
     return Math.abs(a.x - b.x) < 1 && Math.abs(a.y - b.y) < 1;
@@ -343,14 +347,25 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   );
 
   useEffect(() => {
+    const pendingSnapshot = pendingSelectIdsRef.current;
+    const willSelect =
+      !!pendingSnapshot &&
+      pendingSnapshot.length > 0 &&
+      pendingSnapshot.every((id) => flowGraph.nodes.some((n) => n.id === id));
+    const pendingSet = willSelect ? new Set(pendingSnapshot!) : null;
+    if (pendingSet) pendingSelectIdsRef.current = null;
+
     setNodes((current) => {
       const byId = new Map(current.map((n) => [n.id, n]));
       return flowGraph.nodes.map((next) => {
         const cur = byId.get(next.id);
         if (cur?.dragging) return cur;
         const locked = dragPositionLockRef.current.get(next.id);
+        const selected = pendingSet
+          ? pendingSet.has(next.id) && next.type !== "fsiFrame"
+          : (cur?.selected ?? false);
         if (locked && cur) {
-          return { ...next, position: locked, data: next.data, selected: cur.selected };
+          return { ...next, position: locked, data: next.data, selected };
         }
         if (
           cur &&
@@ -358,12 +373,23 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
           cur.type === next.type &&
           cur.parentId === next.parentId
         ) {
-          return { ...cur, data: next.data, selected: cur.selected };
+          return { ...cur, data: next.data, selected };
         }
-        return next;
+        return { ...next, selected };
       });
     });
-  }, [structureSignature, positionSignature, flowGraph.nodes, setNodes]);
+
+    if (willSelect && pendingSnapshot) {
+      queueMicrotask(() => {
+        const idSet = new Set(pendingSnapshot);
+        const selectedNodes = getNodes().filter((n) => idSet.has(n.id) && n.type !== "fsiFrame");
+        if (selectedNodes.length > 0) {
+          onSelectionChange({ nodes: selectedNodes, edges: [] });
+          paneRef.current?.focus();
+        }
+      });
+    }
+  }, [structureSignature, positionSignature, flowGraph.nodes, setNodes, getNodes, onSelectionChange]);
 
   useEffect(() => {
     setEdges((current) => {
@@ -451,35 +477,24 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
       },
       selectNodeIds: (nodeIds: string[]) => {
         if (nodeIds.length === 0) return;
+        pendingSelectIdsRef.current = nodeIds;
         const idSet = new Set(nodeIds);
-        let attempts = 0;
-        const maxAttempts = 20;
+        const current = getNodes();
+        const allPresent = nodeIds.every((id) => current.some((n) => n.id === id));
+        if (!allPresent) return;
 
-        const apply = () => {
-          attempts += 1;
-          const current = getNodes();
-          const presentCount = nodeIds.filter((id) => current.some((n) => n.id === id)).length;
-          if (presentCount < nodeIds.length && attempts < maxAttempts) {
-            requestAnimationFrame(apply);
-            return;
-          }
-
-          setNodes((nds) =>
-            nds.map((n) => ({
-              ...n,
-              selected: idSet.has(n.id) && n.type !== "fsiFrame",
-            })),
-          );
-          queueMicrotask(() => {
-            const selectedNodes = getNodes().filter(
-              (n) => idSet.has(n.id) && n.type !== "fsiFrame",
-            );
-            onSelectionChange({ nodes: selectedNodes, edges: [] });
-            paneRef.current?.focus();
-          });
-        };
-
-        requestAnimationFrame(apply);
+        pendingSelectIdsRef.current = null;
+        setNodes((nds) =>
+          nds.map((n) => ({
+            ...n,
+            selected: idSet.has(n.id) && n.type !== "fsiFrame",
+          })),
+        );
+        queueMicrotask(() => {
+          const selectedNodes = getNodes().filter((n) => idSet.has(n.id) && n.type !== "fsiFrame");
+          onSelectionChange({ nodes: selectedNodes, edges: [] });
+          paneRef.current?.focus();
+        });
       },
       getBoundsForNodeIds: (nodeIds: string[]) => {
         if (nodeIds.length === 0) return null;
@@ -764,24 +779,72 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   );
 
   const handleNodeDragStart = useCallback(
-    (_: React.MouseEvent, node: Node) => {
-      const abs = getAbsoluteFlowPosition(node);
-      onNodeDragStart(node.id, abs.x, abs.y);
+    (_: React.MouseEvent | React.TouchEvent, node: Node, dragged: Node[]) => {
+      pendingSelectIdsRef.current = null;
+      const targets = dragged.length > 0 ? dragged : [node];
+      onNodeDragStart(
+        targets.map((n) => {
+          const abs = getAbsoluteFlowPosition(n);
+          return { id: n.id, x: abs.x, y: abs.y };
+        }),
+      );
     },
     [getAbsoluteFlowPosition, onNodeDragStart],
   );
 
-  const handleNodeDragStop = useCallback(
-    (_: React.MouseEvent, node: Node) => {
+  const persistDraggedNodes = useCallback(
+    (node: Node, dragged: Node[]) => {
       if (!canEdit) return;
-      const abs = getAbsoluteFlowPosition(node);
-      dragPositionLockRef.current.set(node.id, { ...node.position });
+      const now = performance.now();
+      if (now - lastDragPersistAtRef.current < 40) return;
+      lastDragPersistAtRef.current = now;
+
+      const targets = dragged.length > 0 ? dragged : [node];
+      for (const n of targets) {
+        dragPositionLockRef.current.set(n.id, { ...n.position });
+      }
       window.setTimeout(() => {
-        dragPositionLockRef.current.delete(node.id);
+        for (const n of targets) {
+          dragPositionLockRef.current.delete(n.id);
+        }
       }, 1500);
-      onNodeDragStop(node.id, Math.round(abs.x), Math.round(abs.y));
+      onNodeDragStop(
+        targets.map((n) => {
+          const abs = getAbsoluteFlowPosition(n);
+          return { id: n.id, x: Math.round(abs.x), y: Math.round(abs.y) };
+        }),
+      );
     },
     [canEdit, getAbsoluteFlowPosition, onNodeDragStop],
+  );
+
+  const handleNodeDragStop = useCallback(
+    (_: React.MouseEvent | React.TouchEvent, node: Node, dragged: Node[]) => {
+      persistDraggedNodes(node, dragged);
+    },
+    [persistDraggedNodes],
+  );
+
+  const handleSelectionDragStart = useCallback(
+    (_: React.MouseEvent, nodes: Node[]) => {
+      if (nodes.length === 0) return;
+      pendingSelectIdsRef.current = null;
+      onNodeDragStart(
+        nodes.map((n) => {
+          const abs = getAbsoluteFlowPosition(n);
+          return { id: n.id, x: abs.x, y: abs.y };
+        }),
+      );
+    },
+    [getAbsoluteFlowPosition, onNodeDragStart],
+  );
+
+  const handleSelectionDragStop = useCallback(
+    (_: React.MouseEvent, nodes: Node[]) => {
+      if (nodes.length === 0) return;
+      persistDraggedNodes(nodes[0]!, nodes);
+    },
+    [persistDraggedNodes],
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -970,6 +1033,8 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         onPaneDoubleClick={handlePaneDoubleClick}
         onNodeDragStart={handleNodeDragStart}
         onNodeDragStop={handleNodeDragStop}
+        onSelectionDragStart={handleSelectionDragStart}
+        onSelectionDragStop={handleSelectionDragStop}
         onMoveEnd={handleMoveEnd}
         onDragOver={handleDragOver}
         onEdgesDelete={handleEdgesDelete}
