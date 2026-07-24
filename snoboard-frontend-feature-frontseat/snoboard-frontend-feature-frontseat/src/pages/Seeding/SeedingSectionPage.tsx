@@ -47,8 +47,11 @@ export default function SeedingSectionPage() {
   const { pathname } = useLocation();
   const section = sectionFromPath(pathname);
   const meta = META[section];
-  const { role } = useAuth();
-  const isAdmin = String(role || "").split(",").some((r) => canonicalRole(r.trim()) === "admin");
+  const { role, actualRole } = useAuth();
+  // Manage pages as the real admin even if role-preview is active on other seeding tabs.
+  const isAdmin = String(actualRole || role || "")
+    .split(",")
+    .some((r) => canonicalRole(r.trim()) === "admin");
 
   const [deals, setDeals] = useState<SeedingDeal[]>([]);
   const [pages, setPages] = useState<any[]>([]);

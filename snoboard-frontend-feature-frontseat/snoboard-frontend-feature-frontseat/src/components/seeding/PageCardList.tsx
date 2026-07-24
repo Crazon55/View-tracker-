@@ -12,6 +12,27 @@ export type MonetisablePage = {
   notes?: string;
 };
 
+function seedingErrMessage(err: unknown, fallback: string): string {
+  const e = err as { response?: { status?: number; data?: { detail?: unknown } }; message?: string };
+  const status = e?.response?.status;
+  const detail = e?.response?.data?.detail;
+  let text = "";
+  if (typeof detail === "string") text = detail;
+  else if (Array.isArray(detail)) {
+    text = detail
+      .map((d) => (typeof d === "string" ? d : (d as { msg?: string })?.msg || ""))
+      .filter(Boolean)
+      .join("; ");
+  }
+  if (status === 403) {
+    return text || "Admin access required. Exit role preview if you're previewing as BD.";
+  }
+  if (status === 503) return text || "Seeding database unavailable.";
+  if (text) return text;
+  if (e?.message && !e.message.startsWith("Request failed")) return e.message;
+  return fallback;
+}
+
 const inputCls = "fglass-input w-full rounded-lg px-2.5 py-1.5 text-sm";
 const ghostBtn: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 500, padding: "6px 11px", borderRadius: 8, border: "1px solid var(--f-line)", background: "transparent", color: "var(--f-dim)", cursor: "pointer" };
 const solidBtn: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, padding: "7px 13px", borderRadius: 8, border: "none", background: "#fff", color: "#000", cursor: "pointer" };
@@ -83,8 +104,8 @@ export function PageCardList({
       toast.success("Page added.");
       setAdding(false);
       onChanged?.();
-    } catch (err: any) {
-      toast.error(err?.response?.status === 403 ? "Admin access required." : "Couldn't add page.");
+    } catch (err: unknown) {
+      toast.error(seedingErrMessage(err, "Couldn't add page."));
     }
   };
 
@@ -94,8 +115,8 @@ export function PageCardList({
       toast.success("Page updated.");
       setEditingId(null);
       onChanged?.();
-    } catch (err: any) {
-      toast.error(err?.response?.status === 403 ? "Admin access required." : "Couldn't update page.");
+    } catch (err: unknown) {
+      toast.error(seedingErrMessage(err, "Couldn't update page."));
     }
   };
 
@@ -105,8 +126,8 @@ export function PageCardList({
       await api.delete(`/pages/${p.page_id}`);
       toast.success("Page deleted.");
       onChanged?.();
-    } catch (err: any) {
-      toast.error(err?.response?.status === 403 ? "Admin access required." : "Couldn't delete page.");
+    } catch (err: unknown) {
+      toast.error(seedingErrMessage(err, "Couldn't delete page."));
     }
   };
 

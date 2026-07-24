@@ -165,7 +165,19 @@ _FSOS_BD_TEAM_ROLES = {
 async def _sync_seeding_from_fsos(user: dict) -> dict:
     """Align seeding role/team with FSOS user_roles when Admin assigns access there."""
     email = (user.get("email") or "").strip().lower()
-    if not email or email in SEED_ADMIN_EMAILS:
+    if not email:
+        return user
+    # Hard-coded seed admins must stay admin even if profile was provisioned as pending.
+    if email in SEED_ADMIN_EMAILS:
+        if user.get("role") != "admin":
+            try:
+                await db.users.update_one(
+                    {"email": email},
+                    {"$set": {"role": "admin", "business_team_id": None}},
+                )
+            except Exception as e:
+                logger.warning("Could not elevate seed admin %s: %s", email, e)
+            return {**user, "role": "admin", "business_team_id": None}
         return user
     try:
         from app.database.client import get_supabase_client
@@ -344,8 +356,23 @@ async def get_real_user(request: Request) -> dict:
 
 
 async def require_role(user: dict, allowed: List[str]):
-    if user.get("role") not in allowed:
-        raise HTTPException(403, f"Forbidden — requires one of: {allowed}")
+    role = user.get("role")
+    if role in allowed:
+        return
+    # Role-preview scopes an admin as BD/fulfillment — say so explicitly.
+    if user.get("_preview_role") and user.get("_real_admin_id"):
+        raise HTTPException(
+            403,
+            f"Forbidden while previewing as {user.get('_preview_role')}. Exit role preview to continue.",
+        )
+    raise HTTPException(403, f"Forbidden — requires one of: {allowed}")
+
+
+async def require_admin(user: dict):
+    """Admin-only settings (pages, users). Real admins keep access even under role preview."""
+    if user.get("role") == "admin" or user.get("_real_admin_id"):
+        return
+    raise HTTPException(403, "Forbidden — admin access required")
 
 
 def scrub_deal_for_user(deal: dict, user: dict) -> dict:
@@ -680,22 +707,42 @@ async def list_pages(only_active: bool = False, user: dict = Depends(get_current
 
 @api.post("/pages")
 async def create_page(payload: PageCreate, user: dict = Depends(get_current_user)):
-    await require_role(user, ["admin"])
+    await require_admin(user)
+    name = (payload.page_name or "").strip()
+    if not name:
+        raise HTTPException(400, "Page name is required")
     p = {
         "page_id": new_id("page"),
-        "page_name": payload.page_name,
+        "page_name": name,
         "active": payload.active,
-        "notes": payload.notes or "",
+        "notes": (payload.notes or "").strip(),
         "created_at": now_iso(),
         "updated_at": now_iso(),
     }
-    await db.monetisable_pages.insert_one(dict(p))
+    try:
+        await db.monetisable_pages.insert_one(dict(p))
+    except Exception as e:
+        logger.exception("create_page failed for %s", name)
+        msg = str(e)
+        if "seeding_monetisable_pages" in msg and (
+            "does not exist" in msg.lower() or "undefinedtable" in msg.lower()
+        ):
+            raise HTTPException(
+                503,
+                "Monetisable pages table is missing. Run migrations/seeding_integration_v1.sql on Supabase.",
+            )
+        if _is_db_connectivity_error(e):
+            raise HTTPException(
+                503,
+                "Seeding database unavailable. Set DATABASE_URL or SUPABASE_DB_URL on the backend.",
+            )
+        raise HTTPException(500, f"Couldn't save page: {msg[:240]}")
     return p
 
 
 @api.put("/pages/{page_id}")
 async def update_page(page_id: str, payload: PageUpdate, user: dict = Depends(get_current_user)):
-    await require_role(user, ["admin"])
+    await require_admin(user)
     upd = {k: v for k, v in payload.model_dump().items() if v is not None}
     upd["updated_at"] = now_iso()
     res = await db.monetisable_pages.update_one({"page_id": page_id}, {"$set": upd})
@@ -706,7 +753,7 @@ async def update_page(page_id: str, payload: PageUpdate, user: dict = Depends(ge
 
 @api.delete("/pages/{page_id}")
 async def delete_page(page_id: str, user: dict = Depends(get_current_user)):
-    await require_role(user, ["admin"])
+    await require_admin(user)
     res = await db.monetisable_pages.delete_one({"page_id": page_id})
     if res.deleted_count == 0:
         raise HTTPException(404, "Page not found")
@@ -1893,6 +1940,25 @@ async def init_seeding():
     try:
         await db.ping(timeout_sec=5.0)
         logger.info("Seeding Postgres pool ready")
+        # Soft-ensure monetisable pages table exists (idempotent).
+        try:
+            pool = await db.get_pool()
+            async with pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    create table if not exists public.seeding_monetisable_pages (
+                        page_id       text primary key,
+                        page_name     text not null,
+                        fsos_page_id  uuid,
+                        active        boolean not null default true,
+                        notes         text not null default '',
+                        created_at    timestamptz not null default now(),
+                        updated_at    timestamptz not null default now()
+                    )
+                    """
+                )
+        except Exception as e:
+            logger.warning("Could not ensure seeding_monetisable_pages: %s", e)
     except Exception as e:
         logger.warning(
             "Seeding DB unavailable (set DATABASE_URL or SUPABASE_DB_URL in .env to enable /api/seeding): %s",
