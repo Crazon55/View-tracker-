@@ -561,27 +561,61 @@ export default function FsiCanvasWorkspace() {
       source: FsiNodeRecord,
       opts: { offsetX: number; offsetY: number; includeConnectors: boolean },
     ) => {
-      const created = (await duplicateNodeMutation.mutateAsync({
-        source,
-        offsetX: opts.offsetX,
-        offsetY: opts.offsetY,
-      })) as FsiNodeRecord;
-
+      // Node only — single copy, no edges.
       if (!opts.includeConnectors) {
+        const created = (await duplicateNodeMutation.mutateAsync({
+          source,
+          offsetX: opts.offsetX,
+          offsetY: opts.offsetY,
+        })) as FsiNodeRecord;
         toast.success("Node duplicated");
         return created;
       }
 
       const g = graphRef.current;
-      const related =
-        g?.connections.filter(
-          (c) => c.source_node_id === source.id || c.target_node_id === source.id,
-        ) ?? [];
+      if (!g) {
+        const created = (await duplicateNodeMutation.mutateAsync({
+          source,
+          offsetX: opts.offsetX,
+          offsetY: opts.offsetY,
+        })) as FsiNodeRecord;
+        toast.success("Node duplicated");
+        return created;
+      }
 
-      let copied = 0;
-      for (const c of related) {
-        const newSource = c.source_node_id === source.id ? created.id : c.source_node_id;
-        const newTarget = c.target_node_id === source.id ? created.id : c.target_node_id;
+      // With connectors: clone this node + every directly linked neighbor as a
+      // separate cluster. Edges are remapped only among the copies — never wired
+      // back to the original nodes (that was confusing).
+      const neighborIds = new Set<string>([source.id]);
+      for (const c of g.connections) {
+        if (c.source_node_id === source.id) neighborIds.add(c.target_node_id);
+        if (c.target_node_id === source.id) neighborIds.add(c.source_node_id);
+      }
+
+      const cluster = g.nodes.filter((n) => neighborIds.has(n.id) && isCanvasNode(n));
+      const clusterIds = new Set(cluster.map((n) => n.id));
+      const clusterEdges = g.connections.filter(
+        (c) => clusterIds.has(c.source_node_id) && clusterIds.has(c.target_node_id),
+      );
+
+      const idMap = new Map<string, string>();
+      let primaryCopy: FsiNodeRecord | null = null;
+
+      for (const node of cluster) {
+        const created = (await duplicateNodeMutation.mutateAsync({
+          source: node,
+          offsetX: opts.offsetX,
+          offsetY: opts.offsetY,
+        })) as FsiNodeRecord;
+        idMap.set(node.id, created.id);
+        if (node.id === source.id) primaryCopy = created;
+      }
+
+      let copiedEdges = 0;
+      for (const c of clusterEdges) {
+        const newSource = idMap.get(c.source_node_id);
+        const newTarget = idMap.get(c.target_node_id);
+        if (!newSource || !newTarget) continue;
         try {
           await createConnectionMutation.mutateAsync({
             source: newSource,
@@ -589,17 +623,23 @@ export default function FsiCanvasWorkspace() {
             sourceHandle: c.source_handle,
             targetHandle: c.target_handle,
           });
-          copied += 1;
+          copiedEdges += 1;
         } catch {
           // keep going if one connector fails
         }
       }
+
+      if (primaryCopy) setSelectedNode(primaryCopy);
+
+      const extraNodes = cluster.length - 1;
       toast.success(
-        copied > 0
-          ? `Duplicated node with ${copied} connector${copied === 1 ? "" : "s"}`
-          : "Node duplicated (no connectors to copy)",
+        extraNodes > 0
+          ? `Duplicated ${cluster.length} nodes with ${copiedEdges} connector${copiedEdges === 1 ? "" : "s"}`
+          : copiedEdges > 0
+            ? `Duplicated node with ${copiedEdges} connector${copiedEdges === 1 ? "" : "s"}`
+            : "Node duplicated (no linked nodes to copy)",
       );
-      return created;
+      return primaryCopy;
     },
     [createConnectionMutation, duplicateNodeMutation],
   );
@@ -1517,8 +1557,14 @@ export default function FsiCanvasWorkspace() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Duplicate this node?</AlertDialogTitle>
                 <AlertDialogDescription className="text-zinc-400">
-                  Duplicate along with its connectors (lines linked to this node), or copy the node
-                  only.
+                  <span className="block">
+                    <strong className="text-zinc-200">With connectors</strong> — also copies every
+                    node linked to this one, and recreates the lines between those copies only
+                    (nothing stays wired to the originals).
+                  </span>
+                  <span className="mt-2 block">
+                    <strong className="text-zinc-200">Node only</strong> — copies just this node.
+                  </span>
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
