@@ -37,7 +37,7 @@ SUPABASE_JWT_SECRET = os.environ.get('SUPABASE_JWT_SECRET', '')
 async def require_seeding_db():
     """Fail with 503 (not 500) when Postgres isn't configured / reachable."""
     try:
-        await db.get_pool()
+        await db.ping(timeout_sec=5.0)
     except Exception as e:
         logger.warning("Seeding DB unavailable: %s", e)
         raise HTTPException(
@@ -1886,7 +1886,7 @@ async def init_seeding():
     except Exception as e:
         logger.warning("Seeding storage init skipped: %s", e)
     try:
-        await db.get_pool()
+        await db.ping(timeout_sec=5.0)
         logger.info("Seeding Postgres pool ready")
     except Exception as e:
         logger.warning(
@@ -1904,12 +1904,12 @@ async def close_seeding():
 
 async def seeding_connectivity_middleware(request: Request, call_next):
     """Turn seeding pool/connection failures into 503 instead of opaque 500s."""
+    path = request.url.path or ""
     try:
         return await call_next(request)
     except HTTPException:
         raise
     except Exception as exc:
-        path = request.url.path or ""
         if path.startswith("/api/seeding") and _is_db_connectivity_error(exc):
             logger.warning("Seeding DB connectivity error on %s: %s", path, exc)
             return JSONResponse(
@@ -1918,6 +1918,7 @@ async def seeding_connectivity_middleware(request: Request, call_next):
                     "detail": "Seeding database unavailable. Set DATABASE_URL or SUPABASE_DB_URL on the backend.",
                 },
             )
+        # Non-seeding (or non-connectivity) errors: do not swallow — re-raise for FastAPI handlers.
         raise
 
 

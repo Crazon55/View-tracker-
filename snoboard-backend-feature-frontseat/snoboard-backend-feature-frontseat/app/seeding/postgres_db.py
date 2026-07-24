@@ -286,12 +286,15 @@ class Database:
     _pool: Optional[asyncpg.Pool] = field(default=None, repr=False)
     _pool_lock: Optional[asyncio.Lock] = field(default=None, repr=False)
 
+    def _ensure_lock(self) -> asyncio.Lock:
+        if self._pool_lock is None:
+            self._pool_lock = asyncio.Lock()
+        return self._pool_lock
+
     async def get_pool(self) -> asyncpg.Pool:
         if self._pool is not None:
             return self._pool
-        if self._pool_lock is None:
-            self._pool_lock = asyncio.Lock()
-        async with self._pool_lock:
+        async with self._ensure_lock():
             if self._pool is None:
                 # statement_cache_size=0 is required for Supabase's transaction pooler
                 # (pgbouncer in transaction mode does not support prepared statements).
@@ -302,13 +305,29 @@ class Database:
                     statement_cache_size=0,
                     command_timeout=30,
                     max_inactive_connection_lifetime=300,
+                    timeout=10,  # fail acquire fast instead of hanging ~70s
                 )
             return self._pool
 
     async def close(self) -> None:
-        if self._pool:
-            await self._pool.close()
-            self._pool = None
+        async with self._ensure_lock():
+            if self._pool:
+                await self._pool.close()
+                self._pool = None
+
+    async def ping(self, timeout_sec: float = 5.0) -> None:
+        """Acquire a live connection and run SELECT 1; recreate pool once if dead."""
+        async def _once() -> None:
+            pool = await self.get_pool()
+            async with pool.acquire() as conn:
+                await asyncio.wait_for(conn.fetchval("SELECT 1"), timeout=timeout_sec)
+
+        try:
+            await _once()
+        except Exception:
+            # Pool may be holding dead sockets after a network blip — rebuild once.
+            await self.close()
+            await _once()
 
     # Tables are namespaced `seeding_` in the FSOS Supabase (see
     # migrations/seeding_integration_v1.sql). The property names below stay bare

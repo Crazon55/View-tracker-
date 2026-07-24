@@ -76,7 +76,16 @@ app.add_middleware(
 # --- Health (no auth) ---
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    seeding_status = "unknown"
+    try:
+        from app.seeding.postgres_db import get_database
+
+        await get_database().ping(timeout_sec=3.0)
+        seeding_status = "ok"
+    except Exception as exc:
+        logger.warning("Health seeding check failed: %s", exc or type(exc).__name__)
+        seeding_status = "unavailable"
+    return {"status": "ok", "seeding": seeding_status}
 
 
 @app.on_event("startup")
