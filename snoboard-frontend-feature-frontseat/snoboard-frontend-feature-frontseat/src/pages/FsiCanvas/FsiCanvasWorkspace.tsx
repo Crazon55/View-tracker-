@@ -87,10 +87,6 @@ export default function FsiCanvasWorkspace() {
   const [boxSelectMode, setBoxSelectMode] = useState(true);
   const [fitTrigger, setFitTrigger] = useState(0);
   const [resetOpen, setResetOpen] = useState(false);
-  const [duplicatePrompt, setDuplicatePrompt] = useState<{
-    nodeId: string;
-    corner: DuplicateCorner;
-  } | null>(null);
   const [duplicateBusy, setDuplicateBusy] = useState(false);
   const [canvasTheme, setCanvasTheme] = useState<FsiCanvasTheme>(() => loadCanvasTheme());
   const [pickerAt, setPickerAt] = useState<{
@@ -557,91 +553,18 @@ export default function FsiCanvasWorkspace() {
   });
 
   const runDuplicateNode = useCallback(
-    async (
-      source: FsiNodeRecord,
-      opts: { offsetX: number; offsetY: number; includeConnectors: boolean },
-    ) => {
-      // Node only — single copy, no edges.
-      if (!opts.includeConnectors) {
-        const created = (await duplicateNodeMutation.mutateAsync({
-          source,
-          offsetX: opts.offsetX,
-          offsetY: opts.offsetY,
-        })) as FsiNodeRecord;
-        toast.success("Node duplicated");
-        return created;
-      }
-
-      const g = graphRef.current;
-      if (!g) {
-        const created = (await duplicateNodeMutation.mutateAsync({
-          source,
-          offsetX: opts.offsetX,
-          offsetY: opts.offsetY,
-        })) as FsiNodeRecord;
-        toast.success("Node duplicated");
-        return created;
-      }
-
-      // With connectors: clone this node + every directly linked neighbor as a
-      // separate cluster. Edges are remapped only among the copies — never wired
-      // back to the original nodes (that was confusing).
-      const neighborIds = new Set<string>([source.id]);
-      for (const c of g.connections) {
-        if (c.source_node_id === source.id) neighborIds.add(c.target_node_id);
-        if (c.target_node_id === source.id) neighborIds.add(c.source_node_id);
-      }
-
-      const cluster = g.nodes.filter((n) => neighborIds.has(n.id) && isCanvasNode(n));
-      const clusterIds = new Set(cluster.map((n) => n.id));
-      const clusterEdges = g.connections.filter(
-        (c) => clusterIds.has(c.source_node_id) && clusterIds.has(c.target_node_id),
-      );
-
-      const idMap = new Map<string, string>();
-      let primaryCopy: FsiNodeRecord | null = null;
-
-      for (const node of cluster) {
-        const created = (await duplicateNodeMutation.mutateAsync({
-          source: node,
-          offsetX: opts.offsetX,
-          offsetY: opts.offsetY,
-        })) as FsiNodeRecord;
-        idMap.set(node.id, created.id);
-        if (node.id === source.id) primaryCopy = created;
-      }
-
-      let copiedEdges = 0;
-      for (const c of clusterEdges) {
-        const newSource = idMap.get(c.source_node_id);
-        const newTarget = idMap.get(c.target_node_id);
-        if (!newSource || !newTarget) continue;
-        try {
-          await createConnectionMutation.mutateAsync({
-            source: newSource,
-            target: newTarget,
-            sourceHandle: c.source_handle,
-            targetHandle: c.target_handle,
-          });
-          copiedEdges += 1;
-        } catch {
-          // keep going if one connector fails
-        }
-      }
-
-      if (primaryCopy) setSelectedNode(primaryCopy);
-
-      const extraNodes = cluster.length - 1;
-      toast.success(
-        extraNodes > 0
-          ? `Duplicated ${cluster.length} nodes with ${copiedEdges} connector${copiedEdges === 1 ? "" : "s"}`
-          : copiedEdges > 0
-            ? `Duplicated node with ${copiedEdges} connector${copiedEdges === 1 ? "" : "s"}`
-            : "Node duplicated (no linked nodes to copy)",
-      );
-      return primaryCopy;
+    async (source: FsiNodeRecord, opts: { offsetX: number; offsetY: number }) => {
+      // Corner "+" always copies the node alone — no connectors.
+      // Cloning edges into the existing graph (or a half-cluster) created messy tangles.
+      const created = (await duplicateNodeMutation.mutateAsync({
+        source,
+        offsetX: opts.offsetX,
+        offsetY: opts.offsetY,
+      })) as FsiNodeRecord;
+      toast.success("Node duplicated");
+      return created;
     },
-    [createConnectionMutation, duplicateNodeMutation],
+    [duplicateNodeMutation],
   );
 
   const deleteConnectionMutation = useMutation({
@@ -950,38 +873,22 @@ export default function FsiCanvasWorkspace() {
   }, [canEdit, duplicateNodeMutation, multiSelectedIds, selectedNode]);
 
   const handleRequestDuplicate = useCallback(
-    (nodeId: string, corner: DuplicateCorner) => {
-      if (!canEdit) return;
-      setDuplicatePrompt({ nodeId, corner });
-    },
-    [canEdit],
-  );
-
-  const confirmCornerDuplicate = useCallback(
-    async (includeConnectors: boolean) => {
-      if (!duplicatePrompt || duplicateBusy) return;
+    async (nodeId: string, corner: DuplicateCorner) => {
+      if (!canEdit || duplicateBusy) return;
       const g = graphRef.current;
-      const source = g?.nodes.find((n) => n.id === duplicatePrompt.nodeId);
-      if (!source || !isCanvasNode(source)) {
-        setDuplicatePrompt(null);
-        return;
-      }
-      const offset = offsetForDuplicateCorner(duplicatePrompt.corner);
+      const source = g?.nodes.find((n) => n.id === nodeId);
+      if (!source || !isCanvasNode(source)) return;
+      const offset = offsetForDuplicateCorner(corner);
       setDuplicateBusy(true);
       try {
-        await runDuplicateNode(source, {
-          offsetX: offset.x,
-          offsetY: offset.y,
-          includeConnectors,
-        });
-        setDuplicatePrompt(null);
+        await runDuplicateNode(source, { offsetX: offset.x, offsetY: offset.y });
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Duplicate failed");
       } finally {
         setDuplicateBusy(false);
       }
     },
-    [duplicateBusy, duplicatePrompt, runDuplicateNode],
+    [canEdit, duplicateBusy, runDuplicateNode],
   );
 
   const handleDeleteSelection = useCallback(() => {
@@ -1546,57 +1453,6 @@ export default function FsiCanvasWorkspace() {
             onRequestDuplicate={handleRequestDuplicate}
             canvasTheme={canvasTheme}
           />
-
-          <AlertDialog
-            open={!!duplicatePrompt}
-            onOpenChange={(open) => {
-              if (!open && !duplicateBusy) setDuplicatePrompt(null);
-            }}
-          >
-            <AlertDialogContent className="bg-zinc-900 border-zinc-700 text-white">
-              <AlertDialogHeader>
-                <AlertDialogTitle>Duplicate this node?</AlertDialogTitle>
-                <AlertDialogDescription className="text-zinc-400">
-                  <span className="block">
-                    <strong className="text-zinc-200">With connectors</strong> — also copies every
-                    node linked to this one, and recreates the lines between those copies only
-                    (nothing stays wired to the originals).
-                  </span>
-                  <span className="mt-2 block">
-                    <strong className="text-zinc-200">Node only</strong> — copies just this node.
-                  </span>
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
-                <AlertDialogCancel
-                  disabled={duplicateBusy}
-                  className="bg-zinc-800 text-white border-zinc-700"
-                >
-                  Cancel
-                </AlertDialogCancel>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={duplicateBusy}
-                  className="bg-zinc-800 text-zinc-100 hover:bg-zinc-700"
-                  onClick={() => void confirmCornerDuplicate(false)}
-                >
-                  Node only
-                </Button>
-                <Button
-                  type="button"
-                  disabled={duplicateBusy}
-                  className="bg-emerald-600 text-white hover:bg-emerald-500"
-                  onClick={() => void confirmCornerDuplicate(true)}
-                >
-                  {duplicateBusy ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : null}
-                  With connectors
-                </Button>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
 
           {boxSelectMode && (
             <div className="pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 rounded-lg border border-emerald-700/50 bg-emerald-950/90 px-3 py-1.5 text-xs text-emerald-200">

@@ -25,7 +25,7 @@ export default function FsiNodeDuplicateCorners({ visible, onCornerClick }: Prop
         <button
           key={id}
           type="button"
-          title="Duplicate node…"
+          title="Duplicate node"
           aria-label={`Duplicate from ${id} corner`}
           className={cn(
             "nodrag nopan absolute z-[60] flex h-6 w-6 items-center justify-center rounded-full",

@@ -45,18 +45,10 @@ export function resolveConnectionHandles(
   source: FsiNodeRecord,
   target: FsiNodeRecord,
 ): { sourceHandle: string; targetHandle: string } {
-  const fromNote = parseEmbeddedHandles(connection.edge_label_note);
-  const inferred = inferAnchorHandles(source, target);
-  return {
-    sourceHandle:
-      toFlowAnchorHandle(connection.source_handle) ??
-      toFlowAnchorHandle(fromNote.sourceHandle) ??
-      inferred.sourceHandle,
-    targetHandle:
-      toFlowAnchorHandle(connection.target_handle) ??
-      toFlowAnchorHandle(fromNote.targetHandle) ??
-      inferred.targetHandle,
-  };
+  // Always route from live node positions so edges attach to facing sides
+  // (stale top/bottom handles after move/duplicate created the "stiff top" tangle).
+  void connection;
+  return inferAnchorHandles(source, target);
 }
 
 export const inferConnectionHandles = inferAnchorHandles;

@@ -6,10 +6,11 @@ export type AnchorKind = "in" | "out";
 
 const SIDE_RE = /^(top|right|bottom|left)-(in|out)-(\d{1,3})$/;
 
-/** Handle id: `{side}-{in|out}-{pct}` where pct is 0–100 along that edge. */
+/** Handle id: `{side}-{in|out}-{pct}` where pct is 0–100 along that edge (snapped to 5). */
 export function formatAnchorHandle(side: AnchorSide, kind: AnchorKind, pct: number): string {
   const clamped = Math.max(0, Math.min(100, Math.round(pct)));
-  return `${side}-${kind}-${clamped}`;
+  const snapped = Math.round(clamped / 5) * 5;
+  return `${side}-${kind}-${snapped}`;
 }
 
 export function parseAnchorHandle(id: string): { side: AnchorSide; kind: AnchorKind; pct: number } | null {
@@ -90,21 +91,52 @@ export function inferAnchorHandles(
 ): { sourceHandle: string; targetHandle: string } {
   const sw = estimateNodeSize(source);
   const tw = estimateNodeSize(target);
-  const sx = (source.canvas_x ?? 0) + sw.width / 2;
-  const sy = (source.canvas_y ?? 0) + sw.height / 2;
-  const tx = (target.canvas_x ?? 0) + tw.width / 2;
-  const ty = (target.canvas_y ?? 0) + tw.height / 2;
+  const sLeft = source.canvas_x ?? 0;
+  const sTop = source.canvas_y ?? 0;
+  const tLeft = target.canvas_x ?? 0;
+  const tTop = target.canvas_y ?? 0;
+  const sx = sLeft + sw.width / 2;
+  const sy = sTop + sw.height / 2;
+  const tx = tLeft + tw.width / 2;
+  const ty = tTop + tw.height / 2;
   const dx = tx - sx;
   const dy = ty - sy;
 
+  // Project the other node's center onto each edge so parallel wires fan out
+  // instead of stacking on the same mid-point (stiff top/center look).
+  const pctOnHorizontal = (otherX: number, left: number, width: number) => {
+    if (width <= 0) return 50;
+    return Math.max(10, Math.min(90, ((otherX - left) / width) * 100));
+  };
+  const pctOnVertical = (otherY: number, top: number, height: number) => {
+    if (height <= 0) return 50;
+    return Math.max(10, Math.min(90, ((otherY - top) / height) * 100));
+  };
+
   if (Math.abs(dx) >= Math.abs(dy)) {
+    const sPct = pctOnVertical(ty, sTop, sw.height);
+    const tPct = pctOnVertical(sy, tTop, tw.height);
     if (dx >= 0) {
-      return { sourceHandle: "right-out-50", targetHandle: "left-in-50" };
+      return {
+        sourceHandle: formatAnchorHandle("right", "out", sPct),
+        targetHandle: formatAnchorHandle("left", "in", tPct),
+      };
     }
-    return { sourceHandle: "left-out-50", targetHandle: "right-in-50" };
+    return {
+      sourceHandle: formatAnchorHandle("left", "out", sPct),
+      targetHandle: formatAnchorHandle("right", "in", tPct),
+    };
   }
+  const sPct = pctOnHorizontal(tx, sLeft, sw.width);
+  const tPct = pctOnHorizontal(sx, tLeft, tw.width);
   if (dy >= 0) {
-    return { sourceHandle: "bottom-out-50", targetHandle: "top-in-50" };
+    return {
+      sourceHandle: formatAnchorHandle("bottom", "out", sPct),
+      targetHandle: formatAnchorHandle("top", "in", tPct),
+    };
   }
-  return { sourceHandle: "top-out-50", targetHandle: "bottom-in-50" };
+  return {
+    sourceHandle: formatAnchorHandle("top", "out", sPct),
+    targetHandle: formatAnchorHandle("bottom", "in", tPct),
+  };
 }
