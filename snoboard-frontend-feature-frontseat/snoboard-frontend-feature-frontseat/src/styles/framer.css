@@ -1638,7 +1638,7 @@ button.news-pill:hover{
 .seeding-detail-section-title{ font-size:16px; font-weight:600; margin:0; }
 .seeding-detail-section-actions{ display:flex; align-items:center; gap:8px; }
 .seeding-detail-form{
-  display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:12px;
+  display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:16px;
 }
 .seeding-detail-form--row{ grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); }
 .seeding-detail-field{ display:grid; gap:10px; min-width:0; }
@@ -1744,7 +1744,6 @@ button.news-pill:hover{
 }
 .seeding-detail-section.seeding-surface{ padding:20px 22px; margin-top:14px; }
 .seeding-deliverable-card.seeding-surface-nested{ padding:18px 20px; }
-.seeding-detail-form{ gap:16px; }
 .seeding-deal-card.seeding-card{ padding:16px 18px; }
 .seeding-fulfillment-card.seeding-card{ padding:18px 20px; min-height:168px; }
 .seeding-filters-bar.seeding-surface{ padding:12px 16px; margin-top:24px; }
