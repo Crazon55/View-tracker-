@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Calendar, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, Calendar, ChevronDown, Send, Trash2 } from "lucide-react";
 import { FramerPage } from "@/components/framer/Framer";
 import { StatusBadge } from "@/components/seeding/StatusBadge";
 import { api } from "@/services/seeding/client";
@@ -175,6 +175,7 @@ export default function SeedingDealDetail() {
   const [pages, setPages] = useState<any[]>([]);
   const [assignees, setAssignees] = useState<{ user_id: string; name: string; email?: string }[]>([]);
   const [showAddDeliv, setShowAddDeliv] = useState(false);
+  const [openDelivIds, setOpenDelivIds] = useState<Record<string, boolean>>({});
   const [newDeliv, setNewDeliv] = useState({ page_id: "", deliverable_type: "Reel", quantity: 1 });
   const [showAddOutput, setShowAddOutput] = useState(false);
   const [newOutput, setNewOutput] = useState({
@@ -302,26 +303,9 @@ export default function SeedingDealDetail() {
   const assigneeId = (del: SeedingDeliverable) =>
     del.assigned_fulfillment_user_id || del.assigned_to || "";
 
-  const normalizePageName = (name: string | undefined) =>
-    String(name || "").replace(/\s+/g, "").toLowerCase();
-
-  const resolvePageId = (del: SeedingDeliverable) => {
-    if (del.page_id && pages.some((p) => p.page_id === del.page_id)) return del.page_id;
-    const byName = pages.find((p) => normalizePageName(p.page_name) === normalizePageName(del.page_name));
-    if (byName) return byName.page_id;
-    return del.page_id || "";
-  };
-
-  const pageOptionsFor = (del: SeedingDeliverable) => {
-    const opts = [...pages];
-    const currentId = resolvePageId(del);
-    if (currentId && !opts.some((p) => p.page_id === currentId)) {
-      opts.unshift({ page_id: currentId, page_name: del.page_name || currentId });
-    } else if (!currentId && del.page_name) {
-      opts.unshift({ page_id: `__name__:${del.page_name}`, page_name: del.page_name });
-    }
-    return opts;
-  };
+  const isDelivOpen = (id: string) => openDelivIds[id] === true;
+  const toggleDeliv = (id: string) =>
+    setOpenDelivIds((prev) => ({ ...prev, [id]: !prev[id] }));
 
   if (!deal || !draft) {
     return (
@@ -424,57 +408,31 @@ export default function SeedingDealDetail() {
             </div>
           )}
           <div className="seeding-deliverables-stack">
-            {(draft.deliverables || []).map((del) => (
-              <article key={del.deliverable_id} className="seeding-surface-nested seeding-deliverable-card">
+            {(draft.deliverables || []).map((del) => {
+              const open = isDelivOpen(del.deliverable_id);
+              return (
+              <article
+                key={del.deliverable_id}
+                className={`seeding-surface-nested seeding-deliverable-card${open ? " is-open" : " is-collapsed"}`}
+              >
                 <div className="seeding-deliverable-head">
-                  <div>
-                    <div className="seeding-deliverable-title-row">
-                      <select
-                        className="seeding-page-select"
-                        value={resolvePageId(del) || (del.page_name ? `__name__:${del.page_name}` : "")}
-                        title="Change page"
-                        disabled={!canManageOutputs}
-                        onChange={(e) => {
-                          const page_id = e.target.value;
-                          if (!page_id || page_id.startsWith("__name__:")) return;
-                          const page = pages.find((p) => p.page_id === page_id);
-                          updateDeliverable(del.deliverable_id, {
-                            page_id,
-                            page_name: page?.page_name || del.page_name,
-                          });
-                          saveDeliverable(del.deliverable_id, { page_id });
-                        }}
-                      >
-                        {!resolvePageId(del) && !del.page_name && (
-                          <option value="">Select page</option>
-                        )}
-                        {pageOptionsFor(del).map((p) => (
-                          <option key={p.page_id} value={p.page_id}>{p.page_name}</option>
-                        ))}
-                      </select>
-                      <span className="seeding-deliverable-type-sep">·</span>
-                      <select
-                        className="seeding-page-select seeding-page-select--type"
-                        value={del.deliverable_type}
-                        title="Deliverable type"
-                        disabled={!canManageOutputs}
-                        onChange={(e) => {
-                          const deliverable_type = e.target.value;
-                          updateDeliverable(del.deliverable_id, { deliverable_type });
-                          saveDeliverable(del.deliverable_id, { deliverable_type });
-                        }}
-                      >
-                        {(DELIVERABLE_TYPES.includes(del.deliverable_type)
-                          ? DELIVERABLE_TYPES
-                          : [del.deliverable_type, ...DELIVERABLE_TYPES]
-                        ).map((t) => (
-                          <option key={t} value={t}>{t}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <p className="seeding-deliverable-sub">Go live {formatDateTime(del.go_live_date_time)}</p>
-                  </div>
-                  <div className="seeding-deliverable-head-actions">
+                  <button
+                    type="button"
+                    className="seeding-deliverable-toggle"
+                    aria-expanded={open}
+                    onClick={() => toggleDeliv(del.deliverable_id)}
+                  >
+                    <ChevronDown
+                      size={16}
+                      className={`seeding-deliverable-chevron${open ? " is-open" : ""}`}
+                      aria-hidden
+                    />
+                    <span className="seeding-deliverable-title-block">
+                      <span className="seeding-deliverable-title">{del.page_name} · {del.deliverable_type}</span>
+                      <span className="seeding-deliverable-sub">Go live {formatDateTime(del.go_live_date_time)}</span>
+                    </span>
+                  </button>
+                  <div className="seeding-deliverable-head-actions" onClick={(e) => e.stopPropagation()}>
                     {canManageOutputs ? (
                       <button type="button" className="seeding-detail-icon-btn" aria-label="Remove deliverable" onClick={() => removeDeliverable(del.deliverable_id)}>
                         <Trash2 size={14} />
@@ -493,6 +451,7 @@ export default function SeedingDealDetail() {
                     </select>
                   </div>
                 </div>
+                {open ? (
                 <div className="seeding-deliverable-fields">
                   <label className="seeding-detail-field seeding-detail-field--full">
                     <span>Live link</span>
@@ -544,8 +503,10 @@ export default function SeedingDealDetail() {
                     </select>
                   </label>
                 </div>
+                ) : null}
               </article>
-            ))}
+              );
+            })}
           </div>
         </Section>
 
