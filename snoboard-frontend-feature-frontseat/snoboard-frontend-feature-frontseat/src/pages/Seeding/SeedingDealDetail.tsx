@@ -15,11 +15,31 @@ import {
   formatDateTime,
   toDateInputValue,
 } from "@/services/seeding/constants";
-import type { SeedingDealDetail, SeedingDeliverable, SeedingFeedback, SeedingOutput } from "@/services/seeding/mockData";
+import type {
+  SeedingDealDetail,
+  SeedingDeliverable,
+  SeedingFeedback,
+  SeedingFeedbackType,
+  SeedingOutput,
+} from "@/services/seeding/mockData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { BD_TEAM_ROLE_TO_NAME, canonicalRole } from "@/lib/accessModel";
 
 const inputCls = "fglass-input w-full rounded-lg px-3 py-2 text-sm";
+
+const FEEDBACK_TYPES: SeedingFeedbackType[] = ["blocker", "comment", "change"];
+const FEEDBACK_TYPE_META: Record<SeedingFeedbackType, { label: string; color: string; bg: string }> = {
+  blocker: { label: "Blocker", color: "#FF7070", bg: "rgba(201,59,59,0.15)" },
+  comment: { label: "Comment", color: "#a1a1aa", bg: "rgba(161,161,170,0.12)" },
+  change: { label: "Changes", color: "#F0C060", bg: "rgba(212,149,42,0.15)" },
+};
+
+function normalizeFeedbackType(raw: unknown): SeedingFeedbackType {
+  const t = String(raw || "comment").toLowerCase();
+  if (t === "blocker" || t === "change" || t === "comment") return t;
+  if (t === "changes" || t === "update") return "change";
+  return "comment";
+}
 
 /** Live GET /deals/:id returns { deal, deliverables, fulfillment_outputs, payment, … }.
  * Mock may still return a flat deal. Normalize both into one SeedingDealDetail. */
@@ -82,19 +102,36 @@ function CommentThread({
   comments,
   draft,
   onDraftChange,
+  draftType,
+  onDraftTypeChange,
   onPost,
   posting,
   placeholder,
   scopeLabel = "On this item",
+  showTypes = false,
 }: {
   comments: SeedingFeedback[];
   draft: string;
   onDraftChange: (v: string) => void;
+  draftType?: SeedingFeedbackType;
+  onDraftTypeChange?: (t: SeedingFeedbackType) => void;
   onPost: () => void;
   posting?: boolean;
   placeholder: string;
   scopeLabel?: string;
+  showTypes?: boolean;
 }) {
+  const [typeFilter, setTypeFilter] = useState<SeedingFeedbackType | "all">("all");
+  const typeCounts = useMemo(() => {
+    const counts: Record<SeedingFeedbackType, number> = { blocker: 0, comment: 0, change: 0 };
+    for (const c of comments) counts[normalizeFeedbackType(c.feedback_type)] += 1;
+    return counts;
+  }, [comments]);
+  const visible = typeFilter === "all"
+    ? comments
+    : comments.filter((c) => normalizeFeedbackType(c.feedback_type) === typeFilter);
+  const activeType = draftType || "comment";
+
   return (
     <div
       style={{
@@ -106,30 +143,82 @@ function CommentThread({
         padding: "12px 12px 10px",
       }}
     >
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--f-faint)", marginBottom: 10 }}>
-        Comments · {comments.length}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--f-faint)" }}>
+          Discussion · {comments.length}
+        </div>
+        {showTypes && comments.length > 0 ? (
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => setTypeFilter("all")}
+              style={{
+                padding: "2px 8px", borderRadius: 20, fontSize: 10, fontWeight: 600, cursor: "pointer",
+                border: `1px solid ${typeFilter === "all" ? "#71717a" : "var(--f-line)"}`,
+                background: typeFilter === "all" ? "rgba(255,255,255,0.06)" : "transparent",
+                color: typeFilter === "all" ? "var(--f-ink)" : "var(--f-faint)",
+              }}
+            >
+              All
+            </button>
+            {FEEDBACK_TYPES.map((t) => {
+              const m = FEEDBACK_TYPE_META[t];
+              const count = typeCounts[t];
+              if (!count) return null;
+              const active = typeFilter === t;
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setTypeFilter(active ? "all" : t)}
+                  style={{
+                    padding: "2px 8px", borderRadius: 20, fontSize: 10, fontWeight: 600, cursor: "pointer",
+                    border: `1px solid ${active ? m.color : "var(--f-line)"}`,
+                    background: active ? m.bg : "transparent",
+                    color: active ? m.color : "var(--f-faint)",
+                  }}
+                >
+                  {m.label} · {count}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
-      {comments.length ? (
+      {visible.length ? (
         <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
-          {comments.map((c) => (
-            <div key={c.feedback_id} style={{ padding: "10px 12px", borderRadius: 8, background: "rgba(0,0,0,0.28)", border: "1px solid var(--f-line)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--f-ink)" }}>
-                  {c.added_by_name || "Someone"}
-                  {c.added_by_role ? (
-                    <span style={{ color: "var(--f-faint)", fontWeight: 500 }}> · {c.added_by_role}</span>
+          {visible.map((c) => {
+            const kind = normalizeFeedbackType(c.feedback_type);
+            const meta = FEEDBACK_TYPE_META[kind];
+            return (
+              <div key={c.feedback_id} style={{ padding: "10px 12px", borderRadius: 8, background: "rgba(0,0,0,0.28)", border: `1px solid ${showTypes ? meta.color + "44" : "var(--f-line)"}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "var(--f-ink)", display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    {c.added_by_name || "Someone"}
+                    {c.added_by_role ? (
+                      <span style={{ color: "var(--f-faint)", fontWeight: 500 }}> · {c.added_by_role}</span>
+                    ) : null}
+                    {showTypes ? (
+                      <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 20, background: meta.bg, color: meta.color, fontWeight: 600 }}>
+                        {meta.label}
+                      </span>
+                    ) : null}
+                  </span>
+                  {c.created_at ? (
+                    <span style={{ fontSize: 10, color: "var(--f-faint)", flexShrink: 0 }}>{formatDateTime(c.created_at)}</span>
                   ) : null}
-                </span>
-                {c.created_at ? (
-                  <span style={{ fontSize: 10, color: "var(--f-faint)", flexShrink: 0 }}>{formatDateTime(c.created_at)}</span>
-                ) : null}
+                </div>
+                <p style={{ fontSize: 13, color: "var(--f-dim)", whiteSpace: "pre-wrap", margin: 0, lineHeight: 1.45 }}>{c.feedback_text}</p>
               </div>
-              <p style={{ fontSize: 13, color: "var(--f-dim)", whiteSpace: "pre-wrap", margin: 0, lineHeight: 1.45 }}>{c.feedback_text}</p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
-        <p className="seeding-muted" style={{ marginBottom: 10, fontSize: 12 }}>No comments yet — flag blockers or issues here.</p>
+        <p className="seeding-muted" style={{ marginBottom: 10, fontSize: 12 }}>
+          {comments.length === 0
+            ? (showTypes ? "No messages yet — add a blocker, comment, or change request." : "No comments yet.")
+            : `No ${FEEDBACK_TYPE_META[typeFilter as SeedingFeedbackType]?.label.toLowerCase() ?? ""} messages.`}
+        </p>
       )}
       <div className="seeding-comment-compose">
         <textarea
@@ -142,10 +231,33 @@ function CommentThread({
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && draft.trim() && !posting) onPost();
           }}
         />
+        {showTypes && onDraftTypeChange ? (
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 8 }}>
+            {FEEDBACK_TYPES.map((t) => {
+              const m = FEEDBACK_TYPE_META[t];
+              const sel = activeType === t;
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => onDraftTypeChange(t)}
+                  style={{
+                    padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: "pointer",
+                    border: `1.5px solid ${sel ? m.color : "var(--f-line)"}`,
+                    background: sel ? m.bg : "transparent",
+                    color: sel ? m.color : "var(--f-dim)",
+                  }}
+                >
+                  {m.label}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
         <div className="seeding-comment-toolbar">
           <span style={{ fontSize: 11, color: "var(--f-faint)" }}>{scopeLabel} · ⌘/Ctrl+Enter</span>
           <button type="button" className="seeding-detail-post" disabled={!draft.trim() || posting} onClick={onPost}>
-            <Send size={13} /> {posting ? "Posting…" : "Post comment"}
+            <Send size={13} /> {posting ? "Posting…" : "Post"}
           </button>
         </div>
       </div>
@@ -179,6 +291,7 @@ export default function SeedingDealDetail() {
   const [comment, setComment] = useState("");
   const [outputComments, setOutputComments] = useState<Record<string, string>>({});
   const [delivComments, setDelivComments] = useState<Record<string, string>>({});
+  const [delivCommentTypes, setDelivCommentTypes] = useState<Record<string, SeedingFeedbackType>>({});
   const [internalNote, setInternalNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [posting, setPosting] = useState(false);
@@ -252,7 +365,7 @@ export default function SeedingDealDetail() {
   };
 
   const postFeedback = async (
-    target: { outputId?: string | null; deliverableId?: string | null },
+    target: { outputId?: string | null; deliverableId?: string | null; feedbackType?: SeedingFeedbackType },
     text: string,
     clear: () => void,
   ) => {
@@ -263,6 +376,7 @@ export default function SeedingDealDetail() {
         deal_id: dealId,
         output_id: target.outputId ?? null,
         deliverable_id: target.deliverableId ?? null,
+        feedback_type: target.feedbackType || "comment",
         feedback_text: text.trim(),
       });
       clear();
@@ -426,7 +540,10 @@ export default function SeedingDealDetail() {
           <div className="seeding-deliverables-stack">
             {(draft.deliverables || []).map((del) => {
               const open = isDelivOpen(del.deliverable_id);
-              const commentCount = del.comments?.length ?? 0;
+              const comments = del.comments || [];
+              const blockerCount = comments.filter((c) => normalizeFeedbackType(c.feedback_type) === "blocker").length;
+              const changeCount = comments.filter((c) => normalizeFeedbackType(c.feedback_type) === "change").length;
+              const commentCount = comments.filter((c) => normalizeFeedbackType(c.feedback_type) === "comment").length;
               return (
               <article
                 key={del.deliverable_id}
@@ -447,6 +564,12 @@ export default function SeedingDealDetail() {
                     <span className="seeding-deliverable-title-block">
                       <span className="seeding-deliverable-title">
                         {del.page_name} · {del.deliverable_type}
+                        {blockerCount > 0 ? (
+                          <span className="seeding-deliverable-kind-count is-blocker"> · {blockerCount} blocker{blockerCount === 1 ? "" : "s"}</span>
+                        ) : null}
+                        {changeCount > 0 ? (
+                          <span className="seeding-deliverable-kind-count is-change"> · {changeCount} change{changeCount === 1 ? "" : "s"}</span>
+                        ) : null}
                         {commentCount > 0 ? (
                           <span className="seeding-deliverable-comment-count"> · {commentCount} comment{commentCount === 1 ? "" : "s"}</span>
                         ) : null}
@@ -526,19 +649,27 @@ export default function SeedingDealDetail() {
                   </label>
                   {canComment ? (
                     <CommentThread
-                      comments={del.comments || []}
+                      showTypes
+                      comments={comments}
                       draft={delivComments[del.deliverable_id] || ""}
                       onDraftChange={(v) => setDelivComments((prev) => ({ ...prev, [del.deliverable_id]: v }))}
+                      draftType={delivCommentTypes[del.deliverable_id] || "comment"}
+                      onDraftTypeChange={(t) => setDelivCommentTypes((prev) => ({ ...prev, [del.deliverable_id]: t }))}
                       posting={posting}
                       scopeLabel="On this deliverable"
                       placeholder={
-                        isBD
-                          ? "Flag a blocker, wrong page, or client issue on this deliverable…"
-                          : "Reply to BD / note progress on this deliverable…"
+                        (delivCommentTypes[del.deliverable_id] || "comment") === "blocker"
+                          ? "What’s blocking this deliverable?"
+                          : (delivCommentTypes[del.deliverable_id] || "comment") === "change"
+                            ? "What needs to change on this deliverable?"
+                            : "Add a comment on this deliverable…"
                       }
                       onPost={() =>
                         postFeedback(
-                          { deliverableId: del.deliverable_id },
+                          {
+                            deliverableId: del.deliverable_id,
+                            feedbackType: delivCommentTypes[del.deliverable_id] || "comment",
+                          },
                           delivComments[del.deliverable_id] || "",
                           () => setDelivComments((prev) => ({ ...prev, [del.deliverable_id]: "" })),
                         )

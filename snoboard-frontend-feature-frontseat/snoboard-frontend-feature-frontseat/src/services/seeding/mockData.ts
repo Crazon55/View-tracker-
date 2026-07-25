@@ -29,12 +29,15 @@ export type SeedingDeal = {
   created_at?: string;
 };
 
+export type SeedingFeedbackType = "blocker" | "comment" | "change";
+
 export type SeedingFeedback = {
   feedback_id: string;
   deal_id?: string;
   deliverable_id?: string | null;
   output_id?: string | null;
   feedback_text: string;
+  feedback_type?: SeedingFeedbackType | string;
   added_by_name?: string;
   added_by_role?: string;
   added_by_team?: string;
@@ -467,12 +470,15 @@ export function mockSeedingPost<T>(path: string, body: Record<string, unknown>):
   // Output / deliverable / deal comments — POST /feedback
   if (clean === "/feedback") {
     const dealId = String(body.deal_id || "");
+    const rawType = String(body.feedback_type || "comment");
+    const feedback_type = ["blocker", "comment", "change"].includes(rawType) ? rawType : "comment";
     const fb = {
       feedback_id: `fb_${Math.random().toString(36).slice(2, 10)}`,
       deal_id: dealId,
       deliverable_id: (body.deliverable_id as string | null | undefined) ?? null,
       output_id: (body.output_id as string | null | undefined) ?? null,
       feedback_text: String(body.feedback_text || ""),
+      feedback_type,
       added_by_name: "You",
       added_by_role: "bd",
       created_at: new Date().toISOString(),

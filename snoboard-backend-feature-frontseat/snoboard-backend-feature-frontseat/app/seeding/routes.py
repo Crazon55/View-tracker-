@@ -506,11 +506,16 @@ class InternalNoteCreate(BaseModel):
     note_text: str
 
 
+FEEDBACK_TYPES = {"blocker", "comment", "change"}
+
+
 class FeedbackCreate(BaseModel):
     deal_id: str
     deliverable_id: Optional[str] = None
     output_id: Optional[str] = None
     feedback_text: str
+    # Matches reel/post tracker chat kinds: blocker | comment | change (changes)
+    feedback_type: Optional[Literal["blocker", "comment", "change"]] = "comment"
     image_attachment: Optional[str] = ""
     file_attachment: Optional[str] = ""
     reference_link: Optional[str] = ""
@@ -518,6 +523,7 @@ class FeedbackCreate(BaseModel):
 
 class FeedbackUpdate(BaseModel):
     feedback_text: Optional[str] = None
+    feedback_type: Optional[Literal["blocker", "comment", "change"]] = None
     image_attachment: Optional[str] = None
     file_attachment: Optional[str] = None
     reference_link: Optional[str] = None
@@ -1514,12 +1520,17 @@ async def create_feedback(payload: FeedbackCreate, user: dict = Depends(get_curr
         team = await db.business_teams.find_one({"team_id": user["business_team_id"]}, {"_id": 0, "team_name": 1})
         team_name = team and team.get("team_name")
 
+    fb_type = payload.feedback_type or "comment"
+    if fb_type not in FEEDBACK_TYPES:
+        fb_type = "comment"
+
     f = {
         "feedback_id": new_id("fb"),
         "deal_id": payload.deal_id,
         "deliverable_id": payload.deliverable_id,
         "output_id": payload.output_id,
         "feedback_text": payload.feedback_text,
+        "feedback_type": fb_type,
         "image_attachment": payload.image_attachment or "",
         "file_attachment": payload.file_attachment or "",
         "reference_link": payload.reference_link or "",

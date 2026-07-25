@@ -1664,6 +1664,9 @@ button.news-pill:hover{
 }
 .seeding-deliverable-title{ font-size:14px; font-weight:600; margin:0; display:block; }
 .seeding-deliverable-comment-count{ color:var(--f-faint); font-weight:500; font-size:12px; }
+.seeding-deliverable-kind-count{ font-weight:600; font-size:12px; }
+.seeding-deliverable-kind-count.is-blocker{ color:#FF7070; }
+.seeding-deliverable-kind-count.is-change{ color:#F0C060; }
 .seeding-deliverable-toggle{
   display:flex; align-items:flex-start; gap:10px; flex:1; min-width:0;
   padding:0; border:0; background:transparent; color:inherit; text-align:left; cursor:pointer;
