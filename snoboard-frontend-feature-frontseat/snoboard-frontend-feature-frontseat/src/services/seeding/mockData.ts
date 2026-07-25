@@ -31,6 +31,7 @@ export type SeedingDeal = {
 
 export type SeedingDeliverable = {
   deliverable_id: string;
+  page_id?: string;
   page_name: string;
   deliverable_type: string;
   status: string;
@@ -544,9 +545,13 @@ export function mockSeedingPatch<T>(path: string, body: Record<string, unknown>)
       const idx = rows.findIndex((d) => d.deliverable_id === delivMatch[1]);
       if (idx >= 0) {
         const assigned = body.assigned_fulfillment_user_id ?? body.assigned_to;
+        const pageId = body.page_id != null ? String(body.page_id) : undefined;
+        const page = pageId ? MOCK_PAGES.find((p) => p.page_id === pageId) : undefined;
         rows[idx] = {
           ...rows[idx],
           ...body,
+            page_id: pageId ?? rows[idx].page_id,
+            page_name: page?.page_name ?? rows[idx].page_name,
             assigned_fulfillment_user_id: assigned === null || assigned === ""
               ? undefined
               : String(assigned ?? (rows[idx].assigned_fulfillment_user_id || "")),

@@ -465,6 +465,7 @@ class DeliverableUpdate(BaseModel):
     live_link: Optional[str] = None
     views: Optional[int] = None
     notes: Optional[str] = None
+    page_id: Optional[str] = None
     assigned_fulfillment_user_id: Optional[str] = None
     # Frontend alias — mapped in update_deliverable
     assigned_to: Optional[str] = None
@@ -1380,6 +1381,11 @@ async def update_deliverable(deliverable_id: str, payload: DeliverableUpdate, us
         raise HTTPException(400, "No fields to update")
     if "status" in upd and upd["status"] not in DELIVERABLE_STATUSES:
         raise HTTPException(400, f"Invalid status: {upd['status']}")
+    if "page_id" in upd:
+        page = await db.monetisable_pages.find_one({"page_id": upd["page_id"]}, {"_id": 0})
+        if not page:
+            raise HTTPException(400, "Invalid page")
+        upd["page_name"] = page["page_name"]
     upd["updated_at"] = now_iso()
     res = await db.deliverables.update_one({"deliverable_id": deliverable_id}, {"$set": upd})
     if res.matched_count == 0:
