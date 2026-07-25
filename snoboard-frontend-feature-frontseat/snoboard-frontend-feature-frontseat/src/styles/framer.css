@@ -1663,6 +1663,19 @@ button.news-pill:hover{
   display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:12px;
 }
 .seeding-deliverable-title{ font-size:14px; font-weight:600; margin:0; }
+.seeding-deliverable-title-row{
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+}
+.seeding-deliverable-type-sep{ color:var(--f-faint); font-size:14px; font-weight:600; }
+.seeding-page-select{
+  appearance:none; -webkit-appearance:none;
+  min-width:148px; max-width:240px; padding:7px 32px 7px 12px; border-radius:10px;
+  border:1px solid var(--f-line); color:var(--f-ink); font-size:13px; font-weight:600;
+  cursor:pointer;
+  background:#0e0e14 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a8a94' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 10px center;
+}
+.seeding-page-select--type{ min-width:100px; max-width:140px; font-weight:500; }
+.seeding-page-select:disabled{ opacity:.7; cursor:default; }
 .seeding-deliverable-sub{ font-size:11px; color:var(--f-faint); margin:4px 0 0; }
 .seeding-deliverable-head-actions{ display:flex; align-items:center; gap:8px; }
 .seeding-detail-icon-btn{

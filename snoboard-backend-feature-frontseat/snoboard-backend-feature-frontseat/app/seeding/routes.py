@@ -466,6 +466,7 @@ class DeliverableUpdate(BaseModel):
     views: Optional[int] = None
     notes: Optional[str] = None
     page_id: Optional[str] = None
+    deliverable_type: Optional[Literal["Reel", "Static", "Carousel"]] = None
     assigned_fulfillment_user_id: Optional[str] = None
     # Frontend alias — mapped in update_deliverable
     assigned_to: Optional[str] = None

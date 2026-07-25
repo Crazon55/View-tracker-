@@ -302,10 +302,23 @@ export default function SeedingDealDetail() {
   const assigneeId = (del: SeedingDeliverable) =>
     del.assigned_fulfillment_user_id || del.assigned_to || "";
 
+  const normalizePageName = (name: string | undefined) =>
+    String(name || "").replace(/\s+/g, "").toLowerCase();
+
+  const resolvePageId = (del: SeedingDeliverable) => {
+    if (del.page_id && pages.some((p) => p.page_id === del.page_id)) return del.page_id;
+    const byName = pages.find((p) => normalizePageName(p.page_name) === normalizePageName(del.page_name));
+    if (byName) return byName.page_id;
+    return del.page_id || "";
+  };
+
   const pageOptionsFor = (del: SeedingDeliverable) => {
     const opts = [...pages];
-    if (del.page_id && !opts.some((p) => p.page_id === del.page_id)) {
-      opts.unshift({ page_id: del.page_id, page_name: del.page_name || del.page_id });
+    const currentId = resolvePageId(del);
+    if (currentId && !opts.some((p) => p.page_id === currentId)) {
+      opts.unshift({ page_id: currentId, page_name: del.page_name || currentId });
+    } else if (!currentId && del.page_name) {
+      opts.unshift({ page_id: `__name__:${del.page_name}`, page_name: del.page_name });
     }
     return opts;
   };
@@ -415,31 +428,49 @@ export default function SeedingDealDetail() {
               <article key={del.deliverable_id} className="seeding-surface-nested seeding-deliverable-card">
                 <div className="seeding-deliverable-head">
                   <div>
-                    <div className="seeding-deliverable-title-row" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      {canManageOutputs ? (
-                        <select
-                          className="seeding-inline-select"
-                          value={del.page_id || ""}
-                          title="Page"
-                          onChange={(e) => {
-                            const page_id = e.target.value;
-                            const page = pages.find((p) => p.page_id === page_id);
-                            updateDeliverable(del.deliverable_id, {
-                              page_id,
-                              page_name: page?.page_name || del.page_name,
-                            });
-                            saveDeliverable(del.deliverable_id, { page_id });
-                          }}
-                        >
-                          {!del.page_id && <option value="">{del.page_name || "Select page"}</option>}
-                          {pageOptionsFor(del).map((p) => (
-                            <option key={p.page_id} value={p.page_id}>{p.page_name}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <h3 className="seeding-deliverable-title">{del.page_name}</h3>
-                      )}
-                      <h3 className="seeding-deliverable-title">· {del.deliverable_type}</h3>
+                    <div className="seeding-deliverable-title-row">
+                      <select
+                        className="seeding-page-select"
+                        value={resolvePageId(del) || (del.page_name ? `__name__:${del.page_name}` : "")}
+                        title="Change page"
+                        disabled={!canManageOutputs}
+                        onChange={(e) => {
+                          const page_id = e.target.value;
+                          if (!page_id || page_id.startsWith("__name__:")) return;
+                          const page = pages.find((p) => p.page_id === page_id);
+                          updateDeliverable(del.deliverable_id, {
+                            page_id,
+                            page_name: page?.page_name || del.page_name,
+                          });
+                          saveDeliverable(del.deliverable_id, { page_id });
+                        }}
+                      >
+                        {!resolvePageId(del) && !del.page_name && (
+                          <option value="">Select page</option>
+                        )}
+                        {pageOptionsFor(del).map((p) => (
+                          <option key={p.page_id} value={p.page_id}>{p.page_name}</option>
+                        ))}
+                      </select>
+                      <span className="seeding-deliverable-type-sep">·</span>
+                      <select
+                        className="seeding-page-select seeding-page-select--type"
+                        value={del.deliverable_type}
+                        title="Deliverable type"
+                        disabled={!canManageOutputs}
+                        onChange={(e) => {
+                          const deliverable_type = e.target.value;
+                          updateDeliverable(del.deliverable_id, { deliverable_type });
+                          saveDeliverable(del.deliverable_id, { deliverable_type });
+                        }}
+                      >
+                        {(DELIVERABLE_TYPES.includes(del.deliverable_type)
+                          ? DELIVERABLE_TYPES
+                          : [del.deliverable_type, ...DELIVERABLE_TYPES]
+                        ).map((t) => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
                     </div>
                     <p className="seeding-deliverable-sub">Go live {formatDateTime(del.go_live_date_time)}</p>
                   </div>
