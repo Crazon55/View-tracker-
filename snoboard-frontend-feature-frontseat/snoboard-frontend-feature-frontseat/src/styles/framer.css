@@ -1641,10 +1641,11 @@ button.news-pill:hover{
   display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:12px;
 }
 .seeding-detail-form--row{ grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); }
-.seeding-detail-field{ display:grid; gap:6px; min-width:0; }
+.seeding-detail-field{ display:grid; gap:10px; min-width:0; }
 .seeding-detail-field--full{ grid-column:1 / -1; }
 .seeding-detail-field > span{
   font-size:10px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--f-faint);
+  line-height:1.3; margin-bottom:2px;
 }
 .seeding-detail-save{
   margin-top:14px; padding:8px 16px; border-radius:999px; border:none;
@@ -1678,6 +1679,11 @@ button.news-pill:hover{
 }
 .seeding-deliverable-chevron.is-open{ transform: rotate(180deg); }
 .seeding-deliverable-card.is-collapsed{ padding-bottom:14px; }
+.seeding-deliverable-fields{
+  display:grid; gap:18px; margin-top:4px; padding-top:4px;
+}
+.seeding-deliverable-fields .seeding-detail-field{ gap:12px; }
+.seeding-deliverable-fields .seeding-detail-field > span{ margin-bottom:0; padding-bottom:2px; }
 .seeding-deliverable-sub{ font-size:11px; color:var(--f-faint); margin:4px 0 0; }
 .seeding-deliverable-head-actions{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
 .seeding-detail-icon-btn{
@@ -1737,7 +1743,8 @@ button.news-pill:hover{
   border-color:color-mix(in srgb, #7c3aed 35%, rgba(255,255,255,.12));
 }
 .seeding-detail-section.seeding-surface{ padding:20px 22px; margin-top:14px; }
-.seeding-deliverable-card.seeding-surface-nested{ padding:16px 18px; }
+.seeding-deliverable-card.seeding-surface-nested{ padding:18px 20px; }
+.seeding-detail-form{ gap:16px; }
 .seeding-deal-card.seeding-card{ padding:16px 18px; }
 .seeding-fulfillment-card.seeding-card{ padding:18px 20px; min-height:168px; }
 .seeding-filters-bar.seeding-surface{ padding:12px 16px; margin-top:24px; }
