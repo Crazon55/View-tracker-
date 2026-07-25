@@ -36,16 +36,24 @@ function normalizeDealDetail(raw: unknown): SeedingDealDetail {
 
   const allFeedback: SeedingFeedback[] = body.client_feedback ?? d.general_comments ?? [];
   const rawOutputs: SeedingOutput[] = body.fulfillment_outputs ?? body.outputs ?? d.outputs ?? [];
+  const rawDelivs: SeedingDeliverable[] = body.deliverables ?? d.deliverables ?? [];
   const outputs = rawOutputs.map((o) => ({
     ...o,
     comments: allFeedback.filter((f) => f.output_id && f.output_id === o.output_id),
   }));
-  const general_comments = allFeedback.filter((f) => !f.output_id);
+  const deliverables = rawDelivs.map((del) => ({
+    ...del,
+    comments: allFeedback.filter(
+      (f) => f.deliverable_id && f.deliverable_id === del.deliverable_id && !f.output_id,
+    ),
+  }));
+  // Deal-level only — not tied to a deliverable or output.
+  const general_comments = allFeedback.filter((f) => !f.output_id && !f.deliverable_id);
 
   return {
     ...(d as SeedingDealDetail),
     assets_links,
-    deliverables: body.deliverables ?? d.deliverables ?? [],
+    deliverables,
     outputs,
     general_comments,
     internal_notes: body.internal_notes ?? d.internal_notes ?? [],
@@ -77,6 +85,7 @@ function CommentThread({
   onPost,
   posting,
   placeholder,
+  scopeLabel = "On this item",
 }: {
   comments: SeedingFeedback[];
   draft: string;
@@ -84,6 +93,7 @@ function CommentThread({
   onPost: () => void;
   posting?: boolean;
   placeholder: string;
+  scopeLabel?: string;
 }) {
   return (
     <div
@@ -119,7 +129,7 @@ function CommentThread({
           ))}
         </div>
       ) : (
-        <p className="seeding-muted" style={{ marginBottom: 10, fontSize: 12 }}>No comments yet — BD can leave feedback here.</p>
+        <p className="seeding-muted" style={{ marginBottom: 10, fontSize: 12 }}>No comments yet — flag blockers or issues here.</p>
       )}
       <div className="seeding-comment-compose">
         <textarea
@@ -133,7 +143,7 @@ function CommentThread({
           }}
         />
         <div className="seeding-comment-toolbar">
-          <span style={{ fontSize: 11, color: "var(--f-faint)" }}>On this output · ⌘/Ctrl+Enter</span>
+          <span style={{ fontSize: 11, color: "var(--f-faint)" }}>{scopeLabel} · ⌘/Ctrl+Enter</span>
           <button type="button" className="seeding-detail-post" disabled={!draft.trim() || posting} onClick={onPost}>
             <Send size={13} /> {posting ? "Posting…" : "Post comment"}
           </button>
@@ -168,6 +178,7 @@ export default function SeedingDealDetail() {
   const [draft, setDraft] = useState<SeedingDealDetail | null>(null);
   const [comment, setComment] = useState("");
   const [outputComments, setOutputComments] = useState<Record<string, string>>({});
+  const [delivComments, setDelivComments] = useState<Record<string, string>>({});
   const [internalNote, setInternalNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [posting, setPosting] = useState(false);
@@ -240,13 +251,18 @@ export default function SeedingDealDetail() {
     load();
   };
 
-  const postFeedback = async (outputId: string | null, text: string, clear: () => void) => {
+  const postFeedback = async (
+    target: { outputId?: string | null; deliverableId?: string | null },
+    text: string,
+    clear: () => void,
+  ) => {
     if (!dealId || !text.trim()) return;
     setPosting(true);
     try {
       await api.post("/feedback", {
         deal_id: dealId,
-        output_id: outputId,
+        output_id: target.outputId ?? null,
+        deliverable_id: target.deliverableId ?? null,
         feedback_text: text.trim(),
       });
       clear();
@@ -410,6 +426,7 @@ export default function SeedingDealDetail() {
           <div className="seeding-deliverables-stack">
             {(draft.deliverables || []).map((del) => {
               const open = isDelivOpen(del.deliverable_id);
+              const commentCount = del.comments?.length ?? 0;
               return (
               <article
                 key={del.deliverable_id}
@@ -428,7 +445,12 @@ export default function SeedingDealDetail() {
                       aria-hidden
                     />
                     <span className="seeding-deliverable-title-block">
-                      <span className="seeding-deliverable-title">{del.page_name} · {del.deliverable_type}</span>
+                      <span className="seeding-deliverable-title">
+                        {del.page_name} · {del.deliverable_type}
+                        {commentCount > 0 ? (
+                          <span className="seeding-deliverable-comment-count"> · {commentCount} comment{commentCount === 1 ? "" : "s"}</span>
+                        ) : null}
+                      </span>
                       <span className="seeding-deliverable-sub">Go live {formatDateTime(del.go_live_date_time)}</span>
                     </span>
                   </button>
@@ -502,6 +524,27 @@ export default function SeedingDealDetail() {
                       ))}
                     </select>
                   </label>
+                  {canComment ? (
+                    <CommentThread
+                      comments={del.comments || []}
+                      draft={delivComments[del.deliverable_id] || ""}
+                      onDraftChange={(v) => setDelivComments((prev) => ({ ...prev, [del.deliverable_id]: v }))}
+                      posting={posting}
+                      scopeLabel="On this deliverable"
+                      placeholder={
+                        isBD
+                          ? "Flag a blocker, wrong page, or client issue on this deliverable…"
+                          : "Reply to BD / note progress on this deliverable…"
+                      }
+                      onPost={() =>
+                        postFeedback(
+                          { deliverableId: del.deliverable_id },
+                          delivComments[del.deliverable_id] || "",
+                          () => setDelivComments((prev) => ({ ...prev, [del.deliverable_id]: "" })),
+                        )
+                      }
+                    />
+                  ) : null}
                 </div>
                 ) : null}
               </article>
@@ -585,9 +628,13 @@ export default function SeedingDealDetail() {
                       draft={outputComments[o.output_id] || ""}
                       onDraftChange={(v) => setOutputComments((prev) => ({ ...prev, [o.output_id]: v }))}
                       posting={posting}
+                      scopeLabel="On this output"
                       placeholder={isBD ? "Add client feedback on this output…" : "Reply to BD / note a change…"}
-                      onPost={() => postFeedback(o.output_id, outputComments[o.output_id] || "", () =>
-                        setOutputComments((prev) => ({ ...prev, [o.output_id]: "" })))}
+                      onPost={() => postFeedback(
+                        { outputId: o.output_id },
+                        outputComments[o.output_id] || "",
+                        () => setOutputComments((prev) => ({ ...prev, [o.output_id]: "" })),
+                      )}
                     />
                   ) : null}
                 </article>
@@ -598,7 +645,7 @@ export default function SeedingDealDetail() {
 
         <Section title="General deal comments">
           <p className="seeding-detail-hint">
-            For comments that aren&apos;t about a specific output. Most client feedback should live on the output card above.
+            For comments that aren&apos;t about a specific deliverable or output. Prefer commenting on the deliverable card above for blockers.
           </p>
           {(draft.general_comments || []).length ? (
             <div style={{ display: "grid", gap: 8, marginBottom: 10 }}>
@@ -630,7 +677,7 @@ export default function SeedingDealDetail() {
                   type="button"
                   className="seeding-detail-post"
                   disabled={!comment.trim() || posting}
-                  onClick={() => postFeedback(null, comment, () => setComment(""))}
+                  onClick={() => postFeedback({}, comment, () => setComment(""))}
                 >
                   <Send size={13} /> {posting ? "Posting…" : "Post"}
                 </button>

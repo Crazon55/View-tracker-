@@ -29,6 +29,19 @@ export type SeedingDeal = {
   created_at?: string;
 };
 
+export type SeedingFeedback = {
+  feedback_id: string;
+  deal_id?: string;
+  deliverable_id?: string | null;
+  output_id?: string | null;
+  feedback_text: string;
+  added_by_name?: string;
+  added_by_role?: string;
+  added_by_team?: string;
+  created_at?: string;
+  status?: string;
+};
+
 export type SeedingDeliverable = {
   deliverable_id: string;
   page_id?: string;
@@ -41,18 +54,7 @@ export type SeedingDeliverable = {
   notes?: string;
   assigned_to?: string;
   assigned_fulfillment_user_id?: string;
-};
-
-export type SeedingFeedback = {
-  feedback_id: string;
-  deal_id?: string;
-  output_id?: string | null;
-  feedback_text: string;
-  added_by_name?: string;
-  added_by_role?: string;
-  added_by_team?: string;
-  created_at?: string;
-  status?: string;
+  comments?: SeedingFeedback[];
 };
 
 export type SeedingOutput = {
@@ -462,12 +464,13 @@ export function mockSeedingPost<T>(path: string, body: Record<string, unknown>):
     return output as T;
   }
 
-  // Output / deal comments — POST /feedback
+  // Output / deliverable / deal comments — POST /feedback
   if (clean === "/feedback") {
     const dealId = String(body.deal_id || "");
     const fb = {
       feedback_id: `fb_${Math.random().toString(36).slice(2, 10)}`,
       deal_id: dealId,
+      deliverable_id: (body.deliverable_id as string | null | undefined) ?? null,
       output_id: (body.output_id as string | null | undefined) ?? null,
       feedback_text: String(body.feedback_text || ""),
       added_by_name: "You",
