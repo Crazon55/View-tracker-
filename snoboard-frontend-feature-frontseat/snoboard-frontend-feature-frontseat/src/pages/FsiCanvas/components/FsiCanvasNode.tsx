@@ -521,7 +521,6 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
       const perfOpen = payload.performance_expanded === true;
       const linkOpen = payload.link_expanded === true;
       const detailsW = postDetailsCardWidth(payload);
-      const detailsH = postDetailsCardHeight(payload);
 
       return (
         <div
@@ -531,7 +530,8 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
           }`}
           style={{
             width: detailsW,
-            height: detailsH,
+            minHeight: DROPDOWN_COLLAPSED_HEIGHT * 3,
+            height: "auto",
             borderColor: nodeData.color,
             backgroundColor: nodeData.color,
           }}
@@ -545,17 +545,14 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
               }}
             />
           )}
-          <div
-            className="nowheel nopan flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain"
-            onWheel={(e) => e.stopPropagation()}
-          >
+          <div className="flex w-full flex-col">
             <FsiDragSafeToggle
               label="Written Hook"
               expanded={hookOpen}
               onToggle={() => patchPayload({ hook_expanded: !hookOpen })}
               className="bg-violet-300/40"
             />
-            {hookOpen && <div className="nowheel px-3 pb-2">{renderHookBody()}</div>}
+            {hookOpen && <div className="px-3 pb-2">{renderHookBody()}</div>}
 
             <FsiDragSafeToggle
               label="Performance"
@@ -563,7 +560,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
               onToggle={() => patchPayload({ performance_expanded: !perfOpen })}
               className="bg-slate-300/50"
             />
-            {perfOpen && <div className="nowheel px-2 pb-2">{renderFields({ forceShow: true })}</div>}
+            {perfOpen && <div className="px-2 pb-2">{renderFields({ forceShow: true })}</div>}
 
             <FsiDragSafeToggle
               label="Link"
@@ -571,7 +568,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
               onToggle={() => patchPayload({ link_expanded: !linkOpen })}
               className="bg-sky-300/40"
             />
-            {linkOpen && <div className="nowheel px-3 pb-2">{renderLinkBody()}</div>}
+            {linkOpen && <div className="px-3 pb-2">{renderLinkBody()}</div>}
           </div>
           <FsiNodeDuplicateCorners visible={showDuplicateCorners} onCornerClick={handleCornerDuplicate} />
           <FsiNodeHandles

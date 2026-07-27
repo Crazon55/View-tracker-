@@ -233,8 +233,7 @@ export function postDetailsCardHeight(payload: Record<string, unknown> | undefin
   if (p.hook_expanded === true) h += 120;
   if (p.performance_expanded === true) h += 240;
   if (p.link_expanded === true) h += 56;
-  // Cap height — overflow scrolls inside the card.
-  return Math.min(h, 480);
+  return h;
 }
 
 export function postDetailsCardWidth(payload: Record<string, unknown> | undefined): number {
