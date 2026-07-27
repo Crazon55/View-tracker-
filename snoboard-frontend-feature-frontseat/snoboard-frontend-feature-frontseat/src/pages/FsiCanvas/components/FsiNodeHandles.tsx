@@ -22,7 +22,7 @@ type Props = {
   largeHitZone?: boolean;
   canAcceptConnection?: boolean;
   requiredAnchors?: string[];
-  /** Show visible connection bubbles (when node is selected). */
+  /** Show visible connection bubbles (selected, hovered, or while connecting). */
   showConnectionDots?: boolean;
 };
 
@@ -122,10 +122,14 @@ export default function FsiNodeHandles({
               key={`dot-${side}`}
               type="source"
               position={SIDE_POSITION[side]}
-              id={`${side}-out-dot`}
-              className={visibleDotClass}
+              id={`${side}-out-50`}
+              className={cn(
+                visibleDotClass,
+                canStartConnection ? "!pointer-events-auto cursor-crosshair" : "!pointer-events-none",
+              )}
               style={anchorPointStyle(side, 50)}
-              isConnectable={false}
+              isConnectable={canStartConnection}
+              isConnectableStart={canStartConnection}
             />
           ))
         : null}

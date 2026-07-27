@@ -410,7 +410,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
         )}
         <FsiNodeDuplicateCorners visible={showDuplicateCorners} onCornerClick={handleCornerDuplicate} />
         <FsiNodeHandles
-          canStartConnection={canEdit && selected}
+          canStartConnection={canEdit}
           canAcceptConnection={nodeData.isConnecting}
           requiredAnchors={connectionAnchors}
           showConnectionDots={showConnectionDots || selected}
@@ -571,7 +571,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
           </div>
           <FsiNodeDuplicateCorners visible={showDuplicateCorners} onCornerClick={handleCornerDuplicate} />
           <FsiNodeHandles
-            canStartConnection={canEdit && selected}
+            canStartConnection={canEdit}
             canAcceptConnection={nodeData.isConnecting}
             requiredAnchors={connectionAnchors}
             showConnectionDots={showConnectionDots || selected}
@@ -623,7 +623,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
           )}
           <FsiNodeDuplicateCorners visible={showDuplicateCorners} onCornerClick={handleCornerDuplicate} />
           <FsiNodeHandles
-            canStartConnection={canEdit && selected}
+            canStartConnection={canEdit}
             canAcceptConnection={nodeData.isConnecting}
             requiredAnchors={connectionAnchors}
             showConnectionDots={showConnectionDots || selected}
@@ -715,7 +715,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
         </div>
         <FsiNodeDuplicateCorners visible={showDuplicateCorners} onCornerClick={handleCornerDuplicate} />
         <FsiNodeHandles
-          canStartConnection={canEdit && selected}
+          canStartConnection={canEdit}
           canAcceptConnection={nodeData.isConnecting}
           requiredAnchors={connectionAnchors}
           showConnectionDots={showConnectionDots || selected}
@@ -802,7 +802,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
 
       <FsiNodeDuplicateCorners visible={showDuplicateCorners} onCornerClick={handleCornerDuplicate} />
       <FsiNodeHandles
-        canStartConnection={canEdit && selected}
+        canStartConnection={canEdit}
         canAcceptConnection={nodeData.isConnecting}
         requiredAnchors={connectionAnchors}
         showConnectionDots={showConnectionDots || selected}
