@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, TrendingUp, Search } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { getDashboard, getSixDayMonth } from "@/services/api";
+import { readHomeCache, writeHomeCache } from "@/lib/homeCache";
 import { TEAM_ROSTERS, normTeamHandle } from "@/lib/teamRosters";
 import { getOverview, fmtINR } from "@/services/seedingApi";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -261,16 +262,35 @@ export default function FramerHome() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   };
   const [trackerMonth, setTrackerMonth] = useState(localYm);
+  const currentYm = useMemo(() => localYm(), []);
 
-  const { data: stats, isPending: statsPending } = useQuery({ queryKey: ["dashboard"], queryFn: getDashboard });
+  // Instant paint on refresh: show last successful response while refetching.
+  const cachedDashboard = useMemo(() => readHomeCache<any>("dashboard"), []);
+  const cachedGrowth = useMemo(() => readHomeCache<any[]>("growth-data"), []);
+  const cachedMonthSix = useMemo(() => readHomeCache<any>(`six-day-current:${currentYm}`), [currentYm]);
+
+  const { data: stats, isPending: statsPending } = useQuery({
+    queryKey: ["dashboard"],
+    queryFn: async () => {
+      const data = await getDashboard();
+      writeHomeCache("dashboard", data);
+      return data;
+    },
+    staleTime: 5 * 60_000,
+    placeholderData: cachedDashboard,
+  });
   const { data: growth = [], isPending: growthPending } = useQuery({
     queryKey: ["growth-data"],
     queryFn: async () => {
       const res = await fetch(`${import.meta.env.VITE_API_URL || ""}/api/v1/growth`, { headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" } });
       if (!res.ok) return [];
       const json = await res.json();
-      return Array.isArray(json) ? json : (json?.data ?? []); // backend wraps as { success, data }
+      const data = Array.isArray(json) ? json : (json?.data ?? []);
+      writeHomeCache("growth-data", data);
+      return data;
     },
+    staleTime: 5 * 60_000,
+    placeholderData: cachedGrowth,
   });
   const { data: sixDay } = useQuery({
     queryKey: ["six-day", trackerMonth],
@@ -280,11 +300,15 @@ export default function FramerHome() {
   });
   // Current-month 6-day data — the dashboard "This month" donut sources from the SAME
   // data the 6-Day Tracker renders, so the two never disagree.
-  const currentYm = useMemo(() => localYm(), []);
   const { data: monthSix, isPending: monthPending } = useQuery({
     queryKey: ["six-day-current", currentYm],
-    queryFn: () => getSixDayMonth(currentYm),
+    queryFn: async () => {
+      const data = await getSixDayMonth(currentYm);
+      writeHomeCache(`six-day-current:${currentYm}`, data);
+      return data;
+    },
     staleTime: 5 * 60_000,
+    placeholderData: cachedMonthSix,
   });
   const monthAgg = useMemo(() => {
     let views = 0, reel = 0, post = 0;
@@ -312,8 +336,8 @@ export default function FramerHome() {
   }, [monthSix]);
   const { data: seeding } = useQuery({ queryKey: ["seeding-overview"], queryFn: getOverview, enabled: canSeeding });
 
-  const viewsLoading = monthPending;
-  const pagesLoading = statsPending || (viewPeriod === "all" && growthPending);
+  // Only show loading skeleton when we have nothing to paint (no cache + still fetching).
+  const viewsLoading = monthPending && !monthSix;
   // DEV-only: show SAMPLE when queries finished but returned nothing (offline design preview).
   const useSample = import.meta.env.DEV && !viewsLoading && !statsPending && !monthSix && !stats;
 
@@ -352,12 +376,27 @@ export default function FramerHome() {
     : monthAgg.views > 0
       ? monthAgg.post
       : (stats?.total_post_views ?? (useSample ? SAMPLE.posts : 0));
+  // Prefer dashboard pages; fall back to six-day summaries so we don't wait on the heavy /dashboard.
   const rawPages: any[] = stats?.pages?.length
     ? stats.pages
-    : useSample
-      ? SAMPLE.pages
-      : [];
+    : ((monthSix as any)?.page_summaries?.length
+        ? (monthSix as any).page_summaries.map((p: any) => ({
+            id: p.page_id,
+            handle: p.handle,
+            name: p.name,
+            total_views: p.cycle_views_sum ?? 0,
+            all_time_views: 0,
+            reel_views: 0,
+            post_views: 0,
+          }))
+        : useSample
+          ? SAMPLE.pages
+          : []);
 
+  const pagesLoading =
+    viewPeriod === "all"
+      ? growthPending && !(Array.isArray(growth) && growth.length) && rawPages.length === 0
+      : viewsLoading;
   const viewsLabel = viewPeriod === "tracker" ? "Month total (6-day tracker)" : "Total Views";
   const monthNote = viewPeriod === "tracker" && trackerMonth
     ? new Date(trackerMonth + "-01T12:00:00").toLocaleDateString("en-US", { month: "long", year: "numeric" })

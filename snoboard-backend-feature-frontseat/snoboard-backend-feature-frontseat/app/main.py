@@ -1,4 +1,5 @@
 """FastAPI app for Instagram View Tracker."""
+import asyncio
 import json
 import logging
 import os
@@ -3824,34 +3825,50 @@ async def six_day_month_data(month_str: str):
     month_date = f"{year}-{mon:02d}-01"
     cycles = _six_day_cycles(year, mon)
 
-    pages = client.table("pages").select("id,handle,name,stage").order("name").execute().data or []
+    def _fetch_pages():
+        return client.table("pages").select("id,handle,name,stage").order("name").execute().data or []
 
-    entries = (
-        client.table("six_day_entries")
-        .select("*")
-        .eq("month", month_date)
-        .execute()
-        .data or []
+    def _fetch_entries():
+        return (
+            client.table("six_day_entries")
+            .select("*")
+            .eq("month", month_date)
+            .execute()
+            .data
+            or []
+        )
+
+    def _fetch_top():
+        return (
+            client.table("six_day_top_content")
+            .select("*")
+            .eq("month", month_date)
+            .order("views", desc=True)
+            .execute()
+            .data
+            or []
+        )
+
+    def _fetch_actuals():
+        return (
+            client.table("six_day_monthly_actuals")
+            .select("*")
+            .eq("month", month_date)
+            .execute()
+            .data
+            or []
+        )
+
+    def _fetch_config():
+        return client.table("six_day_config").select("*").limit(1).execute().data
+
+    pages, entries, top_content, actuals, config = await asyncio.gather(
+        asyncio.to_thread(_fetch_pages),
+        asyncio.to_thread(_fetch_entries),
+        asyncio.to_thread(_fetch_top),
+        asyncio.to_thread(_fetch_actuals),
+        asyncio.to_thread(_fetch_config),
     )
-
-    top_content = (
-        client.table("six_day_top_content")
-        .select("*")
-        .eq("month", month_date)
-        .order("views", desc=True)
-        .execute()
-        .data or []
-    )
-
-    actuals = (
-        client.table("six_day_monthly_actuals")
-        .select("*")
-        .eq("month", month_date)
-        .execute()
-        .data or []
-    )
-
-    config = client.table("six_day_config").select("*").limit(1).execute().data
     config_row = config[0] if config else None
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
