@@ -443,7 +443,29 @@ export default function FramerHome() {
       .sort((a, b) => b.views - a.views);
   }, [rawPages, viewPeriod, trackerMonth, currentYm, growthAllTimeByHandle, sixDayByPageId, sixDayByHandle, viewsLabel, monthNote]);
 
-  const topPages = allPages.slice(0, 3);
+  // TOP 3 on the "Views this month" slide — always current month (6-day tracker), never all-time.
+  const topPages = useMemo(() => {
+    const summaries = ((monthSix as any)?.page_summaries ?? []) as any[];
+    if (summaries.length) {
+      return [...summaries]
+        .map((p) => ({
+          name: p.name || String(p.handle || "").replace(/^@/, "") || "—",
+          handle: String(p.handle || "").replace(/^@/, ""),
+          views: sixDayViews(p),
+        }))
+        .sort((a, b) => b.views - a.views)
+        .slice(0, 3);
+    }
+    // Fallback: dashboard month totals while six-day is still loading
+    return [...rawPages]
+      .map((p) => ({
+        name: p.name || String(p.handle || "").replace(/^@/, "") || "—",
+        handle: String(p.handle || "").replace(/^@/, ""),
+        views: Number(p.total_views) || 0,
+      }))
+      .sort((a, b) => b.views - a.views)
+      .slice(0, 3);
+  }, [monthSix, rawPages]);
 
   // Team filter pills for the IP grid — from the curated rosters (src/lib/teamRosters.ts),
   // the same source the SixDay tracker trusts. Only teams that own ≥1 loaded page show.
@@ -508,8 +530,8 @@ export default function FramerHome() {
             <div className="b-big" style={{ fontSize: 34, marginTop: "auto" }}>{compact(posts)}</div>
           </div>
           <div className="b b-dark col-2">
-            <div className="b-lab" style={{ marginBottom: 16 }}>🏆 TOP 3 PAGES</div>
-            {pagesLoading ? (
+            <div className="b-lab" style={{ marginBottom: 16 }}>🏆 TOP 3 PAGES · THIS MONTH</div>
+            {viewsLoading ? (
               <div style={{ color: "var(--f-faint)", fontSize: 13, margin: "auto" }}>Loading…</div>
             ) : topPages.length && topPages[0].views > 0 ? (
               <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 18, marginTop: "auto" }}>
