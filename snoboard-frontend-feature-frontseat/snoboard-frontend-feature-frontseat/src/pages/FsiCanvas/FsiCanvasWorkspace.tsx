@@ -1016,6 +1016,14 @@ export default function FsiCanvasWorkspace() {
     const g = graphRef.current;
     if (!g) return;
 
+    const selectedEdgeIds = canvasRef.current?.getSelectedEdgeIds() ?? [];
+    if (selectedEdgeIds.length > 0) {
+      for (const edgeId of selectedEdgeIds) {
+        handleDeleteConnection(edgeId);
+      }
+      return;
+    }
+
     const live = canvasRef.current?.getSelectedNodeIds() ?? [];
     const ids = (
       live.length > 0
@@ -1037,7 +1045,7 @@ export default function FsiCanvasWorkspace() {
     }
     if (!window.confirm(`Delete ${ids.length} selected nodes?`)) return;
     deleteNodesBulkMutation.mutate(ids);
-  }, [canEdit, deleteNodesBulkMutation, handleDeleteNode, multiSelectedIds, selectedNode]);
+  }, [canEdit, deleteNodesBulkMutation, handleDeleteConnection, handleDeleteNode, multiSelectedIds, selectedNode]);
 
   const handleUndo = useCallback(() => {
     void history.undo(graphRef.current, setGraph);

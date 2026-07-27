@@ -98,6 +98,11 @@ function FsiCanvasEdgeComponent({
                   commitLabel();
                   (e.target as HTMLInputElement).blur();
                 }
+                if ((e.key === "Backspace" || e.key === "Delete") && !labelDraft) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onDelete?.(id);
+                }
               }}
               className="w-36 rounded-md border border-zinc-600 bg-zinc-900 px-2 py-1 text-xs text-white shadow-lg focus:border-emerald-600 focus:outline-none"
             />

@@ -2,7 +2,6 @@ import { Handle, Position, type CSSProperties } from "@xyflow/react";
 import { cn } from "@/lib/utils";
 import {
   parseAnchorHandle,
-  type AnchorKind,
   type AnchorSide,
 } from "../lib/fsiConnectionAnchors";
 
@@ -42,17 +41,16 @@ function anchorPointStyle(side: AnchorSide, pct: number): CSSProperties {
 }
 
 function edgeStripStyle(side: AnchorSide, large: boolean): CSSProperties {
-  // Thin target-only strips so the node body stays easy to drag.
-  const thickness = large ? 12 : 8;
+  const thickness = large ? 14 : 10;
   switch (side) {
     case "top":
-      return { left: "0%", width: "100%", height: thickness, top: 0, transform: "translateY(-50%)" };
+      return { left: "8%", width: "84%", height: thickness, top: 0, transform: "translateY(-70%)" };
     case "bottom":
-      return { left: "0%", width: "100%", height: thickness, bottom: 0, transform: "translateY(50%)" };
+      return { left: "8%", width: "84%", height: thickness, bottom: 0, transform: "translateY(70%)" };
     case "left":
-      return { top: "0%", height: "100%", width: thickness, left: 0, transform: "translateX(-50%)" };
+      return { top: "8%", height: "84%", width: thickness, left: 0, transform: "translateX(-70%)" };
     case "right":
-      return { top: "0%", height: "100%", width: thickness, right: 0, transform: "translateX(50%)" };
+      return { top: "8%", height: "84%", width: thickness, right: 0, transform: "translateX(70%)" };
     default:
       return {};
   }
@@ -64,7 +62,6 @@ const stripClass = cn(
 const pointClass = cn(
   "!z-[30] !h-1 !w-1 !min-h-0 !min-w-0 !border-0 !bg-transparent !opacity-0 !pointer-events-none nodrag nopan",
 );
-/** Big, obvious connect affordance — drag from these only (not the node body). */
 const visibleDotClass = cn(
   "!z-[60] !h-4 !w-4 !min-h-4 !min-w-4 !rounded-full !border-2 !border-sky-400 !bg-zinc-950",
   "!opacity-100 !shadow-[0_0_0_3px_rgba(56,189,248,0.35)] nodrag nopan",
@@ -72,7 +69,7 @@ const visibleDotClass = cn(
   "transition-transform",
 );
 
-function collectAnchorIds(requiredAnchors: string[]): Set<string> {
+function collectAnchorIds(requiredAnchors: string[], skipOutMid50: boolean): Set<string> {
   const ids = new Set<string>();
   for (const id of requiredAnchors) {
     if (parseAnchorHandle(id)) ids.add(id);
@@ -80,6 +77,8 @@ function collectAnchorIds(requiredAnchors: string[]): Set<string> {
   for (const side of SIDES) {
     for (const pct of ANCHOR_PCTS) {
       ids.add(`${side}-in-${pct}`);
+      // Mid-side out handles are rendered separately as the visible connect dots.
+      if (skipOutMid50 && pct === 50) continue;
       ids.add(`${side}-out-${pct}`);
     }
   }
@@ -93,11 +92,14 @@ export default function FsiNodeHandles({
   requiredAnchors = [],
   showConnectionDots = false,
 }: Props) {
-  // Source connections start from visible dots only — keeps node body = move.
-  const targetPointer = canAcceptConnection
-    ? "!pointer-events-auto nodrag nopan"
+  const sourcePointer = canStartConnection
+    ? "!pointer-events-auto nodrag nopan cursor-crosshair"
     : "!pointer-events-none";
-  const anchorIds = collectAnchorIds(requiredAnchors);
+  const targetPointer =
+    canAcceptConnection || canStartConnection
+      ? "!pointer-events-auto nodrag nopan"
+      : "!pointer-events-none";
+  const anchorIds = collectAnchorIds(requiredAnchors, showConnectionDots && canStartConnection);
 
   return (
     <>
@@ -119,6 +121,8 @@ export default function FsiNodeHandles({
           />
         );
       })}
+
+      {/* Visible mid-edge dots — primary way to start a connection */}
       {showConnectionDots
         ? SIDES.map((side) => (
             <Handle
@@ -137,7 +141,8 @@ export default function FsiNodeHandles({
             />
           ))
         : null}
-      {/* Target drop zones on edges — receive connections, never start them */}
+
+      {/* Target drop strips (slightly outside the card so body drag stays free) */}
       {SIDES.map((side) => (
         <Handle
           key={`${side}-in-strip`}
@@ -151,6 +156,22 @@ export default function FsiNodeHandles({
           isConnectableStart={false}
         />
       ))}
+
+      {/* Source strips outside the card — backup connect hit zone next to dots */}
+      {canStartConnection
+        ? SIDES.map((side) => (
+            <Handle
+              key={`${side}-out-strip`}
+              type="source"
+              position={SIDE_POSITION[side]}
+              id={`${side}-out`}
+              className={cn(stripClass, sourcePointer)}
+              style={edgeStripStyle(side, largeHitZone)}
+              isConnectable={canStartConnection}
+              isConnectableStart={canStartConnection}
+            />
+          ))
+        : null}
     </>
   );
 }

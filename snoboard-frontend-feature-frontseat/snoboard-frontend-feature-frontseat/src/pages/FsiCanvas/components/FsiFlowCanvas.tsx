@@ -65,6 +65,8 @@ export type FsiFlowCanvasHandle = {
   getBoundsForNodeIds: (nodeIds: string[]) => ReturnType<typeof boundsFromExtents> | null;
   /** Node ids currently selected on the canvas (live React Flow state). */
   getSelectedNodeIds: () => string[];
+  /** Edge ids currently selected on the canvas. */
+  getSelectedEdgeIds: () => string[];
 };
 
 type FlowInnerProps = {
@@ -542,12 +544,17 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         }
         return [];
       },
+      getSelectedEdgeIds: () =>
+        getEdges()
+          .filter((edge) => edge.selected)
+          .map((edge) => edge.id),
     }),
     [
       dbNodes,
       fitView,
       flowCenterFromViewport,
       getAbsoluteFlowPosition,
+      getEdges,
       getNodes,
       getViewport,
       multiSelectedIds,
@@ -956,6 +963,8 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     (_: React.MouseEvent, _edge: Edge) => {
       onNodeSelect(null);
       setNodes((nds) => nds.map((n) => ({ ...n, selected: false })));
+      // Keep focus on the pane so Backspace/Delete can remove the selected connection.
+      queueMicrotask(() => paneRef.current?.focus());
     },
     [onNodeSelect, setNodes],
   );

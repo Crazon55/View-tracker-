@@ -525,7 +525,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
       return (
         <div
           ref={rootRef}
-          className={`relative box-border flex cursor-grab flex-col overflow-hidden rounded-2xl border-2 shadow-lg active:cursor-grabbing ${
+          className={`relative box-border flex cursor-grab flex-col overflow-visible rounded-2xl border-2 shadow-lg active:cursor-grabbing ${
             selected ? "ring-[3px] ring-sky-400 shadow-[0_0_0_5px_rgba(56,189,248,0.28)] ring-offset-0" : ""
           }`}
           style={{
@@ -585,7 +585,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
       return (
         <div
           ref={rootRef}
-          className={`relative box-border flex cursor-grab flex-col overflow-hidden rounded-2xl border-2 shadow-lg active:cursor-grabbing ${
+          className={`relative box-border flex cursor-grab flex-col overflow-visible rounded-2xl border-2 shadow-lg active:cursor-grabbing ${
             selected ? "ring-[3px] ring-sky-400 shadow-[0_0_0_5px_rgba(56,189,248,0.28)] ring-offset-0" : ""
           }`}
           style={{
@@ -635,7 +635,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
     return (
       <div
         ref={rootRef}
-        className={`relative box-border flex cursor-grab flex-col overflow-hidden rounded-2xl border-2 shadow-lg active:cursor-grabbing ${selected ? "ring-[3px] ring-sky-400 shadow-[0_0_0_5px_rgba(56,189,248,0.28)] ring-offset-0" : ""
+        className={`relative box-border flex cursor-grab flex-col overflow-visible rounded-2xl border-2 shadow-lg active:cursor-grabbing ${selected ? "ring-[3px] ring-sky-400 shadow-[0_0_0_5px_rgba(56,189,248,0.28)] ring-offset-0" : ""
           }`}
         style={{
           width: cardW,
