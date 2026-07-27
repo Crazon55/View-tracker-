@@ -14,6 +14,7 @@ import type { SeedingDeal } from "@/services/seeding/mockData";
 type Props = {
   rows: SeedingDeal[];
   onUpdate: (deal: SeedingDeal) => void;
+  onRemove?: (dealId: string) => void;
   canRemove?: boolean;
   showReview?: boolean;
   showDealStatus?: boolean;
@@ -39,19 +40,20 @@ async function patchDeal(
   }
 }
 
-export function DealsCardList({ rows, onUpdate, canRemove = false, showReview = true, showDealStatus = true, empty }: Props) {
+export function DealsCardList({ rows, onUpdate, onRemove, canRemove = false, showReview = true, showDealStatus = true, empty }: Props) {
   if (!rows.length) {
     return <p className="seeding-muted">{empty ?? "No deals."}</p>;
   }
 
   const removeDeal = async (d: SeedingDeal) => {
-    const ok = window.confirm(`Hide “${d.brand_name}” from All Deals? It stays in the system under Review → Archived.`);
+    const ok = window.confirm(`Delete “${d.brand_name}”? This cannot be undone.`);
     if (!ok) return;
     try {
-      await patchDeal(d, { admin_review_status: "Archived" }, onUpdate);
-      toast.success(`Hid ${d.brand_name} from All Deals`);
+      await api.delete(`/deals/${d.deal_id}`);
+      onRemove?.(d.deal_id);
+      toast.success(`Deleted ${d.brand_name}`);
     } catch {
-      // patchDeal already toasts
+      toast.error("Couldn't delete brief.");
     }
   };
 
@@ -71,8 +73,8 @@ export function DealsCardList({ rows, onUpdate, canRemove = false, showReview = 
               {canRemove ? (
                 <button
                   type="button"
-                  title="Hide from All Deals"
-                  aria-label={`Hide ${d.brand_name}`}
+                  title="Delete brief"
+                  aria-label={`Delete ${d.brand_name}`}
                   onClick={() => removeDeal(d)}
                   style={{
                     padding: 6,

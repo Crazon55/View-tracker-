@@ -594,6 +594,15 @@ export function mockSeedingDelete<T>(path: string): T {
   if (clean === "/users/by-email") {
     return { ok: true } as T;
   }
+  const dealMatch = clean.match(/^\/deals\/([^/]+)$/);
+  if (dealMatch) {
+    const idx = MOCK_DEALS.findIndex((d) => d.deal_id === dealMatch[1]);
+    if (idx < 0) throw new Error("Deal not found");
+    const [removed] = MOCK_DEALS.splice(idx, 1);
+    delete MOCK_DELIVERABLES[dealMatch[1]];
+    persistMockDeals();
+    return { deleted: dealMatch[1], brand_name: removed.brand_name } as T;
+  }
   const pageMatch = clean.match(/^\/pages\/([^/]+)$/);
   if (pageMatch) {
     const idx = MOCK_PAGES.findIndex((p) => p.page_id === pageMatch[1]);
