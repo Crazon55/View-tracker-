@@ -33,7 +33,6 @@ import {
   nodeCardHeight,
   nodeCardWidth,
   parseSlidesContent,
-  postDetailsCardHeight,
   postDetailsCardWidth,
 } from "../lib/fsiWhiteboardTypes";
 import FsiNodeHandles from "./FsiNodeHandles";
