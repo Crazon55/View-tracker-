@@ -45,10 +45,23 @@ export function resolveConnectionHandles(
   source: FsiNodeRecord,
   target: FsiNodeRecord,
 ): { sourceHandle: string; targetHandle: string } {
-  // Always route from live node positions so edges attach to facing sides
-  // (stale top/bottom handles after move/duplicate created the "stiff top" tangle).
-  void connection;
-  return inferAnchorHandles(source, target);
+  // Prefer the handles the user actually connected (side + position). Only infer
+  // when missing — re-inferring always caused wires to jump to "facing" sides.
+  const embedded = parseEmbeddedHandles(connection.edge_label_note);
+  const sourceHandle =
+    toFlowAnchorHandle(connection.source_handle) ??
+    toFlowAnchorHandle(embedded.sourceHandle);
+  const targetHandle =
+    toFlowAnchorHandle(connection.target_handle) ??
+    toFlowAnchorHandle(embedded.targetHandle);
+  if (sourceHandle && targetHandle) {
+    return { sourceHandle, targetHandle };
+  }
+  const inferred = inferAnchorHandles(source, target);
+  return {
+    sourceHandle: sourceHandle ?? inferred.sourceHandle,
+    targetHandle: targetHandle ?? inferred.targetHandle,
+  };
 }
 
 export const inferConnectionHandles = inferAnchorHandles;

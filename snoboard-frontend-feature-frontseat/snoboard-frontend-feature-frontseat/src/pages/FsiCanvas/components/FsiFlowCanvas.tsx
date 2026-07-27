@@ -976,8 +976,6 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     [canEdit, onNodeDelete],
   );
 
-  const [hoverNodeId, setHoverNodeId] = useState<string | null>(null);
-
   const styledNodes = useMemo(
     () =>
       nodes.map((n) => ({
@@ -987,10 +985,11 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         data: {
           ...(n.data as FsiNodeData),
           isConnecting,
-          showConnectionDots: canEdit && (!!n.selected || n.id === hoverNodeId || isConnecting),
+          // Always show connect dots while editing so move (body) vs connect (dot) is obvious.
+          showConnectionDots: canEdit,
         },
       })),
-    [nodes, canEdit, isConnecting, hoverNodeId],
+    [nodes, canEdit, isConnecting],
   );
 
   const miniMapNodeColor = useCallback((n: Node) => {
@@ -1033,10 +1032,6 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         onEdgeClick={handleEdgeClick}
         onPaneClick={handlePaneClick}
         onPaneDoubleClick={handlePaneDoubleClick}
-        onNodeMouseEnter={(_, n) => {
-          if (canEdit) setHoverNodeId(n.id);
-        }}
-        onNodeMouseLeave={() => setHoverNodeId(null)}
         onNodeDragStart={handleNodeDragStart}
         onNodeDragStop={handleNodeDragStop}
         onSelectionDragStart={handleSelectionDragStart}

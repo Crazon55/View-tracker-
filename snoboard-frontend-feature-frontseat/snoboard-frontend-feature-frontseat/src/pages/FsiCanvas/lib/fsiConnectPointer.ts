@@ -45,21 +45,15 @@ export function anchorHandlesFromConnection(params: {
   sourcePointer?: XYPosition | null;
   targetPointer?: XYPosition | null;
 }): { sourceHandle: string; targetHandle: string } {
-  const srcParsed = parseAnchorHandle(params.sourceHandleId ?? "");
-  if (srcParsed) {
-    const tgtParsed = parseAnchorHandle(params.targetHandleId ?? "");
-    if (tgtParsed) {
-      return { sourceHandle: params.sourceHandleId!, targetHandle: params.targetHandleId! };
-    }
-  }
-
   const sourceSideMeta = sideFromHandleId(params.sourceHandleId);
   const targetSideMeta = sideFromHandleId(params.targetHandleId);
+  const srcParsed = parseAnchorHandle(params.sourceHandleId ?? "");
 
-  let sourceHandle = toFlowAnchorHandle(params.sourceHandleId) ?? "right-out-50";
-  let targetHandle = toFlowAnchorHandle(params.targetHandleId) ?? "left-in-50";
+  let sourceHandle =
+    toFlowAnchorHandle(params.sourceHandleId) ??
+    (srcParsed ? params.sourceHandleId! : "right-out-50");
 
-  if (sourceSideMeta && params.sourcePointer) {
+  if (!srcParsed && sourceSideMeta && params.sourcePointer) {
     sourceHandle = pointerToSideAnchor(
       sourceSideMeta.side,
       "out",
@@ -69,25 +63,29 @@ export function anchorHandlesFromConnection(params: {
     );
   }
 
-  if (targetSideMeta && params.targetPointer) {
-    targetHandle = pointerToSideAnchor(
-      targetSideMeta.side,
-      "in",
-      params.targetNode,
-      params.targetAbs,
-      params.targetPointer,
-    );
-  } else if (params.targetPointer) {
-    const box = nodeBox(params.targetNode, params.targetAbs);
-    targetHandle = pointerToAnchorHandle(
-      box.x,
-      box.y,
-      box.w,
-      box.h,
-      params.targetPointer.x,
-      params.targetPointer.y,
-      "in",
-    );
+  // Drop pointer decides the target side — never let RF default to a facing-side guess.
+  let targetHandle = toFlowAnchorHandle(params.targetHandleId) ?? "left-in-50";
+  if (params.targetPointer) {
+    if (targetSideMeta) {
+      targetHandle = pointerToSideAnchor(
+        targetSideMeta.side,
+        "in",
+        params.targetNode,
+        params.targetAbs,
+        params.targetPointer,
+      );
+    } else {
+      const box = nodeBox(params.targetNode, params.targetAbs);
+      targetHandle = pointerToAnchorHandle(
+        box.x,
+        box.y,
+        box.w,
+        box.h,
+        params.targetPointer.x,
+        params.targetPointer.y,
+        "in",
+      );
+    }
   }
 
   return { sourceHandle, targetHandle };

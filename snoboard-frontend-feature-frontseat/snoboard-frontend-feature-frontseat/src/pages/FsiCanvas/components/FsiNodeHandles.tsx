@@ -42,7 +42,8 @@ function anchorPointStyle(side: AnchorSide, pct: number): CSSProperties {
 }
 
 function edgeStripStyle(side: AnchorSide, large: boolean): CSSProperties {
-  const thickness = large ? 14 : 8;
+  // Thin target-only strips so the node body stays easy to drag.
+  const thickness = large ? 12 : 8;
   switch (side) {
     case "top":
       return { left: "0%", width: "100%", height: thickness, top: 0, transform: "translateY(-50%)" };
@@ -63,8 +64,12 @@ const stripClass = cn(
 const pointClass = cn(
   "!z-[30] !h-1 !w-1 !min-h-0 !min-w-0 !border-0 !bg-transparent !opacity-0 !pointer-events-none nodrag nopan",
 );
+/** Big, obvious connect affordance — drag from these only (not the node body). */
 const visibleDotClass = cn(
-  "!z-[40] !h-3 !w-3 !min-h-0 !min-w-0 !rounded-full !border-2 !border-zinc-300 !bg-zinc-800 !opacity-100 nodrag nopan pointer-events-none",
+  "!z-[60] !h-4 !w-4 !min-h-4 !min-w-4 !rounded-full !border-2 !border-sky-400 !bg-zinc-950",
+  "!opacity-100 !shadow-[0_0_0_3px_rgba(56,189,248,0.35)] nodrag nopan",
+  "hover:!scale-125 hover:!border-sky-300 hover:!bg-sky-500/20",
+  "transition-transform",
 );
 
 function collectAnchorIds(requiredAnchors: string[]): Set<string> {
@@ -88,9 +93,7 @@ export default function FsiNodeHandles({
   requiredAnchors = [],
   showConnectionDots = false,
 }: Props) {
-  const sourcePointer = canStartConnection
-    ? "!pointer-events-auto nodrag nopan"
-    : "!pointer-events-none";
+  // Source connections start from visible dots only — keeps node body = move.
   const targetPointer = canAcceptConnection
     ? "!pointer-events-auto nodrag nopan"
     : "!pointer-events-none";
@@ -110,8 +113,8 @@ export default function FsiNodeHandles({
             id={id}
             className={pointClass}
             style={anchorPointStyle(meta.side, meta.pct)}
-            isConnectable={isOut ? canStartConnection : true}
-            isConnectableStart={isOut ? canStartConnection : undefined}
+            isConnectable={!isOut}
+            isConnectableStart={false}
             isConnectableEnd={!isOut}
           />
         );
@@ -130,9 +133,11 @@ export default function FsiNodeHandles({
               style={anchorPointStyle(side, 50)}
               isConnectable={canStartConnection}
               isConnectableStart={canStartConnection}
+              title="Drag to connect"
             />
           ))
         : null}
+      {/* Target drop zones on edges — receive connections, never start them */}
       {SIDES.map((side) => (
         <Handle
           key={`${side}-in-strip`}
@@ -143,18 +148,7 @@ export default function FsiNodeHandles({
           style={edgeStripStyle(side, largeHitZone)}
           isConnectable
           isConnectableEnd
-        />
-      ))}
-      {SIDES.map((side) => (
-        <Handle
-          key={`${side}-out-strip`}
-          type="source"
-          position={SIDE_POSITION[side]}
-          id={`${side}-out`}
-          className={cn(stripClass, sourcePointer)}
-          style={edgeStripStyle(side, largeHitZone)}
-          isConnectable={canStartConnection}
-          isConnectableStart={canStartConnection}
+          isConnectableStart={false}
         />
       ))}
     </>
