@@ -519,19 +519,23 @@ export function mockSeedingPost<T>(path: string, body: Record<string, unknown>):
     };
     MOCK_DEALS.unshift(deal);
     persistMockDeals();
-    const drafts = body.deliverable_drafts as { page_name: string; deliverable_type: string; quantity: number }[] | undefined;
+    const drafts = (body.deliverable_drafts || body.deliverables_spec) as
+      | { page_id?: string; page_name?: string; deliverable_type: string; quantity: number }[]
+      | undefined;
     if (drafts?.length) {
-      MOCK_DELIVERABLES[deal.deal_id] = drafts.flatMap((d, i) =>
-        Array.from({ length: d.quantity }, (_, q) => ({
+      MOCK_DELIVERABLES[deal.deal_id] = drafts.flatMap((d, i) => {
+        const page = d.page_id ? MOCK_PAGES.find((p) => p.page_id === d.page_id) : undefined;
+        return Array.from({ length: Math.max(1, Number(d.quantity) || 1) }, (_, q) => ({
           deliverable_id: `del_${deal.deal_id}_${i}_${q}`,
-          page_name: d.page_name,
+          page_id: d.page_id,
+          page_name: page?.page_name || d.page_name || d.page_id || "Page",
           deliverable_type: d.deliverable_type,
           status: "Not Started",
           go_live_date_time: deal.go_live_date_time,
           views: 0,
           assigned_to: "",
-        })),
-      );
+        }));
+      });
     }
     return enrichDeal(deal) as T;
   }
@@ -589,6 +593,15 @@ export function mockSeedingDelete<T>(path: string): T {
   const clean = path.split("?")[0];
   if (clean === "/users/by-email") {
     return { ok: true } as T;
+  }
+  const dealMatch = clean.match(/^\/deals\/([^/]+)$/);
+  if (dealMatch) {
+    const idx = MOCK_DEALS.findIndex((d) => d.deal_id === dealMatch[1]);
+    if (idx < 0) throw new Error("Deal not found");
+    const [removed] = MOCK_DEALS.splice(idx, 1);
+    delete MOCK_DELIVERABLES[dealMatch[1]];
+    persistMockDeals();
+    return { deleted: dealMatch[1], brand_name: removed.brand_name } as T;
   }
   const pageMatch = clean.match(/^\/pages\/([^/]+)$/);
   if (pageMatch) {

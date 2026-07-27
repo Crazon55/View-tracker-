@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/services/seeding/client";
 import {
@@ -13,6 +14,7 @@ import type { SeedingDeal } from "@/services/seeding/mockData";
 type Props = {
   rows: SeedingDeal[];
   onUpdate: (deal: SeedingDeal) => void;
+  onRemove?: (dealId: string) => void;
   showReview?: boolean;
   showDealStatus?: boolean;
   empty?: string;
@@ -37,10 +39,22 @@ async function patchDeal(
   }
 }
 
-export function DealsCardList({ rows, onUpdate, showReview = true, showDealStatus = true, empty }: Props) {
+export function DealsCardList({ rows, onUpdate, onRemove, showReview = true, showDealStatus = true, empty }: Props) {
   if (!rows.length) {
     return <p className="seeding-muted">{empty ?? "No deals."}</p>;
   }
+
+  const removeDeal = async (d: SeedingDeal) => {
+    const ok = window.confirm(`Remove brief “${d.brand_name}”? This cannot be undone.`);
+    if (!ok) return;
+    try {
+      await api.delete(`/deals/${d.deal_id}`);
+      onRemove?.(d.deal_id);
+      toast.success(`Removed ${d.brand_name}`);
+    } catch {
+      toast.error("Couldn't remove brief.");
+    }
+  };
 
   return (
     <div className="seeding-deals-stack">
@@ -53,7 +67,28 @@ export function DealsCardList({ rows, onUpdate, showReview = true, showDealStatu
                 <span className="seeding-brand-sub">{d.agency_or_client_name}</span>
               </Link>
             </div>
-            <div className="seeding-deal-card-team">{d.submitted_by_team?.team_name ?? "—"}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div className="seeding-deal-card-team">{d.submitted_by_team?.team_name ?? "—"}</div>
+              {onRemove ? (
+                <button
+                  type="button"
+                  title="Remove brief"
+                  aria-label={`Remove ${d.brand_name}`}
+                  onClick={() => removeDeal(d)}
+                  style={{
+                    padding: 6,
+                    borderRadius: 7,
+                    border: "1px solid var(--f-line)",
+                    background: "transparent",
+                    color: "var(--f-dim)",
+                    cursor: "pointer",
+                    display: "inline-flex",
+                  }}
+                >
+                  <Trash2 size={13} strokeWidth={1.5} />
+                </button>
+              ) : null}
+            </div>
           </div>
 
           <div className="seeding-deal-card-fields">

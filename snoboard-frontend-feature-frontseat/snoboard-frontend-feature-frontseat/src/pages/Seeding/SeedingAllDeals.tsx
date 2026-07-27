@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { Plus } from "lucide-react";
 import { FramerPage, PageHeader, DataTable } from "@/components/framer/Framer";
 import { FilterDropdown } from "@/components/seeding/FilterDropdown";
 import { DealsCardList } from "@/components/seeding/DealsCardList";
+import { AdminAddBriefForm } from "@/components/seeding/AdminAddBriefForm";
 import { StatusBadge } from "@/components/seeding/StatusBadge";
 import { api } from "@/services/seeding/client";
 import { ADMIN_REVIEW_STATUSES, PAYMENT_STATUSES, formatDate } from "@/services/seeding/constants";
@@ -15,12 +17,15 @@ const PAY_OPTS = [{ value: "", label: "All" }, ...PAYMENT_STATUSES.map((s) => ({
 
 export default function SeedingAllDeals() {
   const { role } = usePermissions();
-  const isFulfillment = String(role || "").split(",").map((r) => r.trim()).some((r) => canonicalRole(r) === "fulfillment");
+  const roleParts = String(role || "").split(",").map((r) => r.trim());
+  const isFulfillment = roleParts.some((r) => canonicalRole(r) === "fulfillment");
+  const isAdmin = roleParts.some((r) => canonicalRole(r) === "admin");
 
   const [rows, setRows] = useState<SeedingDeal[]>([]);
   const [loading, setLoading] = useState(true);
   const [reviewFilter, setReviewFilter] = useState("");
   const [payFilter, setPayFilter] = useState("");
+  const [adding, setAdding] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -44,13 +49,50 @@ export default function SeedingAllDeals() {
     setRows((prev) => prev.map((d) => (d.deal_id === updated.deal_id ? updated : d)));
   };
 
+  const handleCreated = (deal: SeedingDeal) => {
+    setRows((prev) => [deal, ...prev]);
+    setAdding(false);
+  };
+
+  const handleRemoved = (dealId: string) => {
+    setRows((prev) => prev.filter((d) => d.deal_id !== dealId));
+  };
+
   return (
     <FramerPage>
-      <PageHeader
-        eyebrow={isFulfillment ? "SEEDING · FULFILMENT" : "SEEDING · DEALS"}
-        title={isFulfillment ? "All Approved Deals" : "All Deals"}
-        lead={isFulfillment ? "All admin-approved deals, ready to execute." : "Each deal is its own card — filter and edit status, payment, and price inline."}
-      />
+      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+        <PageHeader
+          eyebrow={isFulfillment ? "SEEDING · FULFILMENT" : "SEEDING · DEALS"}
+          title={isFulfillment ? "All Approved Deals" : "All Deals"}
+          lead={isFulfillment ? "All admin-approved deals, ready to execute." : "Each deal is its own card — filter and edit status, payment, and price inline."}
+        />
+        {isAdmin && !isFulfillment && !adding ? (
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              background: "#fff",
+              color: "#000",
+              borderRadius: 8,
+              padding: "8px 12px",
+              fontSize: 12,
+              fontWeight: 600,
+              border: 0,
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
+          >
+            <Plus size={13} strokeWidth={2.25} /> Add Brief
+          </button>
+        ) : null}
+      </div>
+
+      {isAdmin && !isFulfillment && adding ? (
+        <AdminAddBriefForm onCreated={handleCreated} onCancel={() => setAdding(false)} />
+      ) : null}
 
       {/* Fulfillment must not see payment/price — money is need-to-know, so no filters here. */}
       {!isFulfillment && (
@@ -97,7 +139,12 @@ export default function SeedingAllDeals() {
           />
         </div>
       ) : (
-        <DealsCardList rows={filtered} onUpdate={handleUpdate} empty="No deals match these filters." />
+        <DealsCardList
+          rows={filtered}
+          onUpdate={handleUpdate}
+          onRemove={isAdmin ? handleRemoved : undefined}
+          empty="No deals match these filters."
+        />
       )}
     </FramerPage>
   );

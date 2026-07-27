@@ -431,6 +431,10 @@ class BriefCreate(BaseModel):
     payment_due_date: str
     notes: Optional[str] = ""
     submitted_by_team_id: Optional[str] = None
+    # Admin-only: seed historical briefs already past review / payment.
+    admin_review_status: Optional[str] = None
+    deal_status: Optional[str] = None
+    payment_status: Optional[str] = None
 
 
 class BriefUpdate(BaseModel):
@@ -951,6 +955,30 @@ async def create_brief(payload: BriefCreate, user: dict = Depends(get_current_us
             raise HTTPException(400, "BD user must belong to a team")
         team_id = user["business_team_id"]
 
+    review_status = "Submitted"
+    deal_status = None
+    payment_status = "Not Raised"
+    approved_by = None
+    approved_at = None
+    if user["role"] == "admin":
+        if payload.admin_review_status:
+            if payload.admin_review_status not in ADMIN_REVIEW_STATUSES + ["Archived"]:
+                raise HTTPException(400, f"Invalid admin_review_status: {payload.admin_review_status}")
+            review_status = payload.admin_review_status
+        if payload.deal_status is not None and payload.deal_status != "":
+            if payload.deal_status not in DEAL_STATUSES:
+                raise HTTPException(400, f"Invalid deal_status: {payload.deal_status}")
+            deal_status = payload.deal_status
+        if payload.payment_status:
+            if payload.payment_status not in PAYMENT_STATUSES:
+                raise HTTPException(400, f"Invalid payment_status: {payload.payment_status}")
+            payment_status = payload.payment_status
+        if review_status == "Approved":
+            approved_by = user["user_id"]
+            approved_at = now_iso()
+        if review_status == "Cancelled" and deal_status is None:
+            deal_status = "Cancelled"
+
     deal_id = new_id("deal")
     deal = {
         "deal_id": deal_id,
@@ -964,12 +992,12 @@ async def create_brief(payload: BriefCreate, user: dict = Depends(get_current_us
         "go_live_date_time": payload.go_live_date_time,
         "submitted_by_user_id": user["user_id"],
         "submitted_by_team_id": team_id,
-        "admin_review_status": "Submitted",
-        "deal_status": None,
+        "admin_review_status": review_status,
+        "deal_status": deal_status,
         "rejection_reason": "",
         "needs_more_info_comment": "",
-        "approved_by_admin_id": None,
-        "approved_at": None,
+        "approved_by_admin_id": approved_by,
+        "approved_at": approved_at,
         "notes": payload.notes or "",
         "created_at": now_iso(),
         "updated_at": now_iso(),
@@ -1007,7 +1035,7 @@ async def create_brief(payload: BriefCreate, user: dict = Depends(get_current_us
     await db.payments.insert_one({
         "payment_id": new_id("pay"),
         "deal_id": deal_id,
-        "status": "Not Raised",
+        "status": payment_status,
         "payment_due_date": payload.payment_due_date,
         "amount_received": 0.0,
         "payment_notes": "",
@@ -1015,7 +1043,9 @@ async def create_brief(payload: BriefCreate, user: dict = Depends(get_current_us
         "last_updated_at": now_iso(),
     })
 
-    return await _enrich_deal(deal)
+    enriched = await _enrich_deal(deal)
+    enriched = await _attach_payment_status(enriched)
+    return enriched
 
 
 @api.post("/deals")
@@ -1063,6 +1093,9 @@ async def create_deal_compat(request: Request, user: dict = Depends(get_current_
         payment_due_date=str(body.get("payment_due_date") or ""),
         notes=body.get("notes") or "",
         submitted_by_team_id=submitted_by_team_id,
+        admin_review_status=body.get("admin_review_status"),
+        deal_status=body.get("deal_status"),
+        payment_status=body.get("payment_status"),
     )
     return await create_brief(payload, user)
 
@@ -1250,6 +1283,23 @@ async def update_deal(deal_id: str, payload: BriefUpdate, user: dict = Depends(g
     if user["role"] in {"admin", "bd"}:
         updated = await _attach_payment_status(updated)
     return scrub_deal_for_user(updated, user)
+
+
+@api.delete("/deals/{deal_id}")
+async def delete_deal(deal_id: str, user: dict = Depends(get_current_user)):
+    """Admin-only hard delete — removes the deal and all related seeding rows."""
+    await require_role(user, ["admin"])
+    deal = await db.deals.find_one({"deal_id": deal_id}, {"_id": 0})
+    if not deal:
+        raise HTTPException(404, "Deal not found")
+
+    await db.deliverables.delete_many({"deal_id": deal_id})
+    await db.fulfillment_outputs.delete_many({"deal_id": deal_id})
+    await db.client_feedback.delete_many({"deal_id": deal_id})
+    await db.internal_notes.delete_many({"deal_id": deal_id})
+    await db.payments.delete_many({"deal_id": deal_id})
+    await db.deals.delete_one({"deal_id": deal_id})
+    return {"deleted": deal_id, "brand_name": deal.get("brand_name")}
 
 
 @api.post("/deals/{deal_id}/review")
