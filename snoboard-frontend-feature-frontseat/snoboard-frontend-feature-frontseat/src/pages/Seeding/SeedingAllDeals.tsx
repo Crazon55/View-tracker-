@@ -40,7 +40,9 @@ export default function SeedingAllDeals() {
     let list = rows;
     // Fulfillment only ever works with admin-approved deals.
     if (isFulfillment) list = list.filter((d) => d.admin_review_status === "Approved");
-    if (reviewFilter) list = list.filter((d) => d.admin_review_status === reviewFilter);
+    // "All" hides Archived — those stay in the backend and show under Review → Archived.
+    if (!reviewFilter) list = list.filter((d) => d.admin_review_status !== "Archived");
+    else list = list.filter((d) => d.admin_review_status === reviewFilter);
     if (payFilter) list = list.filter((d) => (d.payment_status ?? "Not Raised") === payFilter);
     return list;
   }, [rows, reviewFilter, payFilter, isFulfillment]);
@@ -52,10 +54,6 @@ export default function SeedingAllDeals() {
   const handleCreated = (deal: SeedingDeal) => {
     setRows((prev) => [deal, ...prev]);
     setAdding(false);
-  };
-
-  const handleRemoved = (dealId: string) => {
-    setRows((prev) => prev.filter((d) => d.deal_id !== dealId));
   };
 
   return (
@@ -142,7 +140,7 @@ export default function SeedingAllDeals() {
         <DealsCardList
           rows={filtered}
           onUpdate={handleUpdate}
-          onRemove={isAdmin ? handleRemoved : undefined}
+          canRemove={isAdmin}
           empty="No deals match these filters."
         />
       )}

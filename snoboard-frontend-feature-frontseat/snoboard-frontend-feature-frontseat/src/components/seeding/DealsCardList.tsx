@@ -14,7 +14,7 @@ import type { SeedingDeal } from "@/services/seeding/mockData";
 type Props = {
   rows: SeedingDeal[];
   onUpdate: (deal: SeedingDeal) => void;
-  onRemove?: (dealId: string) => void;
+  canRemove?: boolean;
   showReview?: boolean;
   showDealStatus?: boolean;
   empty?: string;
@@ -39,20 +39,19 @@ async function patchDeal(
   }
 }
 
-export function DealsCardList({ rows, onUpdate, onRemove, showReview = true, showDealStatus = true, empty }: Props) {
+export function DealsCardList({ rows, onUpdate, canRemove = false, showReview = true, showDealStatus = true, empty }: Props) {
   if (!rows.length) {
     return <p className="seeding-muted">{empty ?? "No deals."}</p>;
   }
 
   const removeDeal = async (d: SeedingDeal) => {
-    const ok = window.confirm(`Remove brief “${d.brand_name}”? This cannot be undone.`);
+    const ok = window.confirm(`Hide “${d.brand_name}” from All Deals? It stays in the system under Review → Archived.`);
     if (!ok) return;
     try {
-      await api.delete(`/deals/${d.deal_id}`);
-      onRemove?.(d.deal_id);
-      toast.success(`Removed ${d.brand_name}`);
+      await patchDeal(d, { admin_review_status: "Archived" }, onUpdate);
+      toast.success(`Hid ${d.brand_name} from All Deals`);
     } catch {
-      toast.error("Couldn't remove brief.");
+      // patchDeal already toasts
     }
   };
 
@@ -69,11 +68,11 @@ export function DealsCardList({ rows, onUpdate, onRemove, showReview = true, sho
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div className="seeding-deal-card-team">{d.submitted_by_team?.team_name ?? "—"}</div>
-              {onRemove ? (
+              {canRemove ? (
                 <button
                   type="button"
-                  title="Remove brief"
-                  aria-label={`Remove ${d.brand_name}`}
+                  title="Hide from All Deals"
+                  aria-label={`Hide ${d.brand_name}`}
                   onClick={() => removeDeal(d)}
                   style={{
                     padding: 6,

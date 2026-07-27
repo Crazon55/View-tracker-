@@ -1285,23 +1285,6 @@ async def update_deal(deal_id: str, payload: BriefUpdate, user: dict = Depends(g
     return scrub_deal_for_user(updated, user)
 
 
-@api.delete("/deals/{deal_id}")
-async def delete_deal(deal_id: str, user: dict = Depends(get_current_user)):
-    """Admin-only hard delete — removes the deal and all related seeding rows."""
-    await require_role(user, ["admin"])
-    deal = await db.deals.find_one({"deal_id": deal_id}, {"_id": 0})
-    if not deal:
-        raise HTTPException(404, "Deal not found")
-
-    await db.deliverables.delete_many({"deal_id": deal_id})
-    await db.fulfillment_outputs.delete_many({"deal_id": deal_id})
-    await db.client_feedback.delete_many({"deal_id": deal_id})
-    await db.internal_notes.delete_many({"deal_id": deal_id})
-    await db.payments.delete_many({"deal_id": deal_id})
-    await db.deals.delete_one({"deal_id": deal_id})
-    return {"deleted": deal_id, "brand_name": deal.get("brand_name")}
-
-
 @api.post("/deals/{deal_id}/review")
 async def admin_review(deal_id: str, payload: AdminReviewAction, user: dict = Depends(get_current_user)):
     await require_role(user, ["admin"])
