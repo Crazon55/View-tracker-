@@ -230,10 +230,11 @@ export function specForWhiteboardType(type: WhiteboardNodeType): CreateNodeSpec 
 export function postDetailsCardHeight(payload: Record<string, unknown> | undefined): number {
   const p = payload ?? {};
   let h = DROPDOWN_COLLAPSED_HEIGHT * 3;
-  if (p.hook_expanded === true) h += 100;
-  if (p.performance_expanded === true) h += 176;
-  if (p.link_expanded === true) h += 48;
-  return h;
+  if (p.hook_expanded === true) h += 120;
+  if (p.performance_expanded === true) h += 240;
+  if (p.link_expanded === true) h += 56;
+  // Cap height — overflow scrolls inside the card.
+  return Math.min(h, 480);
 }
 
 export function postDetailsCardWidth(payload: Record<string, unknown> | undefined): number {

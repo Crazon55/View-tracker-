@@ -464,7 +464,18 @@ export default function FsiCanvasWorkspace() {
 
       queryClient.setQueryData<FsiGraph>(["fsi-graph", studyId], (old) => {
         if (!old) return old;
-        return { ...old, nodes: old.nodes.map((n) => (n.id === node.id ? { ...n, ...node } : n)) };
+        return {
+          ...old,
+          nodes: old.nodes.map((n) => {
+            if (n.id !== node.id) return n;
+            // Keep local structured_payload — optimistic UI flags (dropdown open state)
+            // must not be overwritten by a slower in-flight mutation response.
+            if (patch.structured_payload && n.structured_payload) {
+              return { ...n, ...node, structured_payload: n.structured_payload };
+            }
+            return { ...n, ...node };
+          }),
+        };
       });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -1191,7 +1202,18 @@ export default function FsiCanvasWorkspace() {
       const beforePayload = { ...(node.structured_payload ?? {}) };
       const nextPayload = { ...beforePayload, ...patch };
       if (JSON.stringify(beforePayload) === JSON.stringify(nextPayload)) return;
-      if (!history.isApplying.current) {
+      // Don't junk undo history with accordion open/close.
+      const uiOnly = Object.keys(patch).every((k) =>
+        [
+          "hook_expanded",
+          "performance_expanded",
+          "link_expanded",
+          "ui_expanded",
+          "card_width",
+          "card_height",
+        ].includes(k),
+      );
+      if (!uiOnly && !history.isApplying.current) {
         history.pushEntry({
           type: "node_patch",
           nodeId,

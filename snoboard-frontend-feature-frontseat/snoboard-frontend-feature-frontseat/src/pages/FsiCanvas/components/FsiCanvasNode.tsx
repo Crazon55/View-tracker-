@@ -545,14 +545,17 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
               }}
             />
           )}
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div
+            className="nowheel nopan flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain"
+            onWheel={(e) => e.stopPropagation()}
+          >
             <FsiDragSafeToggle
               label="Written Hook"
               expanded={hookOpen}
               onToggle={() => patchPayload({ hook_expanded: !hookOpen })}
               className="bg-violet-300/40"
             />
-            {hookOpen && <div className="px-3 pb-2">{renderHookBody()}</div>}
+            {hookOpen && <div className="nowheel px-3 pb-2">{renderHookBody()}</div>}
 
             <FsiDragSafeToggle
               label="Performance"
@@ -560,7 +563,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
               onToggle={() => patchPayload({ performance_expanded: !perfOpen })}
               className="bg-slate-300/50"
             />
-            {perfOpen && <div className="px-2 pb-2">{renderFields({ forceShow: true })}</div>}
+            {perfOpen && <div className="nowheel px-2 pb-2">{renderFields({ forceShow: true })}</div>}
 
             <FsiDragSafeToggle
               label="Link"
@@ -568,7 +571,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
               onToggle={() => patchPayload({ link_expanded: !linkOpen })}
               className="bg-sky-300/40"
             />
-            {linkOpen && <div className="px-3 pb-2">{renderLinkBody()}</div>}
+            {linkOpen && <div className="nowheel px-3 pb-2">{renderLinkBody()}</div>}
           </div>
           <FsiNodeDuplicateCorners visible={showDuplicateCorners} onCornerClick={handleCornerDuplicate} />
           <FsiNodeHandles
@@ -614,7 +617,10 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
             onToggle={toggleExpanded}
           />
           {uiExpanded && (
-            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-3">
+            <div
+              className="nowheel nopan flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-3 pb-3"
+              onWheel={(e) => e.stopPropagation()}
+            >
               {isLinkCard
                 ? renderLinkBody()
                 : isWrittenHookOnly || hookHasBody
