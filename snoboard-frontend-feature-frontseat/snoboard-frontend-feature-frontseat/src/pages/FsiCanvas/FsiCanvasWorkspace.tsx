@@ -24,7 +24,7 @@ import FsiFlowCanvas, { type FsiFlowCanvasHandle } from "./components/FsiFlowCan
 import FsiLeftToolbar from "./components/FsiLeftToolbar";
 import FsiAiAssistant from "./components/FsiAiAssistant";
 import type { FsiChatMessage } from "./lib/fsiAiChat";
-import { buildGraphSnapshot } from "./lib/fsiGraphSnapshot";
+import { buildGraphSnapshot, flushPendingCanvasEdits } from "./lib/fsiGraphSnapshot";
 import FsiStudySettingsDialog, { type StudyStatus } from "./components/FsiStudySettingsDialog";
 import NodeTypePicker, { type PickerChoice } from "./components/NodeTypePicker";
 import type { NodeSuggestionPayload, NoteSuggestionPayload } from "./components/FsiNodeSuggestionsPanel";
@@ -120,7 +120,8 @@ export default function FsiCanvasWorkspace() {
   graphRef.current = graph ?? null;
 
   const generateSummaryMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
+      await flushPendingCanvasEdits();
       const snapshot = buildGraphSnapshot(graphRef.current ?? undefined);
       return fsiApi.generateStudySummary(studyId!, snapshot);
     },
@@ -134,7 +135,8 @@ export default function FsiCanvasWorkspace() {
   }, [generateSummaryMutation]);
 
   const chatMutation = useMutation({
-    mutationFn: ({ message, history }: { message: string; history: FsiChatMessage[] }) => {
+    mutationFn: async ({ message, history }: { message: string; history: FsiChatMessage[] }) => {
+      await flushPendingCanvasEdits();
       const snapshot = buildGraphSnapshot(graphRef.current ?? undefined);
       return fsiApi.chatStudy(
         studyId!,

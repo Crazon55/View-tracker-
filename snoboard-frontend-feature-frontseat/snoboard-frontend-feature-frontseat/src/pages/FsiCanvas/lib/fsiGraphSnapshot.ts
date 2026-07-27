@@ -7,6 +7,26 @@ export type FsiGraphSnapshot = {
   connections: FsiConnectionRecord[];
 };
 
+/**
+ * Blur any focused field so pending title/body/metric edits commit into the graph
+ * before we snapshot for AI. Wait briefly for React state + setGraph to settle.
+ */
+export async function flushPendingCanvasEdits(): Promise<void> {
+  const active = document.activeElement as HTMLElement | null;
+  if (
+    active &&
+    (active.tagName === "INPUT" ||
+      active.tagName === "TEXTAREA" ||
+      active.tagName === "SELECT" ||
+      active.isContentEditable)
+  ) {
+    active.blur();
+  }
+  await new Promise<void>((resolve) => {
+    window.setTimeout(resolve, 60);
+  });
+}
+
 /** Serialize the live canvas graph for AI requests (matches what the user sees). */
 export function buildGraphSnapshot(graph: FsiGraph | null | undefined): FsiGraphSnapshot | undefined {
   if (!graph?.study) return undefined;

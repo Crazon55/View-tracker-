@@ -376,10 +376,13 @@ def _resolve_study_graph(
     study_id: str,
     snapshot: FsiGraphSnapshot | None,
 ) -> tuple[dict, list[dict], list[dict]]:
-    """Prefer live canvas snapshot from client; fall back to Supabase."""
+    """Prefer live canvas snapshot from client (even if empty); fall back to Supabase."""
     study = _get_study(client, study_id)
-    if snapshot and snapshot.nodes:
-        return study if not snapshot.study else {**study, **snapshot.study}, snapshot.nodes, snapshot.connections
+    # Important: empty nodes=[] is a valid live canvas (user cleared it). Do not
+    # treat it as missing and accidentally reload stale DB nodes.
+    if snapshot is not None:
+        merged_study = study if not snapshot.study else {**study, **snapshot.study}
+        return merged_study, list(snapshot.nodes or []), list(snapshot.connections or [])
     nodes = client.table("nodes").select("*").eq("study_id", study_id).execute().data or []
     connections = client.table("connections").select("*").eq("study_id", study_id).execute().data or []
     return study, nodes, connections
