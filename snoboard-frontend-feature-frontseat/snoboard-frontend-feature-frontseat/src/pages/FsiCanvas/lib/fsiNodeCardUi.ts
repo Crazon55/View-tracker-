@@ -35,15 +35,22 @@ export const NODE_TYPE_LABEL_CLASS =
 export const NODE_FIELD_INPUT_CLASS =
   "nowheel rounded bg-transparent px-1.5 py-1 text-sm font-semibold leading-snug text-black caret-black outline-none placeholder:text-black/40 hover:bg-black/5 focus:bg-white focus:ring-2 focus:ring-sky-500";
 export const NODE_TITLE_INPUT_CLASS = `mt-2.5 w-full ${NODE_FIELD_INPUT_CLASS}`;
+/** Body/hook copy — same clean look as titles: no box until focused. */
+export const NODE_BODY_INPUT_CLASS =
+  "nowheel w-full resize-none rounded bg-transparent px-1.5 py-1 text-sm font-semibold leading-snug text-black caret-black outline-none placeholder:text-black/40 hover:bg-black/5 focus:bg-white focus:ring-2 focus:ring-sky-500";
 export const NODE_TITLE_EMPTY_CLASS =
   "mt-2.5 px-1.5 py-1 text-sm font-semibold leading-snug text-black/40";
 export const NODE_TITLE_DISPLAY_CLASS =
   "mt-2.5 px-1.5 py-1 text-sm font-semibold leading-snug text-black line-clamp-2";
 export const NODE_TITLE_BOX_CLASS =
   "w-full rounded border border-black/15 bg-black/10 px-2 py-1.5 text-sm font-semibold leading-snug text-black";
+/** @deprecated Prefer NODE_BODY_INPUT_CLASS for the clean Content Pillar look. */
 export const NODE_BODY_BOX_CLASS =
   "w-full flex-1 resize-none rounded border border-black/15 bg-black/10 px-2 py-1.5 text-xs leading-relaxed text-black placeholder:text-black/40 focus:border-black/30 focus:outline-none";
 export const NODE_FIELD_FOCUSED_DRAG_LOCK = "nodrag nopan";
+
+/** Placeholder for empty editable node text. */
+export const NODE_TEXT_PLACEHOLDER = "input text here";
 
 /** True when the title is unset or still the legacy default (same as node type). */
 export function isUnsetNodeTitle(title: string, nodeType: string): boolean {

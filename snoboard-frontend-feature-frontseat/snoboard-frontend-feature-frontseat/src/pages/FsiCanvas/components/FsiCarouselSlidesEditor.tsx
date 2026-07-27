@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { NODE_BODY_BOX_CLASS } from "../lib/fsiNodeCardUi";
+import { NODE_BODY_INPUT_CLASS, NODE_TEXT_PLACEHOLDER } from "../lib/fsiNodeCardUi";
 
 type Props = {
   slides: string[];
@@ -66,8 +66,8 @@ export default function FsiCarouselSlidesEditor({ slides, canEdit, onChange }: P
         disabled={!canEdit}
         value={safeSlides[activeIndex] ?? ""}
         onChange={(e) => setSlideText(activeIndex, e.target.value)}
-        placeholder="Copy for this slide…"
-        className={NODE_BODY_BOX_CLASS}
+        placeholder={NODE_TEXT_PLACEHOLDER}
+        className={`${NODE_BODY_INPUT_CLASS} min-h-[80px]`}
       />
     </div>
   );

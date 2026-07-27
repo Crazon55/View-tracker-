@@ -21,13 +21,14 @@ import {
   isLinkNode,
   isNodeUiExpanded,
   isPostDetailsNode,
-  NODE_BODY_BOX_CLASS,
+  NODE_BODY_INPUT_CLASS,
   NODE_TYPE_LABEL_CLASS,
   NODE_TITLE_DISPLAY_CLASS,
   NODE_TITLE_EMPTY_CLASS,
   NODE_TITLE_INPUT_CLASS,
   NODE_FIELD_INPUT_CLASS,
   NODE_FIELD_FOCUSED_DRAG_LOCK,
+  NODE_TEXT_PLACEHOLDER,
   isUnsetNodeTitle,
   nodeCardHeight,
   nodeCardWidth,
@@ -504,13 +505,13 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
           onMouseDown={(e) => {
             if (document.activeElement === e.currentTarget) e.stopPropagation();
           }}
-          placeholder="Hook copy…"
-          className={cn(NODE_BODY_BOX_CLASS, "mt-1 min-h-[80px]", dragLockWhenFocused)}
+          placeholder={NODE_TEXT_PLACEHOLDER}
+          className={cn(NODE_BODY_INPUT_CLASS, "mt-1 min-h-[80px]", dragLockWhenFocused)}
           {...fieldFocusProps}
         />
       ) : (
-        <div className={`${NODE_BODY_BOX_CLASS} mt-1 min-h-[80px] whitespace-pre-wrap`}>
-          {body ? <FsiLinkifiedText text={body} /> : "—"}
+        <div className={cn(NODE_BODY_INPUT_CLASS, "mt-1 min-h-[80px] whitespace-pre-wrap")}>
+          {body ? <FsiLinkifiedText text={body} /> : NODE_TEXT_PLACEHOLDER}
         </div>
       );
 
@@ -676,17 +677,17 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
                   }
                 }}
                 {...fieldFocusProps}
-                placeholder="Hook copy…"
+                placeholder={NODE_TEXT_PLACEHOLDER}
                 className={cn(
-                  NODE_BODY_BOX_CLASS,
+                  NODE_BODY_INPUT_CLASS,
                   "mt-2 min-h-[40px]",
                   uiExpanded && "min-h-[80px]",
                   dragLockWhenFocused,
                 )}
               />
             ) : (
-              <div className={`${NODE_BODY_BOX_CLASS} mt-2 min-h-[40px] whitespace-pre-wrap`}>
-                {body ? <FsiLinkifiedText text={body} /> : "—"}
+              <div className={cn(NODE_BODY_INPUT_CLASS, "mt-2 min-h-[40px] whitespace-pre-wrap")}>
+                {body ? <FsiLinkifiedText text={body} /> : NODE_TEXT_PLACEHOLDER}
               </div>
             )
           ) : canEdit ? (
@@ -697,10 +698,10 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
               onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
               {...fieldFocusProps}
               className={cn(NODE_TITLE_INPUT_CLASS, dragLockWhenFocused)}
-              placeholder={nodeData.nodeType}
+              placeholder={NODE_TEXT_PLACEHOLDER}
             />
           ) : titleEmpty ? (
-            <div className={NODE_TITLE_EMPTY_CLASS}>{nodeData.nodeType}</div>
+            <div className={NODE_TITLE_EMPTY_CLASS}>{NODE_TEXT_PLACEHOLDER}</div>
           ) : (
             <div className={NODE_TITLE_DISPLAY_CLASS}>{title}</div>
           )}
