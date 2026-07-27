@@ -42,7 +42,14 @@ export default function SeedingAllDeals() {
     if (isFulfillment) list = list.filter((d) => d.admin_review_status === "Approved");
     if (reviewFilter) list = list.filter((d) => d.admin_review_status === reviewFilter);
     if (payFilter) list = list.filter((d) => (d.payment_status ?? "Not Raised") === payFilter);
-    return list;
+    // Newest go-live first; missing dates sink to the bottom.
+    return [...list].sort((a, b) => {
+      const ta = a.go_live_date_time ? Date.parse(a.go_live_date_time) : Number.NEGATIVE_INFINITY;
+      const tb = b.go_live_date_time ? Date.parse(b.go_live_date_time) : Number.NEGATIVE_INFINITY;
+      const na = Number.isFinite(ta) ? ta : Number.NEGATIVE_INFINITY;
+      const nb = Number.isFinite(tb) ? tb : Number.NEGATIVE_INFINITY;
+      return nb - na;
+    });
   }, [rows, reviewFilter, payFilter, isFulfillment]);
 
   const handleUpdate = (updated: SeedingDeal) => {
