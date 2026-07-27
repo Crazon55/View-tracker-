@@ -42,8 +42,8 @@ function Donut({ reels, posts }: { reels: number; posts: number }) {
   );
 }
 
-// Sample data — shown only when there's no live backend (localhost), so you can see
-// the design fully populated. Production data overrides it automatically.
+// Sample data — DEV-only fallback when the backend is unreachable (design preview).
+// Never used while live queries are loading (that caused a flash of fake totals).
 // week-wise (6-day cycle) view numbers — W1…W5
 type ViewPeriod = "all" | "tracker";
 
@@ -256,10 +256,14 @@ export default function FramerHome() {
   // Respect Users & Roles matrix (not just bd/fulfillment role names).
   const canSeeding = canSeeSeeding() || gates(roles).seeding;
   const [viewPeriod, setViewPeriod] = useState<ViewPeriod>("all");
-  const [trackerMonth, setTrackerMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const localYm = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  };
+  const [trackerMonth, setTrackerMonth] = useState(localYm);
 
-  const { data: stats } = useQuery({ queryKey: ["dashboard"], queryFn: getDashboard });
-  const { data: growth = [] } = useQuery({
+  const { data: stats, isPending: statsPending } = useQuery({ queryKey: ["dashboard"], queryFn: getDashboard });
+  const { data: growth = [], isPending: growthPending } = useQuery({
     queryKey: ["growth-data"],
     queryFn: async () => {
       const res = await fetch(`${import.meta.env.VITE_API_URL || ""}/api/v1/growth`, { headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" } });
@@ -276,8 +280,8 @@ export default function FramerHome() {
   });
   // Current-month 6-day data — the dashboard "This month" donut sources from the SAME
   // data the 6-Day Tracker renders, so the two never disagree.
-  const currentYm = useMemo(() => new Date().toISOString().slice(0, 7), []);
-  const { data: monthSix } = useQuery({
+  const currentYm = useMemo(() => localYm(), []);
+  const { data: monthSix, isPending: monthPending } = useQuery({
     queryKey: ["six-day-current", currentYm],
     queryFn: () => getSixDayMonth(currentYm),
     staleTime: 5 * 60_000,
@@ -308,6 +312,11 @@ export default function FramerHome() {
   }, [monthSix]);
   const { data: seeding } = useQuery({ queryKey: ["seeding-overview"], queryFn: getOverview, enabled: canSeeding });
 
+  const viewsLoading = monthPending;
+  const pagesLoading = statsPending || (viewPeriod === "all" && growthPending);
+  // DEV-only: show SAMPLE when queries finished but returned nothing (offline design preview).
+  const useSample = import.meta.env.DEV && !viewsLoading && !statsPending && !monthSix && !stats;
+
   const growthAllTimeByHandle = useMemo(() => {
     const m = new Map<string, number>();
     for (const row of Array.isArray(growth) ? (growth as any[]) : []) {
@@ -332,10 +341,22 @@ export default function FramerHome() {
     return m;
   }, [sixDay]);
 
-  // Prefer the 6-day tracker month total (source of truth); fall back to dashboard/sample.
-  const reels = monthAgg.views > 0 ? monthAgg.reel : (stats?.total_reel_views || SAMPLE.reels);
-  const posts = monthAgg.views > 0 ? monthAgg.post : (stats?.total_post_views || SAMPLE.posts);
-  const rawPages: any[] = stats?.pages?.length ? stats.pages : SAMPLE.pages;
+  // Prefer the 6-day tracker month total (source of truth); never paint SAMPLE while loading.
+  const reels = viewsLoading
+    ? 0
+    : monthAgg.views > 0
+      ? monthAgg.reel
+      : (stats?.total_reel_views ?? (useSample ? SAMPLE.reels : 0));
+  const posts = viewsLoading
+    ? 0
+    : monthAgg.views > 0
+      ? monthAgg.post
+      : (stats?.total_post_views ?? (useSample ? SAMPLE.posts : 0));
+  const rawPages: any[] = stats?.pages?.length
+    ? stats.pages
+    : useSample
+      ? SAMPLE.pages
+      : [];
 
   const viewsLabel = viewPeriod === "tracker" ? "Month total (6-day tracker)" : "Total Views";
   const monthNote = viewPeriod === "tracker" && trackerMonth
@@ -343,7 +364,6 @@ export default function FramerHome() {
     : undefined;
 
   const allPages = useMemo(() => {
-    const currentYm = new Date().toISOString().slice(0, 7);
     return [...rawPages]
       .map((p) => {
         const handle = String(p.handle || "").replace(/^@/, "");
@@ -382,7 +402,7 @@ export default function FramerHome() {
         };
       })
       .sort((a, b) => b.views - a.views);
-  }, [rawPages, viewPeriod, trackerMonth, growthAllTimeByHandle, sixDayByPageId, sixDayByHandle, viewsLabel, monthNote]);
+  }, [rawPages, viewPeriod, trackerMonth, currentYm, growthAllTimeByHandle, sixDayByPageId, sixDayByHandle, viewsLabel, monthNote]);
 
   const topPages = allPages.slice(0, 3);
 
@@ -405,12 +425,26 @@ export default function FramerHome() {
     const e = allGrowth.filter((v) => v.month?.slice(0, 7) === m);
     return { name: new Date(m + "-01").toLocaleDateString("en-GB", { month: "short", year: "2-digit" }), views: e.reduce((s, v) => s + (v.views ?? 0), 0) };
   });
-  const chart = realChart.length ? realChart : SAMPLE.growth;
+  const chart = realChart.length ? realChart : (useSample ? SAMPLE.growth : []);
   const allTime = chart.reduce((s, d) => s + d.views, 0);
   const peak = chart.reduce((a, b) => (b.views > a.views ? b : a), { name: "—", views: 0 });
 
-  const slides: { key: string; el: JSX.Element }[] = [
-    { key: "views", el: (
+  const viewsSlideBody = viewsLoading ? (
+    <div>
+      <div className="f-eyebrow" style={{ marginBottom: 10 }}>ECOSYSTEM · THIS MONTH</div>
+      <h1 className="f-h1" style={{ marginBottom: 24 }}>Views this month.</h1>
+      <div className="bento">
+        <div className="b b-pur b-glow col-2 row-2" style={{ display: "grid", placeContent: "center", minHeight: 220 }}>
+          <div style={{ color: "var(--f-dim)", fontSize: 13 }}>Loading views…</div>
+        </div>
+        <div className="b b-mag"><div className="b-lab">● REELS</div><div className="b-big" style={{ fontSize: 34, marginTop: "auto", opacity: 0.35 }}>—</div></div>
+        <div className="b b-grn"><div className="b-lab">● POSTS</div><div className="b-big" style={{ fontSize: 34, marginTop: "auto", opacity: 0.35 }}>—</div></div>
+        <div className="b b-dark col-2" style={{ display: "grid", placeContent: "center" }}>
+          <div style={{ color: "var(--f-faint)", fontSize: 13 }}>Loading top pages…</div>
+        </div>
+      </div>
+    </div>
+  ) : (
       <div>
         <div className="f-eyebrow" style={{ marginBottom: 10 }}>ECOSYSTEM · THIS MONTH</div>
         <h1 className="f-h1" style={{ marginBottom: 24 }}>Views this month.</h1>
@@ -418,7 +452,9 @@ export default function FramerHome() {
           <div className="b b-pur b-glow col-2 row-2" style={{ display: "flex", flexDirection: "column" }}>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
               <span className="b-lab">ALL TIME</span>
-              <span className="mono" style={{ fontSize: 16, fontWeight: 600, color: "var(--accent-2)" }}>{compact(allTime)}</span>
+              <span className="mono" style={{ fontSize: 16, fontWeight: 600, color: "var(--accent-2)" }}>
+                {growthPending && !useSample ? "…" : compact(allTime)}
+              </span>
             </div>
             <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
               <Donut reels={reels} posts={posts} />
@@ -434,7 +470,9 @@ export default function FramerHome() {
           </div>
           <div className="b b-dark col-2">
             <div className="b-lab" style={{ marginBottom: 16 }}>🏆 TOP 3 PAGES</div>
-            {topPages.length && topPages[0].views > 0 ? (
+            {pagesLoading ? (
+              <div style={{ color: "var(--f-faint)", fontSize: 13, margin: "auto" }}>Loading…</div>
+            ) : topPages.length && topPages[0].views > 0 ? (
               <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 18, marginTop: "auto" }}>
                 {[topPages[1], topPages[0], topPages[2]].filter(Boolean).map((p) => {
                   const rank = p === topPages[0] ? 1 : p === topPages[1] ? 2 : 3;
@@ -453,7 +491,10 @@ export default function FramerHome() {
           </div>
         </div>
       </div>
-    )},
+  );
+
+  const slides: { key: string; el: JSX.Element }[] = [
+    { key: "views", el: viewsSlideBody },
     { key: "growth", el: (
       <div>
         <div className="f-eyebrow" style={{ marginBottom: 10 }}>COMPLETE GROWTH</div>

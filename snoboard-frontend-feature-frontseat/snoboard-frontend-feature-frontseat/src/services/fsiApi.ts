@@ -3,6 +3,7 @@
  * Dual-writes to Supabase (canonical) + backend mirror. Does not affect other site APIs.
  */
 import { supabase as _sb } from "@/lib/supabase";
+import { compressImageForUpload } from "@/lib/compressImage";
 import { getAccessToken } from "./api";
 import type { FsiGraphSnapshot } from "@/pages/FsiCanvas/lib/fsiGraphSnapshot";
 import {
@@ -504,28 +505,32 @@ export function createFsiApi() {
       uploader?: string,
     ) => {
       if (!files.length) return [] as string[];
+      const prepared = await Promise.all(
+        files.filter((f) => f.type.startsWith("image/")).map((f) => compressImageForUpload(f)),
+      );
+      if (!prepared.length) return [] as string[];
       const signed = await fsiApi.signNodeCloudinaryUpload(studyId, nodeId, uploader);
-      const urls: string[] = [];
-      for (const file of files) {
-        if (!file.type.startsWith("image/")) continue;
-        const fd = new FormData();
-        fd.append("file", file);
-        fd.append("api_key", String(signed.api_key));
-        fd.append("timestamp", String(signed.timestamp));
-        fd.append("signature", String(signed.signature));
-        fd.append("folder", String(signed.folder));
-        if (signed.tags) fd.append("tags", String(signed.tags));
-        if (signed.context) fd.append("context", String(signed.context));
-        const res = await fetch(String(signed.upload_url), { method: "POST", body: fd });
-        if (!res.ok) {
-          const txt = await res.text().catch(() => "");
-          throw new Error(txt || `Cloudinary upload failed (${res.status})`);
-        }
-        const js = (await res.json()) as { secure_url?: string; url?: string };
-        const url = js.secure_url || js.url;
-        if (!url) throw new Error("Cloudinary upload returned no URL");
-        urls.push(url);
-      }
+      const urls = await Promise.all(
+        prepared.map(async (file) => {
+          const fd = new FormData();
+          fd.append("file", file);
+          fd.append("api_key", String(signed.api_key));
+          fd.append("timestamp", String(signed.timestamp));
+          fd.append("signature", String(signed.signature));
+          fd.append("folder", String(signed.folder));
+          if (signed.tags) fd.append("tags", String(signed.tags));
+          if (signed.context) fd.append("context", String(signed.context));
+          const res = await fetch(String(signed.upload_url), { method: "POST", body: fd });
+          if (!res.ok) {
+            const txt = await res.text().catch(() => "");
+            throw new Error(txt || `Cloudinary upload failed (${res.status})`);
+          }
+          const js = (await res.json()) as { secure_url?: string; url?: string };
+          const url = js.secure_url || js.url;
+          if (!url) throw new Error("Cloudinary upload returned no URL");
+          return url;
+        }),
+      );
       return urls;
     },
     chatStudy: async (

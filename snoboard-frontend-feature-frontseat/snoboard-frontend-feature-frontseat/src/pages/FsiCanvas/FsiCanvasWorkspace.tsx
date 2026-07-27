@@ -358,32 +358,100 @@ export default function FsiCanvasWorkspace() {
   );
 
   const createScreenshotMutation = useMutation({
-    mutationFn: async ({ files, x, y }: { files: File[]; x: number; y: number }) => {
-      const created: FsiNodeRecord[] = [];
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i]!;
-        const node = (await fsiApi.createNode(studyId!, {
+    mutationFn: async ({
+      files,
+      x,
+      y,
+    }: {
+      files: File[];
+      x: number;
+      y: number;
+    }) => {
+      // Parallel per-file pipeline: create → upload (compressed) → persist URL.
+      return Promise.all(
+        files.map(async (file, i) => {
+          const node = (await fsiApi.createNode(studyId!, {
+            node_type: "Visual",
+            display_title: "Visual",
+            canvas_x: x + i * 28,
+            canvas_y: y + i * 28,
+            structured_payload: screenshotNodePayload(""),
+          })) as FsiNodeRecord;
+          const urls = await fsiApi.uploadNodeScreenshotFiles(studyId!, node.id, [file]);
+          return (await fsiApi.updateNode(node.id, {
+            structured_payload: screenshotNodePayload(urls[0]!),
+          })) as FsiNodeRecord;
+        }),
+      );
+    },
+    onMutate: ({ files, x, y }) => {
+      const blobUrls = files.map((f) => URL.createObjectURL(f));
+      const tempIds = files.map(() => `temp-ss-${crypto.randomUUID()}`);
+      const g = graphRef.current;
+      if (g) {
+        let next = g;
+        for (let i = 0; i < files.length; i++) {
+          const tempNode: FsiNodeRecord = {
+            id: tempIds[i]!,
+            study_id: studyId!,
+            node_type: "Visual",
+            display_title: "Visual",
+            canvas_x: x + i * 28,
+            canvas_y: y + i * 28,
+            structured_payload: screenshotNodePayload(blobUrls[i]!),
+            created_by: "",
+          };
+          next = appendGraphNode(next, tempNode);
+        }
+        setGraph(next);
+        setSelectedNode({
+          id: tempIds[tempIds.length - 1]!,
+          study_id: studyId!,
           node_type: "Visual",
           display_title: "Visual",
-          canvas_x: x + i * 28,
-          canvas_y: y + i * 28,
-          structured_payload: screenshotNodePayload(""),
-        })) as FsiNodeRecord;
-        const urls = await fsiApi.uploadNodeScreenshotFiles(studyId!, node.id, [file]);
-        const updated = (await fsiApi.updateNode(node.id, {
-          structured_payload: screenshotNodePayload(urls[0]!),
-        })) as FsiNodeRecord;
-        created.push(updated);
+          canvas_x: x + (files.length - 1) * 28,
+          canvas_y: y + (files.length - 1) * 28,
+          structured_payload: screenshotNodePayload(blobUrls[blobUrls.length - 1]!),
+          created_by: "",
+        });
       }
-      return created;
+      return { tempIds, blobUrls };
     },
-    onSuccess: (nodes) => {
-      for (const node of nodes) {
-        appendCreatedNode(node);
+    onSuccess: (nodes, _vars, ctx) => {
+      const tempIds = new Set(ctx?.tempIds ?? []);
+      for (const url of ctx?.blobUrls ?? []) URL.revokeObjectURL(url);
+
+      const g = graphRef.current;
+      if (g && tempIds.size > 0) {
+        let next: FsiGraph = {
+          ...g,
+          nodes: g.nodes.filter((n) => !tempIds.has(n.id)),
+        };
+        for (const node of nodes) {
+          if (!history.isApplying.current) {
+            history.pushEntry({ type: "node_add", node });
+          }
+          next = appendGraphNode(next, node);
+        }
+        setGraph(next);
+        if (nodes.length) setSelectedNode(nodes[nodes.length - 1]!);
+      } else {
+        for (const node of nodes) appendCreatedNode(node);
       }
       toast.success(`Added ${nodes.length} screenshot${nodes.length === 1 ? "" : "s"}`);
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error, _vars, ctx) => {
+      for (const url of ctx?.blobUrls ?? []) URL.revokeObjectURL(url);
+      const tempIds = new Set(ctx?.tempIds ?? []);
+      if (tempIds.size > 0) {
+        const g = graphRef.current;
+        if (g) {
+          setGraph({ ...g, nodes: g.nodes.filter((n) => !tempIds.has(n.id)) });
+        }
+        setSelectedNode((prev) => (prev && tempIds.has(prev.id) ? null : prev));
+      }
+      toast.error(e.message);
+    },
   });
 
   const updateNodeMutation = useMutation({

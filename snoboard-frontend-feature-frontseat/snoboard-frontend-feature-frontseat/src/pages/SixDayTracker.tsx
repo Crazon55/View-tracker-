@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef, Fragment } from "react";
-import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getSixDayMonth, upsertSixDayEntry,
   createSixDayTopContent, updateSixDayTopContent, deleteSixDayTopContent,
@@ -137,7 +137,6 @@ export default function SixDayTracker() {
     queryFn: () => getSixDayMonth(selectedMonth),
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
-    placeholderData: keepPreviousData,
   });
 
   const { data: deadlineData } = useQuery({
