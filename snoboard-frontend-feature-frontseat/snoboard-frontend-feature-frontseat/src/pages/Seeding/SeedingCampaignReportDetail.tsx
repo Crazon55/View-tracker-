@@ -1,13 +1,27 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, ExternalLink, Eye } from "lucide-react";
+import { ArrowLeft, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
+import {
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+} from "recharts";
 import { FramerPage, PageHeader } from "@/components/framer/Framer";
 import { StatusBadge } from "@/components/seeding/StatusBadge";
 import { api } from "@/services/seeding/client";
 import { formatDate, formatDateTime } from "@/services/seeding/constants";
 import { useAreaAccess } from "@/hooks/useAreaAccess";
 import type { SeedingDeal, SeedingDealDetail, SeedingDeliverable } from "@/services/seeding/mockData";
+
+const CHART_COLORS = ["#34d399", "#60a5fa", "#f472b6", "#fbbf24", "#a78bfa", "#2dd4bf", "#fb7185", "#94a3b8"];
 
 function normalizeDetail(raw: unknown): SeedingDealDetail {
   const body = (raw ?? {}) as Record<string, any>;
@@ -18,6 +32,12 @@ function normalizeDetail(raw: unknown): SeedingDealDetail {
 
 function formatViews(n: number) {
   return new Intl.NumberFormat("en-IN").format(n || 0);
+}
+
+function formatViewsShort(n: number) {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
+  return String(n || 0);
 }
 
 export default function SeedingCampaignReportDetail() {
@@ -66,6 +86,20 @@ export default function SeedingCampaignReportDetail() {
     }
     return [...map.values()].sort((a, b) => b.views - a.views);
   }, [deliverables]);
+
+  const pieData = useMemo(() => {
+    const rows = pageRows.filter((p) => p.views > 0).map((p) => ({ name: p.page, value: p.views }));
+    if (rows.length) return rows;
+    // Empty state ring so the donut still renders with 0 in the center.
+    return [{ name: "No views yet", value: 1 }];
+  }, [pageRows]);
+
+  const barData = useMemo(
+    () => pageRows.map((p) => ({ page: p.page, views: p.views })),
+    [pageRows],
+  );
+
+  const pieHasRealData = pageRows.some((p) => p.views > 0);
 
   const patchDeliverable = async (id: string, body: { live_link?: string; views?: number }) => {
     setSavingId(id);
@@ -145,35 +179,95 @@ export default function SeedingCampaignReportDetail() {
         </div>
       </div>
 
-      {/* KPI strip */}
+      {/* Charts */}
       <div
-        className="seeding-surface"
         style={{
           marginTop: 22,
-          padding: "18px 20px",
-          borderRadius: 14,
-          display: "flex",
-          gap: 28,
-          flexWrap: "wrap",
-          alignItems: "center",
+          display: "grid",
+          gridTemplateColumns: "minmax(240px, 320px) 1fr",
+          gap: 14,
         }}
+        className="campaign-report-charts"
       >
-        <div>
+        <section className="seeding-surface" style={{ padding: "16px 18px", borderRadius: 14 }}>
           <div style={{ fontSize: 11, color: "var(--f-faint)", letterSpacing: "0.04em" }}>TOTAL VIEWS</div>
-          <div style={{ fontSize: 28, fontWeight: 600, marginTop: 4, display: "inline-flex", alignItems: "center", gap: 8 }}>
-            <Eye size={20} style={{ color: "var(--f-dim)" }} />
-            {formatViews(totalViews)}
+          <div style={{ position: "relative", height: 200, marginTop: 4 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius={58}
+                  outerRadius={82}
+                  paddingAngle={pieHasRealData ? 2 : 0}
+                  stroke="transparent"
+                >
+                  {pieData.map((_, i) => (
+                    <Cell
+                      key={i}
+                      fill={pieHasRealData ? CHART_COLORS[i % CHART_COLORS.length] : "rgba(255,255,255,0.08)"}
+                    />
+                  ))}
+                </Pie>
+                {pieHasRealData ? (
+                  <Tooltip
+                    formatter={(v: number, name: string) => [formatViews(v), name]}
+                    contentStyle={{ background: "#111", border: "1px solid #333", borderRadius: 8, fontSize: 12 }}
+                  />
+                ) : null}
+              </PieChart>
+            </ResponsiveContainer>
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                pointerEvents: "none",
+              }}
+            >
+              <div style={{ fontSize: 22, fontWeight: 600 }}>{formatViewsShort(totalViews)}</div>
+              <div style={{ fontSize: 10, color: "var(--f-faint)" }}>views</div>
+            </div>
           </div>
-        </div>
-        <div>
-          <div style={{ fontSize: 11, color: "var(--f-faint)", letterSpacing: "0.04em" }}>DELIVERABLES</div>
-          <div style={{ fontSize: 22, fontWeight: 600, marginTop: 4 }}>{deliverables.length}</div>
-        </div>
-        <div>
-          <div style={{ fontSize: 11, color: "var(--f-faint)", letterSpacing: "0.04em" }}>PAGES</div>
-          <div style={{ fontSize: 22, fontWeight: 600, marginTop: 4 }}>{pageRows.length}</div>
-        </div>
+          <div style={{ display: "flex", gap: 14, justifyContent: "center", fontSize: 12, color: "var(--f-dim)" }}>
+            <span>{deliverables.length} deliverables</span>
+            <span>{pageRows.length} pages</span>
+          </div>
+        </section>
+
+        <section className="seeding-surface" style={{ padding: "16px 18px", borderRadius: 14, minHeight: 240 }}>
+          <div style={{ fontSize: 11, color: "var(--f-faint)", letterSpacing: "0.04em", marginBottom: 8 }}>VIEWS PER PAGE</div>
+          {barData.length ? (
+            <div style={{ height: 200 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={barData} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 8 }}>
+                  <CartesianGrid stroke="rgba(255,255,255,0.06)" horizontal={false} />
+                  <XAxis type="number" tick={{ fill: "#71717a", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={formatViewsShort} />
+                  <YAxis type="category" dataKey="page" width={110} tick={{ fill: "#a1a1aa", fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    formatter={(v: number) => [formatViews(v), "Views"]}
+                    contentStyle={{ background: "#111", border: "1px solid #333", borderRadius: 8, fontSize: 12 }}
+                    cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                  />
+                  <Bar dataKey="views" fill="#34d399" radius={[0, 6, 6, 0]} barSize={16} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <p className="seeding-muted">No pages yet.</p>
+          )}
+        </section>
       </div>
+
+      <style>{`
+        @media (max-width: 800px) {
+          .campaign-report-charts { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
 
       {/* Original brief */}
       <section className="seeding-surface" style={{ marginTop: 16, padding: "16px 18px", borderRadius: 14 }}>
@@ -202,7 +296,7 @@ export default function SeedingCampaignReportDetail() {
       <section style={{ marginTop: 22 }}>
         <h2 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 4px" }}>Page-wise performance</h2>
         <p style={{ fontSize: 12, color: "var(--f-faint)", margin: "0 0 12px" }}>
-          Live links and views per deliverable. Total views above is the sum of these.
+          Live links and views per deliverable. Charts above update from these numbers.
         </p>
 
         {pageRows.map((group) => (
