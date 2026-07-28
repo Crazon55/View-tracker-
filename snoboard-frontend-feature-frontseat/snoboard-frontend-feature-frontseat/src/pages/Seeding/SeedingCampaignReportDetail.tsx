@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ArrowLeft, ChevronDown, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import {
   ResponsiveContainer,
@@ -13,6 +13,7 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
+  LabelList,
 } from "recharts";
 import { FramerPage, PageHeader } from "@/components/framer/Framer";
 import { StatusBadge } from "@/components/seeding/StatusBadge";
@@ -50,6 +51,16 @@ export default function SeedingCampaignReportDetail() {
   const [rationale, setRationale] = useState("");
   const [savingRationale, setSavingRationale] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [openDelivIds, setOpenDelivIds] = useState<Set<string>>(new Set());
+
+  const toggleDeliv = (id: string) => {
+    setOpenDelivIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const load = useCallback(async () => {
     if (!dealId) return;
@@ -98,6 +109,14 @@ export default function SeedingCampaignReportDetail() {
     () => pageRows.map((p) => ({ page: p.page, views: p.views })),
     [pageRows],
   );
+
+  const maxPageViews = useMemo(
+    () => Math.max(0, ...barData.map((b) => b.views)),
+    [barData],
+  );
+
+  /** Scale Y to real view counts (not a fake 0–4 axis when everything is empty). */
+  const viewsAxisMax = maxPageViews > 0 ? Math.ceil(maxPageViews * 1.15) : 0;
 
   const pieHasRealData = pageRows.some((p) => p.views > 0);
 
@@ -242,12 +261,12 @@ export default function SeedingCampaignReportDetail() {
         <section className="seeding-surface" style={{ padding: "16px 18px", borderRadius: 14, minHeight: 280 }}>
           <div style={{ fontSize: 11, color: "var(--f-faint)", letterSpacing: "0.04em", marginBottom: 4 }}>VIEWS PER PAGE</div>
           <p style={{ fontSize: 11, color: "var(--f-faint)", margin: "0 0 8px" }}>
-            Every page on this campaign — tallest bar is performing best.
+            Y-axis = view count. Tallest bar = best performing page.
           </p>
           {barData.length ? (
-            <div style={{ height: 240 }}>
+            <div style={{ height: 260, position: "relative" }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={barData} margin={{ top: 8, right: 8, bottom: 48, left: 4 }}>
+                <BarChart data={barData} margin={{ top: 28, right: 12, bottom: 52, left: 8 }}>
                   <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
                   <XAxis
                     dataKey="page"
@@ -260,15 +279,18 @@ export default function SeedingCampaignReportDetail() {
                     height={56}
                   />
                   <YAxis
-                    tick={{ fill: "#71717a", fontSize: 11 }}
+                    width={52}
+                    tick={{ fill: "#a1a1aa", fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
-                    tickFormatter={formatViewsShort}
+                    tickFormatter={(v: number) => `${formatViewsShort(v)}`}
                     allowDecimals={false}
-                    domain={[0, (max: number) => Math.max(4, max || 0)]}
+                    domain={viewsAxisMax > 0 ? [0, viewsAxisMax] : [0, 1]}
+                    ticks={viewsAxisMax > 0 ? undefined : [0]}
+                    label={{ value: "Views", angle: -90, position: "insideLeft", fill: "#71717a", fontSize: 10, offset: 4 }}
                   />
                   <Tooltip
-                    formatter={(v: number) => [formatViews(v), "Views"]}
+                    formatter={(v: number) => [`${formatViews(v)} views`, "Views"]}
                     labelFormatter={(label) => String(label)}
                     contentStyle={{ background: "#111", border: "1px solid #333", borderRadius: 8, fontSize: 12 }}
                     cursor={{ fill: "rgba(255,255,255,0.04)" }}
@@ -277,9 +299,32 @@ export default function SeedingCampaignReportDetail() {
                     {barData.map((_, i) => (
                       <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                     ))}
+                    <LabelList
+                      dataKey="views"
+                      position="top"
+                      formatter={(v: number) => (v > 0 ? formatViewsShort(v) : "")}
+                      style={{ fill: "#e4e4e7", fontSize: 10, fontWeight: 600 }}
+                    />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
+              {maxPageViews === 0 ? (
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: "40px 20px 70px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    pointerEvents: "none",
+                    fontSize: 12,
+                    color: "var(--f-faint)",
+                    textAlign: "center",
+                  }}
+                >
+                  All pages at 0 views — expand deliverables below and enter real view counts
+                </div>
+              ) : null}
             </div>
           ) : (
             <p className="seeding-muted">No pages yet.</p>
@@ -316,68 +361,82 @@ export default function SeedingCampaignReportDetail() {
         ) : null}
       </section>
 
-      {/* Page-wise performance */}
+      {/* Deliverables accordion — same pattern as brief detail */}
       <section style={{ marginTop: 22 }}>
-        <h2 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 4px" }}>Page-wise performance</h2>
+        <h2 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 4px" }}>
+          Deliverables ({deliverables.length})
+        </h2>
         <p style={{ fontSize: 12, color: "var(--f-faint)", margin: "0 0 12px" }}>
-          Live links and views per deliverable. Charts above update from these numbers.
+          Expand a row to edit live link + views. Charts update from these numbers.
         </p>
 
-        {pageRows.map((group) => (
-          <div key={group.page} className="seeding-surface" style={{ padding: "14px 16px", borderRadius: 14, marginBottom: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 12, alignItems: "baseline" }}>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>{group.page}</div>
-              <div style={{ fontSize: 12, color: "var(--f-dim)" }}>{formatViews(group.views)} views</div>
-            </div>
-            <div style={{ display: "grid", gap: 10 }}>
-              {group.items.map((d) => (
-                <div
-                  key={d.deliverable_id}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "minmax(90px, 120px) 1fr minmax(100px, 120px)",
-                    gap: 10,
-                    alignItems: "end",
-                  }}
-                >
-                  <div>
-                    <div style={{ fontSize: 11, color: "var(--f-faint)", marginBottom: 6 }}>{d.deliverable_type}</div>
-                    <div style={{ fontSize: 11, color: "var(--f-dim)" }}>{formatDateTime(d.go_live_date_time)}</div>
-                  </div>
-                  <label style={{ display: "grid", gap: 6, minWidth: 0 }}>
-                    <span style={{ fontSize: 11, color: "var(--f-faint)" }}>Live link</span>
-                    <input
-                      className={inputCls}
-                      defaultValue={d.live_link || ""}
-                      disabled={!canEditReport || savingId === d.deliverable_id}
-                      placeholder="https://…"
-                      onBlur={(e) => {
-                        const v = e.target.value.trim();
-                        if (v === (d.live_link || "")) return;
-                        void patchDeliverable(d.deliverable_id, { live_link: v });
-                      }}
+        <div className="seeding-deliverables-stack">
+          {deliverables.map((d) => {
+            const open = openDelivIds.has(d.deliverable_id);
+            return (
+              <article
+                key={d.deliverable_id}
+                className={`seeding-surface-nested seeding-deliverable-card${open ? " is-open" : " is-collapsed"}`}
+              >
+                <div className="seeding-deliverable-head">
+                  <button
+                    type="button"
+                    className="seeding-deliverable-toggle"
+                    aria-expanded={open}
+                    onClick={() => toggleDeliv(d.deliverable_id)}
+                  >
+                    <ChevronDown
+                      size={16}
+                      className={`seeding-deliverable-chevron${open ? " is-open" : ""}`}
+                      aria-hidden
                     />
-                  </label>
-                  <label style={{ display: "grid", gap: 6 }}>
-                    <span style={{ fontSize: 11, color: "var(--f-faint)" }}>Views</span>
-                    <input
-                      type="number"
-                      min={0}
-                      className={inputCls}
-                      defaultValue={d.views ?? 0}
-                      disabled={!canEditReport || savingId === d.deliverable_id}
-                      onBlur={(e) => {
-                        const v = Math.max(0, Number(e.target.value) || 0);
-                        if (v === (Number(d.views) || 0)) return;
-                        void patchDeliverable(d.deliverable_id, { views: v });
-                      }}
-                    />
-                  </label>
+                    <span className="seeding-deliverable-title-block">
+                      <span className="seeding-deliverable-title">
+                        {d.page_name} · {d.deliverable_type}
+                      </span>
+                      <span className="seeding-deliverable-sub">
+                        Go live {formatDateTime(d.go_live_date_time)} · {formatViews(Number(d.views) || 0)} views
+                      </span>
+                    </span>
+                  </button>
                 </div>
-              ))}
-            </div>
-          </div>
-        ))}
+                {open ? (
+                  <div className="seeding-deliverable-fields">
+                    <label className="seeding-detail-field seeding-detail-field--full">
+                      <span>Live link</span>
+                      <div className="seeding-live-link-row">
+                        <input
+                          className={inputCls}
+                          defaultValue={d.live_link || ""}
+                          disabled={!canEditReport || savingId === d.deliverable_id}
+                          placeholder="https://…"
+                          onBlur={(e) => {
+                            const v = e.target.value.trim();
+                            if (v === (d.live_link || "")) return;
+                            void patchDeliverable(d.deliverable_id, { live_link: v });
+                          }}
+                        />
+                        <input
+                          className={`${inputCls} seeding-views-input`}
+                          type="number"
+                          min={0}
+                          defaultValue={d.views ?? 0}
+                          disabled={!canEditReport || savingId === d.deliverable_id}
+                          aria-label="Views"
+                          onBlur={(e) => {
+                            const v = Math.max(0, Number(e.target.value) || 0);
+                            if (v === (Number(d.views) || 0)) return;
+                            void patchDeliverable(d.deliverable_id, { views: v });
+                          }}
+                        />
+                      </div>
+                    </label>
+                  </div>
+                ) : null}
+              </article>
+            );
+          })}
+        </div>
 
         {!deliverables.length ? (
           <p className="seeding-muted">No deliverables on this campaign yet.</p>
