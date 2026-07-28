@@ -95,6 +95,7 @@ export default function TeamRolesPage() {
 
   useEffect(() => {
     if (!can("manage_team")) return;
+    // Deprecated-role migration only — never deletes people.
     cleanupTeamRoles()
       .then(() => refetch())
       .catch(() => { /* backend may not be deployed yet */ });

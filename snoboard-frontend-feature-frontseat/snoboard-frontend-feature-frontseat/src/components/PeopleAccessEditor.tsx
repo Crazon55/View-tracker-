@@ -163,7 +163,7 @@ export function PeopleAccessEditor({
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
                 <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end", maxWidth: 320 }}>
-                  {selected.length ? selected.map((r) => {
+                  {selected.filter((r) => r !== "pending").length ? selected.filter((r) => r !== "pending").map((r) => {
                     const label = ALL_ROLES.find((x) => x.key === r)?.short ?? r;
                     return (
                       <span
@@ -178,7 +178,9 @@ export function PeopleAccessEditor({
                       </span>
                     );
                   }) : (
-                    <span style={{ fontSize: 11, color: "var(--f-faint)" }}>No roles</span>
+                    <span style={{ fontSize: 11, color: "var(--f-faint)" }}>
+                      {selected.includes("pending") ? "Pending access" : "No roles"}
+                    </span>
                   )}
                 </div>
                 <button
