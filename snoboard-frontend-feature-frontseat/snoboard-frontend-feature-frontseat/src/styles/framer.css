@@ -1749,16 +1749,17 @@ button.news-pill:hover{
 .seeding-detail-section.seeding-surface{ padding:20px 22px; margin-top:14px; }
 .seeding-deliverable-card.seeding-surface-nested{
   padding:16px 18px;
-  background:#0a0a0e;
-  border:1px solid rgba(255,255,255,.14);
+  background:#16161d;
+  border:1px solid rgba(255,255,255,.18);
+  box-shadow:0 1px 0 rgba(255,255,255,.04);
 }
 .seeding-deliverable-card.seeding-surface-nested:hover{
-  border-color:rgba(255,255,255,.22);
-  background:#101014;
+  border-color:rgba(255,255,255,.28);
+  background:#1c1c24;
 }
 .seeding-deliverable-card.is-open{
-  border-color:rgba(255,255,255,.2);
-  background:#0e0e12;
+  border-color:rgba(255,255,255,.26);
+  background:#1a1a22;
 }
 .seeding-deal-card.seeding-card{ padding:16px 18px; }
 .seeding-fulfillment-card.seeding-card{ padding:18px 20px; min-height:168px; }
