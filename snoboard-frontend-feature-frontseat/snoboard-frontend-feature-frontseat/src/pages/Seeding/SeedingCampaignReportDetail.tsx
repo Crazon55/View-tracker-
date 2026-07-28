@@ -404,32 +404,34 @@ export default function SeedingCampaignReportDetail() {
                   <div className="seeding-deliverable-fields">
                     <label className="seeding-detail-field seeding-detail-field--full">
                       <span>Live link</span>
-                      <div className="seeding-live-link-row">
-                        <input
-                          className={inputCls}
-                          defaultValue={d.live_link || ""}
-                          disabled={!canEditReport || savingId === d.deliverable_id}
-                          placeholder="https://…"
-                          onBlur={(e) => {
-                            const v = e.target.value.trim();
-                            if (v === (d.live_link || "")) return;
-                            void patchDeliverable(d.deliverable_id, { live_link: v });
-                          }}
-                        />
-                        <input
-                          className={`${inputCls} seeding-views-input`}
-                          type="number"
-                          min={0}
-                          defaultValue={d.views ?? 0}
-                          disabled={!canEditReport || savingId === d.deliverable_id}
-                          aria-label="Views"
-                          onBlur={(e) => {
-                            const v = Math.max(0, Number(e.target.value) || 0);
-                            if (v === (Number(d.views) || 0)) return;
-                            void patchDeliverable(d.deliverable_id, { views: v });
-                          }}
-                        />
-                      </div>
+                      <input
+                        className={inputCls}
+                        defaultValue={d.live_link || ""}
+                        disabled={!canEditReport || savingId === d.deliverable_id}
+                        placeholder="https://…"
+                        onBlur={(e) => {
+                          const v = e.target.value.trim();
+                          if (v === (d.live_link || "")) return;
+                          void patchDeliverable(d.deliverable_id, { live_link: v });
+                        }}
+                      />
+                    </label>
+                    <label className="seeding-detail-field" style={{ maxWidth: 280 }}>
+                      <span>Views</span>
+                      <input
+                        className={`${inputCls} seeding-views-input`}
+                        type="number"
+                        min={0}
+                        inputMode="numeric"
+                        defaultValue={d.views ?? 0}
+                        disabled={!canEditReport || savingId === d.deliverable_id}
+                        placeholder="0"
+                        onBlur={(e) => {
+                          const v = Math.max(0, Number(e.target.value) || 0);
+                          if (v === (Number(d.views) || 0)) return;
+                          void patchDeliverable(d.deliverable_id, { views: v });
+                        }}
+                      />
                     </label>
                   </div>
                 ) : null}
