@@ -239,21 +239,45 @@ export default function SeedingCampaignReportDetail() {
           </div>
         </section>
 
-        <section className="seeding-surface" style={{ padding: "16px 18px", borderRadius: 14, minHeight: 240 }}>
-          <div style={{ fontSize: 11, color: "var(--f-faint)", letterSpacing: "0.04em", marginBottom: 8 }}>VIEWS PER PAGE</div>
+        <section className="seeding-surface" style={{ padding: "16px 18px", borderRadius: 14, minHeight: 280 }}>
+          <div style={{ fontSize: 11, color: "var(--f-faint)", letterSpacing: "0.04em", marginBottom: 4 }}>VIEWS PER PAGE</div>
+          <p style={{ fontSize: 11, color: "var(--f-faint)", margin: "0 0 8px" }}>
+            Every page on this campaign — tallest bar is performing best.
+          </p>
           {barData.length ? (
-            <div style={{ height: 200 }}>
+            <div style={{ height: 240 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={barData} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 8 }}>
-                  <CartesianGrid stroke="rgba(255,255,255,0.06)" horizontal={false} />
-                  <XAxis type="number" tick={{ fill: "#71717a", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={formatViewsShort} />
-                  <YAxis type="category" dataKey="page" width={110} tick={{ fill: "#a1a1aa", fontSize: 11 }} axisLine={false} tickLine={false} />
+                <BarChart data={barData} margin={{ top: 8, right: 8, bottom: 48, left: 4 }}>
+                  <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
+                  <XAxis
+                    dataKey="page"
+                    interval={0}
+                    tick={{ fill: "#a1a1aa", fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
+                    angle={-28}
+                    textAnchor="end"
+                    height={56}
+                  />
+                  <YAxis
+                    tick={{ fill: "#71717a", fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={formatViewsShort}
+                    allowDecimals={false}
+                    domain={[0, (max: number) => Math.max(4, max || 0)]}
+                  />
                   <Tooltip
                     formatter={(v: number) => [formatViews(v), "Views"]}
+                    labelFormatter={(label) => String(label)}
                     contentStyle={{ background: "#111", border: "1px solid #333", borderRadius: 8, fontSize: 12 }}
                     cursor={{ fill: "rgba(255,255,255,0.04)" }}
                   />
-                  <Bar dataKey="views" fill="#34d399" radius={[0, 6, 6, 0]} barSize={16} />
+                  <Bar dataKey="views" radius={[6, 6, 0, 0]} maxBarSize={48}>
+                    {barData.map((_, i) => (
+                      <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
