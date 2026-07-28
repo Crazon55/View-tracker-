@@ -35,12 +35,6 @@ function formatViews(n: number) {
   return new Intl.NumberFormat("en-IN").format(n || 0);
 }
 
-function formatViewsShort(n: number) {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
-  return String(n || 0);
-}
-
 export default function SeedingCampaignReportDetail() {
   const { dealId } = useParams<{ dealId: string }>();
   const { canEditArea } = useAreaAccess();
@@ -248,7 +242,7 @@ export default function SeedingCampaignReportDetail() {
                 pointerEvents: "none",
               }}
             >
-              <div style={{ fontSize: 22, fontWeight: 600 }}>{formatViewsShort(totalViews)}</div>
+              <div style={{ fontSize: 18, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{formatViews(totalViews)}</div>
               <div style={{ fontSize: 10, color: "var(--f-faint)" }}>views</div>
             </div>
           </div>
@@ -266,7 +260,7 @@ export default function SeedingCampaignReportDetail() {
           {barData.length ? (
             <div style={{ height: 260, position: "relative" }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={barData} margin={{ top: 28, right: 12, bottom: 52, left: 8 }}>
+                <BarChart data={barData} margin={{ top: 28, right: 12, bottom: 52, left: 16 }}>
                   <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
                   <XAxis
                     dataKey="page"
@@ -279,15 +273,15 @@ export default function SeedingCampaignReportDetail() {
                     height={56}
                   />
                   <YAxis
-                    width={52}
-                    tick={{ fill: "#a1a1aa", fontSize: 11 }}
+                    width={72}
+                    tick={{ fill: "#a1a1aa", fontSize: 10 }}
                     axisLine={false}
                     tickLine={false}
-                    tickFormatter={(v: number) => `${formatViewsShort(v)}`}
+                    tickFormatter={(v: number) => formatViews(v)}
                     allowDecimals={false}
                     domain={viewsAxisMax > 0 ? [0, viewsAxisMax] : [0, 1]}
                     ticks={viewsAxisMax > 0 ? undefined : [0]}
-                    label={{ value: "Views", angle: -90, position: "insideLeft", fill: "#71717a", fontSize: 10, offset: 4 }}
+                    label={{ value: "Views", angle: -90, position: "insideLeft", fill: "#71717a", fontSize: 10, offset: 0 }}
                   />
                   <Tooltip
                     formatter={(v: number) => [`${formatViews(v)} views`, "Views"]}
@@ -302,7 +296,7 @@ export default function SeedingCampaignReportDetail() {
                     <LabelList
                       dataKey="views"
                       position="top"
-                      formatter={(v: number) => (v > 0 ? formatViewsShort(v) : "")}
+                      formatter={(v: number) => (v > 0 ? formatViews(v) : "")}
                       style={{ fill: "#e4e4e7", fontSize: 10, fontWeight: 600 }}
                     />
                   </Bar>
