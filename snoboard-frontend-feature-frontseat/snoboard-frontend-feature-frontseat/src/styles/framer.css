@@ -1716,15 +1716,19 @@ button.news-pill:hover{
 }
 .seeding-surface-nested{
   border-radius:12px;
-  background:#0c0c10;
-  border:1px solid rgba(255,255,255,.12);
-  box-shadow:none;
+  background:linear-gradient(168deg, rgba(255,255,255,.04) 0%, rgba(0,0,0,.45) 50%, rgba(255,255,255,.02) 100%);
+  border:1px solid rgba(255,255,255,.1);
+  backdrop-filter:blur(28px) saturate(145%);
+  -webkit-backdrop-filter:blur(28px) saturate(145%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.08),
+    inset 0 -1px 0 rgba(0,0,0,.3),
+    0 4px 20px -10px rgba(0,0,0,.65);
 }
 .seeding-surface-nested:hover{
-  border-color:rgba(255,255,255,.2);
-  background:#111116;
+  border-color:rgba(255,255,255,.16);
+  background:linear-gradient(168deg, rgba(255,255,255,.06) 0%, rgba(0,0,0,.5) 50%, rgba(255,255,255,.03) 100%);
   transform:none;
-  box-shadow:none;
 }
 .seeding-card{
   display:block; border-radius:14px;
@@ -1748,18 +1752,64 @@ button.news-pill:hover{
 }
 .seeding-detail-section.seeding-surface{ padding:20px 22px; margin-top:14px; }
 .seeding-deliverable-card.seeding-surface-nested{
+  position:relative;
+  overflow:hidden;
   padding:16px 18px;
-  background:#16161d;
-  border:1px solid rgba(255,255,255,.18);
-  box-shadow:0 1px 0 rgba(255,255,255,.04);
+  border-radius:14px;
+  background:linear-gradient(
+    168deg,
+    rgba(255,255,255,.05) 0%,
+    rgba(0,0,0,.55) 45%,
+    rgba(255,255,255,.02) 100%
+  );
+  border:1px solid rgba(255,255,255,.12);
+  backdrop-filter:blur(40px) saturate(150%);
+  -webkit-backdrop-filter:blur(40px) saturate(150%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.1),
+    inset 0 0 24px rgba(0,0,0,.2),
+    0 8px 28px -14px rgba(0,0,0,.75);
+}
+.seeding-deliverable-card.seeding-surface-nested::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  z-index:0;
+  background:
+    radial-gradient(120% 80% at 0% -30%, rgba(255,255,255,.07), transparent 55%),
+    radial-gradient(70% 50% at 100% 120%, rgba(160,170,200,.04), transparent 50%);
+}
+.seeding-deliverable-card.seeding-surface-nested::after{
+  content:"";
+  position:absolute;
+  top:0;
+  left:8%;
+  right:8%;
+  height:1px;
+  pointer-events:none;
+  z-index:0;
+  background:linear-gradient(90deg, transparent, rgba(255,255,255,.22), transparent);
+}
+.seeding-deliverable-card.seeding-surface-nested > *{
+  position:relative;
+  z-index:1;
 }
 .seeding-deliverable-card.seeding-surface-nested:hover{
-  border-color:rgba(255,255,255,.28);
-  background:#1c1c24;
+  border-color:rgba(255,255,255,.2);
+  background:linear-gradient(
+    168deg,
+    rgba(255,255,255,.07) 0%,
+    rgba(0,0,0,.58) 45%,
+    rgba(255,255,255,.03) 100%
+  );
 }
 .seeding-deliverable-card.is-open{
-  border-color:rgba(255,255,255,.26);
-  background:#1a1a22;
+  border-color:rgba(255,255,255,.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.12),
+    inset 0 0 24px rgba(0,0,0,.25),
+    0 12px 32px -12px rgba(0,0,0,.8);
 }
 .seeding-deal-card.seeding-card{ padding:16px 18px; }
 .seeding-fulfillment-card.seeding-card{ padding:18px 20px; min-height:168px; }
