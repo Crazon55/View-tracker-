@@ -233,6 +233,11 @@ async def _sync_seeding_from_fsos(user: dict) -> dict:
     elif parts == ["pending"]:
         if user.get("role") != "pending":
             patch = {"role": "pending", "business_team_id": None}
+    else:
+        # FSOS production roles (ve, editors, cw, …) are NOT seeding "fulfillment".
+        # Clear the stale cache that list_fulfillment_users used to stamp.
+        if user.get("role") in {"fulfillment", "bd", "admin"}:
+            patch = {"role": "pending", "business_team_id": None}
 
     if not patch:
         return user
@@ -242,6 +247,20 @@ async def _sync_seeding_from_fsos(user: dict) -> dict:
         logger.warning("Could not sync seeding profile for %s: %s", email, e)
         return user
     return {**user, **patch}
+
+
+async def sync_seeding_role_for_email(email: str) -> None:
+    """Re-align seeding_profiles.role from FSOS user_roles (call after Admin Save)."""
+    em = (email or "").strip().lower()
+    if not em:
+        return
+    try:
+        user = await db.users.find_one({"email": em}, {"_id": 0})
+    except Exception:
+        return
+    if not user:
+        return
+    await _sync_seeding_from_fsos(user)
 
 
 # ----------------------------- Auth -----------------------------
@@ -729,14 +748,16 @@ async def list_fulfillment_users(user: dict = Depends(get_current_user)):
             existing["role"] = ",".join(parts)
             continue
         # Ensure a seeding profile exists so assigned_fulfillment_user_id FK is valid.
+        # Do NOT stamp role=fulfillment — that made VE/editors look like Fulfillment in Users & Roles.
         doc = await db.users.find_one({"email": em}, {"_id": 0})
         if not doc:
             uid = new_id("user")
+            seeding_role = "fulfillment" if "fulfillment" in parts else "pending"
             doc = {
                 "user_id": uid,
                 "email": em,
                 "name": display,
-                "role": "fulfillment",
+                "role": seeding_role,
                 "business_team_id": None,
                 "active": True,
                 "created_at": now_iso(),
@@ -749,11 +770,18 @@ async def list_fulfillment_users(user: dict = Depends(get_current_user)):
                 continue
         elif doc.get("active") is False:
             await db.users.update_one({"user_id": doc["user_id"]}, {"$set": {"active": True, "updated_at": now_iso()}})
+        # Heal profiles wrongly stamped as fulfillment when FSOS has no fulfillment role.
+        elif doc.get("role") == "fulfillment" and "fulfillment" not in parts and "admin" not in parts:
+            await db.users.update_one(
+                {"user_id": doc["user_id"]},
+                {"$set": {"role": "pending", "business_team_id": None, "updated_at": now_iso()}},
+            )
+            doc = {**doc, "role": "pending", "business_team_id": None}
         by_email[em] = {
             "user_id": doc["user_id"],
             "name": display or doc.get("name") or em.split("@")[0],
             "email": em,
-            "role": ",".join(parts) or "fulfillment",
+            "role": ",".join(parts) or doc.get("role") or "pending",
         }
 
     return sorted(by_email.values(), key=lambda x: (x.get("name") or "").lower())

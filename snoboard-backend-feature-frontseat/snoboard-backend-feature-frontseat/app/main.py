@@ -1356,6 +1356,12 @@ async def set_user_role(req: dict):
             status_code=500,
             detail="Could not save role — check Supabase connection and user_roles table permissions",
         )
+    # Keep seeding workspace role in sync (clears false "fulfillment" stamps).
+    try:
+        from app.seeding.routes import sync_seeding_role_for_email
+        await sync_seeding_role_for_email(email)
+    except Exception as e:
+        logger.warning("Seeding role sync after set_user_role failed for %s: %s", email, e)
     return {"success": True, "data": verify[0]}
 
 
@@ -1438,10 +1444,11 @@ async def set_user_access_mode(req: dict):
 
 
 # ── Per-PERSON area-access matrices: { "<email>": { "<area_key>": "none|view|edit" } } ──
+# Prefer Supabase `user_access` (survives redeploys). Fall back to local JSON file.
 _USER_ACCESS_FILE = os.path.join(os.path.dirname(__file__), "user_access.json")
 
 
-def _read_user_access() -> dict:
+def _read_user_access_file() -> dict:
     try:
         with open(_USER_ACCESS_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
@@ -1449,9 +1456,64 @@ def _read_user_access() -> dict:
         return {}
 
 
-def _write_user_access(data: dict) -> None:
+def _write_user_access_file(data: dict) -> None:
     with open(_USER_ACCESS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
+
+
+def _read_user_access_supabase() -> dict | None:
+    """Return {email: access} from Supabase, or None if table unavailable."""
+    try:
+        from app.database.client import get_supabase_client
+        rows = get_supabase_client().table("user_access").select("email,access").execute().data or []
+        out: dict = {}
+        for r in rows:
+            em = (r.get("email") or "").strip().lower()
+            acc = r.get("access")
+            if em and isinstance(acc, dict):
+                out[em] = acc
+        return out
+    except Exception as e:
+        logger.debug("user_access supabase read skipped: %s", e)
+        return None
+
+
+def _upsert_user_access_supabase(email: str, access: dict) -> bool:
+    try:
+        from app.database.client import get_supabase_client
+        client = get_supabase_client()
+        client.table("user_access").upsert(
+            {"email": email, "access": access, "updated_at": datetime.now(timezone.utc).isoformat()},
+            on_conflict="email",
+        ).execute()
+        return True
+    except Exception as e:
+        logger.warning("user_access supabase write failed for %s: %s", email, e)
+        return False
+
+
+def _delete_user_access_supabase(email: str) -> None:
+    try:
+        from app.database.client import get_supabase_client
+        get_supabase_client().table("user_access").delete().eq("email", email).execute()
+    except Exception:
+        pass
+
+
+def _read_user_access() -> dict:
+    remote = _read_user_access_supabase()
+    if remote is not None:
+        # Keep file as a local cache / backup of what Supabase has.
+        try:
+            _write_user_access_file(remote)
+        except Exception:
+            pass
+        return remote
+    return _read_user_access_file()
+
+
+def _write_user_access(data: dict) -> None:
+    _write_user_access_file(data)
 
 
 @app.get("/api/v1/user-access")
@@ -1462,7 +1524,7 @@ async def get_user_access():
 
 @app.put("/api/v1/user-access")
 async def set_user_access(req: dict):
-    """Persist one person's full area-access matrix."""
+    """Persist one person's full area-access matrix (Supabase + local file)."""
     email = (req.get("email") or "").strip().lower()
     access = req.get("access")
     if not email or not isinstance(access, dict):
@@ -1472,6 +1534,12 @@ async def set_user_access(req: dict):
     data = _read_user_access()
     data[email] = cleaned
     _write_user_access(data)
+    if not _upsert_user_access_supabase(email, cleaned):
+        # Still saved to disk — warn but don't fail hard until table exists.
+        logger.warning(
+            "user_access saved to file only for %s — create public.user_access (see migrations/user_access_table.sql)",
+            email,
+        )
     return {"success": True, "data": {"email": email, "access": cleaned}}
 
 
@@ -1506,6 +1574,7 @@ async def _remove_user_role_impl(email: str):
         if normalized in access:
             del access[normalized]
             _write_user_access(access)
+        _delete_user_access_supabase(normalized)
     except Exception:
         pass
     if not removed_role and not existing:

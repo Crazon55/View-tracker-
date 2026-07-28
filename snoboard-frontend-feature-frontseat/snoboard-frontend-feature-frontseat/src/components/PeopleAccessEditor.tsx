@@ -6,7 +6,6 @@ import { ChevronDown, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { getUserAccess, setUserAccess, setUserRole, deleteUserRole } from "@/services/api";
 import { api as seedingApi } from "@/services/seeding/client";
-import { StatusBadge } from "@/components/seeding/StatusBadge";
 import { AccessMatrix } from "@/components/AccessMatrix";
 import { ALL_ROLES, AREA_KEYS, resolvePersonAccess, type AreaKey, type AreaLevel } from "@/lib/accessModel";
 
@@ -163,7 +162,6 @@ export function PeopleAccessEditor({
                 <div style={{ fontSize: 11, color: "var(--f-faint)", marginTop: 2 }}>{editCount} edit · {viewCount} view</div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                {p.seeding_role ? <StatusBadge status={p.seeding_role} /> : null}
                 <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end", maxWidth: 320 }}>
                   {selected.length ? selected.map((r) => {
                     const label = ALL_ROLES.find((x) => x.key === r)?.short ?? r;
