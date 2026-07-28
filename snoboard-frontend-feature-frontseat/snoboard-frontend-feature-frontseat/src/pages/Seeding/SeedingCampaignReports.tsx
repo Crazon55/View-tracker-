@@ -61,12 +61,22 @@ export default function SeedingCampaignReports() {
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    if (!needle) return rows;
-    return rows.filter((d) =>
-      [d.brand_name, d.agency_or_client_name, d.submitted_by_team?.team_name, ...d.pages]
-        .filter(Boolean)
-        .some((s) => String(s).toLowerCase().includes(needle)),
-    );
+    let list = rows;
+    if (needle) {
+      list = list.filter((d) =>
+        [d.brand_name, d.agency_or_client_name, d.submitted_by_team?.team_name, ...d.pages]
+          .filter(Boolean)
+          .some((s) => String(s).toLowerCase().includes(needle)),
+      );
+    }
+    // Newest go-live first; missing dates sink to the bottom.
+    return [...list].sort((a, b) => {
+      const ta = a.go_live_date_time ? Date.parse(a.go_live_date_time) : Number.NEGATIVE_INFINITY;
+      const tb = b.go_live_date_time ? Date.parse(b.go_live_date_time) : Number.NEGATIVE_INFINITY;
+      const na = Number.isFinite(ta) ? ta : Number.NEGATIVE_INFINITY;
+      const nb = Number.isFinite(tb) ? tb : Number.NEGATIVE_INFINITY;
+      return nb - na;
+    });
   }, [rows, q]);
 
   return (
