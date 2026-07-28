@@ -556,9 +556,45 @@ export function createFsiApi() {
         const detail = errBody?.detail;
         throw new Error(typeof detail === "string" ? detail : `Chat failed (${res.status})`);
       }
-      const json = (await res.json()) as { data?: { reply?: string } };
+      const json = (await res.json()) as {
+        data?: {
+          reply?: string;
+          youtube_research?: {
+            ran?: boolean;
+            query?: string | null;
+            video_count?: number;
+            errors?: string[];
+          };
+        };
+      };
       if (!json.data?.reply) throw new Error("Chat returned no reply");
-      return json.data.reply;
+      return {
+        reply: json.data.reply,
+        youtubeResearch: {
+          ran: Boolean(json.data.youtube_research?.ran),
+          query: json.data.youtube_research?.query ?? null,
+          video_count: json.data.youtube_research?.video_count ?? 0,
+          errors: json.data.youtube_research?.errors ?? [],
+        },
+      };
+    },
+    youtubeResearch: async (studyId: string, query: string) => {
+      const res = await fetch(`${FSI_API_BASE}${FSI_BACKEND_BASE}/studies/${studyId}/youtube-research`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : {}),
+        },
+        body: JSON.stringify({ query }),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => null);
+        const detail = errBody?.detail;
+        throw new Error(typeof detail === "string" ? detail : `YouTube research failed (${res.status})`);
+      }
+      const json = (await res.json()) as { data?: Record<string, unknown> };
+      if (!json.data) throw new Error("YouTube research returned no data");
+      return json.data;
     },
     generateStudySummary: async (studyId: string, graphSnapshot?: FsiGraphSnapshot) => {
       const res = await fetch(`${FSI_API_BASE}${FSI_BACKEND_BASE}/studies/${studyId}/generate-summary`, {

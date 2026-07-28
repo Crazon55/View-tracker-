@@ -1,11 +1,13 @@
 """FSI Canvas — conversational AI about a study graph."""
 
+import json
 import logging
 
 import anthropic
 
 from app.config import get_settings
 from app.services.fsi_graph_context import graph_context_json
+from app.services.youtube_podcast_research import maybe_run_podcast_research
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +34,24 @@ Frame nodes are Miro-style regions that group related content.
 - Nodes with `inside_frame` / `parent_node_id` belong in that frame.
 - Ungrouped nodes sit on the open canvas.
 
+## YouTube podcast research (when present)
+If a `## YOUTUBE PODCAST RESEARCH` JSON block is included:
+- Treat it as the source of truth for podcast quotes, brands, talking points, and captions.
+- Cite video titles and URLs when referencing findings.
+- Do NOT invent quotes or brand mentions that are absent from that pack.
+- If a video has `has_transcript: false` or a `transcript_error`, say captions were unavailable.
+
 ## Style
 Use markdown sparingly (bold, short bullets). Be concise but complete — missing an existing node is worse than being slightly longer."""
+
+
+def _youtube_meta(pack: dict) -> dict:
+    return {
+        "ran": bool(pack.get("ran")),
+        "query": pack.get("query"),
+        "video_count": int(pack.get("video_count") or 0),
+        "errors": pack.get("errors") or [],
+    }
 
 
 async def chat_about_study(
@@ -42,10 +60,14 @@ async def chat_about_study(
     connections: list[dict],
     message: str,
     history: list[dict],
-) -> str:
+) -> dict:
+    """Return { reply, youtube_research }."""
     settings = get_settings()
     if not settings.anthropic_api_key:
         raise ValueError("Anthropic API key not configured")
+
+    yt_pack = await maybe_run_podcast_research(message)
+    yt_meta = _youtube_meta(yt_pack)
 
     graph_block = graph_context_json(study, nodes, connections)
     system = (
@@ -53,6 +75,22 @@ async def chat_about_study(
         "## CURRENT CANVAS GRAPH (complete snapshot — use for every answer)\n"
         f"```json\n{graph_block}\n```"
     )
+
+    if yt_pack.get("ran"):
+        # Drop bulky caption samples from the chat context if overall intel is rich enough;
+        # keep samples so Claude can still quote when intel extract failed.
+        compact_pack = {
+            "query": yt_pack.get("query"),
+            "video_count": yt_pack.get("video_count"),
+            "videos": yt_pack.get("videos") or [],
+            "overall": yt_pack.get("overall") or {},
+            "errors": yt_pack.get("errors") or [],
+        }
+        system += (
+            "\n\n## YOUTUBE PODCAST RESEARCH\n"
+            "Use this pack for podcast/interview findings. Cite titles and URLs.\n"
+            f"```json\n{json.dumps(compact_pack, ensure_ascii=False)}\n```"
+        )
 
     api_messages: list[dict] = []
     for item in history[-20:]:
@@ -75,4 +113,7 @@ async def chat_about_study(
         logger.error("FSI chat Claude API error: %s", e)
         raise
 
-    return response.content[0].text
+    return {
+        "reply": response.content[0].text,
+        "youtube_research": yt_meta,
+    }

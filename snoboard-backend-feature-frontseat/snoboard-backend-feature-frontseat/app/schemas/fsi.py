@@ -139,3 +139,7 @@ class FsiChatRequest(BaseModel):
 
 class FsiSummaryRequest(BaseModel):
     graph_snapshot: FsiGraphSnapshot | None = None
+
+
+class FsiYoutubeResearchRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=200)

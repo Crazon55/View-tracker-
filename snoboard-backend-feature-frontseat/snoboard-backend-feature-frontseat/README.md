@@ -208,6 +208,50 @@ Top performing creators appear first in dashboard responses.
 
 ---
 
+## FSI YouTube podcast research
+
+FSI canvas chat can research YouTube podcasts/interviews about a person or company:
+
+1. User asks e.g. `Research YouTube podcasts about Wispr Flow`
+2. Backend searches YouTube Data API v3, pulls captions via `youtube-transcript-api`, extracts quotes/brands with Claude
+3. Intel is injected into the FSI chat context
+
+### Env
+
+```bash
+# Google Cloud Console → enable YouTube Data API v3 → create API key
+YOUTUBE_API_KEY=your_key_here
+ANTHROPIC_API_KEY=your_existing_key
+```
+
+Also install the new dependency:
+
+```bash
+pip install -r requirements.txt
+# includes youtube-transcript-api
+```
+
+### EC2 deploy (backend + frontend)
+
+```bash
+cd ~/View-tracker-
+git pull origin main
+cd snoboard-backend-feature-frontseat/snoboard-backend-feature-frontseat
+# ensure YOUTUBE_API_KEY is in .env / process env
+pip install -r requirements.txt
+pm2 restart snoboard-backend
+
+cd ~/View-tracker-/snoboard-frontend-feature-frontseat/snoboard-frontend-feature-frontseat
+npm ci && npm run build
+pm2 restart all
+```
+
+Endpoints:
+- `POST /api/fsi/studies/{id}/chat` — auto-runs research when intent matches; response includes `youtube_research`
+- `POST /api/fsi/studies/{id}/youtube-research` — `{ "query": "Brand Name" }` explicit research
+
+---
+
 ## 🔍 Platform-Specific Notes
 
 | Platform | Views Available? | Notes |

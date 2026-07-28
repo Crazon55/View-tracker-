@@ -21,6 +21,7 @@ from app.schemas.fsi import (
     FsiChatRequest,
     FsiGraphSnapshot,
     FsiSummaryRequest,
+    FsiYoutubeResearchRequest,
 )
 
 router = APIRouter(tags=["fsi"])
@@ -446,7 +447,7 @@ async def chat_study(study_id: str, req: FsiChatRequest, claims: dict = Depends(
     study, nodes, connections = _resolve_study_graph(client, study_id, req.graph_snapshot)
 
     try:
-        reply = await chat_about_study(
+        result = await chat_about_study(
             study,
             nodes,
             connections,
@@ -461,10 +462,33 @@ async def chat_study(study_id: str, req: FsiChatRequest, claims: dict = Depends(
     return {
         "success": True,
         "data": {
-            "reply": reply,
+            "reply": result["reply"],
+            "youtube_research": result.get("youtube_research") or {"ran": False},
             "context_stats": {
                 "node_count": len(nodes),
                 "connection_count": len(connections),
             },
         },
     }
+
+
+@router.post("/studies/{study_id}/youtube-research")
+async def youtube_research_route(
+    study_id: str,
+    req: FsiYoutubeResearchRequest,
+    claims: dict = Depends(require_auth),
+):
+    """Explicit YouTube podcast research for a person/company name."""
+    from app.services.youtube_podcast_research import research_podcasts
+
+    client = get_supabase_client()
+    _get_study(client, study_id)
+
+    try:
+        pack = await research_podcasts(req.query)
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"YouTube research failed: {e}") from e
+
+    return {"success": True, "data": pack}

@@ -23,7 +23,7 @@ import {
 import FsiFlowCanvas, { type FsiFlowCanvasHandle } from "./components/FsiFlowCanvas";
 import FsiLeftToolbar from "./components/FsiLeftToolbar";
 import FsiAiAssistant from "./components/FsiAiAssistant";
-import type { FsiChatMessage } from "./lib/fsiAiChat";
+import type { FsiChatMessage, FsiChatReply } from "./lib/fsiAiChat";
 import { buildGraphSnapshot, flushPendingCanvasEdits } from "./lib/fsiGraphSnapshot";
 import FsiStudySettingsDialog, { type StudyStatus } from "./components/FsiStudySettingsDialog";
 import NodeTypePicker, { type PickerChoice } from "./components/NodeTypePicker";
@@ -148,7 +148,7 @@ export default function FsiCanvasWorkspace() {
   });
 
   const handleSendChat = useCallback(
-    async (message: string, history: FsiChatMessage[]) => {
+    async (message: string, history: FsiChatMessage[]): Promise<FsiChatReply> => {
       return chatMutation.mutateAsync({ message, history });
     },
     [chatMutation],

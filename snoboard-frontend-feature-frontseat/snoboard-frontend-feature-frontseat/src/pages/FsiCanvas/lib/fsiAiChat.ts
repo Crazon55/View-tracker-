@@ -2,10 +2,23 @@ import { SUMMARY_SECTION_LABELS } from "../lib/fsiNodeSchemas";
 
 export type SummaryData = Record<string, string | string[]>;
 
+export type YoutubeResearchMeta = {
+  ran: boolean;
+  query?: string | null;
+  video_count?: number;
+  errors?: string[];
+};
+
 export type FsiChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  youtubeResearch?: YoutubeResearchMeta;
+};
+
+export type FsiChatReply = {
+  reply: string;
+  youtubeResearch?: YoutubeResearchMeta;
 };
 
 export function formatSummaryForChat(summary: SummaryData): string {
@@ -47,5 +60,7 @@ export const FSI_CHAT_WELCOME: FsiChatMessage = {
   id: "welcome",
   role: "assistant",
   content:
-    "I'm your FSI research assistant. Every message I receive includes a **full snapshot** of your canvas — all nodes, payloads, connections, and study metadata.\n\nTry **What's on my canvas?** or **Generate strategy summary**.",
+    "I'm your FSI research assistant. Every message I receive includes a **full snapshot** of your canvas — all nodes, payloads, connections, and study metadata.\n\nTry **What's on my canvas?**, **Generate strategy summary**, or **Research YouTube podcasts about [brand/person]**.",
 };
+
+export const FSI_YOUTUBE_RESEARCH_PROMPT = "Research YouTube podcasts about ";

@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     # Anthropic (Claude AI)
     anthropic_api_key: str = ""
 
+    # YouTube Data API v3 (FSI podcast research)
+    youtube_api_key: str = ""
+
     # Service URL (for internal self-calls)
     service_url: str = "http://localhost:8001"
 
