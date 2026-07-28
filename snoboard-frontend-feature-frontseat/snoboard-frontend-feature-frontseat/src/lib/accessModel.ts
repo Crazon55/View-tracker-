@@ -20,7 +20,7 @@ export type AreaKey =
   | "fsi_canvas"
   // Seeding
   | "seeding_overview" | "seeding_approvals" | "seeding_submit" | "seeding_deals"
-  | "seeding_fulfillment" | "seeding_pages" | "seeding_teamwise"
+  | "seeding_fulfillment" | "seeding_campaign_reports" | "seeding_pages" | "seeding_teamwise"
   // Admin
   | "users_roles";
 
@@ -49,6 +49,7 @@ export const AREAS: AreaDef[] = [
   { key: "seeding_submit", label: "Submit Brief", group: "Seeding", route: "/seeding/submit" },
   { key: "seeding_deals", label: "All Deals", group: "Seeding", route: "/seeding/deals" },
   { key: "seeding_fulfillment", label: "Fulfillment", group: "Seeding", route: "/seeding/fulfillment" },
+  { key: "seeding_campaign_reports", label: "Campaign Reports", group: "Seeding", route: "/seeding/campaign-reports" },
   { key: "seeding_pages", label: "Monetisable Pages", group: "Seeding", route: "/seeding/pages" },
   { key: "seeding_teamwise", label: "Teamwise Deals", group: "Seeding", route: "/seeding/teamwise" },
 
@@ -139,7 +140,7 @@ const withOverrides = (
 ): Record<AreaKey, AreaLevel> => ({ ...all(base), ...overrides });
 
 const BD_ACCESS = withOverrides("none", {
-  seeding_overview: "edit", seeding_submit: "edit",
+  seeding_overview: "edit", seeding_submit: "edit", seeding_campaign_reports: "view",
 });
 
 // Default matrices — STARTING POINT (tune in the UI). "?" cells in the plan default
@@ -190,7 +191,7 @@ export const ROLE_ACCESS_DEFAULTS: Record<string, Record<AreaKey, AreaLevel>> = 
   snoball_bd: BD_ACCESS,
 
   fulfillment: withOverrides("none", {
-    seeding_fulfillment: "edit", seeding_deals: "view",
+    seeding_fulfillment: "edit", seeding_deals: "view", seeding_campaign_reports: "edit",
   }),
 
   // Playbook-scoped roles — edit their own playbook, view shared context.

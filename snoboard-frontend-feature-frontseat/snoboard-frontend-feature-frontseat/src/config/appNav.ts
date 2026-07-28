@@ -5,7 +5,7 @@
 import {
   Clapperboard, Timer, Newspaper, Ticket, Scissors, FlaskConical,
   FileText, TrendingUp, ClipboardCheck, Handshake, Plus, Lightbulb,
-  Users, ShieldCheck, LayoutDashboard, type LucideIcon,
+  Users, ShieldCheck, LayoutDashboard, BarChart3, type LucideIcon,
 } from "lucide-react";
 import { PLAYBOOK_CONFIGS, type PlaybookId } from "@/lib/playbookExperimentConfig";
 import { canSeeAnyNonSeeding, canSeeAnySeeding, canView, type PersonAccess } from "@/lib/accessModel";
@@ -48,6 +48,7 @@ export const NAV: NavMenu[] = [
     { to: "/seeding/submit",      label: "Submit Brief",     desc: "Create a new brand deal", icon: Plus },
     { to: "/seeding/deals",       label: "All Deals",        desc: "Every brand deal",      icon: Handshake },
     { to: "/seeding/fulfillment", label: "Fulfillment",      desc: "Deliverables in production", icon: Clapperboard },
+    { to: "/seeding/campaign-reports", label: "Campaign Reports", desc: "Performance & live links", icon: BarChart3 },
     { to: "/seeding/pages",       label: "Monetisable Pages",desc: "Deal-eligible pages",   icon: FileText },
     { to: "/seeding/teamwise",    label: "Teamwise Deals",   desc: "By BD team",            icon: Users },
   ]},

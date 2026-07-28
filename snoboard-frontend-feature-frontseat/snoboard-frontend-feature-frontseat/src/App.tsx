@@ -53,6 +53,8 @@ import SeedingAllDeals from "./pages/Seeding/SeedingAllDeals";
 import SeedingTeamwise from "./pages/Seeding/SeedingTeamwise";
 import SeedingFulfillmentBoard from "./pages/Seeding/SeedingFulfillmentBoard";
 import SeedingSubmitBrief from "./pages/Seeding/SeedingSubmitBrief";
+import SeedingCampaignReports from "./pages/Seeding/SeedingCampaignReports";
+import SeedingCampaignReportDetail from "./pages/Seeding/SeedingCampaignReportDetail";
 import SeedingDealDetail from "./pages/Seeding/SeedingDealDetail";
 import SeedingSectionPage from "./pages/Seeding/SeedingSectionPage";
 import { SeedingPreviewBanner } from "./components/seeding/SeedingPreviewBanner";
@@ -558,6 +560,8 @@ function AppLayout() {
             <Route path="/seeding/deals" element={<RequireArea area="seeding_deals"><SeedingAllDeals /></RequireArea>} />
             <Route path="/seeding/deals/:dealId" element={<RequireArea area="seeding_deals"><SeedingDealDetail /></RequireArea>} />
             <Route path="/seeding/fulfillment" element={<RequireArea area="seeding_fulfillment"><SeedingFulfillmentBoard /></RequireArea>} />
+            <Route path="/seeding/campaign-reports" element={<RequireArea area="seeding_campaign_reports"><SeedingCampaignReports /></RequireArea>} />
+            <Route path="/seeding/campaign-reports/:dealId" element={<RequireArea area="seeding_campaign_reports"><SeedingCampaignReportDetail /></RequireArea>} />
             <Route path="/seeding/submit" element={<RequireArea area="seeding_submit"><SeedingSubmitBrief /></RequireArea>} />
             <Route path="/seeding/pages" element={<RequireArea area="seeding_pages"><SeedingSectionPage /></RequireArea>} />
             <Route path="/seeding/teamwise" element={<RequireArea area="seeding_teamwise"><SeedingTeamwise /></RequireArea>} />

@@ -453,6 +453,12 @@ class BriefUpdate(BaseModel):
     deal_status: Optional[str] = None
     admin_review_status: Optional[str] = None
     payment_status: Optional[str] = None
+    # Campaign report — why fulfillment created this content.
+    content_rationale: Optional[str] = None
+
+
+class CampaignReportUpdate(BaseModel):
+    content_rationale: Optional[str] = None
 
 
 class AdminReviewAction(BaseModel):
@@ -999,6 +1005,7 @@ async def create_brief(payload: BriefCreate, user: dict = Depends(get_current_us
         "approved_by_admin_id": approved_by,
         "approved_at": approved_at,
         "notes": payload.notes or "",
+        "content_rationale": "",
         "created_at": now_iso(),
         "updated_at": now_iso(),
     }
@@ -1282,6 +1289,33 @@ async def update_deal(deal_id: str, payload: BriefUpdate, user: dict = Depends(g
     updated = await _enrich_deal(updated)
     if user["role"] in {"admin", "bd"}:
         updated = await _attach_payment_status(updated)
+    return scrub_deal_for_user(updated, user)
+
+
+@api.put("/deals/{deal_id}/campaign-report")
+@api.patch("/deals/{deal_id}/campaign-report")
+async def update_campaign_report(
+    deal_id: str,
+    payload: CampaignReportUpdate,
+    user: dict = Depends(get_current_user),
+):
+    """Fulfillment + admin: content rationale for the campaign report page."""
+    await require_role(user, ["admin", "fulfillment"])
+    deal = await db.deals.find_one({"deal_id": deal_id}, {"_id": 0})
+    if not deal:
+        raise HTTPException(404, "Deal not found")
+    raw = payload.model_dump(exclude_unset=True)
+    if "content_rationale" not in raw:
+        raise HTTPException(400, "content_rationale required")
+    await db.deals.update_one(
+        {"deal_id": deal_id},
+        {"$set": {
+            "content_rationale": raw.get("content_rationale") or "",
+            "updated_at": now_iso(),
+        }},
+    )
+    updated = await db.deals.find_one({"deal_id": deal_id}, {"_id": 0})
+    updated = await _enrich_deal(updated)
     return scrub_deal_for_user(updated, user)
 
 

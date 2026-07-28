@@ -20,6 +20,7 @@ export type SeedingDeal = {
   deal_status: string | null;
   payment_status?: string;
   payment_notes?: string;
+  content_rationale?: string;
   amount_received?: number;
   payment_updated_by?: string;
   payment_updated_at?: string;
@@ -585,6 +586,17 @@ export function mockSeedingPatch<T>(path: string, body: Record<string, unknown>)
       persistMockDeals();
       return enrichDeal(MOCK_DEALS[idx]) as T;
     }
+  }
+  const reportMatch = clean.match(/^\/deals\/([^/]+)\/campaign-report$/);
+  if (reportMatch) {
+    const idx = MOCK_DEALS.findIndex((d) => d.deal_id === reportMatch[1]);
+    if (idx < 0) throw new Error("Deal not found");
+    MOCK_DEALS[idx] = {
+      ...MOCK_DEALS[idx],
+      content_rationale: String(body.content_rationale ?? MOCK_DEALS[idx].content_rationale ?? ""),
+    } as SeedingDeal;
+    persistMockDeals();
+    return enrichDeal(MOCK_DEALS[idx]) as T;
   }
   throw new Error("Deal not found");
 }
