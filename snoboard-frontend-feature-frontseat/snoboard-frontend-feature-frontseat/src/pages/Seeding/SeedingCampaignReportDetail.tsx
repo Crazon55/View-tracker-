@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, ChevronDown, ExternalLink } from "lucide-react";
+import { ArrowLeft, ChevronDown, ExternalLink, Plus } from "lucide-react";
 import { toast } from "sonner";
 import {
   ResponsiveContainer,
@@ -18,11 +18,13 @@ import {
 import { FramerPage, PageHeader } from "@/components/framer/Framer";
 import { StatusBadge } from "@/components/seeding/StatusBadge";
 import { api } from "@/services/seeding/client";
-import { formatDate, formatDateTime } from "@/services/seeding/constants";
+import { DELIVERABLE_TYPES, formatDate, formatDateTime } from "@/services/seeding/constants";
 import { useAreaAccess } from "@/hooks/useAreaAccess";
 import type { SeedingDeal, SeedingDealDetail, SeedingDeliverable } from "@/services/seeding/mockData";
 
 const CHART_COLORS = ["#34d399", "#60a5fa", "#f472b6", "#fbbf24", "#a78bfa", "#2dd4bf", "#fb7185", "#94a3b8"];
+
+type SeedingPage = { page_id: string; page_name: string; active?: boolean };
 
 function normalizeDetail(raw: unknown): SeedingDealDetail {
   const body = (raw ?? {}) as Record<string, any>;
@@ -46,6 +48,15 @@ export default function SeedingCampaignReportDetail() {
   const [savingRationale, setSavingRationale] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [openDelivIds, setOpenDelivIds] = useState<Set<string>>(new Set());
+  const [showAdd, setShowAdd] = useState(false);
+  const [pages, setPages] = useState<SeedingPage[]>([]);
+  const [adding, setAdding] = useState(false);
+  const [newDeliv, setNewDeliv] = useState({
+    page_id: "",
+    deliverable_type: "Reel",
+    live_link: "",
+    views: "",
+  });
 
   const toggleDeliv = (id: string) => {
     setOpenDelivIds((prev) => {
@@ -74,6 +85,16 @@ export default function SeedingCampaignReportDetail() {
 
   useEffect(() => { void load(); }, [load]);
 
+  useEffect(() => {
+    api.get<SeedingPage[]>("/pages", { params: { only_active: true } })
+      .then(({ data }) => {
+        const list = (data || []).filter((p) => p.active !== false);
+        setPages(list);
+        setNewDeliv((d) => (d.page_id ? d : { ...d, page_id: list[0]?.page_id || "" }));
+      })
+      .catch(() => setPages([]));
+  }, []);
+
   const deliverables = deal?.deliverables || [];
   const totalViews = useMemo(
     () => deliverables.reduce((s, d) => s + (Number(d.views) || 0), 0),
@@ -95,7 +116,6 @@ export default function SeedingCampaignReportDetail() {
   const pieData = useMemo(() => {
     const rows = pageRows.filter((p) => p.views > 0).map((p) => ({ name: p.page, value: p.views }));
     if (rows.length) return rows;
-    // Empty state ring so the donut still renders with 0 in the center.
     return [{ name: "No views yet", value: 1 }];
   }, [pageRows]);
 
@@ -109,9 +129,7 @@ export default function SeedingCampaignReportDetail() {
     [barData],
   );
 
-  /** Scale Y to real view counts (not a fake 0–4 axis when everything is empty). */
   const viewsAxisMax = maxPageViews > 0 ? Math.ceil(maxPageViews * 1.15) : 0;
-
   const pieHasRealData = pageRows.some((p) => p.views > 0);
 
   const patchDeliverable = async (id: string, body: { live_link?: string; views?: number }) => {
@@ -132,6 +150,32 @@ export default function SeedingCampaignReportDetail() {
       await load();
     } finally {
       setSavingId(null);
+    }
+  };
+
+  const addDeliverable = async () => {
+    if (!dealId || !canEditReport || !newDeliv.page_id) return;
+    setAdding(true);
+    try {
+      const { data } = await api.post<SeedingDeliverable[]>(`/deals/${dealId}/deliverables`, {
+        page_id: newDeliv.page_id,
+        deliverable_type: newDeliv.deliverable_type,
+        quantity: 1,
+        live_link: newDeliv.live_link.trim(),
+        views: Math.max(0, Number(newDeliv.views) || 0),
+      });
+      const created = data?.[0];
+      setShowAdd(false);
+      setNewDeliv((d) => ({ ...d, live_link: "", views: "" }));
+      await load();
+      if (created?.deliverable_id) {
+        setOpenDelivIds((prev) => new Set(prev).add(created.deliverable_id));
+      }
+      toast.success("Deliverable added — also on the brief");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || err?.message || "Couldn't add deliverable.");
+    } finally {
+      setAdding(false);
     }
   };
 
@@ -186,13 +230,125 @@ export default function SeedingCampaignReportDetail() {
             lead={`${deal.submitted_by_team?.team_name || "—"} · Go-live ${formatDate(deal.go_live_date_time)}`}
           />
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          {canEditReport ? (
+            <button
+              type="button"
+              onClick={() => setShowAdd((v) => !v)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                background: "#fff",
+                color: "#000",
+                border: 0,
+                borderRadius: 8,
+                padding: "8px 12px",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              <Plus size={14} /> Add deliverable
+            </button>
+          ) : null}
           {deal.deal_status ? <StatusBadge status={deal.deal_status} /> : null}
           <StatusBadge status={deal.admin_review_status} />
         </div>
       </div>
 
-      {/* Charts */}
+      {showAdd && canEditReport ? (
+        <section className="seeding-surface" style={{ marginTop: 16, padding: "16px 18px", borderRadius: 14 }}>
+          <h2 style={{ fontSize: 13, fontWeight: 600, margin: "0 0 4px" }}>New deliverable</h2>
+          <p style={{ fontSize: 12, color: "var(--f-faint)", margin: "0 0 12px" }}>
+            Saved on this campaign and on the brief deliverables list.
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
+            <label className="seeding-detail-field">
+              <span>Page</span>
+              <select
+                className="seeding-inline-select"
+                value={newDeliv.page_id}
+                onChange={(e) => setNewDeliv((d) => ({ ...d, page_id: e.target.value }))}
+              >
+                {!pages.length ? <option value="">No pages</option> : null}
+                {pages.map((p) => (
+                  <option key={p.page_id} value={p.page_id}>{p.page_name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="seeding-detail-field">
+              <span>Type</span>
+              <select
+                className="seeding-inline-select"
+                value={newDeliv.deliverable_type}
+                onChange={(e) => setNewDeliv((d) => ({ ...d, deliverable_type: e.target.value }))}
+              >
+                {DELIVERABLE_TYPES.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </label>
+            <label className="seeding-detail-field" style={{ gridColumn: "1 / -1" }}>
+              <span>Live link</span>
+              <input
+                className={inputCls}
+                value={newDeliv.live_link}
+                placeholder="https://…"
+                onChange={(e) => setNewDeliv((d) => ({ ...d, live_link: e.target.value }))}
+              />
+            </label>
+            <label className="seeding-detail-field" style={{ maxWidth: 280 }}>
+              <span>Views</span>
+              <input
+                className={`${inputCls} seeding-views-input`}
+                type="number"
+                min={0}
+                inputMode="numeric"
+                value={newDeliv.views}
+                placeholder="0"
+                onChange={(e) => setNewDeliv((d) => ({ ...d, views: e.target.value }))}
+              />
+            </label>
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+            <button
+              type="button"
+              disabled={adding || !newDeliv.page_id}
+              onClick={() => void addDeliverable()}
+              style={{
+                background: "#fff",
+                color: "#000",
+                border: 0,
+                borderRadius: 8,
+                padding: "8px 14px",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: adding ? "wait" : "pointer",
+                opacity: adding || !newDeliv.page_id ? 0.6 : 1,
+              }}
+            >
+              {adding ? "Adding…" : "Add"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAdd(false)}
+              style={{
+                background: "transparent",
+                color: "var(--f-dim)",
+                border: "1px solid rgba(255,255,255,.14)",
+                borderRadius: 8,
+                padding: "8px 14px",
+                fontSize: 12,
+                cursor: "pointer",
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </section>
+      ) : null}
+
       <div
         style={{
           marginTop: 22,
@@ -332,7 +488,6 @@ export default function SeedingCampaignReportDetail() {
         }
       `}</style>
 
-      {/* Original brief */}
       <section className="seeding-surface" style={{ marginTop: 16, padding: "16px 18px", borderRadius: 14 }}>
         <h2 style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>Original brief</h2>
         {deal.brief_link ? (
@@ -355,13 +510,12 @@ export default function SeedingCampaignReportDetail() {
         ) : null}
       </section>
 
-      {/* Deliverables accordion — same pattern as brief detail */}
       <section style={{ marginTop: 22 }}>
         <h2 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 4px" }}>
           Deliverables ({deliverables.length})
         </h2>
         <p style={{ fontSize: 12, color: "var(--f-faint)", margin: "0 0 12px" }}>
-          Expand a row to edit live link + views. Charts update from these numbers.
+          Expand a row to edit live link + views. Same deliverables appear on the brief.
         </p>
 
         <div className="seeding-deliverables-stack">
@@ -439,7 +593,6 @@ export default function SeedingCampaignReportDetail() {
         ) : null}
       </section>
 
-      {/* Content rationale */}
       <section className="seeding-surface" style={{ marginTop: 8, padding: "16px 18px", borderRadius: 14 }}>
         <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>Why this content</h2>
         <p style={{ fontSize: 12, color: "var(--f-faint)", margin: "4px 0 12px" }}>

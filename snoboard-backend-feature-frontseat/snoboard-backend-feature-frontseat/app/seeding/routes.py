@@ -505,6 +505,9 @@ class DeliverableAdd(BaseModel):
     page_id: str
     deliverable_type: Literal["Reel", "Static", "Carousel"]
     quantity: int = 1
+    # Optional — used by campaign report when adding a posted deliverable.
+    live_link: Optional[str] = ""
+    views: Optional[int] = 0
 
 
 class FulfillmentOutputCreate(BaseModel):
@@ -1432,6 +1435,8 @@ async def _expand_deliverable_rows(deal_id: str, deal: dict, spec: DeliverableAd
     page = await db.monetisable_pages.find_one({"page_id": spec.page_id}, {"_id": 0})
     if not page:
         raise HTTPException(400, "Invalid page")
+    live_link = (spec.live_link or "").strip()
+    views = max(0, int(spec.views or 0))
     rows = []
     for _ in range(max(1, int(spec.quantity))):
         rows.append({
@@ -1443,8 +1448,8 @@ async def _expand_deliverable_rows(deal_id: str, deal: dict, spec: DeliverableAd
             "go_live_date_time": deal.get("go_live_date_time"),
             "status": "Not Started",
             "assigned_fulfillment_user_id": None,
-            "live_link": "",
-            "views": 0,
+            "live_link": live_link,
+            "views": views,
             "notes": "",
             "created_at": now_iso(),
             "updated_at": now_iso(),
@@ -1454,12 +1459,19 @@ async def _expand_deliverable_rows(deal_id: str, deal: dict, spec: DeliverableAd
 
 @api.post("/deals/{deal_id}/deliverables")
 async def add_deliverables(deal_id: str, payload: DeliverableAdd, user: dict = Depends(get_current_user)):
-    if user["role"] not in {"admin", "bd"}:
-        raise HTTPException(403, "Forbidden")
+    """
+    Admin/BD: deliverable spec edits (BD only pre-approval).
+    Fulfillment: may add deliverables on approved deals (campaign report + brief stay in sync).
+    """
+    await require_role(user, ["admin", "bd", "fulfillment"])
     deal = await db.deals.find_one({"deal_id": deal_id}, {"_id": 0})
     if not deal:
         raise HTTPException(404, "Deal not found")
-    _check_deliverable_spec_access(user, deal)
+    if user["role"] == "fulfillment":
+        if deal.get("admin_review_status") != "Approved":
+            raise HTTPException(403, "Fulfillment can only add deliverables on approved deals")
+    else:
+        _check_deliverable_spec_access(user, deal)
     rows = await _expand_deliverable_rows(deal_id, deal, payload)
     if rows:
         await db.deliverables.insert_many([dict(r) for r in rows])
