@@ -688,7 +688,7 @@ export function mockSeedingGet<T>(path: string, params?: Record<string, unknown>
   return [] as T;
 }
 
-// Official Frontseat monetisable pages ONLY (Current Page Pricing sheet).
+// Official Frontseat monetisable pages (pricing sheet + additions).
 export const MOCK_PAGES = [
   { page_id: "page_101xfounders", page_name: "101xFounders", active: true, notes: "Excluded from Business bundle" },
   { page_id: "page_bizzindia", page_name: "BizzIndia", active: true, notes: "Business bundle" },
@@ -698,6 +698,8 @@ export const MOCK_PAGES = [
   { page_id: "page_foundersinindia", page_name: "FoundersInIndia", active: true, notes: "Business bundle" },
   { page_id: "page_startupcoded", page_name: "StartupCoded", active: true, notes: "Business bundle" },
   { page_id: "page_indiastartupstory", page_name: "IndiaStartupStory", active: true, notes: "Business bundle" },
+  { page_id: "page_indiahappeningnow", page_name: "IndiaHappeningNow", active: true, notes: "Added for briefs" },
+  { page_id: "page_thechangingorder", page_name: "TheChangingOrder", active: true, notes: "Added for briefs" },
 ];
 
 export const MOCK_SEEDING_USERS = [

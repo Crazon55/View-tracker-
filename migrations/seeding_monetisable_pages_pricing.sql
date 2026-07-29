@@ -1,5 +1,5 @@
--- Official Frontseat monetisable pages ONLY (Current Page Pricing sheet).
--- Safe to re-run. Upserts the 8 pages and deactivates everything else.
+-- Official Frontseat monetisable pages (Current Page Pricing sheet + additions).
+-- Safe to re-run. Upserts these pages and deactivates everything else.
 
 create table if not exists public.seeding_monetisable_pages (
     page_id       text primary key,
@@ -20,14 +20,16 @@ values
   ('page_indiafounderscore', 'IndiaFoundersCore',  true, 'Business bundle', now(), now()),
   ('page_foundersinindia',   'FoundersInIndia',    true, 'Business bundle', now(), now()),
   ('page_startupcoded',      'StartupCoded',       true, 'Business bundle', now(), now()),
-  ('page_indiastartupstory', 'IndiaStartupStory',  true, 'Business bundle', now(), now())
+  ('page_indiastartupstory', 'IndiaStartupStory',  true, 'Business bundle', now(), now()),
+  ('page_indiahappeningnow', 'IndiaHappeningNow',  true, 'Added for briefs', now(), now()),
+  ('page_thechangingorder',  'TheChangingOrder',   true, 'Added for briefs', now(), now())
 on conflict (page_id) do update set
   page_name  = excluded.page_name,
   active     = true,
   notes      = excluded.notes,
   updated_at = now();
 
--- Only these 8 stay active — everything else is off.
+-- Only these stay active — everything else is off.
 update public.seeding_monetisable_pages
 set active = false, updated_at = now()
 where page_id not in (
@@ -38,5 +40,7 @@ where page_id not in (
   'page_indiafounderscore',
   'page_foundersinindia',
   'page_startupcoded',
-  'page_indiastartupstory'
+  'page_indiastartupstory',
+  'page_indiahappeningnow',
+  'page_thechangingorder'
 );
