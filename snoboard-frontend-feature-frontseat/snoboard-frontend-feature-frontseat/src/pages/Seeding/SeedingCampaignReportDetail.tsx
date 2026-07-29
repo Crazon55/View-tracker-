@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, ChevronDown, ExternalLink, Plus } from "lucide-react";
+import { ArrowLeft, ChevronDown, Plus } from "lucide-react";
 import { toast } from "sonner";
 import {
   ResponsiveContainer,
@@ -488,27 +488,30 @@ export default function SeedingCampaignReportDetail() {
         }
       `}</style>
 
-      <section className="seeding-surface" style={{ marginTop: 16, padding: "16px 18px", borderRadius: 14 }}>
-        <h2 style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>Original brief</h2>
-        {deal.brief_link ? (
-          <a
-            href={deal.brief_link}
-            target="_blank"
-            rel="noreferrer"
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 10, fontSize: 14, color: "#86efac", wordBreak: "break-all" }}
-          >
-            <ExternalLink size={14} />
-            {deal.brief_link}
-          </a>
-        ) : (
-          <p className="seeding-muted" style={{ marginTop: 8 }}>No brief link on this deal.</p>
-        )}
-        {deal.brief_text ? (
-          <p style={{ marginTop: 10, fontSize: 13, color: "var(--f-dim)", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
-            {deal.brief_text}
-          </p>
-        ) : null}
-      </section>
+      <Link
+        to={`/seeding/deals/${deal.deal_id}`}
+        className="seeding-surface"
+        style={{
+          display: "block",
+          marginTop: 16,
+          padding: "16px 18px",
+          borderRadius: 14,
+          textDecoration: "none",
+          color: "inherit",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div>
+            <h2 style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>Original brief</h2>
+            <p style={{ fontSize: 12, color: "var(--f-faint)", margin: "6px 0 0" }}>
+              Open {deal.brand_name} brief — edit link, text, notes, and deliverables
+            </p>
+          </div>
+          <span style={{ fontSize: 12, fontWeight: 600, color: "#86efac", whiteSpace: "nowrap" }}>
+            Go to brief →
+          </span>
+        </div>
+      </Link>
 
       <section style={{ marginTop: 22 }}>
         <h2 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 4px" }}>
