@@ -30,6 +30,15 @@ async function patchDeal(
   const optimistic = { ...current, ...body } as SeedingDeal;
   onUpdate(optimistic);
   try {
+    const keys = Object.keys(body);
+    // Fulfillment can change deal_status; generic PATCH used to 403 them.
+    if (keys.length === 1 && keys[0] === "deal_status" && body.deal_status) {
+      const { data } = await api.put<SeedingDeal>(`/deals/${current.deal_id}/status`, {
+        deal_status: body.deal_status,
+      });
+      onUpdate({ ...current, ...(data || {}), ...body } as SeedingDeal);
+      return;
+    }
     const { data } = await api.patch<SeedingDeal>(`/deals/${current.deal_id}`, body);
     // Body wins last so deal_status/payment_status always stick even if the API omits them.
     onUpdate({ ...current, ...(data || {}), ...body } as SeedingDeal);

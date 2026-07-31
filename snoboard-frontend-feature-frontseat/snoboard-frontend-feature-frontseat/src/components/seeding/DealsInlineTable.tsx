@@ -28,6 +28,14 @@ async function patchDeal(
   const optimistic = { ...current, ...body } as SeedingDeal;
   onUpdate(optimistic);
   try {
+    const keys = Object.keys(body);
+    if (keys.length === 1 && keys[0] === "deal_status" && body.deal_status) {
+      const { data } = await api.put<SeedingDeal>(`/deals/${current.deal_id}/status`, {
+        deal_status: body.deal_status,
+      });
+      onUpdate({ ...current, ...(data || {}), ...body } as SeedingDeal);
+      return;
+    }
     const { data } = await api.patch<SeedingDeal>(`/deals/${current.deal_id}`, body);
     onUpdate({ ...current, ...(data || {}), ...body } as SeedingDeal);
   } catch (err) {

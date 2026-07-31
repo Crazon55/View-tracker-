@@ -1245,11 +1245,33 @@ async def get_deal(deal_id: str, user: dict = Depends(get_current_user)):
 @api.put("/deals/{deal_id}")
 @api.patch("/deals/{deal_id}")
 async def update_deal(deal_id: str, payload: BriefUpdate, user: dict = Depends(get_current_user)):
-    if user["role"] not in {"admin", "bd"}:
-        raise HTTPException(403, "Forbidden")
     deal = await db.deals.find_one({"deal_id": deal_id}, {"_id": 0})
     if not deal:
         raise HTTPException(404, "Deal not found")
+
+    raw = payload.model_dump(exclude_unset=True)
+
+    # Fulfillment: may only change deal_status on approved deals (same as /status).
+    # The brief UI used to call this endpoint for the status dropdown and got 403.
+    if user.get("role") == "fulfillment":
+        extra = set(raw.keys()) - {"deal_status"}
+        if extra or "deal_status" not in raw:
+            raise HTTPException(403, "Forbidden")
+        if deal.get("admin_review_status") != "Approved":
+            raise HTTPException(400, "Deal not approved yet")
+        status = raw.get("deal_status")
+        if status is not None and status not in DEAL_STATUSES:
+            raise HTTPException(400, f"Invalid deal_status: {status}")
+        await db.deals.update_one(
+            {"deal_id": deal_id},
+            {"$set": {"deal_status": status, "updated_at": now_iso()}},
+        )
+        updated = await db.deals.find_one({"deal_id": deal_id}, {"_id": 0})
+        updated = await _enrich_deal(updated)
+        return scrub_deal_for_user(updated, user)
+
+    if user["role"] not in {"admin", "bd"}:
+        raise HTTPException(403, "Forbidden")
     # only admin can edit accepted/approved deals
     if deal.get("admin_review_status") == "Approved" and user["role"] != "admin":
         raise HTTPException(403, "Only admin can edit approved deals")
@@ -1260,7 +1282,6 @@ async def update_deal(deal_id: str, payload: BriefUpdate, user: dict = Depends(g
         if deal.get("admin_review_status") not in {"Submitted", "Needs More Info"}:
             raise HTTPException(403, "BD can only edit before approval")
 
-    raw = payload.model_dump(exclude_unset=True)
     # payment_status lives on seeding_payments, not seeding_deals
     payment_status = raw.pop("payment_status", None)
     assets_links = raw.pop("assets_links", None)

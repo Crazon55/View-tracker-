@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Calendar, ChevronDown, Send, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { FramerPage } from "@/components/framer/Framer";
 import { StatusBadge } from "@/components/seeding/StatusBadge";
 import { api } from "@/services/seeding/client";
@@ -394,6 +395,23 @@ export default function SeedingDealDetail() {
     try {
       await api.patch(`/deals/${dealId}`, patch);
       await load();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || err?.message || "Couldn't save.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveDealStatus = async (status: string) => {
+    if (!dealId || !status) return;
+    setSaving(true);
+    try {
+      // Dedicated endpoint — admin + fulfillment. Generic PATCH /deals was admin/bd only.
+      await api.put(`/deals/${dealId}/status`, { deal_status: status });
+      await load();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || err?.message || "Couldn't update status.");
+      await load();
     } finally {
       setSaving(false);
     }
@@ -517,7 +535,13 @@ export default function SeedingDealDetail() {
               <select
                 className="seeding-inline-select"
                 value={draft.deal_status || ""}
-                onChange={(e) => save({ deal_status: e.target.value || null })}
+                disabled={!canManageOutputs || saving}
+                onChange={(e) => {
+                  const status = e.target.value;
+                  if (!status) return;
+                  setDraft((d) => (d ? { ...d, deal_status: status } : d));
+                  void saveDealStatus(status);
+                }}
               >
                 {DEAL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
