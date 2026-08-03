@@ -146,15 +146,13 @@ export default function SeedingCampaignReports() {
   const stats = useMemo(() => {
     const totalViews = rows.reduce((s, d) => s + (d.total_views || 0), 0);
     const totalCampaigns = rows.length;
-    if (!rows.length) {
-      return { totalViews, totalCampaigns, best: null as GalleryCard | null, least: null as GalleryCard | null };
-    }
-    const byViews = [...rows].sort((a, b) => b.total_views - a.total_views);
-    const best = byViews[0] || null;
-    const withViews = byViews.filter((d) => d.total_views > 0);
-    const least = withViews.length
-      ? withViews[withViews.length - 1]
-      : byViews[byViews.length - 1] || null;
+    // Rank only campaigns that actually have views. Need ≥2 to name a
+    // distinct best + least — otherwise least is N/A (never the same card twice).
+    const withViews = [...rows]
+      .filter((d) => (d.total_views || 0) > 0)
+      .sort((a, b) => b.total_views - a.total_views);
+    const best = withViews[0] || null;
+    const least = withViews.length >= 2 ? withViews[withViews.length - 1] : null;
     return { totalViews, totalCampaigns, best, least };
   }, [rows]);
 
@@ -184,16 +182,22 @@ export default function SeedingCampaignReports() {
         <StatCard
           icon={TrendingUp}
           label="Best performing"
-          value={loading ? "…" : (stats.best?.brand_name || "—")}
-          sub={stats.best ? `${formatViews(stats.best.total_views)} views` : undefined}
+          value={loading ? "…" : (stats.best?.brand_name || "N/A")}
+          sub={stats.best ? `${formatViews(stats.best.total_views)} views` : "No view data yet"}
           accent="text-emerald-400"
           to={stats.best ? `/seeding/campaign-reports/${stats.best.deal_id}` : undefined}
         />
         <StatCard
           icon={TrendingDown}
           label="Least performing"
-          value={loading ? "…" : (stats.least?.brand_name || "—")}
-          sub={stats.least ? `${formatViews(stats.least.total_views)} views` : undefined}
+          value={loading ? "…" : (stats.least?.brand_name || "N/A")}
+          sub={
+            stats.least
+              ? `${formatViews(stats.least.total_views)} views`
+              : stats.best
+                ? "Need 2+ campaigns with views"
+                : "No view data yet"
+          }
           accent="text-rose-400"
           to={stats.least ? `/seeding/campaign-reports/${stats.least.deal_id}` : undefined}
         />
