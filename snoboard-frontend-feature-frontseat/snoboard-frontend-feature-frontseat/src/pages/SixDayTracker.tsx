@@ -33,8 +33,8 @@ const normHandle = (h: string) => String(h || "").replace(/^@/, "").trim().toLow
 const BIZZ_HANDLES = ["bizzindia", "startupbydog"] as const;
 const FOUNDERS_HANDLES = ["foundersindex", "foundersinindia", "startupcoded"] as const;
 const X101_HANDLES = ["101xfounders"] as const;
-/** News playbook (was Sherus). */
-const NEWS_PLAYBOOK_HANDLES = ["thechangingorder", "startupswtf"] as const;
+/** News playbook — The Changing Order + India Happening Now. */
+const NEWS_PLAYBOOK_HANDLES = ["thechangingorder", "indiahappeningnow"] as const;
 /** Tech playbook. */
 const TECH_ACTIVE_HANDLES = ["indiantechdaily", "ai.cracked", "101xtechnology"] as const;
 /** Everything else still tracked, but filtered under Inactive. */
@@ -48,6 +48,7 @@ const INACTIVE_HANDLES = [
   "indiabusinesscom",
   "indiafounderscore",
   "indiafounderbrief",
+  "startupswtf",
 ] as const;
 
 /** Legacy Garfields list — kept for historical Week 4 roster union only. */
@@ -126,6 +127,8 @@ const ACTIVE_ROSTER_WEEK4 = new Set([
   ...SHERUS_ACTIVE_HANDLES,
   ...EXPERIMENT_X_HANDLES,
   ...TECH_ACTIVE_HANDLES,
+  ...NEWS_PLAYBOOK_HANDLES,
+  ...INACTIVE_HANDLES,
 ]);
 
 const ROSTER_CUTOFF_CYCLE3 = "2026-05-13";

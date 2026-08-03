@@ -25,7 +25,7 @@ export const TEAM_ROSTERS: TeamRoster[] = [
   {
     id: "news",
     label: "News playbook",
-    handles: ["thechangingorder", "startupswtf"],
+    handles: ["thechangingorder", "indiahappeningnow"],
   },
   {
     id: "tech",
@@ -45,6 +45,7 @@ export const TEAM_ROSTERS: TeamRoster[] = [
       "indiabusinesscom",
       "indiafounderscore",
       "indiafounderbrief",
+      "startupswtf",
     ],
   },
 ];
