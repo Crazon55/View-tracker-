@@ -328,6 +328,36 @@ export const canEditArea = (
   personAccess?: PersonAccess | null,
 ) => getAreaLevel(role, area, o, personAccess) === "edit";
 
+/** Monthly wrap is a tracker recap — not for BD / fulfillment / seeding-ops-only roles. */
+const WRAP_BLOCKED_ROLES = new Set([
+  "bd",
+  "fulfillment",
+  "hooc_bd",
+  "ay_bd",
+  "owled_core_bd",
+  "snoball_bd",
+  "pending",
+]);
+
+export function canViewMonthlyWrap(
+  role: string | null | undefined,
+  personAccess?: PersonAccess | null,
+): boolean {
+  if (!role || !String(role).trim()) return false;
+  const parts = String(role)
+    .split(",")
+    .map((r) => r.trim().toLowerCase())
+    .filter(Boolean);
+  if (!parts.length) return false;
+  // Pure seeding/BD roles never get the wrap chip / route / autoload.
+  const hasTrackerEligibleRole = parts.some((r) => {
+    const c = canonicalRole(r);
+    return !WRAP_BLOCKED_ROLES.has(r) && !WRAP_BLOCKED_ROLES.has(c);
+  });
+  if (!hasTrackerEligibleRole) return false;
+  return canView(role, "six_day", undefined, personAccess);
+}
+
 /** Map a nav route to its access area (exact, then prefix for sub-routes). */
 export function areaForRoute(route: string): AreaKey | null {
   const exact = AREAS.find((a) => a.route === route);

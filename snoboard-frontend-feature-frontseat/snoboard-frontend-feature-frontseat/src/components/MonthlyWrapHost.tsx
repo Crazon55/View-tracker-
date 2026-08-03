@@ -27,6 +27,7 @@ import {
 } from "@/lib/monthlyWrap";
 import { getTrackerIdeas, getTrackerNiches, getSixDayMonth } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAreaAccess } from "@/hooks/useAreaAccess";
 import {
   Dialog,
   DialogContent,
@@ -66,8 +67,9 @@ export function useMonthlyWrap() {
 
 export function MonthlyWrapOpenButton({ className = "" }: { className?: string }) {
   const navigate = useNavigate();
+  const { canSeeMonthlyWrap } = useAreaAccess();
   const reportMonth = getActiveReportMonth();
-  if (!reportMonth) return null;
+  if (!canSeeMonthlyWrap() || !reportMonth) return null;
   const [y, m] = reportMonth.split("-").map(Number);
   const label = new Date(y, m - 1, 1).toLocaleString(undefined, { month: "short" });
   return (
@@ -85,11 +87,12 @@ export function MonthlyWrapOpenButton({ className = "" }: { className?: string }
 /** Prominent dashboard entry — hard to miss on the home page. */
 export function MonthlyWrapBanner({ className = "" }: { className?: string }) {
   const navigate = useNavigate();
+  const { canSeeMonthlyWrap } = useAreaAccess();
   // Only show during the official drop window (1st 5pm IST – 3rd each month)
   const reportMonth = getActiveReportMonth();
   const fullLabel = reportMonth ? monthLabel(reportMonth) : "";
   const official = true;
-  if (!reportMonth) return null;
+  if (!canSeeMonthlyWrap() || !reportMonth) return null;
   return (
     <button
       type="button"
@@ -1073,6 +1076,8 @@ function StepPersonStats({ data, team }: { data: MonthlyWrapData; team: TeamKey 
 export function MonthlyWrapRoot({ children = null }: { children?: ReactNode }) {
   const navigate = useNavigate();
   const userKey = useWrapUserKey();
+  const { canSeeMonthlyWrap } = useAreaAccess();
+  const wrapAllowed = canSeeMonthlyWrap();
   const cal = getActiveReportMonth();
   const skipCalAuto = useRef(false);
 
@@ -1088,7 +1093,7 @@ export function MonthlyWrapRoot({ children = null }: { children?: ReactNode }) {
   );
 
   useEffect(() => {
-    if (!userKey) return;
+    if (!userKey || !wrapAllowed) return;
     const test = getWrapMonthFromUrl();
     if (!test) return;
     skipCalAuto.current = true;
@@ -1102,10 +1107,10 @@ export function MonthlyWrapRoot({ children = null }: { children?: ReactNode }) {
     } catch {
       /* ignore */
     }
-  }, [userKey, goWrap]);
+  }, [userKey, wrapAllowed, goWrap]);
 
   useEffect(() => {
-    if (!userKey || !cal || skipCalAuto.current) return;
+    if (!userKey || !wrapAllowed || !cal || skipCalAuto.current) return;
     const st = readWrapState(userKey, cal);
     if (shouldAutoOpenModal(true, st)) {
       goWrap(cal, true);
@@ -1114,9 +1119,12 @@ export function MonthlyWrapRoot({ children = null }: { children?: ReactNode }) {
         autoModalShown: true,
       });
     }
-  }, [userKey, cal, goWrap]);
+  }, [userKey, wrapAllowed, cal, goWrap]);
 
-  const openForMonth = useCallback((ym: string) => goWrap(ym), [goWrap]);
+  const openForMonth = useCallback((ym: string) => {
+    if (!wrapAllowed) return;
+    goWrap(ym);
+  }, [wrapAllowed, goWrap]);
 
   return (
     <MonthlyWrapContext.Provider value={{ openForMonth }}>

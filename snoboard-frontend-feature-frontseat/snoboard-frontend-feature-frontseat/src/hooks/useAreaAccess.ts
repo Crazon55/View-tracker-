@@ -10,6 +10,7 @@ import {
   canSeeAnyNonSeeding,
   canSeeAnySeeding,
   canView,
+  canViewMonthlyWrap,
   getAreaLevel,
   resolvePersonAccess,
   type AreaKey,
@@ -57,6 +58,7 @@ export function useAreaAccess() {
         getAreaLevel(role, area, undefined, personAccess),
       canSeeContent: () => canSeeAnyNonSeeding(role, undefined, personAccess),
       canSeeSeeding: () => canSeeAnySeeding(role, undefined, personAccess),
+      canSeeMonthlyWrap: () => canViewMonthlyWrap(role, personAccess),
     }),
     [role, personAccess],
   );

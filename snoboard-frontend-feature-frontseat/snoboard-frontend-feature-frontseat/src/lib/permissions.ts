@@ -3,7 +3,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { PlaybookId } from "@/lib/playbookExperimentConfig";
-import { canView, canonicalRole } from "@/lib/accessModel";
+import { canView, canViewMonthlyWrap, canonicalRole } from "@/lib/accessModel";
 
 export type Permission =
   | 'view_own_ideas'        // see only ideas you created
@@ -302,6 +302,9 @@ export function isRouteAllowed(role: string | null, path: string): boolean {
   if (playbookId) return canAccessPlaybook(role, playbookId)
   if (path.startsWith("/fsi-canvas") || path === "/canvas") {
     return !!role
+  }
+  if (path === "/wrap" || path.startsWith("/wrap?")) {
+    return canViewMonthlyWrap(role)
   }
   // Admin-only seeding surfaces — do not fall through to "unknown role = allow".
   if (path === "/seeding/approvals" || path.startsWith("/seeding/approvals/")) {
