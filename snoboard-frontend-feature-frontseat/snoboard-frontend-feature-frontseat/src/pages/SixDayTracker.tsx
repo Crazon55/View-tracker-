@@ -30,23 +30,28 @@ function fmt(n: number): string {
 const normHandle = (h: string) => String(h || "").replace(/^@/, "").trim().toLowerCase();
 
 /** Active IP groups (replaces Garfields / Goofies / Sherus). */
-const BIZZ_HANDLES = ["bizzindia", "startupbydog"] as const;
-const FOUNDERS_HANDLES = ["foundersindex", "foundersinindia", "startupcoded"] as const;
+/** Tech playbook (Chaithanya). */
+const TECH_ACTIVE_HANDLES = ["indiantechdaily", "101xtechnology", "ai.cracked"] as const;
+/** Bizz playbook (Pulkit). */
+const BIZZ_PLAYBOOK_HANDLES = [
+  "indiabusinesscom",
+  "indiafounderscore",
+  "indianfoundersco",
+  "indiastartupstory",
+] as const;
+/** BIZZ brand page. */
+const BIZZ_HANDLES = ["bizzindia"] as const;
 const X101_HANDLES = ["101xfounders"] as const;
-/** News playbook — The Changing Order + India Happening Now. */
+/** News playbook. */
 const NEWS_PLAYBOOK_HANDLES = ["thechangingorder", "indiahappeningnow"] as const;
-/** Tech playbook. */
-const TECH_ACTIVE_HANDLES = ["indiantechdaily", "ai.cracked", "101xtechnology"] as const;
+const FOUNDERS_HANDLES = ["foundersinindia", "foundersindex", "startupcoded"] as const;
 /** Everything else still tracked, but filtered under Inactive. */
 const INACTIVE_HANDLES = [
-  "indianfoundersco",
+  "startupbydog",
   "indianbusinesscom",
   "entrepreneursindia.co",
   "therealfoundr",
   "elitefoundrs",
-  "indiastartupstory",
-  "indiabusinesscom",
-  "indiafounderscore",
   "indiafounderbrief",
   "startupswtf",
 ] as const;
@@ -127,7 +132,11 @@ const ACTIVE_ROSTER_WEEK4 = new Set([
   ...SHERUS_ACTIVE_HANDLES,
   ...EXPERIMENT_X_HANDLES,
   ...TECH_ACTIVE_HANDLES,
+  ...BIZZ_PLAYBOOK_HANDLES,
+  ...BIZZ_HANDLES,
+  ...X101_HANDLES,
   ...NEWS_PLAYBOOK_HANDLES,
+  ...FOUNDERS_HANDLES,
   ...INACTIVE_HANDLES,
 ]);
 
@@ -180,7 +189,7 @@ export default function SixDayTracker() {
 
   /* Niche filter: map each page handle to a group bucket.
      Multi-select: empty set == "All". */
-  type NicheKey = "bizz" | "founders" | "x101" | "news" | "tech" | "inactive";
+  type NicheKey = "tech" | "bizz_playbook" | "bizz" | "x101" | "news" | "founders" | "inactive";
   const [nicheFilters, setNicheFilters] = useState<NicheKey[]>([]);
   const nicheFilterSet = useMemo(() => new Set(nicheFilters), [nicheFilters]);
   const isAllActive = nicheFilters.length === 0;
@@ -194,11 +203,12 @@ export default function SixDayTracker() {
   const handleToNiche = useMemo(() => {
     const m = new Map<string, NicheKey>();
     // Curated group assignment (source of truth for filters).
+    for (const h of TECH_ACTIVE_HANDLES) m.set(h, "tech");
+    for (const h of BIZZ_PLAYBOOK_HANDLES) m.set(h, "bizz_playbook");
     for (const h of BIZZ_HANDLES) m.set(h, "bizz");
-    for (const h of FOUNDERS_HANDLES) m.set(h, "founders");
     for (const h of X101_HANDLES) m.set(h, "x101");
     for (const h of NEWS_PLAYBOOK_HANDLES) m.set(h, "news");
-    for (const h of TECH_ACTIVE_HANDLES) m.set(h, "tech");
+    for (const h of FOUNDERS_HANDLES) m.set(h, "founders");
     for (const h of INACTIVE_HANDLES) m.set(h, "inactive");
     // Any other roster page without an explicit group lands in inactive.
     for (const h of ACTIVE_ROSTER_WEEK4) {
@@ -232,14 +242,25 @@ export default function SixDayTracker() {
   const allPages = nichePages;
 
   const nicheCounts = useMemo(() => {
-    const c = { all: nichePages.length, bizz: 0, founders: 0, x101: 0, news: 0, tech: 0, inactive: 0, none: 0 };
+    const c = {
+      all: nichePages.length,
+      tech: 0,
+      bizz_playbook: 0,
+      bizz: 0,
+      x101: 0,
+      news: 0,
+      founders: 0,
+      inactive: 0,
+      none: 0,
+    };
     for (const p of nichePages) {
       const key = handleToNiche.get(normHandle(p.handle));
-      if (key === "bizz") c.bizz += 1;
-      else if (key === "founders") c.founders += 1;
+      if (key === "tech") c.tech += 1;
+      else if (key === "bizz_playbook") c.bizz_playbook += 1;
+      else if (key === "bizz") c.bizz += 1;
       else if (key === "x101") c.x101 += 1;
       else if (key === "news") c.news += 1;
-      else if (key === "tech") c.tech += 1;
+      else if (key === "founders") c.founders += 1;
       else if (key === "inactive") c.inactive += 1;
       else c.none += 1;
     }
@@ -430,11 +451,12 @@ export default function SixDayTracker() {
             All <span className={`tabular-nums text-[10px] ${isAllActive ? "opacity-90" : "fglass-meta"}`}>{nicheCounts.all}</span>
           </button>
           {([
-            { key: "bizz", label: "Bizz playbook", emoji: "💼", count: nicheCounts.bizz, on: "is-on-orange" },
-            { key: "founders", label: "Founders", emoji: "🚀", count: nicheCounts.founders, on: "is-on-sky" },
+            { key: "tech", label: "Tech playbook", emoji: "⚡", count: nicheCounts.tech, on: "is-on-cyan" },
+            { key: "bizz_playbook", label: "Bizz playbook", emoji: "💼", count: nicheCounts.bizz_playbook, on: "is-on-orange" },
+            { key: "bizz", label: "BIZZ", emoji: "🏷️", count: nicheCounts.bizz, on: "is-on-amber" },
             { key: "x101", label: "101x", emoji: "⭐", count: nicheCounts.x101, on: "is-on-violet" },
             { key: "news", label: "News playbook", emoji: "📰", count: nicheCounts.news, on: "is-on-rose" },
-            { key: "tech", label: "Tech playbook", emoji: "⚡", count: nicheCounts.tech, on: "is-on-cyan" },
+            { key: "founders", label: "Founders", emoji: "🚀", count: nicheCounts.founders, on: "is-on-sky" },
             { key: "inactive", label: "Inactive", emoji: "💤", count: nicheCounts.inactive, on: "is-on" },
           ] as const).map((opt) => {
             const isActive = nicheFilterSet.has(opt.key);

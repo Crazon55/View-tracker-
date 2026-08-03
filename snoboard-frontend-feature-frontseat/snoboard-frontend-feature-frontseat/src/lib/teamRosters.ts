@@ -8,14 +8,24 @@ export const normTeamHandle = (h: unknown) =>
 
 export const TEAM_ROSTERS: TeamRoster[] = [
   {
-    id: "bizz",
-    label: "Bizz playbook",
-    handles: ["bizzindia", "startupbydog"],
+    id: "tech",
+    label: "Tech playbook",
+    handles: ["indiantechdaily", "101xtechnology", "ai.cracked"],
   },
   {
-    id: "founders",
-    label: "Founders",
-    handles: ["foundersindex", "foundersinindia", "startupcoded"],
+    id: "bizz_playbook",
+    label: "Bizz playbook",
+    handles: [
+      "indiabusinesscom",
+      "indiafounderscore",
+      "indianfoundersco",
+      "indiastartupstory",
+    ],
+  },
+  {
+    id: "bizz",
+    label: "BIZZ",
+    handles: ["bizzindia"],
   },
   {
     id: "x101",
@@ -28,22 +38,19 @@ export const TEAM_ROSTERS: TeamRoster[] = [
     handles: ["thechangingorder", "indiahappeningnow"],
   },
   {
-    id: "tech",
-    label: "Tech playbook",
-    handles: ["indiantechdaily", "ai.cracked", "101xtechnology"],
+    id: "founders",
+    label: "Founders",
+    handles: ["foundersinindia", "foundersindex", "startupcoded"],
   },
   {
     id: "inactive",
     label: "Inactive",
     handles: [
-      "indianfoundersco",
+      "startupbydog",
       "indianbusinesscom",
       "entrepreneursindia.co",
       "therealfoundr",
       "elitefoundrs",
-      "indiastartupstory",
-      "indiabusinesscom",
-      "indiafounderscore",
       "indiafounderbrief",
       "startupswtf",
     ],

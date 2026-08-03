@@ -424,6 +424,12 @@
   color:rgba(254,215,170,.95);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 0 18px -14px rgba(251,146,60,.25);
 }
+.fglass-filter-pill.is-on-amber{
+  border-color:rgba(245,158,11,.38);
+  background:linear-gradient(165deg, rgba(245,158,11,.14) 0%, rgba(0,0,0,.38) 55%);
+  color:rgba(253,230,138,.95);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 0 18px -14px rgba(245,158,11,.25);
+}
 .fglass-filter-pill.is-on-sky{
   border-color:rgba(56,189,248,.35);
   background:linear-gradient(165deg, rgba(56,189,248,.12) 0%, rgba(0,0,0,.38) 55%);
