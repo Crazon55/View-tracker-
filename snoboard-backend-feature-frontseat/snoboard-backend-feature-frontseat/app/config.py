@@ -48,6 +48,12 @@ class Settings(BaseSettings):
 
     # YouTube Data API v3 (FSI podcast research)
     youtube_api_key: str = ""
+    # Optional — required for captions from AWS/EC2 (YouTube blocks cloud IPs).
+    # Prefer Webshare rotating residential, or any HTTP proxy URL.
+    youtube_webshare_proxy_username: str = ""
+    youtube_webshare_proxy_password: str = ""
+    youtube_transcript_http_proxy: str = ""
+    youtube_transcript_https_proxy: str = ""
 
     # Service URL (for internal self-calls)
     service_url: str = "http://localhost:8001"

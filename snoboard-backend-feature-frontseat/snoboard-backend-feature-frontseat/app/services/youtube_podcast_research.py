@@ -191,18 +191,48 @@ def fetch_video_details(video_ids: list[str]) -> dict[str, dict[str, Any]]:
     return by_id
 
 
+def _youtube_transcript_api():
+    """Build YouTubeTranscriptApi, optionally via residential proxy (needed on AWS)."""
+    from youtube_transcript_api import YouTubeTranscriptApi
+
+    settings = get_settings()
+    proxy_config = None
+
+    user = (settings.youtube_webshare_proxy_username or "").strip()
+    password = (settings.youtube_webshare_proxy_password or "").strip()
+    if user and password:
+        from youtube_transcript_api.proxies import WebshareProxyConfig
+
+        proxy_config = WebshareProxyConfig(
+            proxy_username=user,
+            proxy_password=password,
+        )
+    else:
+        http_url = (settings.youtube_transcript_http_proxy or "").strip()
+        https_url = (settings.youtube_transcript_https_proxy or http_url).strip()
+        if http_url or https_url:
+            from youtube_transcript_api.proxies import GenericProxyConfig
+
+            proxy_config = GenericProxyConfig(
+                http_url=http_url or None,
+                https_url=https_url or None,
+            )
+
+    if proxy_config is not None:
+        return YouTubeTranscriptApi(proxy_config=proxy_config)
+    return YouTubeTranscriptApi()
+
+
 def fetch_transcript(video_id: str) -> tuple[str | None, str | None]:
     """Return (transcript_text, error). Prefer English, then any available captions."""
     try:
-        from youtube_transcript_api import YouTubeTranscriptApi
+        api = _youtube_transcript_api()
     except ImportError:
         return None, "youtube-transcript-api not installed"
 
     lang_priority = ["en", "en-US", "en-GB", "en-IN", "hi", "hi-IN"]
     last_err: Exception | None = None
     fetched = None
-
-    api = YouTubeTranscriptApi()
 
     # 1.x preferred path: fetch() with language priority
     try:
@@ -223,7 +253,6 @@ def fetch_transcript(video_id: str) -> tuple[str | None, str | None]:
                     transcript = listing.find_generated_transcript(lang_priority)
                 except Exception:
                     try:
-                        # First available track, translate to English when possible
                         for t in listing:
                             transcript = t
                             break
@@ -239,28 +268,31 @@ def fetch_transcript(video_id: str) -> tuple[str | None, str | None]:
             logger.info("youtube list(%s) failed: %s", video_id, e)
 
     # Legacy 0.6.x classmethods
-    if fetched is None and hasattr(YouTubeTranscriptApi, "list_transcripts"):
+    if fetched is None:
         try:
-            listing = YouTubeTranscriptApi.list_transcripts(video_id)
-            try:
-                transcript = listing.find_transcript(lang_priority)
-            except Exception:
+            from youtube_transcript_api import YouTubeTranscriptApi as YTT
+
+            if hasattr(YTT, "list_transcripts"):
+                listing = YTT.list_transcripts(video_id)
                 try:
-                    transcript = listing.find_generated_transcript(lang_priority)
+                    transcript = listing.find_transcript(lang_priority)
                 except Exception:
-                    transcript = next(iter(listing))
-            fetched = transcript.fetch()
+                    try:
+                        transcript = listing.find_generated_transcript(lang_priority)
+                    except Exception:
+                        transcript = next(iter(listing))
+                fetched = transcript.fetch()
         except Exception as e:
             last_err = e
 
     if fetched is None:
         err_name = type(last_err).__name__ if last_err else "Unknown"
         err_msg = str(last_err) if last_err else "unknown error"
-        # Common on cloud IPs — YouTube blocks caption scraping from datacenters
-        if any(x in err_name for x in ("IpBlocked", "RequestBlocked", "Blocked")) or "blocked" in err_msg.lower():
+        if any(x in err_name for x in ("IpBlocked", "RequestBlocked", "Blocked")) or "blocking requests from your IP" in err_msg.lower():
             return None, (
                 f"YouTube blocked caption fetch from this server IP ({err_name}). "
-                "Transcripts need a residential proxy or manual paste."
+                "Set YOUTUBE_WEBSHARE_PROXY_USERNAME/PASSWORD (residential) or "
+                "YOUTUBE_TRANSCRIPT_HTTP_PROXY on the backend, then restart."
             )
         return None, f"No captions: {err_name}: {err_msg}"
 
@@ -280,7 +312,6 @@ def fetch_transcript(video_id: str) -> tuple[str | None, str | None]:
                 else:
                     parts.append(str(getattr(row, "text", "") or ""))
         except TypeError:
-            # FetchedTranscript sometimes isn't list-like until snippets accessed
             snippets = getattr(fetched, "snippets", None) or []
             for row in snippets:
                 parts.append(str(getattr(row, "text", "") or ""))
