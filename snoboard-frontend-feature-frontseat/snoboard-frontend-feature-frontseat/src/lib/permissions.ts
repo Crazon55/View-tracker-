@@ -215,8 +215,8 @@ const PINTU_NAV_EMAILS = new Set([
 export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
   // Admin-level — full access
   senior_cs: ADMIN_PERMISSIONS,
-  boss_man:  ADMIN_PERMISSIONS,
-  ai_dev:    ADMIN_PERMISSIONS,
+  boss_man: ADMIN_PERMISSIONS,
+  ai_dev: ADMIN_PERMISSIONS,
 
   // Content creators — own their ideas, full nav. CS also gets playbook VIEW so they can
   // open the playbook; Frontseat edit is granted by getPlaybookViewProfile.
@@ -224,7 +224,7 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
   cw: CS_CW_PERMISSIONS,
 
   // Video editor — playbook Production board only (tab scoping via getPlaybookViewProfile).
-  ve:      VE_PERMISSIONS,
+  ve: VE_PERMISSIONS,
   editors: VE_PERMISSIONS,
 
   // Collaborators — only see ideas they are tagged on, restricted nav
@@ -264,9 +264,9 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
 
   // ── Backwards compatibility aliases ───────────────────────────────────────
   // Users who had these old role values in localStorage still get correct access.
-  admin:          ADMIN_PERMISSIONS,
+  admin: ADMIN_PERMISSIONS,
   ai_automations: ADMIN_PERMISSIONS,
-  post_designer:  COLLABORATOR_PERMISSIONS,
+  post_designer: COLLABORATOR_PERMISSIONS,
   content_creators: CS_CW_PERMISSIONS,
 }
 
@@ -276,8 +276,8 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
 
 export const ROLE_NAV: Record<string, '*' | string[]> = {
   senior_cs: '*',
-  boss_man:  '*',
-  ai_dev:    '*',
+  boss_man: '*',
+  ai_dev: '*',
 
   cs: '*',
   cw: '*',
@@ -285,13 +285,13 @@ export const ROLE_NAV: Record<string, '*' | string[]> = {
   design: '*',
 
   // Video editor — playbook Production board only, nothing else.
-  ve:      ['/', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x'],
+  ve: ['/', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x'],
   editors: ['/', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x'],
   carousel_designer: ['/', '/post-tracker', '/growth'],
 
-  smm:              ['/', '/content-tracker', '/post-tracker', '/growth', '/fsi-canvas'],
-  experiment_x:     ['/', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x', '/fsi-canvas', '/team-performance', '/tickets', '/news', '/growth'],
-  content_ops_intern:  ['/', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x', '/fsi-canvas', '/six-day-tracker', '/growth'],
+  smm: ['/', '/content-tracker', '/post-tracker', '/growth', '/fsi-canvas'],
+  experiment_x: ['/', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x', '/fsi-canvas', '/tickets', '/news', '/growth'],
+  content_ops_intern: ['/', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x', '/fsi-canvas', '/six-day-tracker', '/growth'],
   // legacy — migrated to cs in backend
   content_creators: '*',
 }

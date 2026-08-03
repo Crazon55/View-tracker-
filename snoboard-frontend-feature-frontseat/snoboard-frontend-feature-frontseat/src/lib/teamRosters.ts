@@ -1,8 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Team rosters — the single source of truth for which IP page handles belong to
-// which FBS team. Used by the home "ALL THE IPs" team filter. Mirrors the curated
-// rosters in SixDayTracker (the app trusts these over the raw DB niche assignment,
-// so roster changes apply immediately). Edit the `handles` arrays to reassign pages.
+// IP group rosters — home IP filters (FramerHome). Keep in sync with SixDayTracker.
 // ─────────────────────────────────────────────────────────────────────────────
 export type TeamRoster = { id: string; label: string; handles: string[] };
 
@@ -11,42 +8,43 @@ export const normTeamHandle = (h: unknown) =>
 
 export const TEAM_ROSTERS: TeamRoster[] = [
   {
-    id: "garfields",
-    label: "FBS - Garfields",
+    id: "bizz",
+    label: "Bizz",
+    handles: ["bizzindia", "startupbydog"],
+  },
+  {
+    id: "founders",
+    label: "Founders",
+    handles: ["foundersindex", "foundersinindia", "startupcoded"],
+  },
+  {
+    id: "x101",
+    label: "101x",
+    handles: ["101xfounders"],
+  },
+  {
+    id: "news",
+    label: "News playbook",
+    handles: ["thechangingorder", "startupswtf"],
+  },
+  {
+    id: "tech",
+    label: "Tech playbook",
+    handles: ["indiantechdaily", "ai.cracked", "101xtechnology"],
+  },
+  {
+    id: "inactive",
+    label: "Inactive",
     handles: [
       "indianfoundersco",
-      "bizzindia",
-      "startupbydog",
       "indianbusinesscom",
       "entrepreneursindia.co",
       "therealfoundr",
       "elitefoundrs",
-      "foundersindex",
-    ],
-  },
-  {
-    id: "goofies",
-    label: "FBS - Goofies",
-    handles: ["101xfounders", "foundersinindia", "startupcoded"],
-  },
-  {
-    id: "sherus",
-    label: "FBS - Sherus",
-    handles: ["thechangingorder", "startupswtf"],
-  },
-  {
-    id: "experimentx",
-    label: "FBS - Experiment X",
-    handles: [
       "indiastartupstory",
       "indiabusinesscom",
       "indiafounderscore",
       "indiafounderbrief",
     ],
-  },
-  {
-    id: "tech",
-    label: "FBS - Tech Playbook",
-    handles: ["indiantechdaily", "ai.cracked", "101xtechnology"],
   },
 ];

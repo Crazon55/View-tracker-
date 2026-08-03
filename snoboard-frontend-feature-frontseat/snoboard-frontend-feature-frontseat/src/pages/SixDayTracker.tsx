@@ -4,7 +4,6 @@ import {
   getSixDayMonth, upsertSixDayEntry,
   createSixDayTopContent, updateSixDayTopContent, deleteSixDayTopContent,
   upsertSixDayActual, getSixDayDeadlines, getPages,
-  getTrackerNiches,
 } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -30,7 +29,28 @@ function fmt(n: number): string {
 
 const normHandle = (h: string) => String(h || "").replace(/^@/, "").trim().toLowerCase();
 
-/** Garfields — Swati (indianbusinesscom, entrepreneursindia.co, therealfoundr) + Deepak/Kaavya (startupbydog, bizzindia) + indianfoundersco + elitefoundrs + foundersindex */
+/** Active IP groups (replaces Garfields / Goofies / Sherus). */
+const BIZZ_HANDLES = ["bizzindia", "startupbydog"] as const;
+const FOUNDERS_HANDLES = ["foundersindex", "foundersinindia", "startupcoded"] as const;
+const X101_HANDLES = ["101xfounders"] as const;
+/** News playbook (was Sherus). */
+const NEWS_PLAYBOOK_HANDLES = ["thechangingorder", "startupswtf"] as const;
+/** Tech playbook. */
+const TECH_ACTIVE_HANDLES = ["indiantechdaily", "ai.cracked", "101xtechnology"] as const;
+/** Everything else still tracked, but filtered under Inactive. */
+const INACTIVE_HANDLES = [
+  "indianfoundersco",
+  "indianbusinesscom",
+  "entrepreneursindia.co",
+  "therealfoundr",
+  "elitefoundrs",
+  "indiastartupstory",
+  "indiabusinesscom",
+  "indiafounderscore",
+  "indiafounderbrief",
+] as const;
+
+/** Legacy Garfields list — kept for historical Week 4 roster union only. */
 const GARFIELD_WEEK4_HANDLES = [
   "indianfoundersco",
   "bizzindia",
@@ -42,24 +62,18 @@ const GARFIELD_WEEK4_HANDLES = [
   "foundersindex",
 ] as const;
 
-/** Goofies — Arohi + Harish */
+/** Legacy Goofies — historical roster union only. */
 const GOOFIES_ACTIVE_HANDLES = [
   "101xfounders",
   "foundersinindia",
   "startupcoded",
 ] as const;
 
-/** Sherus — Sugam (thechangingorder) + Chaitanya (101xtechnology, startupswtf) */
+/** Legacy Sherus — historical roster union only. */
 const SHERUS_ACTIVE_HANDLES = [
   "thechangingorder",
   "101xtechnology",
   "startupswtf",
-] as const;
-
-/** Tech niche — from Jun 2026 cycle 3, then every month after. */
-const TECH_ACTIVE_HANDLES = [
-  "indiantechdaily",
-  "ai.cracked",
 ] as const;
 
 const TECH_ROSTER_HANDLES = new Set<string>(TECH_ACTIVE_HANDLES.map((h) => normHandle(h)));
@@ -81,7 +95,7 @@ function techPagesVisible(monthYm: string, cycleStart: string): boolean {
   return true;
 }
 
-/** Experiment X — Pulkit */
+/** Legacy Experiment X handles — historical roster + inactive group. */
 const EXPERIMENT_X_HANDLES = [
   "indianfoundersco",
   "indiastartupstory",
@@ -157,25 +171,13 @@ export default function SixDayTracker() {
     refetchOnWindowFocus: false,
   });
 
-  const { data: nichesRaw } = useQuery<any[]>({
-    queryKey: ["tracker-niches"],
-    queryFn: async () => {
-      const res = await getTrackerNiches();
-      return Array.isArray(res) ? res : ((res as any)?.data ?? []);
-    },
-    staleTime: 5 * 60_000,
-    refetchOnWindowFocus: false,
-  });
-
   const overdueCycles = deadlineData?.overdue_cycles || [];
   const pageSummaries = monthData?.page_summaries || [];
   const monthDate = monthData?.month_date || `${selectedMonth}-01`;
 
-  /* Niche filter: map each page handle to a niche bucket (garfields / goofies / sheruses).
-     Niches come from tracker_niches; we match by substring on the niche name.
-     Multi-select: empty set == "All" (show everything). Otherwise show only
-     pages whose niche is in the selected set. */
-  type NicheKey = "garfields" | "goofies" | "sheruses" | "experimentx" | "tech";
+  /* Niche filter: map each page handle to a group bucket.
+     Multi-select: empty set == "All". */
+  type NicheKey = "bizz" | "founders" | "x101" | "news" | "tech" | "inactive";
   const [nicheFilters, setNicheFilters] = useState<NicheKey[]>([]);
   const nicheFilterSet = useMemo(() => new Set(nicheFilters), [nicheFilters]);
   const isAllActive = nicheFilters.length === 0;
@@ -187,28 +189,20 @@ export default function SixDayTracker() {
   const clearNiche = () => setNicheFilters([]);
 
   const handleToNiche = useMemo(() => {
-    const m = new Map<string, "garfields" | "goofies" | "sheruses" | "experimentx" | "tech">();
-    for (const n of nichesRaw || []) {
-      const nm = String(n?.name || "").toLowerCase();
-      let bucket: "garfields" | "goofies" | "sheruses" | "experimentx" | "tech" | null = null;
-      if (nm.includes("garfields")) bucket = "garfields";
-      else if (nm.includes("goofies")) bucket = "goofies";
-      else if (nm.includes("sheerus") || nm.includes("sheru") || nm.includes("changing order")) bucket = "sheruses";
-      else if (nm.includes("experiment")) bucket = "experimentx";
-      else if (nm === "tech" || nm.includes("tech playbook")) bucket = "tech";
-      if (!bucket) continue;
-      for (const h of n?.pages || []) {
-        if (h) m.set(normHandle(h), bucket);
-      }
-    }
-    // Hardcoded fallbacks so roster updates apply before Supabase niche sync.
-    for (const h of GARFIELD_WEEK4_HANDLES) m.set(h, "garfields");
-    for (const h of GOOFIES_ACTIVE_HANDLES) m.set(h, "goofies");
-    for (const h of SHERUS_ACTIVE_HANDLES) m.set(h, "sheruses");
-    for (const h of EXPERIMENT_X_HANDLES) m.set(h, "experimentx");
+    const m = new Map<string, NicheKey>();
+    // Curated group assignment (source of truth for filters).
+    for (const h of BIZZ_HANDLES) m.set(h, "bizz");
+    for (const h of FOUNDERS_HANDLES) m.set(h, "founders");
+    for (const h of X101_HANDLES) m.set(h, "x101");
+    for (const h of NEWS_PLAYBOOK_HANDLES) m.set(h, "news");
     for (const h of TECH_ACTIVE_HANDLES) m.set(h, "tech");
+    for (const h of INACTIVE_HANDLES) m.set(h, "inactive");
+    // Any other roster page without an explicit group lands in inactive.
+    for (const h of ACTIVE_ROSTER_WEEK4) {
+      if (!m.has(h)) m.set(h, "inactive");
+    }
     return m;
-  }, [nichesRaw]);
+  }, []);
 
   /* Full server page list — used for pre-cutoff cycles so old page views remain visible. */
   const allServerPages = useMemo(() => {
@@ -235,24 +229,25 @@ export default function SixDayTracker() {
   const allPages = nichePages;
 
   const nicheCounts = useMemo(() => {
-    const c = { all: nichePages.length, garfields: 0, goofies: 0, sheruses: 0, experimentx: 0, tech: 0, none: 0 };
+    const c = { all: nichePages.length, bizz: 0, founders: 0, x101: 0, news: 0, tech: 0, inactive: 0, none: 0 };
     for (const p of nichePages) {
-      const key = handleToNiche.get(String(p.handle || "").replace(/^@/, "").trim().toLowerCase());
-      if (key === "garfields") c.garfields += 1;
-      else if (key === "goofies") c.goofies += 1;
-      else if (key === "sheruses") c.sheruses += 1;
-      else if (key === "experimentx") c.experimentx += 1;
+      const key = handleToNiche.get(normHandle(p.handle));
+      if (key === "bizz") c.bizz += 1;
+      else if (key === "founders") c.founders += 1;
+      else if (key === "x101") c.x101 += 1;
+      else if (key === "news") c.news += 1;
       else if (key === "tech") c.tech += 1;
+      else if (key === "inactive") c.inactive += 1;
       else c.none += 1;
     }
     return c;
   }, [nichePages, handleToNiche]);
 
-  /* pages = niche pages optionally filtered by active team pill (Garfields / Goofies / Sherus). */
+  /* pages = niche pages optionally filtered by active group pill. */
   const pages = useMemo(() => {
     if (isAllActive) return nichePages;
     return nichePages.filter((p: any) => {
-      const key = handleToNiche.get(String(p.handle || "").replace(/^@/, "").trim().toLowerCase());
+      const key = handleToNiche.get(normHandle(p.handle));
       return !!key && nicheFilterSet.has(key);
     });
   }, [nichePages, handleToNiche, nicheFilterSet, isAllActive]);
@@ -423,7 +418,7 @@ export default function SixDayTracker() {
 
         {/* ── Niche filter ── */}
         <div className="six-day-filters six-day-glass-bar">
-          <span className="six-day-filters-label">Filter by niche</span>
+          <span className="six-day-filters-label">Filter by group</span>
           <button
             type="button"
             onClick={clearNiche}
@@ -432,11 +427,12 @@ export default function SixDayTracker() {
             All <span className={`tabular-nums text-[10px] ${isAllActive ? "opacity-90" : "fglass-meta"}`}>{nicheCounts.all}</span>
           </button>
           {([
-            { key: "garfields", label: "Garfields", emoji: "🐱", count: nicheCounts.garfields, on: "is-on-orange" },
-            { key: "goofies", label: "Goofies", emoji: "🐶", count: nicheCounts.goofies, on: "is-on-sky" },
-            { key: "sheruses", label: "The Sherus", emoji: "🦁", count: nicheCounts.sheruses, on: "is-on-rose" },
-            { key: "tech", label: "Tech", emoji: "⚡", count: nicheCounts.tech, on: "is-on-cyan" },
-            { key: "experimentx", label: "The Bizz playbook", emoji: "🧪", count: nicheCounts.experimentx, on: "is-on-violet" },
+            { key: "bizz", label: "Bizz", emoji: "💼", count: nicheCounts.bizz, on: "is-on-orange" },
+            { key: "founders", label: "Founders", emoji: "🚀", count: nicheCounts.founders, on: "is-on-sky" },
+            { key: "x101", label: "101x", emoji: "⭐", count: nicheCounts.x101, on: "is-on-violet" },
+            { key: "news", label: "News playbook", emoji: "📰", count: nicheCounts.news, on: "is-on-rose" },
+            { key: "tech", label: "Tech playbook", emoji: "⚡", count: nicheCounts.tech, on: "is-on-cyan" },
+            { key: "inactive", label: "Inactive", emoji: "💤", count: nicheCounts.inactive, on: "is-on" },
           ] as const).map((opt) => {
             const isActive = nicheFilterSet.has(opt.key);
             return (

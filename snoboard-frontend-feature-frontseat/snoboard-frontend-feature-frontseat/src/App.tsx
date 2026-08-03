@@ -5,7 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { getDeadlines, getSixDayConfig, getSixDayDeadlines, getTickets } from "@/services/api";
 import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate, Navigate, useParams } from "react-router-dom";
-import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, Scissors, ClipboardList, Trophy, Ticket, Newspaper, Sparkles, ShieldCheck, FlaskConical, Eye } from "lucide-react";
+import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, Scissors, ClipboardList, Ticket, Newspaper, Sparkles, ShieldCheck, FlaskConical, Eye } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAreaAccess } from "@/hooks/useAreaAccess";
 import { isRouteAllowed, canAccessPintu } from "@/lib/permissions";
@@ -31,7 +31,6 @@ import PipelineView from "./pages/PipelineView";
 import ContentTracker from "./pages/ContentTracker";
 import PostTracker from "./pages/PostTracker";
 import SixDayTracker from "./pages/SixDayTracker";
-import TeamPerformance from "./pages/TeamPerformance";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Tickets from "./pages/Tickets";
 import NewsFeed from "./pages/NewsFeed";
@@ -317,7 +316,6 @@ const navItems: NavItem[] = [
   ...playbookNavItems,
   { to: "/post-tracker", label: "Post Tracker", icon: Image },
   { to: "/six-day-tracker", label: "6-Day Tracker", icon: Radio },
-  { to: "/team-performance", label: "Teams", icon: Trophy },
   { to: "/tickets", label: "Tickets", icon: Ticket },
   { to: "/news", label: "News Feed", icon: Newspaper },
   { to: "/growth", label: "Growth", icon: TrendingUp },
@@ -515,7 +513,6 @@ function AppLayout() {
     location.pathname === "/pipeline" ||
     location.pathname === "/six-day-tracker" ||
     location.pathname === "/growth" ||
-    location.pathname === "/team-performance" ||
     location.pathname === "/tickets" ||
     location.pathname === "/news" ||
     location.pathname === "/idea-engine" ||
@@ -551,82 +548,75 @@ function AppLayout() {
       )}
       {showFsiCanvasFab && <FsiCanvasFab />}
       <DebugBoundary>
-      {isSeeding ? (
-        <div>
-          <SeedingPreviewBanner />
-          <Routes>
-            <Route path="/seeding" element={<RequireArea area="seeding_overview"><SeedingHome /></RequireArea>} />
-            <Route path="/seeding/approvals" element={<RequireArea area="seeding_approvals"><SeedingApprovalQueue /></RequireArea>} />
-            <Route path="/seeding/deals" element={<RequireArea area="seeding_deals"><SeedingAllDeals /></RequireArea>} />
-            <Route path="/seeding/deals/:dealId" element={<RequireArea area="seeding_deals"><SeedingDealDetail /></RequireArea>} />
-            <Route path="/seeding/fulfillment" element={<RequireArea area="seeding_fulfillment"><SeedingFulfillmentBoard /></RequireArea>} />
-            <Route path="/seeding/campaign-reports" element={<RequireArea area="seeding_campaign_reports"><SeedingCampaignReports /></RequireArea>} />
-            <Route path="/seeding/campaign-reports/:dealId" element={<RequireArea area="seeding_campaign_reports"><SeedingCampaignReportDetail /></RequireArea>} />
-            <Route path="/seeding/submit" element={<RequireArea area="seeding_submit"><SeedingSubmitBrief /></RequireArea>} />
-            <Route path="/seeding/pages" element={<RequireArea area="seeding_pages"><SeedingSectionPage /></RequireArea>} />
-            <Route path="/seeding/teamwise" element={<RequireArea area="seeding_teamwise"><SeedingTeamwise /></RequireArea>} />
-            <Route path="/seeding/users" element={<RequireArea area="users_roles"><SeedingSectionPage /></RequireArea>} />
-          </Routes>
-        </div>
-      ) : isFullScreen ? (
-        <div className="relative">
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/dashboard-old" element={<Dashboard />} />
-            <Route path="/wrap" element={<WrapView />} />
-            <Route path="/content-tracker" element={<ContentTracker />} />
-            <Route path="/post-tracker" element={<PostTracker />} />
-            <Route path="/pages" element={<PagesView />} />
-            <Route path="/pages/:pageId" element={<PageDetail />} />
-            <Route path="/post-ips" element={<Navigate to="/pages?mode=posts" replace />} />
-            <Route path="/post-ips/:pageId" element={<RedirectPostIpDetail />} />
-            <Route path="/page/:pageId" element={<RedirectLegacyPageDetail />} />
-            <Route path="/pipeline" element={<PipelineView />} />
-            <Route path="/six-day-tracker" element={<SixDayTracker />} />
-            <Route
-              path="/team-performance"
-              element={
-                <ErrorBoundary title="Team performance crashed">
-                  <TeamPerformance />
-                </ErrorBoundary>
-              }
-            />
-            <Route path="/tickets" element={<Tickets />} />
-            <Route path="/news" element={<NewsFeed />} />
-            <Route path="/idea-engine" element={<IdeaEngineGallery />} />
-            <Route path="/ideas" element={<IdeaEngine />} />
-            <Route path="/competitor-ideas" element={<CompetitorIdeas />} />
-            <Route path="/team-roles" element={<TeamRolesPage />} />
-            <Route path="/experiment-bpb" element={<ExperimentX playbookId="bpb" />} />
-            <Route path="/experiment-xf" element={<ExperimentX playbookId="xf" />} />
-            <Route path="/experiment-tech" element={<ExperimentX playbookId="tech" />} />
-            <Route path="/experiment-x" element={<Navigate to="/experiment-bpb" replace />} />
-            <Route path="/fsi-canvas" element={<FsiCanvasHub />} />
-            <Route
-              path="/fsi-canvas/:studyId"
-              element={
-                <ErrorBoundary title="FSI Canvas crashed">
-                  <FsiCanvasWorkspace />
-                </ErrorBoundary>
-              }
-            />
-            <Route path="/canvas" element={<Navigate to="/fsi-canvas" replace />} />
-            <Route path="/growth" element={<GrowthView />} />
-          </Routes>
-        </div>
-      ) : (
-        <div className="min-h-screen">
-          {/* Main content (old FSBOARD sidebar removed — nav is now the global FramerTopNav) */}
-          <main>
+        {isSeeding ? (
+          <div>
+            <SeedingPreviewBanner />
             <Routes>
-              <Route path="/posts" element={<PostsView />} />
-              <Route path="/reels/stage1" element={<ReelsStage1View />} />
-              <Route path="/reels/main" element={<MainReelsView />} />
-              <Route path="*" element={<NotFound />} />
+              <Route path="/seeding" element={<RequireArea area="seeding_overview"><SeedingHome /></RequireArea>} />
+              <Route path="/seeding/approvals" element={<RequireArea area="seeding_approvals"><SeedingApprovalQueue /></RequireArea>} />
+              <Route path="/seeding/deals" element={<RequireArea area="seeding_deals"><SeedingAllDeals /></RequireArea>} />
+              <Route path="/seeding/deals/:dealId" element={<RequireArea area="seeding_deals"><SeedingDealDetail /></RequireArea>} />
+              <Route path="/seeding/fulfillment" element={<RequireArea area="seeding_fulfillment"><SeedingFulfillmentBoard /></RequireArea>} />
+              <Route path="/seeding/campaign-reports" element={<RequireArea area="seeding_campaign_reports"><SeedingCampaignReports /></RequireArea>} />
+              <Route path="/seeding/campaign-reports/:dealId" element={<RequireArea area="seeding_campaign_reports"><SeedingCampaignReportDetail /></RequireArea>} />
+              <Route path="/seeding/submit" element={<RequireArea area="seeding_submit"><SeedingSubmitBrief /></RequireArea>} />
+              <Route path="/seeding/pages" element={<RequireArea area="seeding_pages"><SeedingSectionPage /></RequireArea>} />
+              <Route path="/seeding/teamwise" element={<RequireArea area="seeding_teamwise"><SeedingTeamwise /></RequireArea>} />
+              <Route path="/seeding/users" element={<RequireArea area="users_roles"><SeedingSectionPage /></RequireArea>} />
             </Routes>
-          </main>
-        </div>
-      )}
+          </div>
+        ) : isFullScreen ? (
+          <div className="relative">
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/dashboard-old" element={<Dashboard />} />
+              <Route path="/wrap" element={<WrapView />} />
+              <Route path="/content-tracker" element={<ContentTracker />} />
+              <Route path="/post-tracker" element={<PostTracker />} />
+              <Route path="/pages" element={<PagesView />} />
+              <Route path="/pages/:pageId" element={<PageDetail />} />
+              <Route path="/post-ips" element={<Navigate to="/pages?mode=posts" replace />} />
+              <Route path="/post-ips/:pageId" element={<RedirectPostIpDetail />} />
+              <Route path="/page/:pageId" element={<RedirectLegacyPageDetail />} />
+              <Route path="/pipeline" element={<PipelineView />} />
+            <Route path="/six-day-tracker" element={<SixDayTracker />} />
+            <Route path="/team-performance" element={<Navigate to="/" replace />} />
+            <Route path="/tickets" element={<Tickets />} />
+              <Route path="/news" element={<NewsFeed />} />
+              <Route path="/idea-engine" element={<IdeaEngineGallery />} />
+              <Route path="/ideas" element={<IdeaEngine />} />
+              <Route path="/competitor-ideas" element={<CompetitorIdeas />} />
+              <Route path="/team-roles" element={<TeamRolesPage />} />
+              <Route path="/experiment-bpb" element={<ExperimentX playbookId="bpb" />} />
+              <Route path="/experiment-xf" element={<ExperimentX playbookId="xf" />} />
+              <Route path="/experiment-tech" element={<ExperimentX playbookId="tech" />} />
+              <Route path="/experiment-x" element={<Navigate to="/experiment-bpb" replace />} />
+              <Route path="/fsi-canvas" element={<FsiCanvasHub />} />
+              <Route
+                path="/fsi-canvas/:studyId"
+                element={
+                  <ErrorBoundary title="FSI Canvas crashed">
+                    <FsiCanvasWorkspace />
+                  </ErrorBoundary>
+                }
+              />
+              <Route path="/canvas" element={<Navigate to="/fsi-canvas" replace />} />
+              <Route path="/growth" element={<GrowthView />} />
+            </Routes>
+          </div>
+        ) : (
+          <div className="min-h-screen">
+            {/* Main content (old FSBOARD sidebar removed — nav is now the global FramerTopNav) */}
+            <main>
+              <Routes>
+                <Route path="/posts" element={<PostsView />} />
+                <Route path="/reels/stage1" element={<ReelsStage1View />} />
+                <Route path="/reels/main" element={<MainReelsView />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </main>
+          </div>
+        )}
       </DebugBoundary>
     </>
   );

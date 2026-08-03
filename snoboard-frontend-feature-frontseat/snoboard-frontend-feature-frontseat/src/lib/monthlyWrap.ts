@@ -387,16 +387,12 @@ export function getWrapSlidePlan(data: MonthlyWrapData): WrapSlideKind[] {
   if (data.totalViews > 0) slides.push("total");
   if (data.topPage) slides.push("topPage");
   if (data.topPages.length > 0) slides.push("top5");
-  if (data.winningTeam && data.winningTeam.views > 0) slides.push("team");
   if (data.individuals.mostIdeasCreated) slides.push("created");
   if (data.individuals.mostProven) slides.push("proven");
   if (data.individuals.mostKilled) slides.push("killed");
   if (data.individuals.mostPosts) slides.push("posts");
   if (data.individuals.mostReels) slides.push("reels");
   if (data.topReelPage) slides.push("topReel");
-  if (data.personStats.some(p => p.team === "garfields")) slides.push("personStatsGarfields");
-  if (data.personStats.some(p => p.team === "goofies")) slides.push("personStatsGoofies");
-  // Sherus slide omitted — shown only when they have page data
   slides.push("outro");
   return slides;
 }

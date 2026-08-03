@@ -17,7 +17,7 @@ import { RingStat, RankList } from "@/components/framer/Framer";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const compact = (n: number) =>
   n >= 1e6 ? (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M"
-  : n >= 1e3 ? (n / 1e3).toFixed(1).replace(/\.0$/, "") + "K" : String(Math.round(n ?? 0));
+    : n >= 1e3 ? (n / 1e3).toFixed(1).replace(/\.0$/, "") + "K" : String(Math.round(n ?? 0));
 const handleKey = (h: unknown) => String(h || "").trim().toLowerCase().replace(/^@/, "");
 
 function Donut({ reels, posts }: { reels: number; posts: number }) {
@@ -146,7 +146,7 @@ function PageIpGrid({
       )}
 
       {teams.length > 0 && (
-        <div className="six-day-seg home-ip-period home-ip-teams" role="tablist" aria-label="Filter by team">
+        <div className="six-day-seg home-ip-period home-ip-teams" role="tablist" aria-label="Filter by group">
           <button
             type="button"
             role="tab"
@@ -154,7 +154,7 @@ function PageIpGrid({
             className={team === "all" ? "is-on" : ""}
             onClick={() => setTeam("all")}
           >
-            All teams
+            All groups
           </button>
           {teams.map((t) => (
             <button
@@ -380,18 +380,18 @@ export default function FramerHome() {
   const rawPages: any[] = stats?.pages?.length
     ? stats.pages
     : ((monthSix as any)?.page_summaries?.length
-        ? (monthSix as any).page_summaries.map((p: any) => ({
-            id: p.page_id,
-            handle: p.handle,
-            name: p.name,
-            total_views: p.cycle_views_sum ?? 0,
-            all_time_views: 0,
-            reel_views: 0,
-            post_views: 0,
-          }))
-        : useSample
-          ? SAMPLE.pages
-          : []);
+      ? (monthSix as any).page_summaries.map((p: any) => ({
+        id: p.page_id,
+        handle: p.handle,
+        name: p.name,
+        total_views: p.cycle_views_sum ?? 0,
+        all_time_views: 0,
+        reel_views: 0,
+        post_views: 0,
+      }))
+      : useSample
+        ? SAMPLE.pages
+        : []);
 
   const pagesLoading =
     viewPeriod === "all"
@@ -506,102 +506,106 @@ export default function FramerHome() {
       </div>
     </div>
   ) : (
-      <div>
-        <div className="f-eyebrow" style={{ marginBottom: 10 }}>ECOSYSTEM · THIS MONTH</div>
-        <h1 className="f-h1" style={{ marginBottom: 24 }}>Views this month.</h1>
-        <div className="bento">
-          <div className="b b-pur b-glow col-2 row-2" style={{ display: "flex", flexDirection: "column" }}>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-              <span className="b-lab">ALL TIME</span>
-              <span className="mono" style={{ fontSize: 16, fontWeight: 600, color: "var(--accent-2)" }}>
-                {growthPending && !useSample ? "…" : compact(allTime)}
-              </span>
-            </div>
-            <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <Donut reels={reels} posts={posts} />
-            </div>
+    <div>
+      <div className="f-eyebrow" style={{ marginBottom: 10 }}>ECOSYSTEM · THIS MONTH</div>
+      <h1 className="f-h1" style={{ marginBottom: 24 }}>Views this month.</h1>
+      <div className="bento">
+        <div className="b b-pur b-glow col-2 row-2" style={{ display: "flex", flexDirection: "column" }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <span className="b-lab">ALL TIME</span>
+            <span className="mono" style={{ fontSize: 16, fontWeight: 600, color: "var(--accent-2)" }}>
+              {growthPending && !useSample ? "…" : compact(allTime)}
+            </span>
           </div>
-          <div className="b b-mag">
-            <div className="b-lab">● REELS</div>
-            <div className="b-big" style={{ fontSize: 34, marginTop: "auto" }}>{compact(reels)}</div>
-          </div>
-          <div className="b b-grn">
-            <div className="b-lab">● POSTS</div>
-            <div className="b-big" style={{ fontSize: 34, marginTop: "auto" }}>{compact(posts)}</div>
-          </div>
-          <div className="b b-dark col-2">
-            <div className="b-lab" style={{ marginBottom: 16 }}>🏆 TOP 3 PAGES · THIS MONTH</div>
-            {viewsLoading ? (
-              <div style={{ color: "var(--f-faint)", fontSize: 13, margin: "auto" }}>Loading…</div>
-            ) : topPages.length && topPages[0].views > 0 ? (
-              <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 18, marginTop: "auto" }}>
-                {[topPages[1], topPages[0], topPages[2]].filter(Boolean).map((p) => {
-                  const rank = p === topPages[0] ? 1 : p === topPages[1] ? 2 : 3;
-                  const h = rank === 1 ? 74 : rank === 2 ? 50 : 36;
-                  return (
-                    <div key={p.name} style={{ width: 110, textAlign: "center" }}>
-                      <div style={{ fontSize: 20 }}>{rank === 1 ? "🥇" : rank === 2 ? "🥈" : "🥉"}</div>
-                      <div style={{ height: h, borderRadius: "8px 8px 0 0", background: "linear-gradient(180deg,rgba(168,85,247,.5),rgba(168,85,247,.08))", marginTop: 6 }} />
-                      <div style={{ fontSize: 12, fontWeight: 600, marginTop: 6 }}>{p.name}</div>
-                      <div className="b-big" style={{ fontSize: 12, color: "var(--accent-2)" }}>{compact(p.views)}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : <div style={{ color: "var(--f-faint)", fontSize: 13, margin: "auto" }}>No page views yet.</div>}
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Donut reels={reels} posts={posts} />
           </div>
         </div>
+        <div className="b b-mag">
+          <div className="b-lab">● REELS</div>
+          <div className="b-big" style={{ fontSize: 34, marginTop: "auto" }}>{compact(reels)}</div>
+        </div>
+        <div className="b b-grn">
+          <div className="b-lab">● POSTS</div>
+          <div className="b-big" style={{ fontSize: 34, marginTop: "auto" }}>{compact(posts)}</div>
+        </div>
+        <div className="b b-dark col-2">
+          <div className="b-lab" style={{ marginBottom: 16 }}>🏆 TOP 3 PAGES · THIS MONTH</div>
+          {viewsLoading ? (
+            <div style={{ color: "var(--f-faint)", fontSize: 13, margin: "auto" }}>Loading…</div>
+          ) : topPages.length && topPages[0].views > 0 ? (
+            <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 18, marginTop: "auto" }}>
+              {[topPages[1], topPages[0], topPages[2]].filter(Boolean).map((p) => {
+                const rank = p === topPages[0] ? 1 : p === topPages[1] ? 2 : 3;
+                const h = rank === 1 ? 74 : rank === 2 ? 50 : 36;
+                return (
+                  <div key={p.name} style={{ width: 110, textAlign: "center" }}>
+                    <div style={{ fontSize: 20 }}>{rank === 1 ? "🥇" : rank === 2 ? "🥈" : "🥉"}</div>
+                    <div style={{ height: h, borderRadius: "8px 8px 0 0", background: "linear-gradient(180deg,rgba(168,85,247,.5),rgba(168,85,247,.08))", marginTop: 6 }} />
+                    <div style={{ fontSize: 12, fontWeight: 600, marginTop: 6 }}>{p.name}</div>
+                    <div className="b-big" style={{ fontSize: 12, color: "var(--accent-2)" }}>{compact(p.views)}</div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : <div style={{ color: "var(--f-faint)", fontSize: 13, margin: "auto" }}>No page views yet.</div>}
+        </div>
       </div>
+    </div>
   );
 
   const slides: { key: string; el: JSX.Element }[] = [
     { key: "views", el: viewsSlideBody },
-    { key: "growth", el: (
-      <div>
-        <div className="f-eyebrow" style={{ marginBottom: 10 }}>COMPLETE GROWTH</div>
-        <h1 className="f-h1" style={{ marginBottom: 24 }}>Overall growth.</h1>
-        <div className="bento">
-          <div className="b b-dark col-3 row-2" style={{ minHeight: 300 }}>
-            {chart.length ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chart} margin={{ top: 8, right: 10, bottom: 5, left: 0 }}>
-                  <defs><linearGradient id="gl" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#8b5cf6" /><stop offset="1" stopColor="#ec4899" /></linearGradient></defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" />
-                  <XAxis dataKey="name" tick={{ fill: "#71717a", fontSize: 10 }} />
-                  <YAxis tick={{ fill: "#71717a", fontSize: 9 }} tickFormatter={(v: number) => compact(v)} />
-                  <Tooltip contentStyle={{ background: "#0a0a0d", border: "1px solid var(--f-line)", borderRadius: 8 }} formatter={(v: number) => [compact(v) + " views", "Views"]} />
-                  <Line type="monotone" dataKey="views" stroke="url(#gl)" strokeWidth={3} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div style={{ margin: "auto", textAlign: "center" }}>
-                <TrendingUp size={30} style={{ color: "var(--accent)", opacity: .6 }} />
-                <div style={{ color: "var(--f-dim)", fontSize: 13, marginTop: 10 }}>Growth loads from your live backend.</div>
-              </div>
-            )}
-          </div>
-          <div className="b b-blu"><div className="b-lab">ALL TIME</div><div className="b-big" style={{ fontSize: 30, marginTop: "auto", color: "var(--accent-2)" }}>{compact(allTime)}</div></div>
-          <div className="b b-pur"><div className="b-lab">PEAK MONTH</div><div className="b-big" style={{ fontSize: 24, marginTop: "auto" }}>{peak.name}</div><div style={{ fontSize: 12, color: "var(--f-dim)" }}>{compact(peak.views)} views</div></div>
-        </div>
-      </div>
-    )},
-    ...(canSeeding ? [{ key: "seeding", el: (
-      <div>
-        <div className="f-eyebrow" style={{ marginBottom: 10 }}>SEEDING · BRAND-DEAL OPS</div>
-        <h1 className="f-h1" style={{ marginBottom: 24 }}>Money this month.</h1>
-        <div className="bento">
-          <div className="b b-pur b-glow col-2" style={{ justifyContent: "center" }}>
-            <RingStat label="REVENUE CLOSED" value={fmtINR(seeding?.revenue_closed ?? 0)} sub={`${fmtINR(seeding?.collected ?? 0)} collected`} pct={seeding?.collection_pct ?? 0} />
-          </div>
-          <div className="b b-grn"><div className="b-lab">COLLECTED</div><div className="b-big" style={{ fontSize: 28, marginTop: "auto" }}>{fmtINR(seeding?.collected ?? 0)}</div></div>
-          <div className="b b-mag"><div className="b-lab">OUTSTANDING</div><div className="b-big" style={{ fontSize: 28, marginTop: "auto" }}>{fmtINR(seeding?.outstanding ?? 0)}</div></div>
-          <div className="b b-dark col-4">
-            <div className="b-lab" style={{ marginBottom: 12 }}>REVENUE BY TEAM</div>
-            <RankList rows={(seeding?.revenue_by_team ?? []).map((t) => ({ label: t.team, value: fmtINR(t.value) }))} />
+    {
+      key: "growth", el: (
+        <div>
+          <div className="f-eyebrow" style={{ marginBottom: 10 }}>COMPLETE GROWTH</div>
+          <h1 className="f-h1" style={{ marginBottom: 24 }}>Overall growth.</h1>
+          <div className="bento">
+            <div className="b b-dark col-3 row-2" style={{ minHeight: 300 }}>
+              {chart.length ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chart} margin={{ top: 8, right: 10, bottom: 5, left: 0 }}>
+                    <defs><linearGradient id="gl" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#8b5cf6" /><stop offset="1" stopColor="#ec4899" /></linearGradient></defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" />
+                    <XAxis dataKey="name" tick={{ fill: "#71717a", fontSize: 10 }} />
+                    <YAxis tick={{ fill: "#71717a", fontSize: 9 }} tickFormatter={(v: number) => compact(v)} />
+                    <Tooltip contentStyle={{ background: "#0a0a0d", border: "1px solid var(--f-line)", borderRadius: 8 }} formatter={(v: number) => [compact(v) + " views", "Views"]} />
+                    <Line type="monotone" dataKey="views" stroke="url(#gl)" strokeWidth={3} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div style={{ margin: "auto", textAlign: "center" }}>
+                  <TrendingUp size={30} style={{ color: "var(--accent)", opacity: .6 }} />
+                  <div style={{ color: "var(--f-dim)", fontSize: 13, marginTop: 10 }}>Growth loads from your live backend.</div>
+                </div>
+              )}
+            </div>
+            <div className="b b-blu"><div className="b-lab">ALL TIME</div><div className="b-big" style={{ fontSize: 30, marginTop: "auto", color: "var(--accent-2)" }}>{compact(allTime)}</div></div>
+            <div className="b b-pur"><div className="b-lab">PEAK MONTH</div><div className="b-big" style={{ fontSize: 24, marginTop: "auto" }}>{peak.name}</div><div style={{ fontSize: 12, color: "var(--f-dim)" }}>{compact(peak.views)} views</div></div>
           </div>
         </div>
-      </div>
-    )}] : []),
+      )
+    },
+    ...(canSeeding ? [{
+      key: "seeding", el: (
+        <div>
+          <div className="f-eyebrow" style={{ marginBottom: 10 }}>SEEDING · BRAND-DEAL OPS</div>
+          <h1 className="f-h1" style={{ marginBottom: 24 }}>Money this month.</h1>
+          <div className="bento">
+            <div className="b b-pur b-glow col-2" style={{ justifyContent: "center" }}>
+              <RingStat label="REVENUE CLOSED" value={fmtINR(seeding?.revenue_closed ?? 0)} sub={`${fmtINR(seeding?.collected ?? 0)} collected`} pct={seeding?.collection_pct ?? 0} />
+            </div>
+            <div className="b b-grn"><div className="b-lab">COLLECTED</div><div className="b-big" style={{ fontSize: 28, marginTop: "auto" }}>{fmtINR(seeding?.collected ?? 0)}</div></div>
+            <div className="b b-mag"><div className="b-lab">OUTSTANDING</div><div className="b-big" style={{ fontSize: 28, marginTop: "auto" }}>{fmtINR(seeding?.outstanding ?? 0)}</div></div>
+            <div className="b b-dark col-4">
+              <div className="b-lab" style={{ marginBottom: 12 }}>REVENUE BY TEAM</div>
+              <RankList rows={(seeding?.revenue_by_team ?? []).map((t) => ({ label: t.team, value: fmtINR(t.value) }))} />
+            </div>
+          </div>
+        </div>
+      )
+    }] : []),
   ];
 
   const [i, setI] = useState(0);

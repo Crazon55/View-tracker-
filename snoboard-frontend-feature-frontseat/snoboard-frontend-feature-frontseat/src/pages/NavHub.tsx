@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, ClipboardList, Image, Radio,
-  Trophy, Ticket, Newspaper, TrendingUp,
+  Ticket, Newspaper, TrendingUp,
   Users, Scissors, ChevronRight,
 } from "lucide-react";
 
@@ -10,7 +10,6 @@ const pages = [
   { to: "/content-tracker", label: "Reel Tracker",          icon: ClipboardList,   external: false },
   { to: "/post-tracker",    label: "Post Tracker",          icon: Image,           external: false },
   { to: "/six-day-tracker", label: "6-Day Tracker",         icon: Radio,           external: false },
-  { to: "/team-performance",label: "Teams",                 icon: Trophy,          external: false },
   { to: "/tickets",         label: "Tickets",               icon: Ticket,          external: false },
   { to: "/news",            label: "News Feed",             icon: Newspaper,       external: false },
   { to: "/growth",          label: "Growth",                icon: TrendingUp,      external: false },
