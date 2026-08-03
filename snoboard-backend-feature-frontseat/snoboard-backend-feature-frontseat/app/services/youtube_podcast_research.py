@@ -192,60 +192,99 @@ def fetch_video_details(video_ids: list[str]) -> dict[str, dict[str, Any]]:
 
 
 def fetch_transcript(video_id: str) -> tuple[str | None, str | None]:
-    """Return (transcript_text, error). Prefer English captions."""
+    """Return (transcript_text, error). Prefer English, then any available captions."""
     try:
         from youtube_transcript_api import YouTubeTranscriptApi
     except ImportError:
         return None, "youtube-transcript-api not installed"
 
-    entries = None
+    lang_priority = ["en", "en-US", "en-GB", "en-IN", "hi", "hi-IN"]
     last_err: Exception | None = None
+    fetched = None
 
-    # youtube-transcript-api 0.6.x class methods
+    api = YouTubeTranscriptApi()
+
+    # 1.x preferred path: fetch() with language priority
     try:
-        listing = YouTubeTranscriptApi.list_transcripts(video_id)
-        try:
-            transcript = listing.find_transcript(["en", "en-US", "en-GB"])
-        except Exception:
-            try:
-                transcript = listing.find_generated_transcript(["en", "en-US", "en-GB"])
-            except Exception:
-                transcript = next(iter(listing))
-        entries = transcript.fetch()
+        fetched = api.fetch(video_id, languages=lang_priority)
     except Exception as e:
         last_err = e
+        logger.info("youtube fetch(%s) failed: %s", video_id, e)
 
-    # youtube-transcript-api 1.x instance API
-    if entries is None:
+    # 1.x list() — any manual / generated / translated-to-en track
+    if fetched is None and hasattr(api, "list"):
         try:
-            api = YouTubeTranscriptApi()
-            if hasattr(api, "fetch"):
-                fetched = api.fetch(video_id, languages=["en", "en-US", "en-GB"])
-                entries = list(fetched)
-            elif hasattr(api, "list"):
-                listing = api.list(video_id)
+            listing = api.list(video_id)
+            transcript = None
+            try:
+                transcript = listing.find_transcript(lang_priority)
+            except Exception:
                 try:
-                    t = listing.find_transcript(["en", "en-US", "en-GB"])
+                    transcript = listing.find_generated_transcript(lang_priority)
                 except Exception:
-                    t = next(iter(listing))
-                entries = t.fetch()
+                    try:
+                        # First available track, translate to English when possible
+                        for t in listing:
+                            transcript = t
+                            break
+                        if transcript is not None and getattr(transcript, "language_code", "")[:2] != "en":
+                            if getattr(transcript, "is_translatable", False):
+                                transcript = transcript.translate("en")
+                    except Exception as e:
+                        last_err = e
+            if transcript is not None:
+                fetched = transcript.fetch()
         except Exception as e:
             last_err = e
+            logger.info("youtube list(%s) failed: %s", video_id, e)
 
-    # Oldest get_transcript helper
-    if entries is None:
+    # Legacy 0.6.x classmethods
+    if fetched is None and hasattr(YouTubeTranscriptApi, "list_transcripts"):
         try:
-            entries = YouTubeTranscriptApi.get_transcript(video_id, languages=["en", "en-US", "en-GB"])
+            listing = YouTubeTranscriptApi.list_transcripts(video_id)
+            try:
+                transcript = listing.find_transcript(lang_priority)
+            except Exception:
+                try:
+                    transcript = listing.find_generated_transcript(lang_priority)
+                except Exception:
+                    transcript = next(iter(listing))
+            fetched = transcript.fetch()
         except Exception as e:
             last_err = e
-            return None, f"No captions: {last_err}"
 
+    if fetched is None:
+        err_name = type(last_err).__name__ if last_err else "Unknown"
+        err_msg = str(last_err) if last_err else "unknown error"
+        # Common on cloud IPs — YouTube blocks caption scraping from datacenters
+        if any(x in err_name for x in ("IpBlocked", "RequestBlocked", "Blocked")) or "blocked" in err_msg.lower():
+            return None, (
+                f"YouTube blocked caption fetch from this server IP ({err_name}). "
+                "Transcripts need a residential proxy or manual paste."
+            )
+        return None, f"No captions: {err_name}: {err_msg}"
+
+    # Normalize snippets → text
     parts: list[str] = []
-    for row in entries:
-        if isinstance(row, dict):
-            parts.append(str(row.get("text") or ""))
-        else:
-            parts.append(str(getattr(row, "text", "") or ""))
+    if hasattr(fetched, "to_raw_data"):
+        try:
+            for row in fetched.to_raw_data():
+                parts.append(str(row.get("text") or ""))
+        except Exception:
+            parts = []
+    if not parts:
+        try:
+            for row in fetched:
+                if isinstance(row, dict):
+                    parts.append(str(row.get("text") or ""))
+                else:
+                    parts.append(str(getattr(row, "text", "") or ""))
+        except TypeError:
+            # FetchedTranscript sometimes isn't list-like until snippets accessed
+            snippets = getattr(fetched, "snippets", None) or []
+            for row in snippets:
+                parts.append(str(getattr(row, "text", "") or ""))
+
     text = re.sub(r"\s+", " ", " ".join(parts)).strip()
     if not text:
         return None, "Empty captions"
