@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Check, Trash2, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { SeedingSelect } from "@/components/seeding/SeedingSelect";
+import {
+  BriefPagesDeliverables,
+  newDeliverableRow,
+  type DeliverableRow,
+} from "@/components/seeding/BriefPagesDeliverables";
 import { api } from "@/services/seeding/client";
 import {
   ADMIN_REVIEW_STATUSES,
   DEAL_STATUSES,
-  DELIVERABLE_TYPES,
   PAYMENT_STATUSES,
 } from "@/services/seeding/constants";
 import type { SeedingDeal } from "@/services/seeding/mockData";
@@ -20,24 +24,8 @@ const TEAMS = [
 
 type SeedingPage = { page_id: string; page_name: string; active?: boolean };
 
-type DeliverableRow = {
-  key: string;
-  page_id: string;
-  deliverable_type: string;
-  quantity: number;
-};
-
 const inputCls = "seeding-submit-input";
 const req = <span className="seeding-req">*</span>;
-
-function newRow(pageId = ""): DeliverableRow {
-  return {
-    key: `row_${Math.random().toString(36).slice(2, 9)}`,
-    page_id: pageId,
-    deliverable_type: "Reel",
-    quantity: 1,
-  };
-}
 
 type Props = {
   onCreated: (deal: SeedingDeal) => void;
@@ -49,7 +37,7 @@ export function AdminAddBriefForm({ onCreated, onCancel }: Props) {
   const [agency, setAgency] = useState("");
   const [briefLink, setBriefLink] = useState("");
   const [briefText, setBriefText] = useState("");
-  const [rows, setRows] = useState<DeliverableRow[]>([newRow()]);
+  const [rows, setRows] = useState<DeliverableRow[]>([newDeliverableRow()]);
   const [pages, setPages] = useState<SeedingPage[]>([]);
   const [goLive, setGoLive] = useState("");
   const [price, setPrice] = useState("");
@@ -74,14 +62,6 @@ export function AdminAddBriefForm({ onCreated, onCancel }: Props) {
     if (!eligiblePages.length) return;
     setRows((prev) => prev.map((r) => (r.page_id ? r : { ...r, page_id: eligiblePages[0].page_id })));
   }, [eligiblePages]);
-
-  const updateRow = (key: string, patch: Partial<DeliverableRow>) => {
-    setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
-  };
-
-  const removeRow = (key: string) => {
-    setRows((prev) => (prev.length <= 1 ? prev : prev.filter((r) => r.key !== key)));
-  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -177,39 +157,12 @@ export function AdminAddBriefForm({ onCreated, onCancel }: Props) {
         <textarea className={inputCls} rows={3} placeholder="Paste the brief or notes…" value={briefText} onChange={(e) => setBriefText(e.target.value)} />
       </label>
 
-      <div className="seeding-submit-field seeding-submit-field--full">
-        <span>Pages &amp; deliverables {req}</span>
-        <div className="seeding-deliverable-rows">
-          {rows.map((row) => (
-            <div key={row.key} className="seeding-deliverable-row">
-              <SeedingSelect
-                value={row.page_id}
-                onChange={(v) => updateRow(row.key, { page_id: v })}
-                options={eligiblePages.map((p) => ({ value: p.page_id, label: p.page_name }))}
-              />
-              <SeedingSelect
-                value={row.deliverable_type}
-                onChange={(v) => updateRow(row.key, { deliverable_type: v })}
-                options={DELIVERABLE_TYPES.map((t) => ({ value: t, label: t }))}
-                className="seeding-select-trigger--compact"
-              />
-              <input
-                type="number"
-                min={1}
-                className={`${inputCls} seeding-qty-input`}
-                value={row.quantity}
-                onChange={(e) => updateRow(row.key, { quantity: Math.max(1, Number(e.target.value) || 1) })}
-              />
-              <button type="button" className="seeding-detail-icon-btn" onClick={() => removeRow(row.key)} aria-label="Remove row">
-                <Trash2 size={14} />
-              </button>
-            </div>
-          ))}
-        </div>
-        <button type="button" className="seeding-submit-add-row" onClick={() => setRows((prev) => [...prev, newRow(eligiblePages[0]?.page_id || "")])}>
-          + Add another page/deliverable
-        </button>
-      </div>
+      <BriefPagesDeliverables
+        pages={pages}
+        rows={rows}
+        onRowsChange={setRows}
+        onPackagePrice={(n) => setPrice(String(n))}
+      />
 
       <div className="seeding-submit-row seeding-submit-row--3">
         <label className="seeding-submit-field">

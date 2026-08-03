@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Check, Trash2, User } from "lucide-react";
+import { Check, User } from "lucide-react";
 import { FramerPage } from "@/components/framer/Framer";
 import { useAuth } from "@/contexts/AuthContext";
 import { bdTeamNameForRole } from "@/lib/accessModel";
 import { api } from "@/services/seeding/client";
-import { DELIVERABLE_TYPES } from "@/services/seeding/constants";
 import { SeedingSelect } from "@/components/seeding/SeedingSelect";
+import {
+  BriefPagesDeliverables,
+  newDeliverableRow,
+  type DeliverableRow,
+} from "@/components/seeding/BriefPagesDeliverables";
 
 type SeedingPage = { page_id: string; page_name: string; active?: boolean };
 
@@ -17,24 +21,8 @@ const TEAMS = [
   { id: "team_99c4b4a0d63d", name: "AY" },
 ];
 
-type DeliverableRow = {
-  key: string;
-  page_id: string;
-  deliverable_type: string;
-  quantity: number;
-};
-
 const inputCls = "seeding-submit-input";
 const req = <span className="seeding-req">*</span>;
-
-function newRow(pageId = ""): DeliverableRow {
-  return {
-    key: `row_${Math.random().toString(36).slice(2, 9)}`,
-    page_id: pageId,
-    deliverable_type: "Reel",
-    quantity: 1,
-  };
-}
 
 export default function SeedingSubmitBrief() {
   const navigate = useNavigate();
@@ -49,7 +37,7 @@ export default function SeedingSubmitBrief() {
   const [briefLink, setBriefLink] = useState("");
   const [briefText, setBriefText] = useState("");
   const [assetsLinks, setAssetsLinks] = useState("");
-  const [rows, setRows] = useState<DeliverableRow[]>([newRow()]);
+  const [rows, setRows] = useState<DeliverableRow[]>([newDeliverableRow()]);
   const [pages, setPages] = useState<SeedingPage[]>([]);
   const [goLive, setGoLive] = useState("");
   const [price, setPrice] = useState("");
@@ -63,8 +51,6 @@ export default function SeedingSubmitBrief() {
   }, [lockedTeam?.id]);
 
   const teamName = useMemo(() => TEAMS.find((t) => t.id === teamId)?.name ?? "Snoball", [teamId]);
-
-  // Deal-eligible pages (active) from the live backend — works in mock and real mode.
   const eligiblePages = useMemo(() => pages.filter((p) => p.active !== false), [pages]);
 
   useEffect(() => {
@@ -73,19 +59,10 @@ export default function SeedingSubmitBrief() {
       .catch(() => setPages([]));
   }, []);
 
-  // Once pages load, default any empty page selection to the first eligible page.
   useEffect(() => {
     if (!eligiblePages.length) return;
     setRows((prev) => prev.map((r) => (r.page_id ? r : { ...r, page_id: eligiblePages[0].page_id })));
   }, [eligiblePages]);
-
-  const updateRow = (key: string, patch: Partial<DeliverableRow>) => {
-    setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
-  };
-
-  const removeRow = (key: string) => {
-    setRows((prev) => (prev.length <= 1 ? prev : prev.filter((r) => r.key !== key)));
-  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -101,6 +78,10 @@ export default function SeedingSubmitBrief() {
     }
     if (!goLive || !price || !paymentDue) {
       setError("Go-live, price, and payment due date are required.");
+      return;
+    }
+    if (!rows.some((r) => r.page_id)) {
+      setError("Add at least one page / deliverable.");
       return;
     }
 
@@ -123,15 +104,17 @@ export default function SeedingSubmitBrief() {
         payment_status: "Not Raised",
         submitted_by_team: team ? { team_id: team.id, team_name: team.name } : undefined,
         submitted_by_user: { user_id: user?.id || "user_local", name: displayName, email: user?.email },
-        deliverable_drafts: rows.map((r) => {
-          const page = pages.find((p) => p.page_id === r.page_id);
-          return {
-            page_id: r.page_id,
-            page_name: page?.page_name || r.page_id,
-            deliverable_type: r.deliverable_type,
-            quantity: r.quantity,
-          };
-        }),
+        deliverable_drafts: rows
+          .filter((r) => r.page_id)
+          .map((r) => {
+            const page = pages.find((p) => p.page_id === r.page_id);
+            return {
+              page_id: r.page_id,
+              page_name: page?.page_name || r.page_id,
+              deliverable_type: r.deliverable_type,
+              quantity: r.quantity,
+            };
+          }),
       });
       navigate("/seeding");
     } catch {
@@ -194,39 +177,12 @@ export default function SeedingSubmitBrief() {
             <textarea className={inputCls} rows={3} placeholder="https://drive.google.com/…" value={assetsLinks} onChange={(e) => setAssetsLinks(e.target.value)} />
           </label>
 
-          <div className="seeding-submit-field seeding-submit-field--full">
-            <span>Pages &amp; deliverables {req}</span>
-            <div className="seeding-deliverable-rows">
-              {rows.map((row) => (
-                <div key={row.key} className="seeding-deliverable-row">
-                  <SeedingSelect
-                    value={row.page_id}
-                    onChange={(v) => updateRow(row.key, { page_id: v })}
-                    options={eligiblePages.map((p) => ({ value: p.page_id, label: p.page_name }))}
-                  />
-                  <SeedingSelect
-                    value={row.deliverable_type}
-                    onChange={(v) => updateRow(row.key, { deliverable_type: v })}
-                    options={DELIVERABLE_TYPES.map((t) => ({ value: t, label: t }))}
-                    className="seeding-select-trigger--compact"
-                  />
-                  <input
-                    type="number"
-                    min={1}
-                    className={`${inputCls} seeding-qty-input`}
-                    value={row.quantity}
-                    onChange={(e) => updateRow(row.key, { quantity: Math.max(1, Number(e.target.value) || 1) })}
-                  />
-                  <button type="button" className="seeding-detail-icon-btn" onClick={() => removeRow(row.key)} aria-label="Remove row">
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <button type="button" className="seeding-submit-add-row" onClick={() => setRows((prev) => [...prev, newRow(eligiblePages[0]?.page_id || "")])}>
-              + Add another page/deliverable
-            </button>
-          </div>
+          <BriefPagesDeliverables
+            pages={pages}
+            rows={rows}
+            onRowsChange={setRows}
+            onPackagePrice={(n) => setPrice(String(n))}
+          />
 
           <div className="seeding-submit-row seeding-submit-row--3">
             <label className="seeding-submit-field">

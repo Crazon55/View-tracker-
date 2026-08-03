@@ -1904,6 +1904,41 @@ input[type="datetime-local"].seeding-submit-input{ color-scheme:dark; }
 .seeding-deliverable-row{
   display:grid; grid-template-columns:1fr 132px 72px 40px; gap:10px; align-items:center;
 }
+.seeding-package-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(160px, 1fr));
+  gap:10px;
+  margin-top:8px;
+}
+.seeding-package-card{
+  text-align:left;
+  padding:12px 14px;
+  border-radius:12px;
+  border:1px solid var(--f-line);
+  background:rgba(255,255,255,.03);
+  color:var(--f-ink);
+  cursor:pointer;
+  transition:border-color .15s ease, background .15s ease;
+}
+.seeding-package-card:hover{
+  border-color:color-mix(in srgb, var(--accent) 45%, var(--f-line));
+  background:color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.seeding-package-card.is-on{
+  border-color:color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,.12));
+  background:color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
+}
+.seeding-package-card-name{ font-size:13px; font-weight:600; }
+.seeding-package-card-price{
+  font-family:'JetBrains Mono',monospace;
+  font-size:14px;
+  font-weight:600;
+  color:var(--accent-2);
+  margin-top:4px;
+}
+.seeding-package-card-meta{ font-size:11px; color:var(--f-faint); margin-top:4px; }
+.seeding-package-card--custom .seeding-package-card-price{ display:none; }
 .seeding-qty-input{ text-align:center; font-family:'JetBrains Mono',monospace; min-height:42px !important; padding:11px 8px !important; }
 .seeding-submit-add-row{
   margin-top:4px; padding:0; border:none; background:none;
