@@ -430,7 +430,7 @@ export default function SixDayTracker() {
             All <span className={`tabular-nums text-[10px] ${isAllActive ? "opacity-90" : "fglass-meta"}`}>{nicheCounts.all}</span>
           </button>
           {([
-            { key: "bizz", label: "Bizz", emoji: "💼", count: nicheCounts.bizz, on: "is-on-orange" },
+            { key: "bizz", label: "Bizz playbook", emoji: "💼", count: nicheCounts.bizz, on: "is-on-orange" },
             { key: "founders", label: "Founders", emoji: "🚀", count: nicheCounts.founders, on: "is-on-sky" },
             { key: "x101", label: "101x", emoji: "⭐", count: nicheCounts.x101, on: "is-on-violet" },
             { key: "news", label: "News playbook", emoji: "📰", count: nicheCounts.news, on: "is-on-rose" },

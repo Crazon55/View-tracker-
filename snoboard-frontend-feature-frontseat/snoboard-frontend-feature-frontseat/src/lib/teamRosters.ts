@@ -9,7 +9,7 @@ export const normTeamHandle = (h: unknown) =>
 export const TEAM_ROSTERS: TeamRoster[] = [
   {
     id: "bizz",
-    label: "Bizz",
+    label: "Bizz playbook",
     handles: ["bizzindia", "startupbydog"],
   },
   {
