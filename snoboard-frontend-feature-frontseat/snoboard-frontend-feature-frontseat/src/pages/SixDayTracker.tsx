@@ -243,7 +243,7 @@ export default function SixDayTracker() {
 
   const nicheCounts = useMemo(() => {
     const c = {
-      all: nichePages.length,
+      all: 0,
       tech: 0,
       bizz_playbook: 0,
       bizz: 0,
@@ -264,12 +264,19 @@ export default function SixDayTracker() {
       else if (key === "inactive") c.inactive += 1;
       else c.none += 1;
     }
+    // "All" = active groups only (never inactive).
+    c.all = c.tech + c.bizz_playbook + c.bizz + c.x101 + c.news + c.founders + c.none;
     return c;
   }, [nichePages, handleToNiche]);
 
-  /* pages = niche pages optionally filtered by active group pill. */
+  /* pages = niche pages optionally filtered by active group pill.
+     Default "All" excludes Inactive — pick the Inactive pill to see those. */
   const pages = useMemo(() => {
-    if (isAllActive) return nichePages;
+    if (isAllActive) {
+      return nichePages.filter(
+        (p: any) => handleToNiche.get(normHandle(p.handle)) !== "inactive",
+      );
+    }
     return nichePages.filter((p: any) => {
       const key = handleToNiche.get(normHandle(p.handle));
       return !!key && nicheFilterSet.has(key);
@@ -280,7 +287,11 @@ export default function SixDayTracker() {
   const getCyclePages = useCallback((cycle: any): any[] => {
     const start = String(cycle?.start || "");
     const applyTeamFilter = (list: any[]) => {
-      if (isAllActive) return list;
+      if (isAllActive) {
+        return list.filter(
+          (p: any) => handleToNiche.get(normHandle(p.handle)) !== "inactive",
+        );
+      }
       return list.filter((p: any) => {
         const key = handleToNiche.get(normHandle(p.handle));
         return !!key && nicheFilterSet.has(key);
@@ -303,8 +314,8 @@ export default function SixDayTracker() {
 
   /* allowedPageIds is only needed for the reconcile/summary filter — keep as niche-based. */
   const allowedPageIds = useMemo(
-    () => (isAllActive ? null : new Set(pages.map((p: any) => p.id))),
-    [pages, isAllActive],
+    () => new Set(pages.map((p: any) => p.id)),
+    [pages],
   );
 
   const cycles = useMemo(() => {
@@ -498,9 +509,7 @@ export default function SixDayTracker() {
             ) : null}
             {pages.length > 0 && cycles.map((cycle: any) => {
               const cyclePages = getCyclePages(cycle);
-              const cycleAllowedIds = String(cycle?.start || "") >= ROSTER_CUTOFF_CYCLE3 && isAllActive
-                ? new Set<string>(cyclePages.map((p: any) => p.id))
-                : allowedPageIds;
+              const cycleAllowedIds = new Set<string>(cyclePages.map((p: any) => p.id));
               return (
               <CycleCard
                 key={cycle.cycle}

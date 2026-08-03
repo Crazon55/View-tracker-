@@ -125,7 +125,10 @@ function PageIpGrid({
   const q = query.trim().toLowerCase();
 
   const activeHandles = team === "all" ? null : teams.find((t) => t.id === team)?.handles ?? null;
-  const byTeam = activeHandles ? pages.filter((p) => activeHandles.has(handleKey(p.handle))) : pages;
+  const inactiveHandles = teams.find((t) => t.id === "inactive")?.handles ?? null;
+  const byTeam = activeHandles
+    ? pages.filter((p) => activeHandles.has(handleKey(p.handle)))
+    : pages.filter((p) => !inactiveHandles?.has(handleKey(p.handle)));
   const filtered = q
     ? byTeam.filter((p) => p.name.toLowerCase().includes(q) || p.handle.toLowerCase().includes(q))
     : byTeam;
