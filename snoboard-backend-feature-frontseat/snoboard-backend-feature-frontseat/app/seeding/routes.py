@@ -1829,22 +1829,57 @@ async def reports_overview(
 
 
 async def _reports_overview_body(user: dict, from_date: Optional[str], to_date: Optional[str]):
-    q = _deal_role_filter(user)
-    date_q: Dict[str, Any] = {}
-    if from_date:
-        date_q["$gte"] = from_date
-    if to_date:
-        date_q["$lte"] = to_date
-    if date_q:
-        q["created_at"] = date_q
+    """Overview totals for the selected date range.
 
+    Revenue (price closed) is attributed by **payment_due_date**, not go-live,
+    approval, or brief created_at. A July go-live with an August payment due
+    counts in August.
+    """
+
+    def parse_day(iso: Optional[str]):
+        if not iso:
+            return None
+        try:
+            return datetime.fromisoformat(str(iso).replace("Z", "+00:00")).date()
+        except Exception:
+            try:
+                return datetime.strptime(str(iso)[:10], "%Y-%m-%d").date()
+            except Exception:
+                return None
+
+    start_day = parse_day(from_date) if from_date else None
+    end_day = parse_day(to_date) if to_date else None
+
+    def in_range(day) -> bool:
+        if day is None:
+            # Missing date: exclude from ranged queries; include when no range.
+            return not (start_day or end_day)
+        if start_day and day < start_day:
+            return False
+        if end_day and day > end_day:
+            return False
+        return True
+
+    q = _deal_role_filter(user)
+    # Load full role-scoped pool; apply payment-due / created-at filters in Python.
     deals = await db.deals.find(q, {"_id": 0}).to_list(2000)
+
+    # Pipeline activity (pending / needs info) still keyed to when the brief was filed.
+    activity_deals = [
+        d for d in deals if in_range(parse_day(d.get("created_at") or ""))
+    ]
+    pending_review = [d for d in activity_deals if d.get("admin_review_status") == "Submitted"]
+    needs_info = [d for d in activity_deals if d.get("admin_review_status") == "Needs More Info"]
+
     approved = [d for d in deals if d.get("admin_review_status") == "Approved"]
     # Cancelled deals stay in Approved history but drop out of revenue / payment totals.
-    revenue_deals = [d for d in approved if d.get("deal_status") != "Cancelled"]
+    # Revenue month = payment due month.
+    revenue_deals = [
+        d for d in approved
+        if d.get("deal_status") != "Cancelled"
+        and in_range(parse_day(d.get("payment_due_date") or ""))
+    ]
     completed = [d for d in revenue_deals if d.get("deal_status") == "Completed"]
-    pending_review = [d for d in deals if d.get("admin_review_status") == "Submitted"]
-    needs_info = [d for d in deals if d.get("admin_review_status") == "Needs More Info"]
 
     # Revenue totals are admin-facing; BD/fulfillment dashboards do not surface them.
     revenue = (
@@ -1886,37 +1921,27 @@ async def _reports_overview_body(user: dict, from_date: Optional[str], to_date: 
     total_views = sum(int(d.get("views") or 0) for d in delivs)
     blocked = [d for d in delivs if d.get("status") == "Blocked"]
 
-    # revenue over time (admin + bd; fulfillment gets empty)
+    # revenue over time — bucket by payment due date
     revenue_over_time: List[Dict[str, Any]] = []
     if user["role"] != "fulfillment":
-        def parse_day(iso: str):
-            try:
-                return datetime.fromisoformat(iso.replace("Z", "+00:00")).date()
-            except Exception:
-                return None
-
-        start_day = parse_day(from_date) if from_date else None
-        end_day = parse_day(to_date) if to_date else None
-        if not end_day:
-            end_day = datetime.now(timezone.utc).date()
-        if not start_day:
-            start_day = end_day.replace(day=1)
+        chart_end = end_day or datetime.now(timezone.utc).date()
+        chart_start = start_day or chart_end.replace(day=1)
 
         rev_q = _deal_role_filter(user)
         rev_q["admin_review_status"] = "Approved"
         all_approved = await db.deals.find(rev_q, {"_id": 0}).to_list(2000)
 
         buckets: Dict[str, Dict[str, Any]] = defaultdict(lambda: {"revenue": 0.0, "deals": 0})
-        cur = start_day
-        while cur <= end_day:
+        cur = chart_start
+        while cur <= chart_end:
             buckets[cur.isoformat()] = {"revenue": 0.0, "deals": 0}
             cur += timedelta(days=1)
 
         for d in all_approved:
             if d.get("deal_status") == "Cancelled":
                 continue
-            day = parse_day(d.get("approved_at") or d.get("created_at") or "")
-            if not day or day < start_day or day > end_day:
+            day = parse_day(d.get("payment_due_date") or "")
+            if not day or day < chart_start or day > chart_end:
                 continue
             key = day.isoformat()
             buckets[key]["revenue"] += float(d.get("price_closed_at") or 0)

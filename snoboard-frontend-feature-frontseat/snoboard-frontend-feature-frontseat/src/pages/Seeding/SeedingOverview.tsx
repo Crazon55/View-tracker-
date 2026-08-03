@@ -133,7 +133,7 @@ export default function SeedingOverview() {
 
       <Reveal style={{ marginTop: 16 }}><Panel>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <div><h2 style={{ fontSize: 14, fontWeight: 600 }}>Revenue over time</h2><p style={{ fontSize: 11, color: "var(--f-faint)", marginTop: 2 }}>Approved deal revenue by approval date</p></div>
+          <div><h2 style={{ fontSize: 14, fontWeight: 600 }}>Revenue over time</h2><p style={{ fontSize: 11, color: "var(--f-faint)", marginTop: 2 }}>Approved deal revenue by payment due date</p></div>
           <span className="mono" style={{ fontSize: 11, color: "var(--f-dim)" }}>{formatCurrency((data.revenue_over_time || []).reduce((s: number, d: any) => s + (d.revenue || 0), 0))} in range</span>
         </div>
         <RevenueChart data={data.revenue_over_time || []} />

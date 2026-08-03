@@ -309,30 +309,47 @@ function buildTeamPayments() {
 }
 
 function revenueOverTime(from?: string, to?: string) {
-  const start = from ? new Date(from) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-  const end = to ? new Date(to.replace(/T.*/, "")) : new Date();
+  const start = from ? new Date(String(from).slice(0, 10)) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  const end = to ? new Date(String(to).slice(0, 10)) : new Date();
   const points: { date: string; revenue: number; deals: number }[] = [];
-  const approvals = [
-    { date: "2026-06-05", revenue: 320000 },
-    { date: "2026-06-20", revenue: 520000 },
-    { date: "2026-06-26", revenue: 240000 },
-  ];
-  for (const a of approvals) {
-    const d = new Date(a.date);
-    if (d >= start && d <= end) points.push({ date: a.date, revenue: a.revenue, deals: 1 });
+  // Mock buckets by payment_due_date (same rule as the live API).
+  for (const deal of approvedDeals()) {
+    if (!deal.payment_due_date) continue;
+    const day = String(deal.payment_due_date).slice(0, 10);
+    const d = new Date(day);
+    if (d < start || d > end) continue;
+    const existing = points.find((p) => p.date === day);
+    if (existing) {
+      existing.revenue += deal.price_closed_at;
+      existing.deals += 1;
+    } else {
+      points.push({ date: day, revenue: deal.price_closed_at, deals: 1 });
+    }
   }
   if (!points.length) {
     points.push({ date: start.toISOString().slice(0, 10), revenue: 0, deals: 0 });
   }
-  return points;
+  return points.sort((a, b) => a.date.localeCompare(b.date));
 }
 
 export function buildOverviewReport(params?: Record<string, unknown>) {
   const teamName = typeof params?.team_name === "string" ? params.team_name : "";
+  const from = typeof params?.from_date === "string" ? new Date(String(params.from_date).slice(0, 10)) : null;
+  const to = typeof params?.to_date === "string" ? new Date(String(params.to_date).slice(0, 10)) : null;
   const pool = teamName
     ? MOCK_DEALS.filter((d) => (d.submitted_by_team?.team_name || "") === teamName)
     : MOCK_DEALS;
-  const approved = pool.filter((d) => d.admin_review_status === "Approved" && d.deal_status !== "Cancelled");
+  const inPaymentDueRange = (d: SeedingDeal) => {
+    if (!from && !to) return true;
+    if (!d.payment_due_date) return false;
+    const due = new Date(String(d.payment_due_date).slice(0, 10));
+    if (from && due < from) return false;
+    if (to && due > to) return false;
+    return true;
+  };
+  const approved = pool.filter(
+    (d) => d.admin_review_status === "Approved" && d.deal_status !== "Cancelled" && inPaymentDueRange(d),
+  );
   const revenueClosed = approved.reduce((s, d) => s + d.price_closed_at, 0);
   const collected = approved.filter((d) => d.payment_status === "Paid").reduce((s, d) => s + d.price_closed_at, 0);
 
