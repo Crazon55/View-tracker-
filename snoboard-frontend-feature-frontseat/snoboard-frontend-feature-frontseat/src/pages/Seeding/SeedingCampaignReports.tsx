@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Eye, FileText, ExternalLink } from "lucide-react";
+import { Eye, FileText, ExternalLink, Layers, TrendingUp, TrendingDown } from "lucide-react";
 import { FramerPage, PageHeader } from "@/components/framer/Framer";
 import { StatusBadge } from "@/components/seeding/StatusBadge";
 import { api } from "@/services/seeding/client";
@@ -17,6 +17,70 @@ function formatViews(n: number) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
   return String(n);
+}
+
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  sub,
+  accent,
+  to,
+}: {
+  icon: typeof Eye;
+  label: string;
+  value: string;
+  sub?: string;
+  accent?: string;
+  to?: string;
+}) {
+  const inner = (
+    <>
+      <div
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: 8,
+          background: "rgba(255,255,255,.04)",
+          border: "1px solid var(--f-line)",
+          display: "grid",
+          placeItems: "center",
+          marginBottom: 12,
+        }}
+      >
+        <Icon size={16} strokeWidth={1.75} className={accent} style={!accent ? { color: "var(--f-dim)" } : undefined} />
+      </div>
+      <div className="f-num" style={{ fontSize: 24, lineHeight: 1.15, wordBreak: "break-word" }}>
+        {value}
+      </div>
+      {sub ? (
+        <div
+          className="f-num"
+          style={{
+            fontSize: 13,
+            marginTop: 4,
+            color: accent?.includes("emerald")
+              ? "rgb(52 211 153)"
+              : accent?.includes("rose")
+                ? "rgb(251 113 133)"
+                : "var(--accent-2)",
+          }}
+        >
+          {sub}
+        </div>
+      ) : null}
+      <div style={{ fontSize: 12, color: "var(--f-faint)", marginTop: 4 }}>{label}</div>
+    </>
+  );
+
+  if (to) {
+    return (
+      <Link to={to} className="fglass-panel fglass-purple-shadow f-stat" style={{ textDecoration: "none", color: "inherit", display: "block" }}>
+        {inner}
+      </Link>
+    );
+  }
+  return <div className="fglass-panel fglass-purple-shadow f-stat">{inner}</div>;
 }
 
 export default function SeedingCampaignReports() {
@@ -79,6 +143,21 @@ export default function SeedingCampaignReports() {
     });
   }, [rows, q]);
 
+  const stats = useMemo(() => {
+    const totalViews = rows.reduce((s, d) => s + (d.total_views || 0), 0);
+    const totalCampaigns = rows.length;
+    if (!rows.length) {
+      return { totalViews, totalCampaigns, best: null as GalleryCard | null, least: null as GalleryCard | null };
+    }
+    const byViews = [...rows].sort((a, b) => b.total_views - a.total_views);
+    const best = byViews[0] || null;
+    const withViews = byViews.filter((d) => d.total_views > 0);
+    const least = withViews.length
+      ? withViews[withViews.length - 1]
+      : byViews[byViews.length - 1] || null;
+    return { totalViews, totalCampaigns, best, least };
+  }, [rows]);
+
   return (
     <FramerPage>
       <PageHeader
@@ -86,6 +165,39 @@ export default function SeedingCampaignReports() {
         title="Campaign Reports"
         lead="One card per campaign — open for brief link, page performance, live links, and content rationale."
       />
+
+      <section
+        style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginTop: 26 }}
+        className="seeding-stats"
+      >
+        <StatCard
+          icon={Eye}
+          label="Total views"
+          value={loading ? "…" : formatViews(stats.totalViews)}
+          accent="text-emerald-400"
+        />
+        <StatCard
+          icon={Layers}
+          label="Total campaigns"
+          value={loading ? "…" : String(stats.totalCampaigns)}
+        />
+        <StatCard
+          icon={TrendingUp}
+          label="Best performing"
+          value={loading ? "…" : (stats.best?.brand_name || "—")}
+          sub={stats.best ? `${formatViews(stats.best.total_views)} views` : undefined}
+          accent="text-emerald-400"
+          to={stats.best ? `/seeding/campaign-reports/${stats.best.deal_id}` : undefined}
+        />
+        <StatCard
+          icon={TrendingDown}
+          label="Least performing"
+          value={loading ? "…" : (stats.least?.brand_name || "—")}
+          sub={stats.least ? `${formatViews(stats.least.total_views)} views` : undefined}
+          accent="text-rose-400"
+          to={stats.least ? `/seeding/campaign-reports/${stats.least.deal_id}` : undefined}
+        />
+      </section>
 
       <div className="seeding-filters-bar seeding-surface" style={{ marginTop: 20 }}>
         <input
