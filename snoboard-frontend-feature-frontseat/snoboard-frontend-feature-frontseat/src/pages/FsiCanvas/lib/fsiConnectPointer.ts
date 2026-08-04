@@ -23,7 +23,7 @@ function nodeBox(node: FlowNode, absPos: XYPosition): { x: number; y: number; w:
   return { x: absPos.x, y: absPos.y, w, h };
 }
 
-/** Resolve side + pointer position to a snapped corner anchor id. */
+/** Resolve side + pointer to that side's mid-port. */
 export function pointerToSideAnchor(
   side: AnchorSide,
   kind: AnchorKind,
@@ -47,11 +47,11 @@ export function anchorHandlesFromConnection(params: {
 }): { sourceHandle: string; targetHandle: string } {
   const sourceSideMeta = sideFromHandleId(params.sourceHandleId);
   const targetSideMeta = sideFromHandleId(params.targetHandleId);
-  const startedFromExactCorner = !!parseAnchorHandle(params.sourceHandleId ?? "");
+  const startedFromExactPort = !!parseAnchorHandle(params.sourceHandleId ?? "");
 
-  // Keep the corner the user dragged from when they started on a visible corner dot.
-  let sourceHandle = toFlowAnchorHandle(params.sourceHandleId) ?? "top-out-100";
-  if (!startedFromExactCorner && params.sourcePointer) {
+  // Keep the mid-side port the user dragged from.
+  let sourceHandle = toFlowAnchorHandle(params.sourceHandleId) ?? "right-out-50";
+  if (!startedFromExactPort && params.sourcePointer) {
     if (sourceSideMeta) {
       sourceHandle = pointerToSideAnchor(
         sourceSideMeta.side,
@@ -74,8 +74,8 @@ export function anchorHandlesFromConnection(params: {
     }
   }
 
-  // Drop pointer decides the target corner.
-  let targetHandle = toFlowAnchorHandle(params.targetHandleId) ?? "top-in-0";
+  // Drop pointer decides the target mid-side.
+  let targetHandle = toFlowAnchorHandle(params.targetHandleId) ?? "left-in-50";
   if (params.targetPointer) {
     if (targetSideMeta) {
       targetHandle = pointerToSideAnchor(

@@ -3,12 +3,15 @@ import { estimateNodeSize } from "./fsiNodeBounds";
 
 export type AnchorSide = "top" | "right" | "bottom" | "left";
 export type AnchorKind = "in" | "out";
-export type CornerId = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+
+export const SIDES: AnchorSide[] = ["top", "right", "bottom", "left"];
 
 const SIDE_RE = /^(top|right|bottom|left)-(in|out)-(\d{1,3})$/;
 
-/** Canonical corner handles use top/bottom at 0 or 100. */
-export const CORNER_IDS: CornerId[] = ["top-left", "top-right", "bottom-left", "bottom-right"];
+/** Mid-edge handle id — Miro-style ports live at the center of each side. */
+export function sideMidHandle(side: AnchorSide, kind: AnchorKind): string {
+  return formatAnchorHandle(side, kind, 50);
+}
 
 /** Handle id: `{side}-{in|out}-{pct}` where pct is 0–100 along that edge (snapped to 5). */
 export function formatAnchorHandle(side: AnchorSide, kind: AnchorKind, pct: number): string {
@@ -27,68 +30,32 @@ export function isAnchorHandle(id: string | null | undefined): boolean {
   return !!id && SIDE_RE.test(id);
 }
 
-export function cornerHandle(corner: CornerId, kind: AnchorKind): string {
-  switch (corner) {
-    case "top-left":
-      return formatAnchorHandle("top", kind, 0);
-    case "top-right":
-      return formatAnchorHandle("top", kind, 100);
-    case "bottom-left":
-      return formatAnchorHandle("bottom", kind, 0);
-    case "bottom-right":
-      return formatAnchorHandle("bottom", kind, 100);
-  }
-}
-
-/** Map any side/pct (or strip) handle onto one of the four box corners. */
-export function snapHandleToCorner(id: string | null | undefined): string | undefined {
+/** Map any stored handle (corner, mid, strip) onto a mid-side port. */
+export function snapHandleToSideMid(id: string | null | undefined): string | undefined {
   if (!id) return undefined;
   const trimmed = id.trim();
   const parsed = parseAnchorHandle(trimmed);
-  if (parsed) {
-    return cornerHandle(sidePctToCorner(parsed.side, parsed.pct), parsed.kind);
-  }
+  if (parsed) return sideMidHandle(parsed.side, parsed.kind);
   const strip = sideFromHandleId(trimmed);
-  if (strip) {
-    // Mid-side strips → prefer the "top" or "left" corner of that side.
-    return cornerHandle(sidePctToCorner(strip.side, 0), strip.kind);
-  }
+  if (strip) return sideMidHandle(strip.side, strip.kind);
   return undefined;
 }
 
-function sidePctToCorner(side: AnchorSide, pct: number): CornerId {
-  const towardEnd = pct >= 50;
-  switch (side) {
-    case "top":
-      return towardEnd ? "top-right" : "top-left";
-    case "bottom":
-      return towardEnd ? "bottom-right" : "bottom-left";
-    case "left":
-      return towardEnd ? "bottom-left" : "top-left";
-    case "right":
-      return towardEnd ? "bottom-right" : "top-right";
-  }
-}
+/** @deprecated use snapHandleToSideMid */
+export const snapHandleToCorner = snapHandleToSideMid;
 
 export function anchorOnSide(
   side: AnchorSide,
   kind: AnchorKind,
-  nodeX: number,
-  nodeY: number,
-  width: number,
-  height: number,
-  pointerX: number,
-  pointerY: number,
+  _nodeX: number,
+  _nodeY: number,
+  _width: number,
+  _height: number,
+  _pointerX: number,
+  _pointerY: number,
   _snapStep = 10,
 ): string {
-  // Only corners — project the pointer onto this side, then snap to nearer end.
-  let pct = 50;
-  if (side === "top" || side === "bottom") {
-    pct = width > 0 ? ((pointerX - nodeX) / width) * 100 : 50;
-  } else {
-    pct = height > 0 ? ((pointerY - nodeY) / height) * 100 : 50;
-  }
-  return cornerHandle(sidePctToCorner(side, pct), kind);
+  return sideMidHandle(side, kind);
 }
 
 /** Parse strip (`right-out`) or anchor (`right-out-50`) handle ids. */
@@ -103,26 +70,26 @@ export function sideFromHandleId(
   return null;
 }
 
-function cornerPoint(
-  corner: CornerId,
+function sideMidPoint(
+  side: AnchorSide,
   nodeX: number,
   nodeY: number,
   width: number,
   height: number,
 ): { x: number; y: number } {
-  switch (corner) {
-    case "top-left":
-      return { x: nodeX, y: nodeY };
-    case "top-right":
-      return { x: nodeX + width, y: nodeY };
-    case "bottom-left":
-      return { x: nodeX, y: nodeY + height };
-    case "bottom-right":
-      return { x: nodeX + width, y: nodeY + height };
+  switch (side) {
+    case "top":
+      return { x: nodeX + width / 2, y: nodeY };
+    case "bottom":
+      return { x: nodeX + width / 2, y: nodeY + height };
+    case "left":
+      return { x: nodeX, y: nodeY + height / 2 };
+    case "right":
+      return { x: nodeX + width, y: nodeY + height / 2 };
   }
 }
 
-/** Snap pointer (flow coords) to the nearest of the four box corners. */
+/** Snap pointer to the nearest mid-side port (top / right / bottom / left). */
 export function pointerToAnchorHandle(
   nodeX: number,
   nodeY: number,
@@ -132,17 +99,17 @@ export function pointerToAnchorHandle(
   pointerY: number,
   kind: AnchorKind,
 ): string {
-  let best: CornerId = "top-left";
+  let best: AnchorSide = "right";
   let bestDist = Infinity;
-  for (const corner of CORNER_IDS) {
-    const p = cornerPoint(corner, nodeX, nodeY, width, height);
+  for (const side of SIDES) {
+    const p = sideMidPoint(side, nodeX, nodeY, width, height);
     const d = (p.x - pointerX) ** 2 + (p.y - pointerY) ** 2;
     if (d < bestDist) {
       bestDist = d;
-      best = corner;
+      best = side;
     }
   }
-  return cornerHandle(best, kind);
+  return sideMidHandle(best, kind);
 }
 
 export function inferAnchorHandles(
@@ -159,31 +126,18 @@ export function inferAnchorHandles(
   const sy = sTop + sw.height / 2;
   const tx = tLeft + tw.width / 2;
   const ty = tTop + tw.height / 2;
+  const dx = tx - sx;
+  const dy = ty - sy;
 
-  // Pick the source corner closest to the target center, and vice versa.
-  const nearestCorner = (
-    left: number,
-    top: number,
-    width: number,
-    height: number,
-    towardX: number,
-    towardY: number,
-  ): CornerId => {
-    let best: CornerId = "top-left";
-    let bestDist = Infinity;
-    for (const corner of CORNER_IDS) {
-      const p = cornerPoint(corner, left, top, width, height);
-      const d = (p.x - towardX) ** 2 + (p.y - towardY) ** 2;
-      if (d < bestDist) {
-        bestDist = d;
-        best = corner;
-      }
+  // Prefer the facing mid-sides so orthogonal wires stay clean (Miro-style trees).
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    if (dx >= 0) {
+      return { sourceHandle: sideMidHandle("right", "out"), targetHandle: sideMidHandle("left", "in") };
     }
-    return best;
-  };
-
-  return {
-    sourceHandle: cornerHandle(nearestCorner(sLeft, sTop, sw.width, sw.height, tx, ty), "out"),
-    targetHandle: cornerHandle(nearestCorner(tLeft, tTop, tw.width, tw.height, sx, sy), "in"),
-  };
+    return { sourceHandle: sideMidHandle("left", "out"), targetHandle: sideMidHandle("right", "in") };
+  }
+  if (dy >= 0) {
+    return { sourceHandle: sideMidHandle("bottom", "out"), targetHandle: sideMidHandle("top", "in") };
+  }
+  return { sourceHandle: sideMidHandle("top", "out"), targetHandle: sideMidHandle("bottom", "in") };
 }

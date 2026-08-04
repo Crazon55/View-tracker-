@@ -1,38 +1,36 @@
 import { Handle, Position, type CSSProperties } from "@xyflow/react";
 import { cn } from "@/lib/utils";
-import {
-  CORNER_IDS,
-  cornerHandle,
-  type CornerId,
-} from "../lib/fsiConnectionAnchors";
+import { SIDES, sideMidHandle, type AnchorSide } from "../lib/fsiConnectionAnchors";
 
 type Props = {
   canStartConnection?: boolean;
   largeHitZone?: boolean;
   canAcceptConnection?: boolean;
   requiredAnchors?: string[];
-  /** Show visible connection bubbles so users know where to connect. */
+  /** Show visible Miro-style mid-side connection dots. */
   showConnectionDots?: boolean;
 };
 
-const CORNER_POSITION: Record<CornerId, Position> = {
-  "top-left": Position.Top,
-  "top-right": Position.Top,
-  "bottom-left": Position.Bottom,
-  "bottom-right": Position.Bottom,
+const SIDE_POSITION: Record<AnchorSide, Position> = {
+  top: Position.Top,
+  right: Position.Right,
+  bottom: Position.Bottom,
+  left: Position.Left,
 };
 
-function cornerStyle(corner: CornerId, sizePx: number): CSSProperties {
+/** Sit the port slightly outside the card edge so it's easy to grab (Miro-like). */
+function midSideStyle(side: AnchorSide, sizePx: number, outset = 0): CSSProperties {
   const half = sizePx / 2;
-  switch (corner) {
-    case "top-left":
-      return { left: 0, top: 0, transform: `translate(-${half}px, -${half}px)` };
-    case "top-right":
-      return { right: 0, top: 0, transform: `translate(${half}px, -${half}px)` };
-    case "bottom-left":
-      return { left: 0, bottom: 0, transform: `translate(-${half}px, ${half}px)` };
-    case "bottom-right":
-      return { right: 0, bottom: 0, transform: `translate(${half}px, ${half}px)` };
+  const push = outset + half;
+  switch (side) {
+    case "top":
+      return { left: "50%", top: 0, transform: `translate(-50%, -${push}px)` };
+    case "bottom":
+      return { left: "50%", bottom: 0, transform: `translate(-50%, ${push}px)` };
+    case "left":
+      return { top: "50%", left: 0, transform: `translate(-${push}px, -50%)` };
+    case "right":
+      return { top: "50%", right: 0, transform: `translate(${push}px, -50%)` };
   }
 }
 
@@ -40,15 +38,18 @@ const invisiblePointClass = cn(
   "!z-[30] !h-1 !w-1 !min-h-0 !min-w-0 !border-0 !bg-transparent !opacity-0 !pointer-events-none nodrag nopan",
 );
 
+/** Big, obvious Miro-style ports — hard to miss. */
 const visibleDotClass = cn(
-  "!z-[60] !h-3.5 !w-3.5 !min-h-3.5 !min-w-3.5 !rounded-full !border-2 !border-sky-400 !bg-zinc-950",
-  "!opacity-100 !shadow-[0_0_0_2px_rgba(56,189,248,0.3)] nodrag nopan",
-  "hover:!scale-125 hover:!border-sky-300 hover:!bg-sky-500/20",
+  "!z-[60] !h-5 !w-5 !min-h-5 !min-w-5 !rounded-full",
+  "!border-[2.5px] !border-sky-400 !bg-zinc-950",
+  "!opacity-100 !shadow-[0_0_0_3px_rgba(56,189,248,0.28)] nodrag nopan",
+  "hover:!scale-125 hover:!border-sky-200 hover:!bg-sky-500/30",
   "transition-transform",
 );
 
-const targetHitClass = cn(
-  "!z-[55] !h-5 !w-5 !min-h-5 !min-w-5 !rounded-full !border-0 !bg-transparent !opacity-0 nodrag nopan",
+/** Generous invisible hit pad around each port. */
+const hitPadClass = cn(
+  "!z-[55] !h-10 !w-10 !min-h-10 !min-w-10 !rounded-full !border-0 !bg-transparent !opacity-0 nodrag nopan",
 );
 
 export default function FsiNodeHandles({
@@ -58,40 +59,40 @@ export default function FsiNodeHandles({
   requiredAnchors: _requiredAnchors = [],
   showConnectionDots = false,
 }: Props) {
-  const targetPointer =
+  const interactive =
     canAcceptConnection || canStartConnection
-      ? "!pointer-events-auto nodrag nopan"
+      ? "!pointer-events-auto nodrag nopan cursor-crosshair"
       : "!pointer-events-none";
 
   return (
     <>
-      {CORNER_IDS.map((corner) => {
-        const outId = cornerHandle(corner, "out");
-        const inId = cornerHandle(corner, "in");
+      {SIDES.map((side) => {
+        const outId = sideMidHandle(side, "out");
+        const inId = sideMidHandle(side, "in");
         return (
-          <span key={corner} className="contents">
-            {/* Invisible target hit zone at each corner */}
+          <span key={side} className="contents">
+            {/* Large target hit pad — drop zone on this side */}
             <Handle
               type="target"
-              position={CORNER_POSITION[corner]}
+              position={SIDE_POSITION[side]}
               id={inId}
-              className={cn(targetHitClass, targetPointer)}
-              style={cornerStyle(corner, 20)}
+              className={cn(hitPadClass, interactive)}
+              style={midSideStyle(side, 40, 2)}
               isConnectable
               isConnectableEnd
               isConnectableStart={false}
             />
-            {/* Visible corner dots — only places to start a connection */}
+            {/* Visible mid-side dot — drag from here to connect */}
             {showConnectionDots ? (
               <Handle
                 type="source"
-                position={CORNER_POSITION[corner]}
+                position={SIDE_POSITION[side]}
                 id={outId}
                 className={cn(
                   visibleDotClass,
                   canStartConnection ? "!pointer-events-auto cursor-crosshair" : "!pointer-events-none",
                 )}
-                style={cornerStyle(corner, 14)}
+                style={midSideStyle(side, 20, 2)}
                 isConnectable={canStartConnection}
                 isConnectableStart={canStartConnection}
                 title="Drag to connect"
@@ -99,10 +100,10 @@ export default function FsiNodeHandles({
             ) : (
               <Handle
                 type="source"
-                position={CORNER_POSITION[corner]}
+                position={SIDE_POSITION[side]}
                 id={outId}
                 className={invisiblePointClass}
-                style={cornerStyle(corner, 4)}
+                style={midSideStyle(side, 4, 0)}
                 isConnectable={false}
                 isConnectableStart={false}
               />

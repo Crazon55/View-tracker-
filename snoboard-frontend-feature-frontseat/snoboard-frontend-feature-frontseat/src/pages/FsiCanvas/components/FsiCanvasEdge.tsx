@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useState } from "react";
 import {
   BaseEdge,
   EdgeLabelRenderer,
-  getStraightPath,
+  getSmoothStepPath,
   type EdgeProps,
 } from "@xyflow/react";
 import { Trash2 } from "lucide-react";
@@ -20,6 +20,8 @@ function FsiCanvasEdgeComponent({
   sourceY,
   targetX,
   targetY,
+  sourcePosition,
+  targetPosition,
   selected,
   data,
 }: EdgeProps) {
@@ -33,11 +35,16 @@ function FsiCanvasEdgeComponent({
     setLabelDraft(edgeData.labelNote ?? "");
   }, [edgeData.labelNote, id]);
 
-  const [edgePath, labelX, labelY] = getStraightPath({
+  // Orthogonal (right-angle) routing like Miro — no diagonals, no bezier curves.
+  const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX,
     sourceY,
     targetX,
     targetY,
+    sourcePosition,
+    targetPosition,
+    borderRadius: 0,
+    offset: 16,
   });
 
   const commitLabel = useCallback(() => {
@@ -54,10 +61,10 @@ function FsiCanvasEdgeComponent({
       <BaseEdge
         id={id}
         path={edgePath}
-        interactionWidth={24}
+        interactionWidth={28}
         style={{
-          stroke: selected ? "#d4d4d8" : "#71717a",
-          strokeWidth: selected ? 2.5 : 2,
+          stroke: selected ? "#d4d4d8" : "#a1a1aa",
+          strokeWidth: selected ? 2.5 : 1.75,
         }}
       />
       {!selected && displayLabel ? (

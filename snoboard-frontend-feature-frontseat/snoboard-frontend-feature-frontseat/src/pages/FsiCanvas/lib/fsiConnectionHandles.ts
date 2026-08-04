@@ -1,16 +1,16 @@
 import type { FsiConnectionRecord, FsiNodeRecord } from "./fsiNodeSchemas";
 import {
   inferAnchorHandles,
-  snapHandleToCorner,
+  snapHandleToSideMid,
 } from "./fsiConnectionAnchors";
 import { parseEmbeddedHandles } from "./fsiConnectionHandleMeta";
 
 export type FsiSourceHandleId = string;
 export type FsiTargetHandleId = string;
 
-/** Normalize stored id to a corner React Flow handle (`top-out-0`, not mid-side / strip). */
+/** Normalize stored id to a mid-side React Flow handle (`right-out-50`). */
 export function toFlowAnchorHandle(id: string | null | undefined): string | undefined {
-  return snapHandleToCorner(id);
+  return snapHandleToSideMid(id);
 }
 
 /** Collect every anchor handle id a node must render for its edges. */
@@ -37,8 +37,7 @@ export function resolveConnectionHandles(
   source: FsiNodeRecord,
   target: FsiNodeRecord,
 ): { sourceHandle: string; targetHandle: string } {
-  // Prefer the handles the user actually connected (side + position). Only infer
-  // when missing — re-inferring always caused wires to jump to "facing" sides.
+  // Prefer the handles the user actually connected. Only infer when missing.
   const embedded = parseEmbeddedHandles(connection.edge_label_note);
   const sourceHandle =
     toFlowAnchorHandle(connection.source_handle) ??
