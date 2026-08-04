@@ -3,11 +3,12 @@ import { cn } from "@/lib/utils";
 
 export type DuplicateCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
+/** Offset further out than corner connection dots so both stay usable when selected. */
 const CORNERS: { id: DuplicateCorner; className: string }[] = [
-  { id: "top-left", className: "-left-3 -top-3" },
-  { id: "top-right", className: "-right-3 -top-3" },
-  { id: "bottom-left", className: "-bottom-3 -left-3" },
-  { id: "bottom-right", className: "-bottom-3 -right-3" },
+  { id: "top-left", className: "-left-7 -top-7" },
+  { id: "top-right", className: "-right-7 -top-7" },
+  { id: "bottom-left", className: "-bottom-7 -left-7" },
+  { id: "bottom-right", className: "-bottom-7 -right-7" },
 ];
 
 type Props = {

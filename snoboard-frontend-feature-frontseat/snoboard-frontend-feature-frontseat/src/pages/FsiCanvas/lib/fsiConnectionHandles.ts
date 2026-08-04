@@ -1,24 +1,16 @@
 import type { FsiConnectionRecord, FsiNodeRecord } from "./fsiNodeSchemas";
 import {
   inferAnchorHandles,
-  parseAnchorHandle,
-  sideFromHandleId,
+  snapHandleToCorner,
 } from "./fsiConnectionAnchors";
 import { parseEmbeddedHandles } from "./fsiConnectionHandleMeta";
 
 export type FsiSourceHandleId = string;
 export type FsiTargetHandleId = string;
 
-/** Normalize stored id to a React Flow anchor handle (`right-out-35`, not bare `right-out`). */
+/** Normalize stored id to a corner React Flow handle (`top-out-0`, not mid-side / strip). */
 export function toFlowAnchorHandle(id: string | null | undefined): string | undefined {
-  if (!id) return undefined;
-  const trimmed = id.trim();
-  if (parseAnchorHandle(trimmed)) return trimmed;
-  const sideMeta = sideFromHandleId(trimmed);
-  if (sideMeta) {
-    return `${sideMeta.side}-${sideMeta.kind}-${50}`;
-  }
-  return undefined;
+  return snapHandleToCorner(id);
 }
 
 /** Collect every anchor handle id a node must render for its edges. */

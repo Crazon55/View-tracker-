@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useState } from "react";
 import {
   BaseEdge,
   EdgeLabelRenderer,
-  getSimpleBezierPath,
+  getStraightPath,
   type EdgeProps,
 } from "@xyflow/react";
 import { Trash2 } from "lucide-react";
@@ -20,8 +20,6 @@ function FsiCanvasEdgeComponent({
   sourceY,
   targetX,
   targetY,
-  sourcePosition,
-  targetPosition,
   selected,
   data,
 }: EdgeProps) {
@@ -35,13 +33,11 @@ function FsiCanvasEdgeComponent({
     setLabelDraft(edgeData.labelNote ?? "");
   }, [edgeData.labelNote, id]);
 
-  const [edgePath, labelX, labelY] = getSimpleBezierPath({
+  const [edgePath, labelX, labelY] = getStraightPath({
     sourceX,
     sourceY,
     targetX,
     targetY,
-    sourcePosition,
-    targetPosition,
   });
 
   const commitLabel = useCallback(() => {

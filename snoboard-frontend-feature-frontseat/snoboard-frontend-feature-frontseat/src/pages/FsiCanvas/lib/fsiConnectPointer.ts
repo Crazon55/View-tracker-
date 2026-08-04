@@ -23,7 +23,7 @@ function nodeBox(node: FlowNode, absPos: XYPosition): { x: number; y: number; w:
   return { x: absPos.x, y: absPos.y, w, h };
 }
 
-/** Resolve side + pointer position to a snapped perimeter anchor id. */
+/** Resolve side + pointer position to a snapped corner anchor id. */
 export function pointerToSideAnchor(
   side: AnchorSide,
   kind: AnchorKind,
@@ -47,24 +47,35 @@ export function anchorHandlesFromConnection(params: {
 }): { sourceHandle: string; targetHandle: string } {
   const sourceSideMeta = sideFromHandleId(params.sourceHandleId);
   const targetSideMeta = sideFromHandleId(params.targetHandleId);
-  const srcParsed = parseAnchorHandle(params.sourceHandleId ?? "");
+  const startedFromExactCorner = !!parseAnchorHandle(params.sourceHandleId ?? "");
 
-  let sourceHandle =
-    toFlowAnchorHandle(params.sourceHandleId) ??
-    (srcParsed ? params.sourceHandleId! : "right-out-50");
-
-  if (!srcParsed && sourceSideMeta && params.sourcePointer) {
-    sourceHandle = pointerToSideAnchor(
-      sourceSideMeta.side,
-      "out",
-      params.sourceNode,
-      params.sourceAbs,
-      params.sourcePointer,
-    );
+  // Keep the corner the user dragged from when they started on a visible corner dot.
+  let sourceHandle = toFlowAnchorHandle(params.sourceHandleId) ?? "top-out-100";
+  if (!startedFromExactCorner && params.sourcePointer) {
+    if (sourceSideMeta) {
+      sourceHandle = pointerToSideAnchor(
+        sourceSideMeta.side,
+        "out",
+        params.sourceNode,
+        params.sourceAbs,
+        params.sourcePointer,
+      );
+    } else {
+      const box = nodeBox(params.sourceNode, params.sourceAbs);
+      sourceHandle = pointerToAnchorHandle(
+        box.x,
+        box.y,
+        box.w,
+        box.h,
+        params.sourcePointer.x,
+        params.sourcePointer.y,
+        "out",
+      );
+    }
   }
 
-  // Drop pointer decides the target side — never let RF default to a facing-side guess.
-  let targetHandle = toFlowAnchorHandle(params.targetHandleId) ?? "left-in-50";
+  // Drop pointer decides the target corner.
+  let targetHandle = toFlowAnchorHandle(params.targetHandleId) ?? "top-in-0";
   if (params.targetPointer) {
     if (targetSideMeta) {
       targetHandle = pointerToSideAnchor(
