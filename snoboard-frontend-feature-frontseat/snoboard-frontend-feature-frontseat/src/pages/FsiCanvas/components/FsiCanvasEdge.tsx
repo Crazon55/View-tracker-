@@ -41,7 +41,7 @@ function edgePathForEndpoints(
     sourcePosition,
     targetPosition,
     borderRadius: 0,
-    offset: 16,
+    offset: 8,
   });
 }
 

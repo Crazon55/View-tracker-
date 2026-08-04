@@ -18,19 +18,18 @@ const SIDE_POSITION: Record<AnchorSide, Position> = {
   left: Position.Left,
 };
 
-/** Sit the port slightly outside the card edge so it's easy to grab (Miro-like). */
-function midSideStyle(side: AnchorSide, sizePx: number, outset = 0): CSSProperties {
+/** Center the port on the card edge so wires meet the border (no floating gap). */
+function midSideStyle(side: AnchorSide, sizePx: number): CSSProperties {
   const half = sizePx / 2;
-  const push = outset + half;
   switch (side) {
     case "top":
-      return { left: "50%", top: 0, transform: `translate(-50%, -${push}px)` };
+      return { left: "50%", top: 0, transform: `translate(-50%, -${half}px)` };
     case "bottom":
-      return { left: "50%", bottom: 0, transform: `translate(-50%, ${push}px)` };
+      return { left: "50%", bottom: 0, transform: `translate(-50%, ${half}px)` };
     case "left":
-      return { top: "50%", left: 0, transform: `translate(-${push}px, -50%)` };
+      return { top: "50%", left: 0, transform: `translate(-${half}px, -50%)` };
     case "right":
-      return { top: "50%", right: 0, transform: `translate(${push}px, -50%)` };
+      return { top: "50%", right: 0, transform: `translate(${half}px, -50%)` };
   }
 }
 
@@ -77,7 +76,7 @@ export default function FsiNodeHandles({
               position={SIDE_POSITION[side]}
               id={inId}
               className={cn(hitPadClass, interactive)}
-              style={midSideStyle(side, 40, 2)}
+              style={midSideStyle(side, 40)}
               isConnectable
               isConnectableEnd
               isConnectableStart={false}
@@ -92,7 +91,7 @@ export default function FsiNodeHandles({
                   visibleDotClass,
                   canStartConnection ? "!pointer-events-auto cursor-crosshair" : "!pointer-events-none",
                 )}
-                style={midSideStyle(side, 20, 2)}
+                style={midSideStyle(side, 20)}
                 isConnectable={canStartConnection}
                 isConnectableStart={canStartConnection}
                 title="Drag to connect"
@@ -103,7 +102,7 @@ export default function FsiNodeHandles({
                 position={SIDE_POSITION[side]}
                 id={outId}
                 className={invisiblePointClass}
-                style={midSideStyle(side, 4, 0)}
+                style={midSideStyle(side, 4)}
                 isConnectable={false}
                 isConnectableStart={false}
               />
