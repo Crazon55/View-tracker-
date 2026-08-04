@@ -140,7 +140,10 @@ const withOverrides = (
 ): Record<AreaKey, AreaLevel> => ({ ...all(base), ...overrides });
 
 const BD_ACCESS = withOverrides("none", {
-  seeding_overview: "edit", seeding_submit: "edit", seeding_campaign_reports: "view",
+  seeding_overview: "edit",
+  seeding_submit: "edit",
+  seeding_deals: "view",
+  seeding_campaign_reports: "view",
 });
 
 // Default matrices — STARTING POINT (tune in the UI). "?" cells in the plan default
