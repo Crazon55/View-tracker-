@@ -30,8 +30,9 @@ const FILTERS: [string, string][] = [
 ];
 
 export default function SeedingBDDashboard() {
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const lockedTeamName = bdTeamNameForRole(role);
+  const myEmail = user?.email?.trim().toLowerCase() || "";
   const [data, setData] = useState<any>(null);
   const [deals, setDeals] = useState<any[]>([]);
   const [filter, setFilter] = useState("all");
@@ -51,13 +52,16 @@ export default function SeedingBDDashboard() {
       api.get<any[]>("/deals", { params: lockedTeamName ? { team_name: lockedTeamName } : {} }),
     ]).then(([{ data: rep }, { data: dlist }]) => {
       setData(rep);
-      // Defense in depth: never show another team's briefs on the BD dashboard.
       const rows = dlist || [];
-      setDeals(lockedTeamName
+      const teamScoped = lockedTeamName
         ? rows.filter((d) => (d.submitted_by_team?.team_name || "") === lockedTeamName)
-        : rows);
+        : rows;
+      // BDs edit only briefs they submitted — list those on the dashboard.
+      setDeals(myEmail
+        ? teamScoped.filter((d) => (d.submitted_by_user?.email || "").trim().toLowerCase() === myEmail)
+        : teamScoped);
     }).catch(() => { /* backend scopes to the caller's team */ });
-  }, [lockedTeamName]);
+  }, [lockedTeamName, myEmail]);
 
   const teamName = useMemo(
     () => lockedTeamName || deals[0]?.submitted_by_team?.team_name || "Your team",
@@ -80,7 +84,7 @@ export default function SeedingBDDashboard() {
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16 }}>
         <div>
           <h1 className="f-h1">{teamName}</h1>
-          <p className="f-lead">Your team's briefs and deals — this month.</p>
+          <p className="f-lead">Your submitted briefs and deals — this month.</p>
         </div>
         <Link to="/seeding/submit" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#fff", color: "#000", borderRadius: 8, padding: "10px 16px", fontSize: 13, fontWeight: 600, flexShrink: 0 }}>
           <Plus size={15} strokeWidth={2.25} /> Submit New Brief

@@ -916,7 +916,11 @@ async def _enrich_deals(deals: List[dict]) -> List[dict]:
             {"_id": 0, "user_id": 1, "name": 1, "email": 1},
         ).to_list(len(user_ids) + 10)
         users_map = {
-            u["user_id"]: {"name": u.get("name"), "email": u.get("email")}
+            u["user_id"]: {
+                "user_id": u["user_id"],
+                "name": u.get("name"),
+                "email": u.get("email"),
+            }
             for u in users
             if u.get("user_id")
         }
@@ -1275,12 +1279,9 @@ async def update_deal(deal_id: str, payload: BriefUpdate, user: dict = Depends(g
     # only admin can edit accepted/approved deals
     if deal.get("admin_review_status") == "Approved" and user["role"] != "admin":
         raise HTTPException(403, "Only admin can edit approved deals")
-    # BD can edit only own team's submitted briefs
+    # BD can edit only briefs they personally submitted (pre-approval).
     if user["role"] == "bd":
-        if deal.get("submitted_by_team_id") != user.get("business_team_id"):
-            raise HTTPException(403, "Forbidden")
-        if deal.get("admin_review_status") not in {"Submitted", "Needs More Info"}:
-            raise HTTPException(403, "BD can only edit before approval")
+        _check_bd_own_brief(user, deal)
 
     # payment_status lives on seeding_payments, not seeding_deals
     payment_status = raw.pop("payment_status", None)
@@ -1440,15 +1441,25 @@ async def update_deal_status(deal_id: str, payload: DealStatusUpdate, user: dict
 
 
 # ----------------------------- Deliverables -----------------------------
+def _check_bd_own_brief(user: dict, deal: dict, *, require_editable: bool = True):
+    """BD may only modify briefs they personally submitted."""
+    if user.get("role") != "bd":
+        return
+    if deal.get("submitted_by_team_id") != user.get("business_team_id"):
+        raise HTTPException(403, "Forbidden")
+    if deal.get("submitted_by_user_id") != user.get("user_id"):
+        raise HTTPException(403, "You can only edit your own briefs")
+    if require_editable and deal.get("admin_review_status") not in {"Submitted", "Needs More Info"}:
+        raise HTTPException(403, "BD can only edit before approval")
+
+
 def _check_deliverable_spec_access(user: dict, deal: dict):
-    """Admin can always edit deliverable spec; BD only before approval."""
+    """Admin can always edit deliverable spec; BD only their own brief before approval."""
     if user["role"] == "admin":
         return
     if user["role"] == "bd":
-        if deal.get("submitted_by_team_id") != user.get("business_team_id"):
-            raise HTTPException(403, "Forbidden")
-        if deal.get("admin_review_status") in {"Submitted", "Needs More Info"}:
-            return
+        _check_bd_own_brief(user, deal)
+        return
     raise HTTPException(403, "Only admin can modify deliverables after approval")
 
 
@@ -1734,8 +1745,11 @@ async def update_payment(deal_id: str, payload: PaymentUpdate, user: dict = Depe
     deal = await db.deals.find_one({"deal_id": deal_id}, {"_id": 0})
     if not deal:
         raise HTTPException(404, "Deal not found")
-    if user["role"] == "bd" and deal.get("submitted_by_team_id") != user.get("business_team_id"):
-        raise HTTPException(403, "Forbidden")
+    if user["role"] == "bd":
+        if deal.get("submitted_by_team_id") != user.get("business_team_id"):
+            raise HTTPException(403, "Forbidden")
+        if deal.get("submitted_by_user_id") != user.get("user_id"):
+            raise HTTPException(403, "You can only update payment on your own briefs")
     if user["role"] != "admin":
         if payload.amount_received is not None:
             raise HTTPException(403, "Only admin can update amount received")

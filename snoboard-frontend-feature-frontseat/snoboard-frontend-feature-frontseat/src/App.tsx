@@ -555,7 +555,7 @@ function AppLayout() {
               <Route path="/seeding" element={<RequireArea area="seeding_overview"><SeedingHome /></RequireArea>} />
               <Route path="/seeding/approvals" element={<RequireArea area="seeding_approvals"><SeedingApprovalQueue /></RequireArea>} />
               <Route path="/seeding/deals" element={<RequireArea area="seeding_deals"><SeedingAllDeals /></RequireArea>} />
-              <Route path="/seeding/deals/:dealId" element={<RequireArea area="seeding_deals"><SeedingDealDetail /></RequireArea>} />
+              <Route path="/seeding/deals/:dealId" element={<RequireArea anyOf={["seeding_deals", "seeding_overview"]}><SeedingDealDetail /></RequireArea>} />
               <Route path="/seeding/fulfillment" element={<RequireArea area="seeding_fulfillment"><SeedingFulfillmentBoard /></RequireArea>} />
               <Route path="/seeding/campaign-reports" element={<RequireArea area="seeding_campaign_reports"><SeedingCampaignReports /></RequireArea>} />
               <Route path="/seeding/campaign-reports/:dealId" element={<RequireArea area="seeding_campaign_reports"><SeedingCampaignReportDetail /></RequireArea>} />

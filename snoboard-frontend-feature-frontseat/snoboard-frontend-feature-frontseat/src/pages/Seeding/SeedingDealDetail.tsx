@@ -24,9 +24,21 @@ import type {
   SeedingOutput,
 } from "@/services/seeding/mockData";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAuth } from "@/contexts/AuthContext";
 import { BD_TEAM_ROLE_TO_NAME, canonicalRole } from "@/lib/accessModel";
 
 const inputCls = "fglass-input w-full rounded-lg px-3 py-2 text-sm";
+
+const BD_EDITABLE_REVIEW = new Set(["Submitted", "Needs More Info"]);
+
+function isOwnSubmittedBrief(
+  deal: { submitted_by_user?: { email?: string }; submitted_by_user_id?: string },
+  email?: string | null,
+): boolean {
+  const mine = (email || "").trim().toLowerCase();
+  const submitterEmail = (deal.submitted_by_user?.email || "").trim().toLowerCase();
+  return !!mine && !!submitterEmail && mine === submitterEmail;
+}
 
 const FEEDBACK_TYPES: SeedingFeedbackType[] = ["blocker", "comment", "change"];
 const FEEDBACK_TYPE_META: Record<SeedingFeedbackType, { label: string; color: string; bg: string }> = {
@@ -270,9 +282,8 @@ export default function SeedingDealDetail() {
   const { dealId } = useParams();
   const [search] = useSearchParams();
   const { role } = usePermissions();
+  const { user } = useAuth();
   const from = search.get("from");
-  const backTo = from === "fulfillment" ? "/seeding/fulfillment" : "/seeding/deals";
-  const backLabel = from === "fulfillment" ? "Back to fulfillment" : "Back to deals";
 
   const roleParts = useMemo(
     () => String(role || "").split(",").map((r) => r.trim().toLowerCase()).filter(Boolean),
@@ -281,6 +292,8 @@ export default function SeedingDealDetail() {
   const isFulfillment = roleParts.some((r) => canonicalRole(r) === "fulfillment");
   const isBD = roleParts.some((r) => canonicalRole(r) === "bd" || r in BD_TEAM_ROLE_TO_NAME);
   const isAdmin = roleParts.some((r) => canonicalRole(r) === "admin");
+  const backTo = from === "fulfillment" ? "/seeding/fulfillment" : isBD && !isAdmin ? "/seeding" : "/seeding/deals";
+  const backLabel = from === "fulfillment" ? "Back to fulfillment" : isBD && !isAdmin ? "Back to dashboard" : "Back to deals";
   // Money is BD/admin only — fulfillment must never see Payment / Revenue.
   const canSeeMoney = !isFulfillment || isAdmin;
   const canManageOutputs = isFulfillment || isAdmin;
@@ -468,6 +481,13 @@ export default function SeedingDealDetail() {
     deal.submitted_by_team?.team_name ? `(${deal.submitted_by_team.team_name})` : null,
   ].filter(Boolean).join(" ");
 
+  const isOwnBrief = isOwnSubmittedBrief(deal, user?.email);
+  const canEditBrief =
+    isAdmin ||
+    (isBD && isOwnBrief && BD_EDITABLE_REVIEW.has(deal.admin_review_status));
+  const canEditMoney = isAdmin || (isBD && isOwnBrief && BD_EDITABLE_REVIEW.has(deal.admin_review_status));
+  const canEditDeliverables = canManageOutputs || canEditBrief;
+
   return (
     <FramerPage>
       <div className="seeding-detail-wrap">
@@ -497,39 +517,49 @@ export default function SeedingDealDetail() {
           </div>
         ) : null}
 
+        {isBD && !isAdmin && !canEditBrief ? (
+          <div className="seeding-detail-alert" style={{ borderColor: "var(--f-line)", color: "var(--f-dim)" }}>
+            {isOwnBrief
+              ? "This brief is approved — you can view it and comment, but edits are locked."
+              : "View only — you can only edit briefs you submitted."}
+          </div>
+        ) : null}
+
         <Section title="Original brief">
           <div className="seeding-detail-form">
             <label className="seeding-detail-field seeding-detail-field--full">
               <span>Agency / Client name</span>
-              <input className={inputCls} value={draft.agency_or_client_name || ""} onChange={(e) => setDraft({ ...draft, agency_or_client_name: e.target.value })} />
+              <input className={inputCls} readOnly={!canEditBrief} value={draft.agency_or_client_name || ""} onChange={(e) => setDraft({ ...draft, agency_or_client_name: e.target.value })} />
             </label>
             <label className="seeding-detail-field seeding-detail-field--full">
               <span>Brief link</span>
-              <input className={inputCls} placeholder="https://…" value={draft.brief_link || ""} onChange={(e) => setDraft({ ...draft, brief_link: e.target.value })} />
+              <input className={inputCls} readOnly={!canEditBrief} placeholder="https://…" value={draft.brief_link || ""} onChange={(e) => setDraft({ ...draft, brief_link: e.target.value })} />
             </label>
             <label className="seeding-detail-field seeding-detail-field--full">
               <span>Brief text</span>
-              <textarea className={inputCls} rows={4} value={draft.brief_text || ""} onChange={(e) => setDraft({ ...draft, brief_text: e.target.value })} />
+              <textarea className={inputCls} readOnly={!canEditBrief} rows={4} value={draft.brief_text || ""} onChange={(e) => setDraft({ ...draft, brief_text: e.target.value })} />
             </label>
             <label className="seeding-detail-field seeding-detail-field--full">
               <span>Assets / reference links (one per line)</span>
-              <textarea className={inputCls} rows={3} value={draft.assets_links || ""} onChange={(e) => setDraft({ ...draft, assets_links: e.target.value })} />
+              <textarea className={inputCls} readOnly={!canEditBrief} rows={3} value={draft.assets_links || ""} onChange={(e) => setDraft({ ...draft, assets_links: e.target.value })} />
             </label>
             <label className="seeding-detail-field seeding-detail-field--full">
               <span>Notes</span>
-              <textarea className={inputCls} rows={3} value={draft.notes || ""} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />
+              <textarea className={inputCls} readOnly={!canEditBrief} rows={3} value={draft.notes || ""} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />
             </label>
           </div>
-          <button type="button" className="seeding-detail-save" disabled={saving} onClick={saveBrief}>
-            {saving ? "Saving…" : "Save brief"}
-          </button>
+          {canEditBrief ? (
+            <button type="button" className="seeding-detail-save" disabled={saving} onClick={saveBrief}>
+              {saving ? "Saving…" : "Save brief"}
+            </button>
+          ) : null}
         </Section>
 
         <Section
           title={`Deliverables (${draft.deliverables?.length ?? 0})`}
           action={
             <div className="seeding-detail-section-actions">
-              {canManageOutputs ? (
+              {canEditDeliverables ? (
                 <button type="button" className="seeding-detail-ghost-btn" onClick={() => setShowAddDeliv((v) => !v)}>+ Add</button>
               ) : null}
               <select
@@ -548,7 +578,7 @@ export default function SeedingDealDetail() {
             </div>
           }
         >
-          {showAddDeliv && canManageOutputs && (
+          {showAddDeliv && canEditDeliverables && (
             <div className="seeding-surface-nested" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", padding: 12, borderRadius: 12, marginBottom: 12 }}>
               <select className="seeding-inline-select" style={{ flex: "1 1 180px" }} value={newDeliv.page_id} onChange={(e) => setNewDeliv((d) => ({ ...d, page_id: e.target.value }))}>
                 {!pages.length && <option value="">No pages</option>}
@@ -602,7 +632,7 @@ export default function SeedingDealDetail() {
                     </span>
                   </button>
                   <div className="seeding-deliverable-head-actions" onClick={(e) => e.stopPropagation()}>
-                    {canManageOutputs ? (
+                    {canEditDeliverables ? (
                       <button type="button" className="seeding-detail-icon-btn" aria-label="Remove deliverable" onClick={() => removeDeliverable(del.deliverable_id)}>
                         <Trash2 size={14} />
                       </button>
@@ -610,6 +640,7 @@ export default function SeedingDealDetail() {
                     <select
                       className="seeding-inline-select"
                       value={del.status}
+                      disabled={!canManageOutputs}
                       onChange={(e) => {
                         const status = e.target.value;
                         updateDeliverable(del.deliverable_id, { status });
@@ -627,6 +658,7 @@ export default function SeedingDealDetail() {
                     <div className="seeding-live-link-row">
                       <input
                         className={inputCls}
+                        readOnly={!canManageOutputs}
                         value={del.live_link || ""}
                         onChange={(e) => updateDeliverable(del.deliverable_id, { live_link: e.target.value })}
                         onBlur={(e) => saveDeliverable(del.deliverable_id, { live_link: e.target.value })}
@@ -634,6 +666,7 @@ export default function SeedingDealDetail() {
                       <input
                         className={`${inputCls} seeding-views-input`}
                         type="number"
+                        readOnly={!canManageOutputs}
                         value={del.views ?? 0}
                         onChange={(e) => updateDeliverable(del.deliverable_id, { views: Number(e.target.value) || 0 })}
                         onBlur={(e) => saveDeliverable(del.deliverable_id, { views: Number(e.target.value) || 0 })}
@@ -644,6 +677,7 @@ export default function SeedingDealDetail() {
                     <span>Deliverable notes</span>
                     <input
                       className={inputCls}
+                      readOnly={!canManageOutputs}
                       value={del.notes || ""}
                       onChange={(e) => updateDeliverable(del.deliverable_id, { notes: e.target.value })}
                       onBlur={(e) => saveDeliverable(del.deliverable_id, { notes: e.target.value })}
@@ -653,6 +687,7 @@ export default function SeedingDealDetail() {
                     <span>Assignment</span>
                     <select
                       className="seeding-inline-select"
+                      disabled={!canManageOutputs}
                       value={assigneeId(del)}
                       onChange={(e) => {
                         const assigned_fulfillment_user_id = e.target.value || null;
@@ -849,6 +884,7 @@ export default function SeedingDealDetail() {
                   <span>Status</span>
                   <select
                     className="seeding-inline-select"
+                    disabled={!canEditMoney}
                     value={draft.payment_status || "Not Raised"}
                     onChange={(e) => save({ payment_status: e.target.value })}
                   >
@@ -860,6 +896,7 @@ export default function SeedingDealDetail() {
                   <input
                     type="date"
                     className={inputCls}
+                    readOnly={!canEditMoney}
                     value={toDateInputValue(draft.payment_due_date)}
                     onChange={(e) => save({ payment_due_date: e.target.value ? `${e.target.value}T00:00:00` : undefined })}
                   />
@@ -869,6 +906,7 @@ export default function SeedingDealDetail() {
                   <input
                     type="number"
                     className={inputCls}
+                    readOnly={!isAdmin}
                     value={draft.amount_received ?? 0}
                     onChange={(e) => setDraft({ ...draft, amount_received: Number(e.target.value) || 0 })}
                     onBlur={() => save({ amount_received: draft.amount_received ?? 0 })}
@@ -886,6 +924,7 @@ export default function SeedingDealDetail() {
                 <span>Payment notes</span>
                 <textarea
                   className={inputCls}
+                  readOnly={!isAdmin}
                   rows={3}
                   placeholder="Add payment notes…"
                   value={draft.payment_notes || ""}
@@ -901,6 +940,7 @@ export default function SeedingDealDetail() {
                 <input
                   type="number"
                   className={inputCls}
+                  readOnly={!canEditMoney}
                   value={draft.price_closed_at}
                   onChange={(e) => setDraft({ ...draft, price_closed_at: Number(e.target.value) || 0 })}
                   onBlur={() => save({ price_closed_at: draft.price_closed_at })}

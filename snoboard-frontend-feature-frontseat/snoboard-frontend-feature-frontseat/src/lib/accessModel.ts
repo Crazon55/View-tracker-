@@ -142,7 +142,6 @@ const withOverrides = (
 const BD_ACCESS = withOverrides("none", {
   seeding_overview: "edit",
   seeding_submit: "edit",
-  seeding_deals: "view",
   seeding_campaign_reports: "view",
 });
 
@@ -186,7 +185,7 @@ export const ROLE_ACCESS_DEFAULTS: Record<string, Record<AreaKey, AreaLevel>> = 
     pintu: "view", growth: "view", ips: "view", fsi_canvas: "edit",
   }),
 
-  // BD: only their team dashboard (Overview) + Submit Brief.
+  // BD: team dashboard (Overview) + Submit Brief + own deal detail (via overview).
   bd: BD_ACCESS,
   hooc_bd: BD_ACCESS,
   ay_bd: BD_ACCESS,

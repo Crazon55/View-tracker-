@@ -5,15 +5,22 @@ import { AREAS, type AreaKey } from "@/lib/accessModel";
 /** Redirects away when the signed-in (or preview) role cannot view `area`. */
 export function RequireArea({
   area,
+  anyOf,
   fallback,
   children,
 }: {
-  area: AreaKey;
+  area?: AreaKey;
+  anyOf?: AreaKey[];
   fallback?: string;
   children: React.ReactNode;
 }) {
   const { canViewArea } = useAreaAccess();
-  if (canViewArea(area)) return <>{children}</>;
+  const allowed = anyOf?.length
+    ? anyOf.some((a) => canViewArea(a))
+    : area
+      ? canViewArea(area)
+      : false;
+  if (allowed) return <>{children}</>;
 
   // Prefer an explicitly allowed sibling route; never bounce to a gated page the user also can't see.
   if (fallback) return <Navigate to={fallback} replace />;
