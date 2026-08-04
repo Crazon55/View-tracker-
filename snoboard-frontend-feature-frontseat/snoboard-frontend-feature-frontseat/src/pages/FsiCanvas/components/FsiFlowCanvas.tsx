@@ -995,8 +995,9 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         data: {
           ...(n.data as FsiNodeData),
           isConnecting,
-          // Always show connect dots while editing so move (body) vs connect (dot) is obvious.
-          showConnectionDots: canEdit,
+          // Only reveal ports while a connect drag is active; selected nodes also
+          // show them locally so you can start a wire without cluttering the board.
+          showConnectionDots: isConnecting,
         },
       })),
     [nodes, canEdit, isConnecting],

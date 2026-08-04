@@ -65,6 +65,8 @@ export default function FsiNodeHandles({
               className={cn(
                 baseHandleClass,
                 "fsi-rf-handle-target",
+                // While dragging a wire, highlight drop ports on other nodes.
+                showConnectionDots && canAcceptConnection && "fsi-rf-handle-target-visible",
                 canHitTarget ? "!pointer-events-auto cursor-crosshair" : "!pointer-events-none",
               )}
               style={anchorStyle(side)}
@@ -79,7 +81,8 @@ export default function FsiNodeHandles({
               className={cn(
                 baseHandleClass,
                 "fsi-rf-handle-source",
-                showConnectionDots && canStartConnection && "fsi-rf-handle-source-visible",
+                // Source dots only when this node is offering a start port (selected), not on every board node.
+                showConnectionDots && canDragFromSource && "fsi-rf-handle-source-visible",
                 canDragFromSource ? "!pointer-events-auto cursor-crosshair" : "!pointer-events-none",
               )}
               style={anchorStyle(side)}

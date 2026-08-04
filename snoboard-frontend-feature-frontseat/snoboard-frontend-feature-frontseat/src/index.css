@@ -445,8 +445,9 @@ input[style*="colorScheme"]::-webkit-calendar-picker-indicator {
   background: transparent;
 }
 
-/* Visible Miro-style connect dots on source ports when editing. */
-.fsi-flow-canvas .react-flow__handle.fsi-rf-handle-source-visible::after {
+/* Visible Miro-style connect dots on source ports (selected node). */
+.fsi-flow-canvas .react-flow__handle.fsi-rf-handle-source-visible::after,
+.fsi-flow-canvas .react-flow__handle.fsi-rf-handle-target-visible::after {
   content: "";
   position: absolute;
   left: 50%;
@@ -462,7 +463,8 @@ input[style*="colorScheme"]::-webkit-calendar-picker-indicator {
   pointer-events: none;
 }
 
-.fsi-flow-canvas .react-flow__handle.fsi-rf-handle-source-visible:hover::after {
+.fsi-flow-canvas .react-flow__handle.fsi-rf-handle-source-visible:hover::after,
+.fsi-flow-canvas .react-flow__handle.fsi-rf-handle-target-visible:hover::after {
   transform: translate(-50%, -50%) scale(1.2);
   border-color: rgb(186, 230, 253);
   background: rgba(14, 165, 233, 0.25);
