@@ -24,7 +24,7 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import FsiCanvasNode from "./FsiCanvasNode";
-import FsiCanvasEdge from "./FsiCanvasEdge";
+import FsiCanvasEdge, { FsiConnectionLine } from "./FsiCanvasEdge";
 import FsiMiroGrid from "./FsiMiroGrid";
 import FsiFrameNode from "./FsiFrameNode";
 import { FSI_WHITEBOARD_TOOL_MIME, type WhiteboardToolPayload } from "./FsiLeftToolbar";
@@ -1029,6 +1029,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         isValidConnection={isValidConnection}
         connectionMode={ConnectionMode.Strict}
         connectionLineType={ConnectionLineType.SmoothStep}
+        connectionLineComponent={FsiConnectionLine}
         connectOnClick={false}
         connectionRadius={72}
         nodeDragThreshold={1}

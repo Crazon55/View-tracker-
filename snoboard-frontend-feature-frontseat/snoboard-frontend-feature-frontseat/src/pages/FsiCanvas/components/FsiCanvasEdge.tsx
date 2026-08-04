@@ -3,7 +3,10 @@ import {
   BaseEdge,
   EdgeLabelRenderer,
   getSmoothStepPath,
+  getStraightPath,
+  type ConnectionLineComponentProps,
   type EdgeProps,
+  type Position,
 } from "@xyflow/react";
 import { Trash2 } from "lucide-react";
 
@@ -13,6 +16,55 @@ export type FsiEdgeData = {
   onDelete?: (edgeId: string) => void;
   onLabelChange?: (edgeId: string, label: string) => void;
 };
+
+/** If ports are nearly aligned, draw straight — avoid tiny orthogonal "stair" jogs. */
+const ALIGN_THRESHOLD_PX = 24;
+
+function edgePathForEndpoints(
+  sourceX: number,
+  sourceY: number,
+  targetX: number,
+  targetY: number,
+  sourcePosition: Position,
+  targetPosition: Position,
+): [string, number, number] {
+  const dx = Math.abs(targetX - sourceX);
+  const dy = Math.abs(targetY - sourceY);
+  if (dx <= ALIGN_THRESHOLD_PX || dy <= ALIGN_THRESHOLD_PX) {
+    return getStraightPath({ sourceX, sourceY, targetX, targetY });
+  }
+  return getSmoothStepPath({
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition,
+    borderRadius: 0,
+    offset: 16,
+  });
+}
+
+/** Live drag preview uses the same straight-vs-step rule as committed edges. */
+export function FsiConnectionLine({
+  fromX,
+  fromY,
+  toX,
+  toY,
+  fromPosition,
+  toPosition,
+}: ConnectionLineComponentProps) {
+  const [path] = edgePathForEndpoints(fromX, fromY, toX, toY, fromPosition, toPosition);
+  return (
+    <path
+      fill="none"
+      stroke="#a1a1aa"
+      strokeWidth={1.75}
+      d={path}
+      className="react-flow__connection-path"
+    />
+  );
+}
 
 function FsiCanvasEdgeComponent({
   id,
@@ -35,17 +87,14 @@ function FsiCanvasEdgeComponent({
     setLabelDraft(edgeData.labelNote ?? "");
   }, [edgeData.labelNote, id]);
 
-  // Orthogonal (right-angle) routing like Miro — no diagonals, no bezier curves.
-  const [edgePath, labelX, labelY] = getSmoothStepPath({
+  const [edgePath, labelX, labelY] = edgePathForEndpoints(
     sourceX,
     sourceY,
     targetX,
     targetY,
     sourcePosition,
     targetPosition,
-    borderRadius: 0,
-    offset: 16,
-  });
+  );
 
   const commitLabel = useCallback(() => {
     const next = labelDraft.trim();
