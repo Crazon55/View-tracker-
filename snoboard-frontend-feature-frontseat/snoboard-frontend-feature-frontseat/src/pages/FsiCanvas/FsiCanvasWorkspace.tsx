@@ -599,6 +599,10 @@ export default function FsiCanvasWorkspace() {
       };
       const previous = g;
       setGraph({ ...g, connections: [...g.connections, optimistic] });
+      // Record immediately so Ctrl+Z undoes the line without waiting for the API.
+      if (!history.isApplying.current) {
+        history.pushEntry({ type: "connection_add", connection: optimistic });
+      }
       return { previous, tempId, skipped: false as const };
     },
     onSuccess: (connection, { source, target, sourceHandle, targetHandle }, ctx) => {
@@ -618,6 +622,7 @@ export default function FsiCanvasWorkspace() {
       );
       if (!stillWanted) {
         void fsiApi.deleteConnection(connection.id, studyId!);
+        if (ctx?.tempId) history.discardConnectionEntry(ctx.tempId);
         return;
       }
       const withHandles = {
@@ -644,12 +649,13 @@ export default function FsiCanvasWorkspace() {
           withHandles,
         ],
       });
-      if (!history.isApplying.current) {
-        history.pushEntry({ type: "connection_add", connection: withHandles });
+      if (ctx?.tempId) {
+        history.remapConnectionId(ctx.tempId, withHandles);
       }
     },
     onError: (e: Error, _vars, ctx) => {
       if (ctx?.previous && !ctx.skipped) setGraph(ctx.previous);
+      if (ctx?.tempId) history.discardConnectionEntry(ctx.tempId);
       toast.error(e.message);
     },
   });

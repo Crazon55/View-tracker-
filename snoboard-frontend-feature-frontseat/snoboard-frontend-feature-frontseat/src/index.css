@@ -427,17 +427,50 @@ input[style*="colorScheme"]::-webkit-calendar-picker-indicator {
 }
 
 .fsi-flow-canvas .react-flow__handle {
-  opacity: 0 !important;
-  background: transparent !important;
-  border: none !important;
+  /* Geometry stays 1px — do NOT force opacity 0 on all handles (hides Miro dots). */
   min-width: 0;
   min-height: 0;
+}
+
+/* Invisible hit pad around the 1px anchor (::before does not affect RF edge math). */
+.fsi-flow-canvas .react-flow__handle.fsi-rf-handle::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 36px;
+  height: 36px;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  background: transparent;
+}
+
+/* Visible Miro-style connect dots on source ports when editing. */
+.fsi-flow-canvas .react-flow__handle.fsi-rf-handle-source-visible::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  transform: translate(-50%, -50%);
+  box-sizing: border-box;
+  border-radius: 9999px;
+  border: 2.5px solid rgb(56, 189, 248);
+  background: rgb(9, 9, 11);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.28);
+  pointer-events: none;
+}
+
+.fsi-flow-canvas .react-flow__handle.fsi-rf-handle-source-visible:hover::after {
+  transform: translate(-50%, -50%) scale(1.2);
+  border-color: rgb(186, 230, 253);
+  background: rgba(14, 165, 233, 0.25);
 }
 
 .fsi-flow-canvas .react-flow__handle.connecting,
 .fsi-flow-canvas .react-flow__handle.valid,
 .fsi-flow-canvas .react-flow__handle:hover {
-  opacity: 0 !important;
   background: transparent !important;
 }
 

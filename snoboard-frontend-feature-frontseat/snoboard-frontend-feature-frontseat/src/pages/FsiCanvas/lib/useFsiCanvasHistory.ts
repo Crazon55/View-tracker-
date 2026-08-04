@@ -45,6 +45,21 @@ function applyBatchMove(
   };
 }
 
+function findMatchingConnection(
+  connections: FsiConnectionRecord[],
+  needle: FsiConnectionRecord,
+): FsiConnectionRecord | undefined {
+  const byId = connections.find((c) => c.id === needle.id);
+  if (byId) return byId;
+  return connections.find(
+    (c) =>
+      c.source_node_id === needle.source_node_id &&
+      c.target_node_id === needle.target_node_id &&
+      (c.source_handle ?? "") === (needle.source_handle ?? "") &&
+      (c.target_handle ?? "") === (needle.target_handle ?? ""),
+  );
+}
+
 async function persistNodePatch(nodeId: string, patch: NodePatch): Promise<void> {
   await fsiApi.updateNode(nodeId, patch as Record<string, unknown>);
 }
@@ -162,32 +177,67 @@ export function useFsiCanvasHistory(studyId: string | undefined) {
             const conn = await fsiApi.createConnection(studyId, {
               source_node_id: entry.connection.source_node_id,
               target_node_id: entry.connection.target_node_id,
-              edge_label_note: entry.connection.edge_label_note,
+              edge_label_note: entry.connection.edge_label_note ?? undefined,
+              source_handle: entry.connection.source_handle ?? undefined,
+              target_handle: entry.connection.target_handle ?? undefined,
             });
-            setGraph({ ...graph, connections: [...graph.connections, conn] });
+            const withHandles: FsiConnectionRecord = {
+              ...conn,
+              source_handle: conn.source_handle ?? entry.connection.source_handle ?? null,
+              target_handle: conn.target_handle ?? entry.connection.target_handle ?? null,
+            };
+            // Keep stack entry id in sync so a later undo finds this edge.
+            entry.connection = withHandles;
+            setGraph({ ...graph, connections: [...graph.connections, withHandles] });
           } else {
+            const match = findMatchingConnection(graph.connections, entry.connection);
             setGraph({
               ...graph,
-              connections: graph.connections.filter((c) => c.id !== entry.connection.id),
+              connections: match
+                ? graph.connections.filter((c) => c.id !== match.id)
+                : graph.connections.filter((c) => c.id !== entry.connection.id),
             });
-            await fsiApi.deleteConnection(entry.connection.id);
+            const idToDelete = match?.id ?? entry.connection.id;
+            if (idToDelete && !idToDelete.startsWith("opt-")) {
+              try {
+                await fsiApi.deleteConnection(idToDelete);
+              } catch {
+                // Already gone — still treat undo as success in the UI.
+              }
+            }
           }
           break;
         }
         case "connection_remove": {
           if (forward) {
+            const match = findMatchingConnection(graph.connections, entry.connection);
+            const idToDelete = match?.id ?? entry.connection.id;
             setGraph({
               ...graph,
-              connections: graph.connections.filter((c) => c.id !== entry.connection.id),
+              connections: graph.connections.filter((c) => c.id !== idToDelete),
             });
-            await fsiApi.deleteConnection(entry.connection.id);
+            if (idToDelete && !idToDelete.startsWith("opt-")) {
+              try {
+                await fsiApi.deleteConnection(idToDelete);
+              } catch {
+                /* ignore */
+              }
+            }
           } else {
             const conn = await fsiApi.createConnection(studyId, {
               source_node_id: entry.connection.source_node_id,
               target_node_id: entry.connection.target_node_id,
-              edge_label_note: entry.connection.edge_label_note,
+              edge_label_note: entry.connection.edge_label_note ?? undefined,
+              source_handle: entry.connection.source_handle ?? undefined,
+              target_handle: entry.connection.target_handle ?? undefined,
             });
-            setGraph({ ...graph, connections: [...graph.connections, conn] });
+            const withHandles: FsiConnectionRecord = {
+              ...conn,
+              source_handle: conn.source_handle ?? entry.connection.source_handle ?? null,
+              target_handle: conn.target_handle ?? entry.connection.target_handle ?? null,
+            };
+            entry.connection = withHandles;
+            setGraph({ ...graph, connections: [...graph.connections, withHandles] });
           }
           break;
         }
@@ -248,11 +298,48 @@ export function useFsiCanvasHistory(studyId: string | undefined) {
     bump();
   }, [bump]);
 
+  /** Swap optimistic connection id → real id inside history entries. */
+  const remapConnectionId = useCallback((tempId: string, real: FsiConnectionRecord) => {
+    const patch = (stack: FsiHistoryEntry[]) => {
+      for (let i = 0; i < stack.length; i++) {
+        const e = stack[i]!;
+        if (
+          (e.type === "connection_add" || e.type === "connection_remove") &&
+          e.connection.id === tempId
+        ) {
+          stack[i] = { ...e, connection: real };
+        }
+      }
+    };
+    patch(undoStack.current);
+    patch(redoStack.current);
+  }, []);
+
+  /** Drop a failed optimistic connection_add from the undo stack. */
+  const discardConnectionEntry = useCallback(
+    (connectionId: string) => {
+      const filterStack = (stack: FsiHistoryEntry[]) =>
+        stack.filter(
+          (e) =>
+            !(
+              (e.type === "connection_add" || e.type === "connection_remove") &&
+              e.connection.id === connectionId
+            ),
+        );
+      undoStack.current = filterStack(undoStack.current);
+      redoStack.current = filterStack(redoStack.current);
+      bump();
+    },
+    [bump],
+  );
+
   return {
     pushEntry,
     undo,
     redo,
     clearHistory,
+    remapConnectionId,
+    discardConnectionEntry,
     canUndo,
     canRedo,
     isApplying: applyingRef,
