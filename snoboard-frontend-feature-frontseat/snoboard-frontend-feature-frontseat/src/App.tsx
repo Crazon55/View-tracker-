@@ -196,6 +196,7 @@ function AnimalPicker({ userId }: { userId: string | undefined }) {
 
   const TYPE_ICON: Record<string, string> = {
     comment: "💬", blocker: "🔴", update: "🟡", review_request: "👁", assignment: "🏷️",
+    seeding_brief_submitted: "📋", seeding_brief_approved: "✅", seeding_fulfillment_update: "🔧",
   };
 
   function timeAgoShort(iso: string) {
@@ -246,8 +247,11 @@ function AnimalPicker({ userId }: { userId: string | undefined }) {
                 <div className="p-2 space-y-1">
                   {notifications.map((n) => {
                     const hasLink = !!n.idea_id;
-                    const trackerPath = n.tracker_type === "post" ? "/post-tracker" : "/content-tracker";
-                    const href = hasLink ? `${trackerPath}?idea=${n.idea_id}` : null;
+                    const href = !hasLink
+                      ? null
+                      : n.tracker_type === "seeding"
+                        ? `/seeding/deals/${n.idea_id}`
+                        : `${n.tracker_type === "post" ? "/post-tracker" : "/content-tracker"}?idea=${n.idea_id}`;
                     return (
                       <div
                         key={n.id}

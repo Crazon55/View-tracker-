@@ -23,6 +23,11 @@ import jwt
 # if DATABASE_URL is unset). Pool warm-up happens in init_seeding() on startup.
 from app.seeding.postgres_db import lazy_database as db
 from app.seeding.storage import init_storage, put_object, get_object
+from app.seeding.notify import (
+    notify_admins_brief_submitted,
+    notify_bd_fulfillment_update,
+    notify_fulfillment_brief_approved,
+)
 from app.auth import verify_token  # shared FSOS Supabase JWT verifier
 
 logger = logging.getLogger(__name__)
@@ -1087,6 +1092,14 @@ async def create_brief(payload: BriefCreate, user: dict = Depends(get_current_us
 
     enriched = await _enrich_deal(deal)
     enriched = await _attach_payment_status(enriched)
+
+    # BD submit → audible ping for all admins (Realtime + Web Audio on frontend).
+    if review_status == "Submitted" and user.get("role") == "bd":
+        try:
+            await notify_admins_brief_submitted(deal, user)
+        except Exception as e:
+            logger.warning("notify admins on brief submit failed: %s", e)
+
     return enriched
 
 
@@ -1425,7 +1438,15 @@ async def admin_review(deal_id: str, payload: AdminReviewAction, user: dict = De
         # visible under the "Archived" filter on the Deals page.
         upd["admin_review_status"] = "Archived"
     await db.deals.update_one({"deal_id": deal_id}, {"$set": upd})
-    return await db.deals.find_one({"deal_id": deal_id}, {"_id": 0})
+    updated = await db.deals.find_one({"deal_id": deal_id}, {"_id": 0})
+
+    if payload.action == "Approve" and updated:
+        try:
+            await notify_fulfillment_brief_approved(updated, user)
+        except Exception as e:
+            logger.warning("notify fulfillment on approve failed: %s", e)
+
+    return updated
 
 
 @api.put("/deals/{deal_id}/status")
@@ -1437,7 +1458,16 @@ async def update_deal_status(deal_id: str, payload: DealStatusUpdate, user: dict
     if deal.get("admin_review_status") != "Approved":
         raise HTTPException(400, "Deal not approved yet")
     await db.deals.update_one({"deal_id": deal_id}, {"$set": {"deal_status": payload.deal_status, "updated_at": now_iso()}})
-    return await db.deals.find_one({"deal_id": deal_id}, {"_id": 0})
+    updated = await db.deals.find_one({"deal_id": deal_id}, {"_id": 0})
+    try:
+        await notify_bd_fulfillment_update(
+            deal,
+            user,
+            detail=f"set deal status to {payload.deal_status}",
+        )
+    except Exception as e:
+        logger.warning("notify BD on deal status failed: %s", e)
+    return updated
 
 
 # ----------------------------- Deliverables -----------------------------
@@ -1553,7 +1583,15 @@ async def update_deliverable(deliverable_id: str, payload: DeliverableUpdate, us
     res = await db.deliverables.update_one({"deliverable_id": deliverable_id}, {"$set": upd})
     if res.matched_count == 0:
         raise HTTPException(404, "Deliverable not found")
-    return await db.deliverables.find_one({"deliverable_id": deliverable_id}, {"_id": 0})
+    updated = await db.deliverables.find_one({"deliverable_id": deliverable_id}, {"_id": 0})
+    deal = await db.deals.find_one({"deal_id": updated["deal_id"]}, {"_id": 0}) if updated else None
+    if deal:
+        try:
+            page = updated.get("page_name") or "a deliverable"
+            await notify_bd_fulfillment_update(deal, user, detail=f"updated deliverable ({page})")
+        except Exception as e:
+            logger.warning("notify BD on deliverable update failed: %s", e)
+    return updated
 
 
 @api.get("/deliverables")
@@ -1598,6 +1636,13 @@ async def create_output(payload: FulfillmentOutputCreate, user: dict = Depends(g
         "updated_at": now_iso(),
     }
     await db.fulfillment_outputs.insert_one(dict(o))
+    deal = await db.deals.find_one({"deal_id": payload.deal_id}, {"_id": 0})
+    if deal:
+        try:
+            title = payload.title or "an output"
+            await notify_bd_fulfillment_update(deal, user, detail=f"added output ({title})")
+        except Exception as e:
+            logger.warning("notify BD on output create failed: %s", e)
     return o
 
 
@@ -1619,7 +1664,15 @@ async def update_output(output_id: str, payload: FulfillmentOutputUpdate, user: 
         upd["status"] = "Shared with BD"
     upd["updated_at"] = now_iso()
     await db.fulfillment_outputs.update_one({"output_id": output_id}, {"$set": upd})
-    return await db.fulfillment_outputs.find_one({"output_id": output_id}, {"_id": 0})
+    updated = await db.fulfillment_outputs.find_one({"output_id": output_id}, {"_id": 0})
+    deal = await db.deals.find_one({"deal_id": existing.get("deal_id")}, {"_id": 0})
+    if deal:
+        try:
+            title = (updated or existing).get("title") or "an output"
+            await notify_bd_fulfillment_update(deal, user, detail=f"updated output ({title})")
+        except Exception as e:
+            logger.warning("notify BD on output update failed: %s", e)
+    return updated
 
 
 @api.delete("/outputs/{output_id}")
