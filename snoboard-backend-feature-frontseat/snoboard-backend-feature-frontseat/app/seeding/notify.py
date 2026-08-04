@@ -120,10 +120,22 @@ def notify_emails(
         logger.warning("seeding notify insert failed (%s): %s", type, e)
 
 
+def _exclude_actor_email(actor: dict) -> Optional[str]:
+    """Skip self-notify for real BD/fulfillment; keep self when admin is role-previewing."""
+    if actor.get("_preview_role") or actor.get("_real_admin_id") or actor.get("_real_admin_email"):
+        return None
+    return actor.get("email")
+
+
 async def notify_admins_brief_submitted(deal: dict, actor: dict) -> None:
     brand = deal.get("brand_name") or deal.get("agency_or_client_name") or "a brief"
     name = actor.get("name") or actor.get("email") or "BD"
-    emails = await emails_for_role("admin")
+    emails = set(await emails_for_role("admin"))
+    # Role-preview: ensure the real admin inbox is included (tester must hear the ping).
+    if actor.get("_preview_role") or actor.get("_real_admin_id"):
+        real = _norm_email(actor.get("_real_admin_email") or actor.get("email"))
+        if real:
+            emails.add(real)
     notify_emails(
         emails,
         type="seeding_brief_submitted",
@@ -131,7 +143,7 @@ async def notify_admins_brief_submitted(deal: dict, actor: dict) -> None:
         brand=brand,
         from_name=name,
         message=f'{name} submitted brief for "{brand}"',
-        exclude_email=actor.get("email"),
+        exclude_email=_exclude_actor_email(actor),
     )
 
 
@@ -146,7 +158,7 @@ async def notify_fulfillment_brief_approved(deal: dict, actor: dict) -> None:
         brand=brand,
         from_name=name,
         message=f'"{brand}" approved — ready for fulfillment',
-        exclude_email=actor.get("email"),
+        exclude_email=_exclude_actor_email(actor),
     )
 
 
@@ -166,5 +178,5 @@ async def notify_bd_fulfillment_update(deal: dict, actor: dict, detail: str = "u
         brand=brand,
         from_name=name,
         message=f'{name} {detail} on "{brand}"',
-        exclude_email=actor.get("email"),
+        exclude_email=_exclude_actor_email(actor),
     )
