@@ -22,7 +22,6 @@ import {
   isNodeUiExpanded,
   isPostDetailsNode,
   NODE_BODY_INPUT_CLASS,
-  NODE_TYPE_LABEL_CLASS,
   NODE_TITLE_DISPLAY_CLASS,
   NODE_TITLE_EMPTY_CLASS,
   NODE_TITLE_INPUT_CLASS,
@@ -664,7 +663,6 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
           onToggle={toggleExpanded}
         />
         <div className="flex min-h-0 flex-1 flex-col px-3 py-2.5 pr-7">
-          <div className={NODE_TYPE_LABEL_CLASS}>{nodeData.nodeType}</div>
           {hookHasBody ? (
             canEdit ? (
               <textarea
@@ -739,12 +737,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
     >
       {isNote ? (
         <>
-          <div className="px-3 py-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-amber-900/80">
-              Sticky Note
-            </div>
-          </div>
-          <div className="px-3 pb-3">
+          <div className="px-3 py-3">
             {editing ? (
               <textarea
                 rows={3}
@@ -772,12 +765,11 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
                 onBlur={(e) => commitTitle(e.target.value)}
                 {...fieldFocusProps}
                 placeholder="Niche name"
-                className={cn(nicheFieldClass, "mb-1 text-sm font-bold", dragLockWhenFocused)}
+                className={cn(nicheFieldClass, "text-sm font-bold", dragLockWhenFocused)}
               />
             ) : (
               <div className="text-sm font-bold leading-tight text-emerald-950">{title || "Niche"}</div>
             )}
-            <div className="text-[10px] font-medium uppercase tracking-wide text-emerald-950/70">Niche</div>
           </div>
           {renderFields()}
         </>
@@ -790,14 +782,11 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
                 onChange={(e) => setTitle(e.target.value)}
                 onBlur={(e) => commitTitle(e.target.value)}
                 {...fieldFocusProps}
-                className={cn(inputClass, "mb-1 text-sm font-bold", dragLockWhenFocused)}
+                className={cn(inputClass, "text-sm font-bold", dragLockWhenFocused)}
               />
             ) : (
               <div className="text-sm font-bold leading-tight text-emerald-950">{title}</div>
             )}
-            <div className="text-[10px] font-medium uppercase tracking-wide text-emerald-950/70">
-              {nodeData.nodeType}
-            </div>
           </div>
           {renderFields()}
         </>
