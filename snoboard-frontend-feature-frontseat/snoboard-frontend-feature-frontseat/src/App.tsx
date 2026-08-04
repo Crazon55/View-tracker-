@@ -10,7 +10,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useAreaAccess } from "@/hooks/useAreaAccess";
 import { isRouteAllowed, canAccessPintu } from "@/lib/permissions";
 import { PLAYBOOK_CONFIGS } from "@/lib/playbookExperimentConfig";
-import { useNotifications } from "@/hooks/useNotifications";
+import { useNotifications, NotificationProvider } from "@/hooks/useNotifications";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -687,7 +687,9 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <AuthGate />
+          <NotificationProvider>
+            <AuthGate />
+          </NotificationProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
