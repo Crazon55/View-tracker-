@@ -1720,14 +1720,16 @@ async def post_idea_comment(idea_id: str, req: dict):
 async def get_notifications(email: str):
     from app.database.client import get_supabase_client
     client = get_supabase_client()
-    data = client.table("notifications").select("*").eq("user_email", email).order("created_at", desc=True).limit(50).execute().data or []
+    email_norm = (email or "").strip().lower()
+    data = client.table("notifications").select("*").eq("user_email", email_norm).order("created_at", desc=True).limit(50).execute().data or []
     return {"success": True, "data": data}
 
 @app.patch("/api/v1/notifications/read-all")
 async def mark_all_notifications_read(email: str):
     from app.database.client import get_supabase_client
     client = get_supabase_client()
-    client.table("notifications").update({"read": True}).eq("user_email", email).eq("read", False).execute()
+    email_norm = (email or "").strip().lower()
+    client.table("notifications").update({"read": True}).eq("user_email", email_norm).eq("read", False).execute()
     return {"success": True}
 
 

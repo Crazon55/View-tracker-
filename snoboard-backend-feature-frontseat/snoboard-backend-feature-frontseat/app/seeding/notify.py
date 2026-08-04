@@ -7,11 +7,20 @@ on the frontend fire without a seeding-specific poller.
 from __future__ import annotations
 
 import logging
+import os
 from typing import Iterable, List, Optional, Set
 
 from app.seeding.postgres_db import lazy_database as db
 
 logger = logging.getLogger(__name__)
+
+# Keep in sync with routes.SEED_ADMIN_EMAIL so admins always receive submit pings
+# even before their seeding profile role is stamped.
+SEED_ADMIN_EMAILS = {
+    e.strip().lower()
+    for e in os.environ.get("SEED_ADMIN_EMAIL", "jaskaran.sethi@owledmedia.com").split(",")
+    if e.strip()
+}
 
 
 def _norm_email(value: Optional[str]) -> str:
@@ -38,6 +47,9 @@ async def emails_for_role(role: str) -> List[str]:
 
     found: Set[str] = set()
 
+    if role == "admin":
+        found.update(_norm_email(e) for e in SEED_ADMIN_EMAILS if _norm_email(e))
+
     try:
         rows = await db.users.find(
             {"active": {"$ne": False}, "role": role},
@@ -59,7 +71,8 @@ async def emails_for_role(role: str) -> List[str]:
                 for p in str(row.get("role") or "").split(",")
                 if p.strip()
             }
-            if role not in parts:
+            # Match exact role token, or "admin" inside compound FSOS roles.
+            if role not in parts and not any(role == p or p.endswith(f"_{role}") for p in parts):
                 continue
             em = _norm_email(row.get("email"))
             if em:
@@ -102,6 +115,7 @@ def notify_emails(
     try:
         from app.database.client import get_supabase_client
         get_supabase_client().table("notifications").insert(rows).execute()
+        logger.info("seeding notify (%s) → %s", type, ", ".join(recipients))
     except Exception as e:
         logger.warning("seeding notify insert failed (%s): %s", type, e)
 

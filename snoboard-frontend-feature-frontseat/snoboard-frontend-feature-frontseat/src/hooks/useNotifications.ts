@@ -3,27 +3,63 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { getNotifications, markAllNotificationsRead } from "@/services/api";
 
-// Slack-like double chime using Web Audio API — no audio file needed
-function playNotificationSound() {
+type AudioCtx = AudioContext;
+
+let sharedCtx: AudioCtx | null = null;
+let unlockBound = false;
+
+function getAudioCtx(): AudioCtx | null {
+  const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Ctor) return null;
+  if (!sharedCtx) sharedCtx = new Ctor();
+  return sharedCtx;
+}
+
+/** Browsers mute Web Audio until a user gesture — unlock once on first click/key/touch. */
+function ensureAudioUnlocked() {
+  if (unlockBound || typeof window === "undefined") return;
+  unlockBound = true;
+  const unlock = () => {
+    const ctx = getAudioCtx();
+    if (!ctx) return;
+    if (ctx.state === "suspended") void ctx.resume();
+  };
+  window.addEventListener("pointerdown", unlock, { once: true, capture: true });
+  window.addEventListener("keydown", unlock, { once: true, capture: true });
+  window.addEventListener("touchstart", unlock, { once: true, capture: true });
+}
+
+/** WhatsApp / Slack-style double chime (Web Audio — no mp3). */
+export function playNotificationSound() {
   try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const notes = [880, 1100];
-    notes.forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = "sine";
-      const t = ctx.currentTime + i * 0.18;
-      osc.frequency.setValueAtTime(freq, t);
-      osc.frequency.exponentialRampToValueAtTime(freq * 0.75, t + 0.2);
-      gain.gain.setValueAtTime(0, t);
-      gain.gain.linearRampToValueAtTime(0.25, t + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
-      osc.start(t);
-      osc.stop(t + 0.35);
-    });
-  } catch {}
+    ensureAudioUnlocked();
+    const ctx = getAudioCtx();
+    if (!ctx) return;
+    const run = () => {
+      const notes = [880, 1174.7]; // A5 → D6
+      notes.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = "sine";
+        const t = ctx.currentTime + i * 0.16;
+        osc.frequency.setValueAtTime(freq, t);
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.linearRampToValueAtTime(0.35, t + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.38);
+        osc.start(t);
+        osc.stop(t + 0.4);
+      });
+    };
+    if (ctx.state === "suspended") {
+      void ctx.resume().then(run).catch(() => {});
+    } else {
+      run();
+    }
+  } catch {
+    // audio unavailable — silent fail
+  }
 }
 
 export interface AppNotification {
@@ -41,30 +77,52 @@ export interface AppNotification {
 
 export function useNotifications() {
   const { user } = useAuth();
-  const email = user?.email || "";
+  const email = (user?.email || "").trim().toLowerCase();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const loaded = useRef(false);
+  const seenIds = useRef<Set<string>>(new Set());
+  const seeded = useRef(false);
+
+  useEffect(() => {
+    ensureAudioUnlocked();
+  }, []);
+
+  const absorbNew = useCallback((rows: AppNotification[], { play }: { play: boolean }) => {
+    let fresh = 0;
+    for (const n of rows) {
+      if (!n?.id || seenIds.current.has(n.id)) continue;
+      seenIds.current.add(n.id);
+      fresh += 1;
+    }
+    if (play && seeded.current && fresh > 0) playNotificationSound();
+  }, []);
 
   const fetchNotifications = useCallback(async () => {
     if (!email) return;
     try {
-      const data = await getNotifications(email);
-      setNotifications(data || []);
-      setUnreadCount((data || []).filter((n: AppNotification) => !n.read).length);
-      loaded.current = true;
-    } catch {}
-  }, [email]);
+      const data = (await getNotifications(email)) as AppNotification[];
+      const rows = data || [];
+      // After first load, any newly appeared ids (Realtime miss / delayed insert) still chime.
+      absorbNew(rows, { play: true });
+      seeded.current = true;
+      setNotifications(rows);
+      setUnreadCount(rows.filter((n) => !n.read).length);
+    } catch {
+      /* ignore */
+    }
+  }, [email, absorbNew]);
 
-  // Initial load + poll every 20s
+  // Initial load + poll every 8s (Realtime may be off for notifications; poll is the reliable path).
   useEffect(() => {
     if (!email) return;
+    seeded.current = false;
+    seenIds.current = new Set();
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 20_000);
+    const interval = setInterval(fetchNotifications, 8_000);
     return () => clearInterval(interval);
   }, [email, fetchNotifications]);
 
-  // Supabase Realtime — instant delivery + sound
+  // Supabase Realtime — instant delivery + sound when publication is enabled.
   useEffect(() => {
     if (!email) return;
     const channel = supabase
@@ -79,20 +137,29 @@ export function useNotifications() {
         },
         (payload) => {
           const n = payload.new as AppNotification;
-          setNotifications((prev) => [n, ...prev]);
-          setUnreadCount((prev) => prev + 1);
-          if (loaded.current) playNotificationSound();
-        }
+          if (!n?.id) return;
+          const already = seenIds.current.has(n.id);
+          seenIds.current.add(n.id);
+          setNotifications((prev) => (prev.some((x) => x.id === n.id) ? prev : [n, ...prev]));
+          setUnreadCount((prev) => prev + (already || n.read ? 0 : 1));
+          if (seeded.current && !already) playNotificationSound();
+        },
       )
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [email]);
 
   const markAllRead = useCallback(async () => {
     if (!email) return;
     setUnreadCount(0);
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    try { await markAllNotificationsRead(email); } catch {}
+    try {
+      await markAllNotificationsRead(email);
+    } catch {
+      /* ignore */
+    }
   }, [email]);
 
   return { notifications, unreadCount, markAllRead, refetch: fetchNotifications };
