@@ -416,6 +416,10 @@ input[style*="colorScheme"]::-webkit-calendar-picker-indicator {
   overflow: visible;
 }
 
+.fsi-snap-guides line {
+  filter: drop-shadow(0 0 2px rgba(56, 189, 248, 0.85));
+}
+
 .fsi-flow-canvas .react-flow__selection {
   background: rgba(56, 189, 248, 0.12);
   border: 1px solid rgba(56, 189, 248, 0.85);

@@ -122,13 +122,25 @@ export function computeSnapGuides(dragged: SnapBox, others: SnapBox[], threshold
   if (bestX) {
     const aligned = others.filter((o) => xValues(o).some((v) => Math.abs(v - bestX.position) <= ALIGNMENT_EPSILON));
     const extents = [snapped.top, snapped.top + snapped.height, ...aligned.flatMap((b) => [b.top, b.top + b.height])];
-    lines.push({ orientation: "vertical", position: bestX.position, start: Math.min(...extents), end: Math.max(...extents) });
+    const pad = 64;
+    lines.push({
+      orientation: "vertical",
+      position: bestX.position,
+      start: Math.min(...extents) - pad,
+      end: Math.max(...extents) + pad,
+    });
   }
 
   if (bestY) {
     const aligned = others.filter((o) => yValues(o).some((v) => Math.abs(v - bestY.position) <= ALIGNMENT_EPSILON));
     const extents = [snapped.left, snapped.left + snapped.width, ...aligned.flatMap((b) => [b.left, b.left + b.width])];
-    lines.push({ orientation: "horizontal", position: bestY.position, start: Math.min(...extents), end: Math.max(...extents) });
+    const pad = 64;
+    lines.push({
+      orientation: "horizontal",
+      position: bestY.position,
+      start: Math.min(...extents) - pad,
+      end: Math.max(...extents) + pad,
+    });
   }
 
   return { dx, dy, lines };

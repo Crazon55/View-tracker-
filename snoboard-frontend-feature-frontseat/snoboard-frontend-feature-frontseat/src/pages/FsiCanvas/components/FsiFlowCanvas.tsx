@@ -1281,7 +1281,6 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         className={cn(themePalette.canvasBgClass, "fsi-flow-canvas")}
       >
         <FsiMiroGrid theme={canvasTheme} />
-        <FsiSnapGuides lines={snapLines} />
         <Controls className={themePalette.controlsClass} />
         <MiniMap
           pannable
@@ -1294,6 +1293,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
           className={themePalette.minimapClass}
         />
       </ReactFlow>
+      <FsiSnapGuides lines={snapLines} />
     </div>
   );
 });
