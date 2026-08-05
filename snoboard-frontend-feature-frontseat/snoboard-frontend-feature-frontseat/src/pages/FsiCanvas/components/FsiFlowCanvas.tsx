@@ -28,6 +28,8 @@ import FsiCanvasNode from "./FsiCanvasNode";
 import FsiCanvasEdge, { FsiConnectionLine } from "./FsiCanvasEdge";
 import FsiMiroGrid from "./FsiMiroGrid";
 import FsiFrameNode from "./FsiFrameNode";
+import FsiSnapGuides from "./FsiSnapGuides";
+import { computeSnapGuides, type SnapBox, type SnapLine } from "../lib/fsiSnapGuides";
 import { FSI_WHITEBOARD_TOOL_MIME, type WhiteboardToolPayload } from "./FsiLeftToolbar";
 import { paletteForCanvasTheme, type FsiCanvasTheme } from "../lib/fsiCanvasTheme";
 import { cn } from "@/lib/utils";
@@ -55,6 +57,9 @@ const edgeTypes = { fsiEdge: FsiCanvasEdge };
 
 const CANVAS_MIN_ZOOM = 0.08;
 const CANVAS_MAX_ZOOM = 2.5;
+
+/** Screen-space snap catch radius; divided by zoom so it feels the same at any zoom level. */
+const SNAP_THRESHOLD_PX = 6;
 
 /**
  * Physical mouse wheels report large, integer, single-axis deltas per notch;
@@ -177,6 +182,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   }>({ sourceHandleId: null, startPointer: null, endPointer: null });
   const connectingRef = useRef(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [snapLines, setSnapLines] = useState<SnapLine[]>([]);
   const connectCompletedRef = useRef(false);
   const dragPositionLockRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   /** Select these ids once they appear in the flow (avoids rAF races with first drag). */
@@ -805,6 +811,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   const handleNodeDragStart = useCallback(
     (_: React.MouseEvent | React.TouchEvent, node: Node, dragged: Node[]) => {
       pendingSelectIdsRef.current = null;
+      setSnapLines([]);
       const targets = dragged.length > 0 ? dragged : [node];
       onNodeDragStart(
         targets.map((n) => {
@@ -816,8 +823,62 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     [getAbsoluteFlowPosition, onNodeDragStart],
   );
 
+  /** Absolute-flow-space box for a node, preferring its measured DOM size. */
+  const nodeBox = useCallback(
+    (n: Node): SnapBox => {
+      const abs = getAbsoluteFlowPosition(n);
+      const est = estimateNodeSize((n.data as FsiNodeData).fsiNode);
+      return {
+        left: abs.x,
+        top: abs.y,
+        width: n.measured?.width ?? n.width ?? est.width,
+        height: n.measured?.height ?? n.height ?? est.height,
+      };
+    },
+    [getAbsoluteFlowPosition],
+  );
+
+  /** Miro/Figma-style smart guides: snaps the dragged node(s) to nearby edges/centers and shows guide lines. */
+  const applySnap = useCallback(
+    (primary: Node, dragged: Node[]) => {
+      if (!canEdit) return;
+      const targets = dragged.length > 0 ? dragged : [primary];
+      const targetIds = new Set(targets.map((n) => n.id));
+      const others = getNodes()
+        .filter((n) => !targetIds.has(n.id))
+        .map(nodeBox);
+      const threshold = SNAP_THRESHOLD_PX / getViewport().zoom;
+      const { dx, dy, lines } = computeSnapGuides(nodeBox(primary), others, threshold);
+      setSnapLines(lines);
+      if (dx !== 0 || dy !== 0) {
+        setNodes((nds) =>
+          nds.map((n) =>
+            targetIds.has(n.id) ? { ...n, position: { x: n.position.x + dx, y: n.position.y + dy } } : n,
+          ),
+        );
+      }
+    },
+    [canEdit, getNodes, getViewport, nodeBox, setNodes],
+  );
+
+  const handleNodeDrag = useCallback(
+    (_: React.MouseEvent | React.TouchEvent, node: Node, dragged: Node[]) => {
+      applySnap(node, dragged);
+    },
+    [applySnap],
+  );
+
+  const handleSelectionDrag = useCallback(
+    (_: React.MouseEvent, nodes: Node[]) => {
+      if (nodes.length === 0) return;
+      applySnap(nodes[0]!, nodes);
+    },
+    [applySnap],
+  );
+
   const persistDraggedNodes = useCallback(
     (node: Node, dragged: Node[]) => {
+      setSnapLines([]);
       if (!canEdit) return;
       const now = performance.now();
       if (now - lastDragPersistAtRef.current < 40) return;
@@ -853,6 +914,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     (_: React.MouseEvent, nodes: Node[]) => {
       if (nodes.length === 0) return;
       pendingSelectIdsRef.current = null;
+      setSnapLines([]);
       onNodeDragStart(
         nodes.map((n) => {
           const abs = getAbsoluteFlowPosition(n);
@@ -1090,8 +1152,10 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         onPaneClick={handlePaneClick}
         onPaneDoubleClick={handlePaneDoubleClick}
         onNodeDragStart={handleNodeDragStart}
+        onNodeDrag={handleNodeDrag}
         onNodeDragStop={handleNodeDragStop}
         onSelectionDragStart={handleSelectionDragStart}
+        onSelectionDrag={handleSelectionDrag}
         onSelectionDragStop={handleSelectionDragStop}
         onMoveEnd={handleMoveEnd}
         onDragOver={handleDragOver}
@@ -1128,6 +1192,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         className={cn(themePalette.canvasBgClass, "fsi-flow-canvas")}
       >
         <FsiMiroGrid theme={canvasTheme} />
+        <FsiSnapGuides lines={snapLines} zoom={getViewport().zoom} />
         <Controls className={themePalette.controlsClass} />
         <MiniMap
           pannable
