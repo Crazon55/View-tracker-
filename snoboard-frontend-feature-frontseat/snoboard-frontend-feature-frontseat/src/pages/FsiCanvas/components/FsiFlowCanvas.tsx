@@ -59,7 +59,7 @@ const CANVAS_MIN_ZOOM = 0.08;
 const CANVAS_MAX_ZOOM = 2.5;
 
 /** Screen-space snap catch radius; divided by zoom so it feels the same at any zoom level. */
-const SNAP_THRESHOLD_PX = 6;
+const SNAP_THRESHOLD_PX = 10;
 
 /**
  * Physical mouse wheels report large, integer, single-axis deltas per notch;
@@ -349,21 +349,6 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   const [nodes, setNodes, onNodesChange] = useNodesState(flowGraph.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(flowEdges);
 
-  const handleNodesChange = useCallback(
-    (changes: NodeChange[]) => {
-      onNodesChange(changes);
-      if (!changes.some((change) => change.type === "select")) return;
-      queueMicrotask(() => {
-        const selectedNodes = getNodes().filter(
-          (node) => node.selected && node.type !== "fsiFrame",
-        );
-        const selectedEdges = getEdges().filter((edge) => edge.selected);
-        onSelectionChange({ nodes: selectedNodes, edges: selectedEdges });
-      });
-    },
-    [getEdges, getNodes, onNodesChange, onSelectionChange],
-  );
-
   const handleEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
       onEdgesChange(changes.filter((c) => c.type !== "remove"));
@@ -454,6 +439,23 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     (node: Node) => {
       let x = node.position.x;
       let y = node.position.y;
+      let parentId = node.parentId;
+      while (parentId) {
+        const parent = getNode(parentId);
+        if (!parent) break;
+        x += parent.position.x;
+        y += parent.position.y;
+        parentId = parent.parentId;
+      }
+      return { x, y };
+    },
+    [getNode],
+  );
+
+  const absolutePositionFromRelative = useCallback(
+    (node: Node, rel: XYPosition) => {
+      let x = rel.x;
+      let y = rel.y;
       let parentId = node.parentId;
       while (parentId) {
         const parent = getNode(parentId);
@@ -859,6 +861,81 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     [getNodes, getViewport, nodeBox],
   );
 
+  const computeSnapAtRelativePosition = useCallback(
+    (primary: Node, relPos: XYPosition, dragged: Node[]) => {
+      const targets = dragged.length > 0 ? dragged : [primary];
+      const targetIds = new Set(targets.map((n) => n.id));
+      const others = getNodes()
+        .filter((n) => !targetIds.has(n.id))
+        .map(nodeBox);
+      const threshold = SNAP_THRESHOLD_PX / getViewport().zoom;
+      const abs = absolutePositionFromRelative(primary, relPos);
+      const est = estimateNodeSize((primary.data as FsiNodeData).fsiNode);
+      const draggedBox: SnapBox = {
+        left: abs.x,
+        top: abs.y,
+        width: primary.measured?.width ?? primary.width ?? est.width,
+        height: primary.measured?.height ?? primary.height ?? est.height,
+      };
+      return { ...computeSnapGuides(draggedBox, others, threshold), targetIds };
+    },
+    [absolutePositionFromRelative, getNodes, getViewport, nodeBox],
+  );
+
+  const handleNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      let applied = changes;
+
+      if (canEdit) {
+        const dragMoves = changes.filter(
+          (c): c is NodeChange & { type: "position"; id: string; position: XYPosition; dragging?: boolean } =>
+            c.type === "position" && c.dragging === true && "position" in c && c.position != null,
+        );
+
+        if (dragMoves.length > 0) {
+          const dragIds = new Set(dragMoves.map((c) => c.id));
+          const all = getNodes();
+          const primary = all.find((n) => n.id === dragMoves[0]!.id);
+          const dragged = all.filter((n) => dragIds.has(n.id));
+          if (primary) {
+            const posChange = dragMoves.find((c) => c.id === primary.id)!;
+            const { dx, dy, lines, targetIds } = computeSnapAtRelativePosition(
+              primary,
+              posChange.position!,
+              dragged,
+            );
+            setSnapLines(lines);
+            if (dx !== 0 || dy !== 0) {
+              applied = changes.map((c) => {
+                if (c.type === "position" && c.dragging && "position" in c && c.position && targetIds.has(c.id)) {
+                  return {
+                    ...c,
+                    position: { x: c.position.x + dx, y: c.position.y + dy },
+                  };
+                }
+                return c;
+              });
+            }
+          }
+        } else if (changes.some((c) => c.type === "position" && c.dragging === false)) {
+          setSnapLines([]);
+        }
+      }
+
+      onNodesChange(applied);
+
+      if (!changes.some((change) => change.type === "select")) return;
+      queueMicrotask(() => {
+        const selectedNodes = getNodes().filter(
+          (node) => node.selected && node.type !== "fsiFrame",
+        );
+        const selectedEdges = getEdges().filter((edge) => edge.selected);
+        onSelectionChange({ nodes: selectedNodes, edges: selectedEdges });
+      });
+    },
+    [canEdit, computeSnapAtRelativePosition, getEdges, getNodes, onNodesChange, onSelectionChange],
+  );
+
   const handleNodeDrag = useCallback(
     (_: React.MouseEvent | React.TouchEvent, node: Node, dragged: Node[]) => {
       if (!canEdit) return;
@@ -1204,7 +1281,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         className={cn(themePalette.canvasBgClass, "fsi-flow-canvas")}
       >
         <FsiMiroGrid theme={canvasTheme} />
-        <FsiSnapGuides lines={snapLines} zoom={getViewport().zoom} />
+        <FsiSnapGuides lines={snapLines} />
         <Controls className={themePalette.controlsClass} />
         <MiniMap
           pannable

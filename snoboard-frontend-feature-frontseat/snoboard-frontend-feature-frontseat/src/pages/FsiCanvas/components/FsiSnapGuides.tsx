@@ -1,19 +1,17 @@
-import { ViewportPortal } from "@xyflow/react";
+import { ViewportPortal, useStore } from "@xyflow/react";
 import type { SnapLine } from "../lib/fsiSnapGuides";
 
 type Props = {
   lines: SnapLine[];
-  /** Current viewport zoom — keeps the line/dash thickness constant on screen. */
-  zoom: number;
 };
 
-const GUIDE_COLOR = "#ec4899";
-
-/** Renders Miro/Figma-style alignment guides in flow space via ViewportPortal, so they pan/zoom with the canvas. */
-export default function FsiSnapGuides({ lines, zoom }: Props) {
+/** Miro-style blue dashed alignment guides in flow space (pan/zoom with the canvas). */
+export default function FsiSnapGuides({ lines }: Props) {
+  const zoom = useStore((s) => s.transform[2]);
   if (lines.length === 0) return null;
+
   const strokeWidth = 1 / zoom;
-  const dash = 4 / zoom;
+  const dash = 5 / zoom;
 
   return (
     <ViewportPortal>
@@ -28,7 +26,7 @@ export default function FsiSnapGuides({ lines, zoom }: Props) {
               y1={line.start}
               x2={line.position}
               y2={line.end}
-              stroke={GUIDE_COLOR}
+              stroke="#38bdf8"
               strokeWidth={strokeWidth}
               strokeDasharray={`${dash} ${dash}`}
             />
@@ -39,7 +37,7 @@ export default function FsiSnapGuides({ lines, zoom }: Props) {
               y1={line.position}
               x2={line.end}
               y2={line.position}
-              stroke={GUIDE_COLOR}
+              stroke="#38bdf8"
               strokeWidth={strokeWidth}
               strokeDasharray={`${dash} ${dash}`}
             />
