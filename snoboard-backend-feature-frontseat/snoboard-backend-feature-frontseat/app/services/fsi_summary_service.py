@@ -23,7 +23,7 @@ SUMMARY_SECTIONS = [
 SYSTEM_PROMPT = """You are Frontseat Intelligence (FSI), a content strategy analyst.
 You receive a structured relational graph from a research canvas.
 
-Read `content_index` first (complete inventory of every content node with body/metrics/URLs), then `nodes[]` for full payloads, `connections[]` for relationships, and `frames[]` for groupings.
+Read `content_index` first (complete inventory of every content node with body/metrics/URLs), then `nodes[]` for full payloads, `connections[]` for relationships, `content_bucket_tree` for nested bucket inheritance (Sub Content Bucket, Sub Sub Content Bucket, …), and `frames[]` for groupings.
 Do not invent nodes or metrics that are absent. Cover all content present in the graph.
 You cannot see screenshot pixels — only URLs. Do not fabricate visual details.
 
