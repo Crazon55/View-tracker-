@@ -53,6 +53,21 @@ import {
 const nodeTypes = { fsiNode: FsiCanvasNode, fsiFrame: FsiFrameNode };
 const edgeTypes = { fsiEdge: FsiCanvasEdge };
 
+const CANVAS_MIN_ZOOM = 0.08;
+const CANVAS_MAX_ZOOM = 2.5;
+
+/**
+ * Physical mouse wheels report large, integer, single-axis deltas per notch;
+ * trackpads report small/fractional deltas (and often move both axes at once)
+ * as fingers glide. This tells the two apart so a bare mouse scroll can zoom
+ * while a bare trackpad scroll keeps panning (panOnScroll handles that case).
+ */
+function isMouseWheelNotch(event: WheelEvent): boolean {
+  if (event.deltaX !== 0) return false;
+  if (event.deltaMode === 1) return true; // Firefox reports physical wheels in "line" units
+  return Number.isInteger(event.deltaY) && Math.abs(event.deltaY) >= 40;
+}
+
 export type FsiFlowCanvasHandle = {
   getViewportCenter: () => { x: number; y: number };
   focusNode: (nodeId: string) => void;
@@ -879,6 +894,33 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     [screenToFlowPosition],
   );
 
+  // A bare mouse-wheel notch zooms (cursor-anchored); ctrl+scroll/pinch keep using
+  // React Flow's own zoomOnPinch handling below, and bare trackpad scroll falls
+  // through to panOnScroll. Runs in the capture phase so it can claim the event
+  // before React Flow's own wheel listener (bound lower in the tree) sees it.
+  const handleWheelCapture = useCallback(
+    (e: React.WheelEvent<HTMLDivElement>) => {
+      if (e.ctrlKey || e.metaKey || !isMouseWheelNotch(e.nativeEvent)) return;
+      const pane = paneRef.current?.querySelector(".react-flow__pane") as HTMLElement | null;
+      if (!pane) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const rect = pane.getBoundingClientRect();
+      const screenX = e.clientX - rect.left;
+      const screenY = e.clientY - rect.top;
+      const { x, y, zoom } = getViewport();
+      const factor = Math.pow(2, (e.deltaY > 0 ? -1 : 1) * 0.25);
+      const nextZoom = Math.min(CANVAS_MAX_ZOOM, Math.max(CANVAS_MIN_ZOOM, zoom * factor));
+      const flowX = (screenX - x) / zoom;
+      const flowY = (screenY - y) / zoom;
+      void setViewport(
+        { x: screenX - flowX * nextZoom, y: screenY - flowY * nextZoom, zoom: nextZoom },
+        { duration: 0 },
+      );
+    },
+    [getViewport, setViewport],
+  );
+
   const handlePanePaste = useCallback(
     (e: React.ClipboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -1018,6 +1060,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
       onDrop={handleDrop}
       onMouseMove={handlePaneMouseMove}
       onPaste={handlePanePaste}
+      onWheelCapture={handleWheelCapture}
     >
       <ReactFlow
         nodes={styledNodes}
@@ -1060,7 +1103,10 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         edgeTypes={edgeTypes}
         edgesFocusable
         selectionOnDrag={canEdit && boxSelectMode}
-        panOnDrag={boxSelectMode ? [1, 2] : true}
+        // Middle-mouse-button drag (button 1) always pans, alongside left-click
+        // drag in the normal (non box-select) mode — "hold the scroll wheel and
+        // move" is the standard mouse convention for panning a canvas.
+        panOnDrag={boxSelectMode ? [1, 2] : [0, 1]}
         selectionMode={SelectionMode.Partial}
         deleteKeyCode={null}
         // Double-click is how you select a word in a text field — don't let the canvas
@@ -1077,8 +1123,8 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
           focusable: true,
           data: { canEdit, onDelete: stableEdgeDelete, onLabelChange: stableEdgeLabelChange },
         }}
-        minZoom={0.08}
-        maxZoom={2.5}
+        minZoom={CANVAS_MIN_ZOOM}
+        maxZoom={CANVAS_MAX_ZOOM}
         className={cn(themePalette.canvasBgClass, "fsi-flow-canvas")}
       >
         <FsiMiroGrid theme={canvasTheme} />
