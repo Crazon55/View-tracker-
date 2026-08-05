@@ -188,6 +188,8 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   /** Select these ids once they appear in the flow (avoids rAF races with first drag). */
   const pendingSelectIdsRef = useRef<string[] | null>(null);
   const lastDragPersistAtRef = useRef(0);
+  /** Ignore the pane click that React Flow fires right after a marquee box-select. */
+  const suppressPaneClickClearRef = useRef(false);
 
   function positionsNearlyEqual(a: { x: number; y: number }, b: { x: number; y: number }) {
     return Math.abs(a.x - b.x) < 1 && Math.abs(a.y - b.y) < 1;
@@ -771,31 +773,31 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   }, [setEdges]);
 
   const handleNodeClick = useCallback(
-    (e: React.MouseEvent, node: Node) => {
+    (e: React.MouseEvent) => {
       clearEdgeSelection();
       // Only steal focus to the pane (for keyboard shortcuts) when NOT clicking into
       // a text field — otherwise this blurs the field and kills the typing caret.
       const target = e.target as HTMLElement | null;
       const inField = !!target?.closest?.("input, textarea, select, [contenteditable='true']");
       if (!inField) paneRef.current?.focus();
-      // Selection itself is driven by the node's own onPointerDownCapture; here we
-      // just keep the workspace's selected-node state in sync.
-      queueMicrotask(() => {
-        const selectedNodes = getNodes().filter((n) => n.selected && n.type !== "fsiFrame");
-        onSelectionChange({ nodes: selectedNodes, edges: [] });
-      });
-      const data = node.data as FsiNodeData;
-      onNodeSelect(data.fsiNode);
+      // Selection is owned by React Flow + onSelectionChange on the canvas.
     },
-    [clearEdgeSelection, getNodes, onNodeSelect, onSelectionChange],
+    [clearEdgeSelection],
   );
 
+  const handleSelectionEnd = useCallback(() => {
+    suppressPaneClickClearRef.current = true;
+    queueMicrotask(() => {
+      suppressPaneClickClearRef.current = false;
+    });
+  }, []);
+
   const handlePaneClick = useCallback(() => {
+    if (suppressPaneClickClearRef.current) return;
     onNodeSelect(null);
     onPaneClick?.();
-    setNodes((nds) => nds.map((n) => ({ ...n, selected: false })));
     clearEdgeSelection();
-  }, [onNodeSelect, onPaneClick, setNodes, clearEdgeSelection]);
+  }, [onNodeSelect, onPaneClick, clearEdgeSelection]);
 
   const handlePaneDoubleClick = useCallback(
     (e: React.MouseEvent) => {
@@ -1246,6 +1248,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         onSelectionDragStart={handleSelectionDragStart}
         onSelectionDrag={handleSelectionDrag}
         onSelectionDragStop={handleSelectionDragStop}
+        onSelectionEnd={handleSelectionEnd}
         onMoveEnd={handleMoveEnd}
         onDragOver={handleDragOver}
         onEdgesDelete={handleEdgesDelete}
@@ -1256,10 +1259,14 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         edgeTypes={edgeTypes}
         edgesFocusable
         selectionOnDrag={canEdit && boxSelectMode}
+        {...(boxSelectMode
+          ? { selectionKeyCode: null, multiSelectionKeyCode: "Shift" as const }
+          : { selectionKeyCode: "Shift" as const })}
         // Middle-mouse-button drag (button 1) always pans, alongside left-click
         // drag in the normal (non box-select) mode — "hold the scroll wheel and
         // move" is the standard mouse convention for panning a canvas.
         panOnDrag={boxSelectMode ? [1, 2] : [0, 1]}
+        panActivationKeyCode="Space"
         selectionMode={SelectionMode.Partial}
         deleteKeyCode={null}
         // Double-click is how you select a word in a text field — don't let the canvas

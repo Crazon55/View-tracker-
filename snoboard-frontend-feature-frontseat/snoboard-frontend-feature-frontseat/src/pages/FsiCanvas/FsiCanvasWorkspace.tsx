@@ -1639,7 +1639,7 @@ export default function FsiCanvasWorkspace() {
 
           {boxSelectMode && (
             <div className="pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 rounded-lg border border-emerald-700/50 bg-emerald-950/90 px-3 py-1.5 text-xs text-emerald-200">
-              Drag on canvas to select · Delete key removes selection · middle-mouse to pan
+              Drag on canvas to select · Shift+click to add · Delete removes selection · middle-mouse or Space+drag to pan
             </div>
           )}
 
