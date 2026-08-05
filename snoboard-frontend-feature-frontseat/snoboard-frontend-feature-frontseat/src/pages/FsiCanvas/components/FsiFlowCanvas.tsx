@@ -4,6 +4,7 @@ import {
   Controls,
   MiniMap,
   SelectionMode,
+  PanOnScrollMode,
   ConnectionMode,
   ConnectionLineType,
   addEdge,
@@ -1065,6 +1066,11 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         // Double-click is how you select a word in a text field — don't let the canvas
         // hijack it to zoom. (Node creation uses the explicit onPaneDoubleClick handler.)
         zoomOnDoubleClick={false}
+        // Trackpad/mouse-wheel scroll pans the canvas in x/y; pinch gestures (and
+        // ctrl+scroll) still zoom via zoomOnPinch, which defaults to true.
+        panOnScroll
+        panOnScrollMode={PanOnScrollMode.Free}
+        zoomOnScroll={false}
         defaultEdgeOptions={{
           type: "fsiEdge",
           selectable: true,
