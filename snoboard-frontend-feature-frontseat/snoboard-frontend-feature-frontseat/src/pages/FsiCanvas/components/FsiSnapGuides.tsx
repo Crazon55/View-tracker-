@@ -13,8 +13,9 @@ export default function FsiSnapGuides({ lines }: Props) {
   const { x, y, zoom } = useViewport();
   if (lines.length === 0) return null;
 
-  const strokeWidth = Math.max(2, 2.5 / zoom);
+  const strokeWidth = Math.max(1.5, 2 / zoom);
   const dash = 6 / zoom;
+  const guideStroke = "rgba(56, 189, 248, 0.42)";
 
   return (
     <div className="fsi-snap-guides pointer-events-none absolute inset-0 z-[6]" aria-hidden>
@@ -28,7 +29,7 @@ export default function FsiSnapGuides({ lines }: Props) {
                 y1={line.start}
                 x2={line.position}
                 y2={line.end}
-                stroke="#38bdf8"
+                stroke={guideStroke}
                 strokeWidth={strokeWidth}
                 strokeDasharray={`${dash} ${dash}`}
                 strokeLinecap="round"
@@ -40,7 +41,7 @@ export default function FsiSnapGuides({ lines }: Props) {
                 y1={line.position}
                 x2={line.end}
                 y2={line.position}
-                stroke="#38bdf8"
+                stroke={guideStroke}
                 strokeWidth={strokeWidth}
                 strokeDasharray={`${dash} ${dash}`}
                 strokeLinecap="round"

@@ -417,7 +417,7 @@ input[style*="colorScheme"]::-webkit-calendar-picker-indicator {
 }
 
 .fsi-snap-guides line {
-  filter: drop-shadow(0 0 2px rgba(56, 189, 248, 0.85));
+  filter: drop-shadow(0 0 1px rgba(56, 189, 248, 0.25));
 }
 
 .fsi-flow-canvas .react-flow__selection {
