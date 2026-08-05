@@ -194,12 +194,14 @@ export function specForWhiteboardType(type: WhiteboardNodeType): CreateNodeSpec 
           hook_expanded: false,
           performance_expanded: false,
           link_expanded: false,
+          observations_expanded: false,
           views: "",
           likes: "",
           shares: "",
           comments: "",
           followers_gained: "",
           url: "",
+          observations: "",
         },
         raw_body_text: "",
       };
@@ -229,10 +231,11 @@ export function specForWhiteboardType(type: WhiteboardNodeType): CreateNodeSpec 
 
 export function postDetailsCardHeight(payload: Record<string, unknown> | undefined): number {
   const p = payload ?? {};
-  let h = DROPDOWN_COLLAPSED_HEIGHT * 3;
+  let h = DROPDOWN_COLLAPSED_HEIGHT * 4;
   if (p.hook_expanded === true) h += 120;
   if (p.performance_expanded === true) h += 240;
   if (p.link_expanded === true) h += 56;
+  if (p.observations_expanded === true) h += 120;
   return h;
 }
 

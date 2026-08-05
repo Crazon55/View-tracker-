@@ -82,6 +82,9 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
     return "";
   });
   const [linkUrl, setLinkUrl] = useState(() => String(fsiNode.structured_payload?.url ?? ""));
+  const [observations, setObservations] = useState(() =>
+    String(fsiNode.structured_payload?.observations ?? ""),
+  );
   const payload = fsiNode.structured_payload ?? {};
   const [fieldValues, setFieldValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(
@@ -109,7 +112,15 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
       setBody("");
     }
     setLinkUrl(String(fsiNode.structured_payload?.url ?? ""));
-  }, [fsiNode.id, fsiNode.display_title, fsiNode.raw_body_text, fsiNode.node_type, fsiNode.structured_payload?.url]);
+    setObservations(String(fsiNode.structured_payload?.observations ?? ""));
+  }, [
+    fsiNode.id,
+    fsiNode.display_title,
+    fsiNode.raw_body_text,
+    fsiNode.node_type,
+    fsiNode.structured_payload?.url,
+    fsiNode.structured_payload?.observations,
+  ]);
 
   useEffect(() => {
     setFieldValues(
@@ -513,11 +524,35 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       );
 
-    // One box: Written Hook + Performance + Link as three dropdowns
+    const renderObservationsBody = () =>
+      canEdit ? (
+        <textarea
+          rows={5}
+          value={observations}
+          onChange={(e) => setObservations(e.target.value)}
+          onBlur={(e) => commitField("observations", e.target.value)}
+          onPointerDown={(e) => {
+            if (document.activeElement === e.currentTarget) e.stopPropagation();
+          }}
+          onMouseDown={(e) => {
+            if (document.activeElement === e.currentTarget) e.stopPropagation();
+          }}
+          placeholder="Notes..."
+          className={cn(NODE_BODY_INPUT_CLASS, "mt-1 min-h-[80px]", dragLockWhenFocused)}
+          {...fieldFocusProps}
+        />
+      ) : (
+        <div className={cn(NODE_BODY_INPUT_CLASS, "mt-1 min-h-[80px] whitespace-pre-wrap")}>
+          {observations ? <FsiLinkifiedText text={observations} /> : "Notes..."}
+        </div>
+      );
+
+    // One box: Written Hook + Performance + Link + Observations as dropdowns
     if (isCombinedDetails) {
       const hookOpen = payload.hook_expanded === true;
       const perfOpen = payload.performance_expanded === true;
       const linkOpen = payload.link_expanded === true;
+      const obsOpen = payload.observations_expanded === true;
       const detailsW = postDetailsCardWidth(payload);
 
       return (
@@ -528,7 +563,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
           }`}
           style={{
             width: detailsW,
-            minHeight: DROPDOWN_COLLAPSED_HEIGHT * 3,
+            minHeight: DROPDOWN_COLLAPSED_HEIGHT * 4,
             height: "auto",
             borderColor: nodeData.color,
             backgroundColor: nodeData.color,
@@ -537,7 +572,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
           {canEdit && selected && (
             <NodeResizer
               minWidth={COMPACT_NODE_WIDTH}
-              minHeight={DROPDOWN_COLLAPSED_HEIGHT * 3}
+              minHeight={DROPDOWN_COLLAPSED_HEIGHT * 4}
               onResizeEnd={(_event, params) => {
                 patchPayload({ card_width: Math.round(params.width) });
               }}
@@ -567,6 +602,14 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
               className="bg-sky-300/40"
             />
             {linkOpen && <div className="px-3 pb-2">{renderLinkBody()}</div>}
+
+            <FsiDragSafeToggle
+              label="Observations"
+              expanded={obsOpen}
+              onToggle={() => patchPayload({ observations_expanded: !obsOpen })}
+              className="bg-amber-300/40"
+            />
+            {obsOpen && <div className="px-3 pb-2">{renderObservationsBody()}</div>}
           </div>
           <FsiNodeDuplicateCorners visible={showDuplicateCorners} onCornerClick={handleCornerDuplicate} />
           <FsiNodeHandles
