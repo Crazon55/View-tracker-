@@ -838,53 +838,65 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     [getAbsoluteFlowPosition],
   );
 
-  /** Miro/Figma-style smart guides: snaps the dragged node(s) to nearby edges/centers and shows guide lines. */
-  const applySnap = useCallback(
+  /**
+   * Miro/Figma-style smart guides. React Flow's drag engine recomputes each
+   * node's position every frame as "raw pointer position minus the offset
+   * captured at drag start" — it never re-reads a position we set mid-drag,
+   * so a live position correction here would be overwritten on the very next
+   * pointermove and never be felt. We still compute it live for the guide
+   * lines (pure visual feedback), and apply the actual snap once, on release.
+   */
+  const computeSnapForTargets = useCallback(
     (primary: Node, dragged: Node[]) => {
-      if (!canEdit) return;
       const targets = dragged.length > 0 ? dragged : [primary];
       const targetIds = new Set(targets.map((n) => n.id));
       const others = getNodes()
         .filter((n) => !targetIds.has(n.id))
         .map(nodeBox);
       const threshold = SNAP_THRESHOLD_PX / getViewport().zoom;
-      const { dx, dy, lines } = computeSnapGuides(nodeBox(primary), others, threshold);
-      setSnapLines(lines);
-      if (dx !== 0 || dy !== 0) {
-        setNodes((nds) =>
-          nds.map((n) =>
-            targetIds.has(n.id) ? { ...n, position: { x: n.position.x + dx, y: n.position.y + dy } } : n,
-          ),
-        );
-      }
+      return { ...computeSnapGuides(nodeBox(primary), others, threshold), targetIds };
     },
-    [canEdit, getNodes, getViewport, nodeBox, setNodes],
+    [getNodes, getViewport, nodeBox],
   );
 
   const handleNodeDrag = useCallback(
     (_: React.MouseEvent | React.TouchEvent, node: Node, dragged: Node[]) => {
-      applySnap(node, dragged);
+      if (!canEdit) return;
+      setSnapLines(computeSnapForTargets(node, dragged).lines);
     },
-    [applySnap],
+    [canEdit, computeSnapForTargets],
   );
 
   const handleSelectionDrag = useCallback(
     (_: React.MouseEvent, nodes: Node[]) => {
-      if (nodes.length === 0) return;
-      applySnap(nodes[0]!, nodes);
+      if (!canEdit || nodes.length === 0) return;
+      setSnapLines(computeSnapForTargets(nodes[0]!, nodes).lines);
     },
-    [applySnap],
+    [canEdit, computeSnapForTargets],
   );
 
   const persistDraggedNodes = useCallback(
     (node: Node, dragged: Node[]) => {
       setSnapLines([]);
       if (!canEdit) return;
+
+      let targets = dragged.length > 0 ? dragged : [node];
+      // Snap once more on release, since a live mid-drag correction can't
+      // stick (see computeSnapForTargets) — this is the actual "snap into place".
+      const { dx, dy, targetIds } = computeSnapForTargets(node, dragged);
+      if (dx !== 0 || dy !== 0) {
+        targets = targets.map((n) =>
+          targetIds.has(n.id) ? { ...n, position: { x: n.position.x + dx, y: n.position.y + dy } } : n,
+        );
+        setNodes((nds) =>
+          nds.map((n) => (targetIds.has(n.id) ? { ...n, position: { x: n.position.x + dx, y: n.position.y + dy } } : n)),
+        );
+      }
+
       const now = performance.now();
       if (now - lastDragPersistAtRef.current < 40) return;
       lastDragPersistAtRef.current = now;
 
-      const targets = dragged.length > 0 ? dragged : [node];
       for (const n of targets) {
         dragPositionLockRef.current.set(n.id, { ...n.position });
       }
@@ -900,7 +912,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         }),
       );
     },
-    [canEdit, getAbsoluteFlowPosition, onNodeDragStop],
+    [canEdit, computeSnapForTargets, getAbsoluteFlowPosition, onNodeDragStop, setNodes],
   );
 
   const handleNodeDragStop = useCallback(
