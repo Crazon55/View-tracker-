@@ -980,6 +980,50 @@ export default function FsiCanvasWorkspace() {
     selectedNode,
   ]);
 
+  const handleAltDuplicateDrag = useCallback(
+    async (placements: Array<{ sourceId: string; x: number; y: number }>) => {
+      if (!canEdit || duplicateBusy || placements.length === 0) return;
+      const g = graphRef.current;
+      if (!g) return;
+
+      for (const p of placements) {
+        dragOriginRef.current.delete(p.sourceId);
+      }
+
+      const byId = new Map(g.nodes.map((n) => [n.id, n]));
+      setDuplicateBusy(true);
+      try {
+        const created: FsiNodeRecord[] = [];
+        for (const p of placements) {
+          const source = byId.get(p.sourceId);
+          if (!source || !isCanvasNode(source)) continue;
+          created.push(
+            (await duplicateNodeMutation.mutateAsync({
+              source,
+              offsetX: p.x - source.canvas_x,
+              offsetY: p.y - source.canvas_y,
+            })) as FsiNodeRecord,
+          );
+        }
+        if (created.length === 0) return;
+        appendDuplicatedNodes(created);
+        selectDuplicatedNodes(created.map((n) => n.id));
+        toast.success(created.length > 1 ? `Duplicated ${created.length} nodes` : "Node duplicated");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Duplicate failed");
+      } finally {
+        setDuplicateBusy(false);
+      }
+    },
+    [
+      appendDuplicatedNodes,
+      canEdit,
+      duplicateBusy,
+      duplicateNodeMutation,
+      selectDuplicatedNodes,
+    ],
+  );
+
   const handleRequestDuplicate = useCallback(
     async (nodeId: string, corner: DuplicateCorner) => {
       if (!canEdit || duplicateBusy) return;
@@ -1620,6 +1664,7 @@ export default function FsiCanvasWorkspace() {
             onPaneDoubleClick={handlePaneDoubleClick}
             onNodeDragStart={handleNodeDragStart}
             onNodeDragStop={handleNodeDragStop}
+            onAltDuplicateDrag={handleAltDuplicateDrag}
             onConnect={handleConnect}
             onEdgeDelete={handleDeleteConnection}
             onEdgeLabelChange={handleEdgeLabelChange}
@@ -1639,7 +1684,7 @@ export default function FsiCanvasWorkspace() {
 
           {boxSelectMode && (
             <div className="pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 rounded-lg border border-emerald-700/50 bg-emerald-950/90 px-3 py-1.5 text-xs text-emerald-200">
-              Drag on canvas to select · Shift+click to add · Delete removes selection · middle-mouse or Space+drag to pan
+              Drag on canvas to select · Shift+click to add · Alt+drag to duplicate · Delete removes · middle-mouse or Space+drag to pan
             </div>
           )}
 

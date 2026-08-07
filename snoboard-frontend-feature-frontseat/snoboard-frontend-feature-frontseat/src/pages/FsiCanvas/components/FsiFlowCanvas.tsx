@@ -4,7 +4,6 @@ import {
   Controls,
   MiniMap,
   SelectionMode,
-  PanOnScrollMode,
   ConnectionMode,
   ConnectionLineType,
   addEdge,
@@ -64,13 +63,35 @@ const SNAP_THRESHOLD_PX = 10;
 /**
  * Physical mouse wheels report large, integer, single-axis deltas per notch;
  * trackpads report small/fractional deltas (and often move both axes at once)
- * as fingers glide. This tells the two apart so a bare mouse scroll can zoom
- * while a bare trackpad scroll keeps panning (panOnScroll handles that case).
+ * as fingers glide. Pinch / ctrl+scroll sets ctrlKey (or metaKey) — that must
+ * zoom, never pan.
  */
 function isMouseWheelNotch(event: WheelEvent): boolean {
+  if (event.ctrlKey || event.metaKey) return false;
   if (event.deltaX !== 0) return false;
   if (event.deltaMode === 1) return true; // Firefox reports physical wheels in "line" units
   return Number.isInteger(event.deltaY) && Math.abs(event.deltaY) >= 40;
+}
+
+function eventHasAltKey(e: React.MouseEvent | React.TouchEvent): boolean {
+  return "altKey" in e && Boolean(e.altKey);
+}
+
+/** Cursor-anchored zoom; higher sensitivity = snappier pinch / wheel zoom. */
+function zoomViewportAtPoint(
+  viewport: Viewport,
+  nextZoom: number,
+  screenX: number,
+  screenY: number,
+): Viewport {
+  const { x, y, zoom } = viewport;
+  const flowX = (screenX - x) / zoom;
+  const flowY = (screenY - y) / zoom;
+  return {
+    x: screenX - flowX * nextZoom,
+    y: screenY - flowY * nextZoom,
+    zoom: nextZoom,
+  };
 }
 
 export type FsiFlowCanvasHandle = {
@@ -107,6 +128,8 @@ type FlowInnerProps = {
   /** Absolute canvas positions for every node moved in this drag (multi-select aware). */
   onNodeDragStart: (moves: Array<{ id: string; x: number; y: number }>) => void;
   onNodeDragStop: (moves: Array<{ id: string; x: number; y: number }>) => void;
+  /** Alt+drag: keep originals, create copies at the drop positions. */
+  onAltDuplicateDrag?: (placements: Array<{ sourceId: string; x: number; y: number }>) => void;
   onConnect: (
     source: string,
     target: string,
@@ -148,6 +171,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     onPaneDoubleClick,
     onNodeDragStart,
     onNodeDragStop,
+    onAltDuplicateDrag,
     onConnect,
     onEdgeDelete,
     onEdgeLabelChange,
@@ -190,6 +214,10 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   const lastDragPersistAtRef = useRef(0);
   /** Ignore the pane click that React Flow fires right after a marquee box-select. */
   const suppressPaneClickClearRef = useRef(false);
+  /** Alt held at drag start → duplicate on release instead of moving. */
+  const altDuplicateDragRef = useRef(false);
+  /** Relative RF positions at drag start (used to snap originals back after Alt+drag). */
+  const dragStartRelativeRef = useRef<Map<string, { x: number; y: number }>>(new Map());
 
   function positionsNearlyEqual(a: { x: number; y: number }, b: { x: number; y: number }) {
     return Math.abs(a.x - b.x) < 1 && Math.abs(a.y - b.y) < 1;
@@ -813,10 +841,12 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   );
 
   const handleNodeDragStart = useCallback(
-    (_: React.MouseEvent | React.TouchEvent, node: Node, dragged: Node[]) => {
+    (e: React.MouseEvent | React.TouchEvent, node: Node, dragged: Node[]) => {
       pendingSelectIdsRef.current = null;
       setSnapLines([]);
       const targets = dragged.length > 0 ? dragged : [node];
+      altDuplicateDragRef.current = Boolean(canEdit && onAltDuplicateDrag && eventHasAltKey(e));
+      dragStartRelativeRef.current = new Map(targets.map((n) => [n.id, { ...n.position }]));
       onNodeDragStart(
         targets.map((n) => {
           const abs = getAbsoluteFlowPosition(n);
@@ -824,7 +854,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         }),
       );
     },
-    [getAbsoluteFlowPosition, onNodeDragStart],
+    [canEdit, getAbsoluteFlowPosition, onAltDuplicateDrag, onNodeDragStart],
   );
 
   /** Absolute-flow-space box for a node, preferring its measured DOM size. */
@@ -968,13 +998,38 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
           targetIds.has(n.id) ? { ...n, position: { x: n.position.x + dx, y: n.position.y + dy } } : n,
         );
         setNodes((nds) =>
-          nds.map((n) => (targetIds.has(n.id) ? { ...n, position: { x: n.position.x + dx, y: n.position.y + dy } } : n)),
+          nds.map((n) =>
+            targetIds.has(n.id) ? { ...n, position: { x: n.position.x + dx, y: n.position.y + dy } } : n,
+          ),
         );
+      }
+
+      if (altDuplicateDragRef.current && onAltDuplicateDrag) {
+        altDuplicateDragRef.current = false;
+        const placements = targets
+          .filter((n) => n.type !== "fsiFrame")
+          .map((n) => {
+            const abs = getAbsoluteFlowPosition(n);
+            return { sourceId: n.id, x: Math.round(abs.x), y: Math.round(abs.y) };
+          });
+        const starts = dragStartRelativeRef.current;
+        setNodes((nds) =>
+          nds.map((n) => {
+            const start = starts.get(n.id);
+            return start ? { ...n, position: { ...start } } : n;
+          }),
+        );
+        dragStartRelativeRef.current = new Map();
+        if (placements.length > 0) onAltDuplicateDrag(placements);
+        return;
       }
 
       const now = performance.now();
       if (now - lastDragPersistAtRef.current < 40) return;
       lastDragPersistAtRef.current = now;
+
+      altDuplicateDragRef.current = false;
+      dragStartRelativeRef.current = new Map();
 
       for (const n of targets) {
         dragPositionLockRef.current.set(n.id, { ...n.position });
@@ -991,7 +1046,14 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         }),
       );
     },
-    [canEdit, computeSnapForTargets, getAbsoluteFlowPosition, onNodeDragStop, setNodes],
+    [
+      canEdit,
+      computeSnapForTargets,
+      getAbsoluteFlowPosition,
+      onAltDuplicateDrag,
+      onNodeDragStop,
+      setNodes,
+    ],
   );
 
   const handleNodeDragStop = useCallback(
@@ -1002,10 +1064,12 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   );
 
   const handleSelectionDragStart = useCallback(
-    (_: React.MouseEvent, nodes: Node[]) => {
+    (e: React.MouseEvent, nodes: Node[]) => {
       if (nodes.length === 0) return;
       pendingSelectIdsRef.current = null;
       setSnapLines([]);
+      altDuplicateDragRef.current = Boolean(canEdit && onAltDuplicateDrag && eventHasAltKey(e));
+      dragStartRelativeRef.current = new Map(nodes.map((n) => [n.id, { ...n.position }]));
       onNodeDragStart(
         nodes.map((n) => {
           const abs = getAbsoluteFlowPosition(n);
@@ -1013,7 +1077,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         }),
       );
     },
-    [getAbsoluteFlowPosition, onNodeDragStart],
+    [canEdit, getAbsoluteFlowPosition, onAltDuplicateDrag, onNodeDragStart],
   );
 
   const handleSelectionDragStop = useCallback(
@@ -1047,27 +1111,53 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     [screenToFlowPosition],
   );
 
-  // A bare mouse-wheel notch zooms (cursor-anchored); ctrl+scroll/pinch keep using
-  // React Flow's own zoomOnPinch handling below, and bare trackpad scroll falls
-  // through to panOnScroll. Runs in the capture phase so it can claim the event
-  // before React Flow's own wheel listener (bound lower in the tree) sees it.
+  // Own all wheel gestures so trackpad two-finger scroll only pans, pinch only
+  // zooms, and mouse-wheel zoom is snappy. React Flow's panOnScroll/zoomOnPinch
+  // are disabled — they mix pan+zoom on Windows trackpads.
   const handleWheelCapture = useCallback(
     (e: React.WheelEvent<HTMLDivElement>) => {
-      if (e.ctrlKey || e.metaKey || !isMouseWheelNotch(e.nativeEvent)) return;
+      const target = e.target as HTMLElement | null;
+      const inScrollableField =
+        !!target?.closest?.(".nowheel, input, textarea, select, [contenteditable='true']");
+      const isPinch = e.ctrlKey || e.metaKey;
+      // Let focused text fields keep normal scroll unless this is a pinch zoom.
+      if (inScrollableField && !isPinch) return;
+
       const pane = paneRef.current?.querySelector(".react-flow__pane") as HTMLElement | null;
       if (!pane) return;
+
       e.preventDefault();
       e.stopPropagation();
+
       const rect = pane.getBoundingClientRect();
       const screenX = e.clientX - rect.left;
       const screenY = e.clientY - rect.top;
-      const { x, y, zoom } = getViewport();
-      const factor = Math.pow(2, (e.deltaY > 0 ? -1 : 1) * 0.25);
-      const nextZoom = Math.min(CANVAS_MAX_ZOOM, Math.max(CANVAS_MIN_ZOOM, zoom * factor));
-      const flowX = (screenX - x) / zoom;
-      const flowY = (screenY - y) / zoom;
+      const viewport = getViewport();
+
+      if (isPinch || isMouseWheelNotch(e.nativeEvent)) {
+        // Pinch: continuous delta → exponential zoom. Mouse wheel: fixed step.
+        const sensitivity = isPinch ? 0.014 : 0;
+        const nextZoom = Math.min(
+          CANVAS_MAX_ZOOM,
+          Math.max(
+            CANVAS_MIN_ZOOM,
+            isPinch
+              ? viewport.zoom * Math.exp(-e.deltaY * sensitivity)
+              : viewport.zoom * Math.pow(2, (e.deltaY > 0 ? -1 : 1) * 0.45),
+          ),
+        );
+        if (nextZoom === viewport.zoom) return;
+        void setViewport(zoomViewportAtPoint(viewport, nextZoom, screenX, screenY), { duration: 0 });
+        return;
+      }
+
+      // Two-finger trackpad scroll → pan only (no zoom).
       void setViewport(
-        { x: screenX - flowX * nextZoom, y: screenY - flowY * nextZoom, zoom: nextZoom },
+        {
+          x: viewport.x - e.deltaX,
+          y: viewport.y - e.deltaY,
+          zoom: viewport.zoom,
+        },
         { duration: 0 },
       );
     },
@@ -1272,11 +1362,10 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         // Double-click is how you select a word in a text field — don't let the canvas
         // hijack it to zoom. (Node creation uses the explicit onPaneDoubleClick handler.)
         zoomOnDoubleClick={false}
-        // Trackpad/mouse-wheel scroll pans the canvas in x/y; pinch gestures (and
-        // ctrl+scroll) still zoom via zoomOnPinch, which defaults to true.
-        panOnScroll
-        panOnScrollMode={PanOnScrollMode.Free}
+        // Wheel gestures are handled in onWheelCapture (pan / pinch / mouse-wheel zoom).
+        panOnScroll={false}
         zoomOnScroll={false}
+        zoomOnPinch={false}
         defaultEdgeOptions={{
           type: "fsiEdge",
           selectable: true,
