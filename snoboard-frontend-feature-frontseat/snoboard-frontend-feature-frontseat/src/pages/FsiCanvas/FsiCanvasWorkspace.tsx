@@ -912,12 +912,9 @@ export default function FsiCanvasWorkspace() {
     [runCreateWhiteboard],
   );
 
-  const handleNoteDrop = useCallback(
-    (_payload: NoteSuggestionPayload, x: number, y: number) => {
-      runCreateWhiteboard("Sticky Note", x, y);
-    },
-    [runCreateWhiteboard],
-  );
+  const handleNoteDrop = useCallback((_payload: NoteSuggestionPayload, _x: number, _y: number) => {
+    // Sticky notes were removed from the whiteboard tools.
+  }, []);
 
   const handlePaneDoubleClick = useCallback(
     (flowX: number, flowY: number, screenX: number, screenY: number) => {
@@ -934,8 +931,6 @@ export default function FsiCanvasWorkspace() {
       setPickerAt(null);
       if (choice.kind === "node") {
         runCreateWhiteboard(choice.nodeType as WhiteboardNodeType, flowX, flowY);
-      } else if (choice.kind === "note") {
-        runCreateWhiteboard("Sticky Note", flowX, flowY);
       } else {
         addScreenshot(flowX, flowY);
       }

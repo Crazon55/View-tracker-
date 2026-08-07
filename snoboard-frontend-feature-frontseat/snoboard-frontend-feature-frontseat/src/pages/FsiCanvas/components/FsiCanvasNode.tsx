@@ -85,6 +85,9 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
   const [observations, setObservations] = useState(() =>
     String(fsiNode.structured_payload?.observations ?? ""),
   );
+  const [visualHook, setVisualHook] = useState(() =>
+    String(fsiNode.structured_payload?.visual_hook ?? ""),
+  );
   const payload = fsiNode.structured_payload ?? {};
   const [fieldValues, setFieldValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(
@@ -113,6 +116,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
     }
     setLinkUrl(String(fsiNode.structured_payload?.url ?? ""));
     setObservations(String(fsiNode.structured_payload?.observations ?? ""));
+    setVisualHook(String(fsiNode.structured_payload?.visual_hook ?? ""));
   }, [
     fsiNode.id,
     fsiNode.display_title,
@@ -120,6 +124,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
     fsiNode.node_type,
     fsiNode.structured_payload?.url,
     fsiNode.structured_payload?.observations,
+    fsiNode.structured_payload?.visual_hook,
   ]);
 
   useEffect(() => {
@@ -547,13 +552,39 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       );
 
-    // One box: Written Hook + Performance + Link + Observations as dropdowns
+    const renderVisualHookBody = () =>
+      canEdit ? (
+        <textarea
+          rows={5}
+          value={visualHook}
+          onChange={(e) => setVisualHook(e.target.value)}
+          onBlur={(e) => commitField("visual_hook", e.target.value)}
+          onPointerDown={(e) => {
+            if (document.activeElement === e.currentTarget) e.stopPropagation();
+          }}
+          onMouseDown={(e) => {
+            if (document.activeElement === e.currentTarget) e.stopPropagation();
+          }}
+          placeholder={NODE_TEXT_PLACEHOLDER}
+          className={cn(NODE_BODY_INPUT_CLASS, "mt-1 min-h-[80px]", dragLockWhenFocused)}
+          {...fieldFocusProps}
+        />
+      ) : (
+        <div className={cn(NODE_BODY_INPUT_CLASS, "mt-1 min-h-[80px] whitespace-pre-wrap")}>
+          {visualHook ? <FsiLinkifiedText text={visualHook} /> : NODE_TEXT_PLACEHOLDER}
+        </div>
+      );
+
+    // One box: Written Hook + Visual Hook + Carousel + Performance + Link + Observations
     if (isCombinedDetails) {
       const hookOpen = payload.hook_expanded === true;
+      const visualHookOpen = payload.visual_hook_expanded === true;
+      const carouselOpen = payload.carousel_expanded === true;
       const perfOpen = payload.performance_expanded === true;
       const linkOpen = payload.link_expanded === true;
       const obsOpen = payload.observations_expanded === true;
       const detailsW = postDetailsCardWidth(payload);
+      const detailsSlides = parseSlidesContent(payload);
 
       return (
         <div
@@ -563,7 +594,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
           }`}
           style={{
             width: detailsW,
-            minHeight: DROPDOWN_COLLAPSED_HEIGHT * 4,
+            minHeight: DROPDOWN_COLLAPSED_HEIGHT * 6,
             height: "auto",
             borderColor: nodeData.color,
             backgroundColor: nodeData.color,
@@ -572,7 +603,7 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
           {canEdit && selected && (
             <NodeResizer
               minWidth={COMPACT_NODE_WIDTH}
-              minHeight={DROPDOWN_COLLAPSED_HEIGHT * 4}
+              minHeight={DROPDOWN_COLLAPSED_HEIGHT * 6}
               onResizeEnd={(_event, params) => {
                 patchPayload({ card_width: Math.round(params.width) });
               }}
@@ -586,6 +617,30 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
               className="bg-violet-300/40"
             />
             {hookOpen && <div className="px-3 pb-2">{renderHookBody()}</div>}
+
+            <FsiDragSafeToggle
+              label="Visual Hook"
+              expanded={visualHookOpen}
+              onToggle={() => patchPayload({ visual_hook_expanded: !visualHookOpen })}
+              className="bg-fuchsia-300/40"
+            />
+            {visualHookOpen && <div className="px-3 pb-2">{renderVisualHookBody()}</div>}
+
+            <FsiDragSafeToggle
+              label="Carousel Body"
+              expanded={carouselOpen}
+              onToggle={() => patchPayload({ carousel_expanded: !carouselOpen })}
+              className="bg-indigo-300/40"
+            />
+            {carouselOpen && (
+              <div className="px-3 pb-2">
+                <FsiCarouselSlidesEditor
+                  slides={detailsSlides}
+                  canEdit={canEdit}
+                  onChange={(rows) => patchPayload({ slides_content: rows })}
+                />
+              </div>
+            )}
 
             <FsiDragSafeToggle
               label="Performance"

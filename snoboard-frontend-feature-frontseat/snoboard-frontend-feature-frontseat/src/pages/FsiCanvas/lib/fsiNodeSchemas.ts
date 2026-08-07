@@ -195,14 +195,20 @@ export function defaultPayloadForType(nodeType: string): Record<string, unknown>
       return {
         is_post_details: true,
         hook_expanded: false,
+        visual_hook_expanded: false,
+        carousel_expanded: false,
         performance_expanded: false,
         link_expanded: false,
+        observations_expanded: false,
+        visual_hook: "",
+        slides_content: [""],
         views: "",
         likes: "",
         shares: "",
         comments: "",
         followers_gained: "",
         url: "",
+        observations: "",
       };
     case "Carousel Body":
       return { ui_expanded: false, slides_content: [""] };

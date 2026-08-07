@@ -1,10 +1,9 @@
-import { ImageIcon, StickyNote } from "lucide-react";
+import { ImageIcon } from "lucide-react";
 import { colorForNodeType } from "../lib/fsiNodeSchemas";
 import { WHITEBOARD_NODE_TYPES } from "../lib/fsiWhiteboardTypes";
 
 export type PickerChoice =
   | { kind: "node"; nodeType: string }
-  | { kind: "note" }
   | { kind: "image" };
 
 type Props = {
@@ -30,7 +29,7 @@ export default function NodeTypePicker({ screenX, screenY, nodeTypes, onSelect, 
         <div className="mb-2 px-2 text-xs font-medium text-zinc-400">Add to canvas</div>
 
         {types
-          .filter((t) => t !== "Sticky Note" && t !== "Visual")
+          .filter((t) => t !== "Visual")
           .map((type) => (
             <button
               key={type}
@@ -56,14 +55,6 @@ export default function NodeTypePicker({ screenX, screenY, nodeTypes, onSelect, 
         >
           <ImageIcon className="h-3.5 w-3.5 text-pink-400" />
           Visual (image)
-        </button>
-        <button
-          type="button"
-          onClick={() => onSelect({ kind: "note" })}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-white hover:bg-zinc-800"
-        >
-          <StickyNote className="h-3.5 w-3.5 text-amber-300" />
-          Sticky Note
         </button>
       </div>
     </>

@@ -7,10 +7,7 @@ export const WHITEBOARD_NODE_TYPES = [
   "Content Pillar",
   "Content Bucket",
   "Visual",
-  "Visual Hook",
   "Post Details",
-  "Carousel Body",
-  "Sticky Note",
   "Frame",
 ] as const;
 
@@ -83,7 +80,7 @@ export function isPerformanceNode(node: FsiNodeRecord): boolean {
   return node.node_type === "Performance" || node.node_type === "Performance Insight";
 }
 
-/** Combined Written Hook + Performance + Link card. */
+/** Combined post card: hooks, carousel, performance, link, observations. */
 export function isPostDetailsNode(node: FsiNodeRecord): boolean {
   return (
     node.node_type === "Post Details" || node.structured_payload?.is_post_details === true
@@ -178,13 +175,6 @@ export function specForWhiteboardType(type: WhiteboardNodeType): CreateNodeSpec 
         display_title: "Visual",
         structured_payload: { is_screenshot: true, image_url: "" },
       };
-    case "Visual Hook":
-      return {
-        node_type: "Visual Hook",
-        display_title: "",
-        structured_payload: { ui_expanded: false },
-        raw_body_text: "",
-      };
     case "Post Details":
       return {
         node_type: "Post Details",
@@ -192,9 +182,13 @@ export function specForWhiteboardType(type: WhiteboardNodeType): CreateNodeSpec 
         structured_payload: {
           is_post_details: true,
           hook_expanded: false,
+          visual_hook_expanded: false,
+          carousel_expanded: false,
           performance_expanded: false,
           link_expanded: false,
           observations_expanded: false,
+          visual_hook: "",
+          slides_content: [""],
           views: "",
           likes: "",
           shares: "",
@@ -203,19 +197,6 @@ export function specForWhiteboardType(type: WhiteboardNodeType): CreateNodeSpec 
           url: "",
           observations: "",
         },
-        raw_body_text: "",
-      };
-    case "Carousel Body":
-      return {
-        node_type: "Carousel Body",
-        display_title: "",
-        structured_payload: { ui_expanded: false, slides_content: [""] },
-      };
-    case "Sticky Note":
-      return {
-        node_type: "Sticky Note",
-        display_title: "Note",
-        structured_payload: { is_sticky: true, is_note: true },
         raw_body_text: "",
       };
     case "Frame":
@@ -231,8 +212,10 @@ export function specForWhiteboardType(type: WhiteboardNodeType): CreateNodeSpec 
 
 export function postDetailsCardHeight(payload: Record<string, unknown> | undefined): number {
   const p = payload ?? {};
-  let h = DROPDOWN_COLLAPSED_HEIGHT * 4;
+  let h = DROPDOWN_COLLAPSED_HEIGHT * 6;
   if (p.hook_expanded === true) h += 120;
+  if (p.visual_hook_expanded === true) h += 120;
+  if (p.carousel_expanded === true) h += 160;
   if (p.performance_expanded === true) h += 240;
   if (p.link_expanded === true) h += 56;
   if (p.observations_expanded === true) h += 120;

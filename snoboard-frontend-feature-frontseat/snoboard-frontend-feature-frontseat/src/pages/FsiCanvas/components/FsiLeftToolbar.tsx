@@ -3,16 +3,13 @@ import {
   Frame,
   Hash,
   ImageIcon,
-  StickyNote,
   Undo2,
   Redo2,
   Layers,
   FolderOpen,
-  Eye,
   PenLine,
   PanelLeftClose,
   PanelLeftOpen,
-  GalleryHorizontalEnd,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -29,10 +26,7 @@ const TOOL_ICONS: Record<WhiteboardNodeType, React.ReactNode> = {
   "Content Pillar": <Layers className="h-4 w-4 shrink-0" />,
   "Content Bucket": <Hash className="h-4 w-4 shrink-0" />,
   Visual: <ImageIcon className="h-4 w-4 shrink-0" />,
-  "Visual Hook": <Eye className="h-4 w-4 shrink-0" />,
   "Post Details": <PenLine className="h-4 w-4 shrink-0" />,
-  "Carousel Body": <GalleryHorizontalEnd className="h-4 w-4 shrink-0" />,
-  "Sticky Note": <StickyNote className="h-4 w-4 shrink-0" />,
   Frame: <Frame className="h-4 w-4 shrink-0" />,
 };
 
@@ -41,10 +35,7 @@ const TOOL_LABELS: Record<WhiteboardNodeType, string> = {
   "Content Pillar": "Content Pillar",
   "Content Bucket": "Content Bucket",
   Visual: "Visual",
-  "Visual Hook": "Visual Hook",
-  "Post Details": "Hook · Perf · Link",
-  "Carousel Body": "Carousel Body",
-  "Sticky Note": "Sticky Note",
+  "Post Details": "Post Details",
   Frame: "Frame selection",
 };
 
