@@ -505,12 +505,36 @@ export default function FsiCanvasWorkspace() {
     },
   });
 
+  const orphanFrameChildren = useCallback(
+    (frameId: string) => {
+      const g = graphRef.current;
+      if (!g) return;
+      const children = g.nodes.filter((n) => n.parent_node_id === frameId);
+      if (children.length === 0) return;
+      setGraph({
+        ...g,
+        nodes: g.nodes.map((n) =>
+          n.parent_node_id === frameId ? { ...n, parent_node_id: null } : n,
+        ),
+      });
+      void Promise.all(
+        children.map((c) => fsiApi.updateNode(c.id, { parent_node_id: null })),
+      ).catch((e) => {
+        toast.error(e instanceof Error ? e.message : "Could not ungroup frame contents");
+      });
+    },
+    [setGraph],
+  );
+
   const handleDeleteNode = useCallback(
     (id: string) => {
       const g = graphRef.current;
-      if (g && !history.isApplying.current) {
+      if (g) {
         const node = g.nodes.find((n) => n.id === id);
-        if (node) {
+        if (node && isFrameNode(node)) {
+          orphanFrameChildren(id);
+        }
+        if (!history.isApplying.current && node) {
           const related = g.connections.filter(
             (c) => c.source_node_id === id || c.target_node_id === id,
           );
@@ -519,7 +543,7 @@ export default function FsiCanvasWorkspace() {
       }
       deleteNodeMutation.mutate(id);
     },
-    [deleteNodeMutation, history],
+    [deleteNodeMutation, history, orphanFrameChildren],
   );
 
   const deleteNodesBulkMutation = useMutation({
@@ -1608,7 +1632,9 @@ export default function FsiCanvasWorkspace() {
                     <AlertDialogHeader>
                       <AlertDialogTitle>Reset canvas?</AlertDialogTitle>
                       <AlertDialogDescription className="text-zinc-400">
-                        This deletes all nodes and connections. Study title and metadata are kept.
+                        This permanently deletes all nodes and connections on this canvas. Study title
+                        and metadata are kept. This cannot be undone unless you restore from a database
+                        backup.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

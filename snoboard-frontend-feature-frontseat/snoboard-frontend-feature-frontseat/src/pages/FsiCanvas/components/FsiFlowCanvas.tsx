@@ -1267,7 +1267,11 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   const handleNodesDelete = useCallback(
     (deleted: Node[]) => {
       if (!canEdit) return;
-      deleted.forEach((node) => onNodeDelete(node.id));
+      // Deleting a frame must not cascade-delete grouped nodes — only remove the frame.
+      const targets = deleted.some((n) => n.type === "fsiFrame")
+        ? deleted.filter((n) => n.type === "fsiFrame")
+        : deleted;
+      targets.forEach((node) => onNodeDelete(node.id));
     },
     [canEdit, onNodeDelete],
   );
