@@ -484,15 +484,8 @@ export default function FsiCanvasWorkspace() {
   });
 
   const deleteNodeMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const g = graphRef.current;
-      const node = g?.nodes.find((n) => n.id === id);
-      if (node && isFrameNode(node)) {
-        const children = g!.nodes.filter((n) => n.parent_node_id === id);
-        await Promise.all(children.map((c) => fsiApi.updateNode(c.id, { parent_node_id: null })));
-      }
-      await fsiApi.deleteNode(id, studyId!);
-    },
+    // fsiApi.deleteNode unparents children in DB before delete (CASCADE-safe).
+    mutationFn: (id: string) => fsiApi.deleteNode(id, studyId!),
     onMutate: (id) => {
       const g = graphRef.current;
       if (!g) return;

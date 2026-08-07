@@ -236,7 +236,8 @@ async def create_node(study_id: str, req: NodeCreate, claims: dict = Depends(req
 async def update_node(node_id: str, req: NodeUpdate, claims: dict = Depends(require_auth)):
     client = get_supabase_client()
     existing = _get_node(client, node_id)
-    update_data = {k: v for k, v in req.model_dump().items() if v is not None}
+    # exclude_unset keeps explicit nulls (e.g. parent_node_id: null to ungroup)
+    update_data = req.model_dump(exclude_unset=True)
     if "node_type" in update_data:
         _validate_node_type(update_data["node_type"])
     if not update_data:
@@ -254,6 +255,10 @@ async def delete_node(node_id: str, claims: dict = Depends(require_auth)):
     if not rows:
         return {"success": True, "data": {"id": node_id}}
     study_id = rows[0]["study_id"]
+    # Unparent children before delete — DB may still be ON DELETE CASCADE for parent_node_id.
+    client.table("nodes").update({"parent_node_id": None, "updated_at": _now_iso()}).eq(
+        "parent_node_id", node_id
+    ).execute()
     client.table("connections").delete().or_(
         f"source_node_id.eq.{node_id},target_node_id.eq.{node_id}"
     ).execute()

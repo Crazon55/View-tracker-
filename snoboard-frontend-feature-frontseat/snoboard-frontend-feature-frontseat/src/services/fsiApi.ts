@@ -348,6 +348,14 @@ export function createFsiApi() {
         .eq("id", nodeId)
         .maybeSingle();
 
+      // parent_node_id REFERENCES nodes(id) ON DELETE CASCADE — unparent first or
+      // deleting a frame wipes every node inside it (and their connections).
+      const { error: orphanErr } = await _sb
+        .from("nodes")
+        .update({ parent_node_id: null, updated_at: new Date().toISOString() })
+        .eq("parent_node_id", nodeId);
+      if (orphanErr) throw new Error(orphanErr.message);
+
       await _sb.from("connections").delete().or(`source_node_id.eq.${nodeId},target_node_id.eq.${nodeId}`);
 
       const { error } = await _sb.from("nodes").delete().eq("id", nodeId);
