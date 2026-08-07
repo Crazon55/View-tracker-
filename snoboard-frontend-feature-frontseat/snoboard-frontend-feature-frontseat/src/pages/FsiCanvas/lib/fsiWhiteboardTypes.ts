@@ -7,7 +7,7 @@ export const WHITEBOARD_NODE_TYPES = [
   "Content Pillar",
   "Content Bucket",
   "Visual",
-  "Post Details",
+  "Observations",
   "Frame",
 ] as const;
 
@@ -140,7 +140,7 @@ export function isSimpleLabelNode(node: FsiNodeRecord): boolean {
 export function displayNodeType(node: FsiNodeRecord): string {
   if (isFrameNode(node)) return "Frame";
   if (isStickyNode(node)) return "Sticky Note";
-  if (isPostDetailsNode(node)) return "Post Details";
+  if (isPostDetailsNode(node)) return "Observations";
   if (isLinkNode(node)) return "Link";
   if (isVisualNode(node)) return "Visual";
   if (isVisualHookNode(node)) return "Visual Hook";
@@ -175,7 +175,7 @@ export function specForWhiteboardType(type: WhiteboardNodeType): CreateNodeSpec 
         display_title: "Visual",
         structured_payload: { is_screenshot: true, image_url: "" },
       };
-    case "Post Details":
+    case "Observations":
       return {
         node_type: "Post Details",
         display_title: "",

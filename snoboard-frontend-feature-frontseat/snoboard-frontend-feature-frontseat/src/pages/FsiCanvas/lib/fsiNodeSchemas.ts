@@ -160,6 +160,7 @@ export const NODE_TYPE_COLORS: Record<string, string> = {
   "Visual Hook": "#a855f7",
   "Written Hook": "#c084fc",
   "Post Details": "#a78bfa",
+  Observations: "#a78bfa",
   "Carousel Body": "#6366f1",
   Performance: "#64748b",
   "Performance Insight": "#64748b",

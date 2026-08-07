@@ -26,7 +26,7 @@ const TOOL_ICONS: Record<WhiteboardNodeType, React.ReactNode> = {
   "Content Pillar": <Layers className="h-4 w-4 shrink-0" />,
   "Content Bucket": <Hash className="h-4 w-4 shrink-0" />,
   Visual: <ImageIcon className="h-4 w-4 shrink-0" />,
-  "Post Details": <PenLine className="h-4 w-4 shrink-0" />,
+  Observations: <PenLine className="h-4 w-4 shrink-0" />,
   Frame: <Frame className="h-4 w-4 shrink-0" />,
 };
 
@@ -35,7 +35,7 @@ const TOOL_LABELS: Record<WhiteboardNodeType, string> = {
   "Content Pillar": "Content Pillar",
   "Content Bucket": "Content Bucket",
   Visual: "Visual",
-  "Post Details": "Post Details",
+  Observations: "Observations",
   Frame: "Frame selection",
 };
 
