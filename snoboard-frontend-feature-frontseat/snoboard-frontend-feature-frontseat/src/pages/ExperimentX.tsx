@@ -3599,6 +3599,108 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
   const [detailIdea, setDetailIdea] = useState<any>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const pagesScrollRef = useRef<HTMLDivElement>(null);
+  const poolScrollRef = useRef<HTMLDivElement>(null);
+
+  // Edge auto-scroll while dragging pool ideas onto page columns (horizontal pages
+  // strip + vertical window/column scroll when a page has many cards).
+  useEffect(() => {
+    if (!draggingId) return;
+
+    const EDGE = 80;
+    const MAX_SPEED = 22;
+    let raf = 0;
+    let lastX = 0;
+    let lastY = 0;
+    let active = false;
+
+    const scrollAxis = (
+      el: HTMLElement,
+      client: number,
+      start: number,
+      end: number,
+      horizontal: boolean,
+    ) => {
+      if (client > end - EDGE) {
+        const t = Math.min(1, (client - (end - EDGE)) / EDGE);
+        const delta = Math.ceil(MAX_SPEED * t * t);
+        if (horizontal) el.scrollLeft += delta;
+        else el.scrollTop += delta;
+        return true;
+      }
+      if (client < start + EDGE) {
+        const t = Math.min(1, (start + EDGE - client) / EDGE);
+        const delta = Math.ceil(MAX_SPEED * t * t);
+        if (horizontal) el.scrollLeft -= delta;
+        else el.scrollTop -= delta;
+        return true;
+      }
+      return false;
+    };
+
+    const tick = () => {
+      raf = 0;
+      if (!active) return;
+
+      const pagesEl = pagesScrollRef.current;
+      if (pagesEl) {
+        const r = pagesEl.getBoundingClientRect();
+        if (lastX >= r.left - 8 && lastX <= r.right + 8 && lastY >= r.top - 8 && lastY <= r.bottom + 8) {
+          scrollAxis(pagesEl, lastX, r.left, r.right, true);
+        }
+      }
+
+      const poolEl = poolScrollRef.current;
+      if (poolEl) {
+        const r = poolEl.getBoundingClientRect();
+        if (lastX >= r.left && lastX <= r.right && lastY >= r.top && lastY <= r.bottom) {
+          scrollAxis(poolEl, lastY, r.top, r.bottom, false);
+        }
+      }
+
+      document.querySelectorAll<HTMLElement>("[data-frontseat-page-scroll]").forEach((col) => {
+        const r = col.getBoundingClientRect();
+        if (lastX < r.left || lastX > r.right || lastY < r.top || lastY > r.bottom) return;
+        scrollAxis(col, lastY, r.top, r.bottom, false);
+      });
+
+      const vh = window.innerHeight;
+      if (lastY > vh - EDGE) {
+        const t = Math.min(1, (lastY - (vh - EDGE)) / EDGE);
+        window.scrollBy(0, Math.ceil(MAX_SPEED * t * t));
+      } else if (lastY < EDGE + 48) {
+        const t = Math.min(1, (EDGE + 48 - lastY) / EDGE);
+        window.scrollBy(0, -Math.ceil(MAX_SPEED * t * t));
+      }
+
+      raf = requestAnimationFrame(tick);
+    };
+
+    const onDragOver = (e: DragEvent) => {
+      lastX = e.clientX;
+      lastY = e.clientY;
+      if (!active) {
+        active = true;
+        raf = requestAnimationFrame(tick);
+      }
+    };
+
+    const stop = () => {
+      active = false;
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+    };
+
+    document.addEventListener("dragover", onDragOver);
+    document.addEventListener("dragend", stop);
+    document.addEventListener("drop", stop);
+    return () => {
+      stop();
+      document.removeEventListener("dragover", onDragOver);
+      document.removeEventListener("dragend", stop);
+      document.removeEventListener("drop", stop);
+    };
+  }, [draggingId]);
 
   const { data: settings } = useQuery({
     queryKey: expQk(playbookId, "settings"),
@@ -3817,7 +3919,7 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
         </div>
 
         {/* Pool cards (editors) or day summary (ops) */}
-        <div style={{ flex: 1, overflowY: "auto" }}>
+        <div ref={poolScrollRef} style={{ flex: 1, overflowY: "auto" }}>
           {isLoading ? (
             <p style={{ color: "#52525b", fontSize: 12 }}>Loading…</p>
           ) : opsOnly ? (
@@ -3915,7 +4017,10 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
       </div>
 
       {/* ── Right panel: page columns ── */}
-      <div style={{ flex: 1, overflowX: "auto", display: "flex", gap: 10, paddingBottom: 20, alignItems: "flex-start" }}>
+      <div
+        ref={pagesScrollRef}
+        style={{ flex: 1, overflowX: "auto", display: "flex", gap: 10, paddingBottom: 20, alignItems: "flex-start" }}
+      >
         {playbookPages.map(page => {
           const short    = pageShort[page] || page;
           const color    = pageColors[page] || "#a1a1aa";
@@ -3925,7 +4030,7 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
           return (
             <div
               key={page}
-              style={{ minWidth: 195, flex: "1 0 195px", maxWidth: 250 }}
+              style={{ minWidth: 195, flex: "1 0 195px", maxWidth: 250, display: "flex", flexDirection: "column", maxHeight: "calc(100vh - 260px)" }}
               onDragOver={dragDisabled ? undefined : e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropTarget(page); }}
               onDragLeave={dragDisabled ? undefined : e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTarget(null); }}
               onDrop={dragDisabled ? undefined : e => handleDrop(page, e)}
@@ -3935,6 +4040,7 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
                 display: "flex", alignItems: "center", gap: 6,
                 padding: "6px 8px 8px", marginBottom: 4,
                 borderBottom: `2px solid ${color}30`,
+                flexShrink: 0,
               }}>
                 <span style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
                 <span style={{ fontSize: 13, fontWeight: 700, color, letterSpacing: "-0.01em" }}>{short}</span>
@@ -3944,12 +4050,19 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
               </div>
 
               {/* Drop zone + cards */}
-              <div style={{
-                minHeight: 120, padding: "6px 4px", borderRadius: 9,
-                border: isDrop ? "2px dashed #7c3aed" : "2px dashed transparent",
-                background: isDrop ? "rgba(124,58,237,0.05)" : "transparent",
-                transition: "all 0.12s",
-              }}>
+              <div
+                data-frontseat-page-scroll
+                style={{
+                  flex: 1,
+                  minHeight: 120,
+                  overflowY: "auto",
+                  padding: "6px 4px",
+                  borderRadius: 9,
+                  border: isDrop ? "2px dashed #7c3aed" : "2px dashed transparent",
+                  background: isDrop ? "rgba(124,58,237,0.05)" : "transparent",
+                  transition: "border-color 0.12s, background 0.12s",
+                }}
+              >
                 {colIdeas.length === 0 && !isDrop && (
                   <div style={{ padding: "24px 10px", textAlign: "center", color: "#3f3f46", fontSize: 10 }}>
                     {opsOnly ? "No ideas yesterday or today" : "Drop an idea here"}
