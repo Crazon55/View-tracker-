@@ -39,6 +39,8 @@ export type FsiNodeData = {
   onScreenshotsChange?: (nodeId: string, screenshots: string[]) => void;
   /** Selected-node corner "+" → open duplicate confirm (with connectors option). */
   onRequestDuplicate?: (nodeId: string, corner: "top-left" | "top-right" | "bottom-left" | "bottom-right") => void;
+  /** Remove frame border only — contents stay on the canvas. */
+  onRemoveFrame?: (nodeId: string) => void;
   connectionAnchors?: string[];
   /** True while user is dragging a new connection line. */
   isConnecting?: boolean;
@@ -61,6 +63,7 @@ export function graphToFlow(
       nodeId: string,
       corner: "top-left" | "top-right" | "bottom-left" | "bottom-right",
     ) => void;
+    onRemoveFrame?: (nodeId: string) => void;
   },
 ): { nodes: Node[]; edges: Edge[] } {
   const visible = nodes.filter(isCanvasNode);
@@ -108,6 +111,7 @@ export function graphToFlow(
           onPayloadChange: options?.onPayloadChange,
           onScreenshotsChange: options?.onScreenshotsChange,
           onRequestDuplicate: options?.onRequestDuplicate,
+          onRemoveFrame: options?.onRemoveFrame,
         } satisfies FsiNodeData,
       };
     }

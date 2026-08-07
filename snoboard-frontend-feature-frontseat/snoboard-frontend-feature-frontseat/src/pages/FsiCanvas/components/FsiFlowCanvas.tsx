@@ -108,6 +108,8 @@ export type FsiFlowCanvasHandle = {
   getBoundsForNodeIds: (nodeIds: string[]) => ReturnType<typeof boundsFromExtents> | null;
   /** Node ids currently selected on the canvas (live React Flow state). */
   getSelectedNodeIds: () => string[];
+  /** Frame nodes currently selected (live React Flow state). */
+  getSelectedFrameIds: () => string[];
   /** Edge ids currently selected on the canvas. */
   getSelectedEdgeIds: () => string[];
 };
@@ -152,6 +154,7 @@ type FlowInnerProps = {
     nodeId: string,
     corner: "top-left" | "top-right" | "bottom-left" | "bottom-right",
   ) => void;
+  onRemoveFrame?: (nodeId: string) => void;
   canvasTheme?: FsiCanvasTheme;
 };
 
@@ -186,6 +189,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     onStructuredPayloadPatch,
     onScreenshotsChange,
     onRequestDuplicate,
+    onRemoveFrame,
     canvasTheme = "dark",
   },
   ref,
@@ -307,6 +311,12 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     [],
   );
 
+  const onRemoveFrameRef = useRef(onRemoveFrame);
+  onRemoveFrameRef.current = onRemoveFrame;
+  const stableRemoveFrame = useCallback((id: string) => {
+    onRemoveFrameRef.current?.(id);
+  }, []);
+
   const onEdgeDeleteRef = useRef(onEdgeDelete);
   onEdgeDeleteRef.current = onEdgeDelete;
   const stableEdgeDelete = useCallback((id: string) => {
@@ -370,8 +380,9 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         onEdgeLabelChange: stableEdgeLabelChange,
         onScreenshotsChange: stableScreenshotsChange,
         onRequestDuplicate: stableRequestDuplicate,
+        onRemoveFrame: stableRemoveFrame,
       }),
-    [structureSignature, positionSignature, canEdit, stableTitleChange, stableBodyChange, stablePayloadChange, stableStructuredPayloadPatch, stableEdgeDelete, stableEdgeLabelChange, stableScreenshotsChange, stableRequestDuplicate],
+    [structureSignature, positionSignature, canEdit, stableTitleChange, stableBodyChange, stablePayloadChange, stableStructuredPayloadPatch, stableEdgeDelete, stableEdgeLabelChange, stableScreenshotsChange, stableRequestDuplicate, stableRemoveFrame],
   );
 
   const flowEdges = flowGraph.edges;
@@ -599,6 +610,10 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         }
         return [];
       },
+      getSelectedFrameIds: () =>
+        getNodes()
+          .filter((node) => node.selected && node.type === "fsiFrame")
+          .map((node) => node.id),
       getSelectedEdgeIds: () =>
         getEdges()
           .filter((edge) => edge.selected)
@@ -958,9 +973,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
 
       if (!changes.some((change) => change.type === "select")) return;
       queueMicrotask(() => {
-        const selectedNodes = getNodes().filter(
-          (node) => node.selected && node.type !== "fsiFrame",
-        );
+        const selectedNodes = getNodes().filter((node) => node.selected);
         const selectedEdges = getEdges().filter((edge) => edge.selected);
         onSelectionChange({ nodes: selectedNodes, edges: selectedEdges });
       });
@@ -1285,12 +1298,11 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         data: {
           ...(n.data as FsiNodeData),
           isConnecting,
-          // Only reveal ports while a connect drag is active; selected nodes also
-          // show them locally so you can start a wire without cluttering the board.
           showConnectionDots: isConnecting,
+          ...(n.type === "fsiFrame" ? { onRemoveFrame: stableRemoveFrame } : {}),
         },
       })),
-    [nodes, canEdit, isConnecting],
+    [nodes, canEdit, isConnecting, stableRemoveFrame],
   );
 
   const miniMapNodeColor = useCallback((n: Node) => {

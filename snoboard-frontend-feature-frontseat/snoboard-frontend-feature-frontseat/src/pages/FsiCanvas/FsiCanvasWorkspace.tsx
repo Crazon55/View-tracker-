@@ -2,7 +2,7 @@ import { useCallback, useRef, useState, useEffect, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { OnSelectionChangeFunc } from "@xyflow/react";
-import { ArrowLeft, Copy, Loader2, Moon, Redo2, RotateCcw, SquareDashedMousePointer, Sun, Trash2, Undo2 } from "lucide-react";
+import { ArrowLeft, Copy, Frame, Loader2, Moon, Redo2, RotateCcw, SquareDashedMousePointer, Sun, Trash2, Undo2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { fsiApi, flushFsiBackendSyncQueue } from "@/services/fsiApi";
@@ -484,15 +484,28 @@ export default function FsiCanvasWorkspace() {
   });
 
   const deleteNodeMutation = useMutation({
-    mutationFn: (id: string) => fsiApi.deleteNode(id, studyId!),
+    mutationFn: async (id: string) => {
+      const g = graphRef.current;
+      const node = g?.nodes.find((n) => n.id === id);
+      if (node && isFrameNode(node)) {
+        const children = g!.nodes.filter((n) => n.parent_node_id === id);
+        await Promise.all(children.map((c) => fsiApi.updateNode(c.id, { parent_node_id: null })));
+      }
+      await fsiApi.deleteNode(id, studyId!);
+    },
     onMutate: (id) => {
       const g = graphRef.current;
       if (!g) return;
       const previous = g;
+      const node = g.nodes.find((n) => n.id === id);
+      const isFrame = node && isFrameNode(node);
       setSelectedNode((prev) => (prev?.id === id ? null : prev));
+      setMultiSelectedIds((prev) => prev.filter((x) => x !== id));
       setGraph({
         ...g,
-        nodes: g.nodes.filter((n) => n.id !== id),
+        nodes: g.nodes
+          .filter((n) => n.id !== id)
+          .map((n) => (isFrame && n.parent_node_id === id ? { ...n, parent_node_id: null } : n)),
         connections: g.connections.filter(
           (c) => c.source_node_id !== id && c.target_node_id !== id,
         ),
@@ -505,35 +518,11 @@ export default function FsiCanvasWorkspace() {
     },
   });
 
-  const orphanFrameChildren = useCallback(
-    (frameId: string) => {
-      const g = graphRef.current;
-      if (!g) return;
-      const children = g.nodes.filter((n) => n.parent_node_id === frameId);
-      if (children.length === 0) return;
-      setGraph({
-        ...g,
-        nodes: g.nodes.map((n) =>
-          n.parent_node_id === frameId ? { ...n, parent_node_id: null } : n,
-        ),
-      });
-      void Promise.all(
-        children.map((c) => fsiApi.updateNode(c.id, { parent_node_id: null })),
-      ).catch((e) => {
-        toast.error(e instanceof Error ? e.message : "Could not ungroup frame contents");
-      });
-    },
-    [setGraph],
-  );
-
   const handleDeleteNode = useCallback(
     (id: string) => {
       const g = graphRef.current;
       if (g) {
         const node = g.nodes.find((n) => n.id === id);
-        if (node && isFrameNode(node)) {
-          orphanFrameChildren(id);
-        }
         if (!history.isApplying.current && node) {
           const related = g.connections.filter(
             (c) => c.source_node_id === id || c.target_node_id === id,
@@ -543,7 +532,7 @@ export default function FsiCanvasWorkspace() {
       }
       deleteNodeMutation.mutate(id);
     },
-    [deleteNodeMutation, history, orphanFrameChildren],
+    [deleteNodeMutation, history],
   );
 
   const deleteNodesBulkMutation = useMutation({
@@ -1106,6 +1095,19 @@ export default function FsiCanvasWorkspace() {
       return;
     }
 
+    const selectedFrameIds = canvasRef.current?.getSelectedFrameIds() ?? [];
+    if (selectedFrameIds.length > 0) {
+      for (const frameId of selectedFrameIds) {
+        handleDeleteNode(frameId);
+      }
+      return;
+    }
+
+    if (selectedNode && isFrameNode(selectedNode)) {
+      handleDeleteNode(selectedNode.id);
+      return;
+    }
+
     const live = canvasRef.current?.getSelectedNodeIds() ?? [];
     const ids = (
       live.length > 0
@@ -1128,6 +1130,35 @@ export default function FsiCanvasWorkspace() {
     if (!window.confirm(`Delete ${ids.length} selected nodes?`)) return;
     deleteNodesBulkMutation.mutate(ids);
   }, [canEdit, deleteNodesBulkMutation, handleDeleteConnection, handleDeleteNode, multiSelectedIds, selectedNode]);
+
+  const handleRemoveFrame = useCallback(
+    (frameId: string) => {
+      handleDeleteNode(frameId);
+    },
+    [handleDeleteNode],
+  );
+
+  const removableFrameId = useMemo(() => {
+    const g = graph;
+    if (!g) return null;
+    if (selectedNode && isFrameNode(selectedNode)) return selectedNode.id;
+    const ids =
+      multiSelectedIds.length > 0
+        ? multiSelectedIds
+        : selectedNode
+          ? [selectedNode.id]
+          : [];
+    if (ids.length === 0) return null;
+    const parentIds = [
+      ...new Set(
+        ids
+          .map((id) => g.nodes.find((n) => n.id === id)?.parent_node_id)
+          .filter((p): p is string => Boolean(p)),
+      ),
+    ];
+    if (parentIds.length !== 1) return null;
+    return parentIds[0]!;
+  }, [graph, multiSelectedIds, selectedNode]);
 
   const handleUndo = useCallback(() => {
     void history.undo(graphRef.current, setGraph);
@@ -1464,6 +1495,7 @@ export default function FsiCanvasWorkspace() {
 
   const hasCanvasSelection = useMemo(() => {
     const nodeList = graph?.nodes ?? [];
+    if (selectedNode && isFrameNode(selectedNode)) return true;
     if (multiSelectedIds.length > 0) {
       return multiSelectedIds.some((id) => {
         const n = nodeList.find((x) => x.id === id);
@@ -1473,8 +1505,12 @@ export default function FsiCanvasWorkspace() {
     return !!selectedNode && isCanvasNode(selectedNode);
   }, [multiSelectedIds, graph?.nodes, selectedNode]);
 
-  const canDuplicate = hasCanvasSelection && !duplicateNodeMutation.isPending;
-  const canDeleteSelection = hasCanvasSelection && !deleteNodesBulkMutation.isPending;
+  const canDuplicate =
+    hasCanvasSelection &&
+    !duplicateNodeMutation.isPending &&
+    !(selectedNode && isFrameNode(selectedNode));
+  const canDeleteSelection =
+    (hasCanvasSelection || !!removableFrameId) && !deleteNodesBulkMutation.isPending;
 
   if (!studyId) return null;
 
@@ -1600,6 +1636,17 @@ export default function FsiCanvasWorkspace() {
                 >
                   <Copy className="h-3.5 w-3.5" />
                 </Button>
+                {removableFrameId ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-amber-300 hover:text-amber-200"
+                    onClick={() => handleRemoveFrame(removableFrameId)}
+                    title="Remove frame (keep nodes inside)"
+                  >
+                    <Frame className="h-3.5 w-3.5" />
+                  </Button>
+                ) : null}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -1607,11 +1654,15 @@ export default function FsiCanvasWorkspace() {
                   disabled={!canDeleteSelection}
                   onClick={handleDeleteSelected}
                   title={
-                    selectionCount > 1
-                      ? `Delete ${selectionCount} nodes (Backspace)`
-                      : hasCanvasSelection
-                        ? "Delete node (Backspace)"
-                        : "Delete selected"
+                    selectedNode && isFrameNode(selectedNode)
+                      ? "Remove frame (keep nodes inside)"
+                      : selectionCount > 1
+                        ? `Delete ${selectionCount} nodes (Backspace)`
+                        : hasCanvasSelection
+                          ? "Delete node (Backspace)"
+                          : removableFrameId
+                            ? "Remove frame (keep nodes inside)"
+                            : "Delete selected"
                   }
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -1690,6 +1741,7 @@ export default function FsiCanvasWorkspace() {
             onEdgeDelete={handleDeleteConnection}
             onEdgeLabelChange={handleEdgeLabelChange}
             onNodeDelete={handleDeleteNode}
+            onRemoveFrame={handleRemoveFrame}
             onSuggestionDrop={handleSuggestionDrop}
             onNoteDrop={handleNoteDrop}
             onScreenshotDrop={handleScreenshotDrop}
