@@ -3658,12 +3658,6 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
         }
       }
 
-      document.querySelectorAll<HTMLElement>("[data-frontseat-page-scroll]").forEach((col) => {
-        const r = col.getBoundingClientRect();
-        if (lastX < r.left || lastX > r.right || lastY < r.top || lastY > r.bottom) return;
-        scrollAxis(col, lastY, r.top, r.bottom, false);
-      });
-
       const vh = window.innerHeight;
       if (lastY > vh - EDGE) {
         const t = Math.min(1, (lastY - (vh - EDGE)) / EDGE);
@@ -4030,7 +4024,7 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
           return (
             <div
               key={page}
-              style={{ minWidth: 195, flex: "1 0 195px", maxWidth: 250, display: "flex", flexDirection: "column", maxHeight: "calc(100vh - 260px)" }}
+              style={{ minWidth: 195, flex: "1 0 195px", maxWidth: 250 }}
               onDragOver={dragDisabled ? undefined : e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropTarget(page); }}
               onDragLeave={dragDisabled ? undefined : e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTarget(null); }}
               onDrop={dragDisabled ? undefined : e => handleDrop(page, e)}
@@ -4040,7 +4034,6 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
                 display: "flex", alignItems: "center", gap: 6,
                 padding: "6px 8px 8px", marginBottom: 4,
                 borderBottom: `2px solid ${color}30`,
-                flexShrink: 0,
               }}>
                 <span style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
                 <span style={{ fontSize: 13, fontWeight: 700, color, letterSpacing: "-0.01em" }}>{short}</span>
@@ -4050,19 +4043,12 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
               </div>
 
               {/* Drop zone + cards */}
-              <div
-                data-frontseat-page-scroll
-                style={{
-                  flex: 1,
-                  minHeight: 120,
-                  overflowY: "auto",
-                  padding: "6px 4px",
-                  borderRadius: 9,
-                  border: isDrop ? "2px dashed #7c3aed" : "2px dashed transparent",
-                  background: isDrop ? "rgba(124,58,237,0.05)" : "transparent",
-                  transition: "border-color 0.12s, background 0.12s",
-                }}
-              >
+              <div style={{
+                minHeight: 120, padding: "6px 4px", borderRadius: 9,
+                border: isDrop ? "2px dashed #7c3aed" : "2px dashed transparent",
+                background: isDrop ? "rgba(124,58,237,0.05)" : "transparent",
+                transition: "all 0.12s",
+              }}>
                 {colIdeas.length === 0 && !isDrop && (
                   <div style={{ padding: "24px 10px", textAlign: "center", color: "#3f3f46", fontSize: 10 }}>
                     {opsOnly ? "No ideas yesterday or today" : "Drop an idea here"}
