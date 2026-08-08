@@ -34,15 +34,58 @@ function sixDayViews(summary: any): number {
   return Number.isNaN(cvs) ? 0 : cvs;
 }
 
-/** Map handle → cycle_views_sum from a six-day month payload. */
-function viewsByHandleFromMonth(monthData: any): Map<string, number> {
-  const m = new Map<string, number>();
-  for (const p of (monthData?.page_summaries ?? []) as any[]) {
-    const h = handleKey(p.handle);
-    if (!h) continue;
-    m.set(h, sixDayViews(p));
+/**
+ * How far through the month's 6-day cycles we are — consecutive from cycle 1
+ * that already have entered views. If only week 1 is filled → 1; weeks 1–2 → 2, etc.
+ */
+function filledCycleCount(monthData: any): number {
+  const cycles = [...((monthData?.cycles ?? []) as any[])].sort(
+    (a, b) => (Number(a.cycle) || 0) - (Number(b.cycle) || 0),
+  );
+  let n = 0;
+  for (const c of cycles) {
+    const num = Number(c.cycle) || 0;
+    if (num !== n + 1) break;
+    const hasViews = (c.entries ?? []).some((e: any) => (Number(e.views) || 0) > 0);
+    const filled = Number(c.filled_count) || 0;
+    if (!hasViews && filled <= 0) break;
+    n = num;
   }
-  return m;
+  return n;
+}
+
+function pageIdForHandle(monthData: any, handle: string): string | null {
+  const h = handleKey(handle);
+  if (!h || !monthData) return null;
+  for (const p of (monthData.pages ?? []) as any[]) {
+    if (handleKey(p.handle) === h) return p.id != null ? String(p.id) : null;
+  }
+  for (const p of (monthData.page_summaries ?? []) as any[]) {
+    if (handleKey(p.handle) === h && p.page_id != null) return String(p.page_id);
+  }
+  return null;
+}
+
+/** Sum a page's views across cycles 1..throughCycle in a six-day month payload. */
+function sumViewsThroughCycles(monthData: any, handle: string, throughCycle: number): number {
+  if (!monthData || throughCycle < 1) return 0;
+  const pid = pageIdForHandle(monthData, handle);
+  if (!pid) return 0;
+  let sum = 0;
+  for (const c of (monthData.cycles ?? []) as any[]) {
+    const num = Number(c.cycle) || 0;
+    if (num < 1 || num > throughCycle) continue;
+    for (const e of (c.entries ?? []) as any[]) {
+      if (String(e.page_id) === pid) sum += Number(e.views) || 0;
+    }
+  }
+  return sum;
+}
+
+function cycleScopeLabel(throughCycle: number): string {
+  if (throughCycle <= 0) return "";
+  if (throughCycle === 1) return "W1";
+  return `W1–${throughCycle}`;
 }
 
 function Donut({ reels, posts }: { reels: number; posts: number }) {
@@ -79,10 +122,12 @@ type PageRow = {
   postViews: number;
   viewsLabel: string;
   monthNote?: string;
-  /** Selected month − average of prior 2 months (tracker mode). */
+  /** Selected month − same-cycle avg of prior 2 months (tracker mode). */
   vsAvgDelta?: number | null;
   vsAvgPct?: number | null;
   vsAvgLabel?: string;
+  /** e.g. "W1" or "W1–2" — which cycles the comparison uses */
+  vsAvgScope?: string;
 };
 
 type TeamFilter = { id: string; label: string; handles: Set<string> };
@@ -256,7 +301,9 @@ function PageIpGrid({
                         {p.vsAvgPct > 0 ? "+" : ""}
                         {p.vsAvgPct.toFixed(0)}%
                       </span>
-                      <span className="home-ip-vs-lab">vs 2-mo avg</span>
+                      <span className="home-ip-vs-lab">
+                        vs 2-mo {p.vsAvgScope || "avg"}
+                      </span>
                     </div>
                   ) : null}
                 </div>
@@ -481,18 +528,40 @@ export default function FramerHome() {
     return [...byHandle.values()];
   }, [stats, sixDay, monthSix, useSample]);
 
+  const compareThroughCycle = useMemo(
+    () => (viewPeriod === "tracker" ? filledCycleCount(sixDay) : 0),
+    [viewPeriod, sixDay],
+  );
+  const compareScope = useMemo(
+    () => cycleScopeLabel(compareThroughCycle),
+    [compareThroughCycle],
+  );
+
+  /** Same-cycle-window averages from the prior two months (e.g. only W1 if Aug only has W1). */
   const avgByHandle = useMemo(() => {
-    const a = viewsByHandleFromMonth(sixDayPrior1);
-    const b = viewsByHandleFromMonth(sixDayPrior2);
     const out = new Map<string, number>();
-    const handles = new Set([...a.keys(), ...b.keys()]);
+    if (compareThroughCycle < 1) return out;
+    const handles = new Set<string>();
+    for (const src of [sixDayPrior1, sixDayPrior2, sixDay]) {
+      for (const p of ((src as any)?.page_summaries ?? []) as any[]) {
+        const h = handleKey(p.handle);
+        if (h) handles.add(h);
+      }
+      for (const p of ((src as any)?.pages ?? []) as any[]) {
+        const h = handleKey(p.handle);
+        if (h) handles.add(h);
+      }
+    }
     for (const h of handles) {
-      const vals = [a.get(h), b.get(h)].filter((v): v is number => v != null && v > 0);
+      const vals = [
+        sumViewsThroughCycles(sixDayPrior1, h, compareThroughCycle),
+        sumViewsThroughCycles(sixDayPrior2, h, compareThroughCycle),
+      ].filter((v) => v > 0);
       if (vals.length === 0) continue;
       out.set(h, vals.reduce((s, v) => s + v, 0) / vals.length);
     }
     return out;
-  }, [sixDayPrior1, sixDayPrior2]);
+  }, [sixDay, sixDayPrior1, sixDayPrior2, compareThroughCycle]);
 
   const pagesLoading =
     viewPeriod === "all"
@@ -534,12 +603,15 @@ export default function FramerHome() {
         let vsAvgDelta: number | null = null;
         let vsAvgPct: number | null = null;
         let vsAvgLabel: string | undefined;
-        if (viewPeriod === "tracker") {
+        if (viewPeriod === "tracker" && compareThroughCycle >= 1) {
           const avg = avgByHandle.get(h);
+          // Compare the same cycle window on the selected month (not full-month totals).
+          const scoped = sumViewsThroughCycles(sixDay, h, compareThroughCycle);
+          const compareViews = scoped > 0 ? scoped : views;
           if (avg != null && avg > 0) {
-            vsAvgDelta = Math.round(views - avg);
+            vsAvgDelta = Math.round(compareViews - avg);
             vsAvgPct = (vsAvgDelta / avg) * 100;
-            vsAvgLabel = `vs avg of ${priorMonth1} + ${priorMonth2} (${compact(avg)})`;
+            vsAvgLabel = `vs avg of ${compareScope} in ${priorMonth1} + ${priorMonth2} (${compact(avg)})`;
           }
         }
 
@@ -554,6 +626,7 @@ export default function FramerHome() {
           vsAvgDelta,
           vsAvgPct,
           vsAvgLabel,
+          vsAvgScope: compareScope || undefined,
         };
       })
       .sort((a, b) => b.views - a.views);
@@ -568,6 +641,9 @@ export default function FramerHome() {
     viewsLabel,
     monthNote,
     avgByHandle,
+    compareThroughCycle,
+    compareScope,
+    sixDay,
     priorMonth1,
     priorMonth2,
   ]);
