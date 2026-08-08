@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, TrendingUp, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, Search } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { getDashboard, getSixDayMonth } from "@/services/api";
 import { readHomeCache, writeHomeCache } from "@/lib/homeCache";
@@ -19,6 +19,31 @@ const compact = (n: number) =>
   n >= 1e6 ? (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M"
     : n >= 1e3 ? (n / 1e3).toFixed(1).replace(/\.0$/, "") + "K" : String(Math.round(n ?? 0));
 const handleKey = (h: unknown) => String(h || "").trim().toLowerCase().replace(/^@/, "");
+
+/** Shift YYYY-MM by `delta` calendar months. */
+function shiftMonth(ym: string, delta: number): string {
+  const [y, m] = ym.split("-").map(Number);
+  if (!y || !m) return ym;
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function sixDayViews(summary: any): number {
+  if (!summary) return 0;
+  const cvs = Number(summary.cycle_views_sum);
+  return Number.isNaN(cvs) ? 0 : cvs;
+}
+
+/** Map handle → cycle_views_sum from a six-day month payload. */
+function viewsByHandleFromMonth(monthData: any): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const p of (monthData?.page_summaries ?? []) as any[]) {
+    const h = handleKey(p.handle);
+    if (!h) continue;
+    m.set(h, sixDayViews(p));
+  }
+  return m;
+}
 
 function Donut({ reels, posts }: { reels: number; posts: number }) {
   const total = reels + posts, size = 210, stroke = 22, r = (size - stroke) / 2;
@@ -44,8 +69,6 @@ function Donut({ reels, posts }: { reels: number; posts: number }) {
 }
 
 // Sample data — DEV-only fallback when the backend is unreachable (design preview).
-// Never used while live queries are loading (that caused a flash of fake totals).
-// week-wise (6-day cycle) view numbers — W1…W5
 type ViewPeriod = "all" | "tracker";
 
 type PageRow = {
@@ -56,15 +79,13 @@ type PageRow = {
   postViews: number;
   viewsLabel: string;
   monthNote?: string;
+  /** Selected month − average of prior 2 months (tracker mode). */
+  vsAvgDelta?: number | null;
+  vsAvgPct?: number | null;
+  vsAvgLabel?: string;
 };
 
 type TeamFilter = { id: string; label: string; handles: Set<string> };
-
-function sixDayViews(summary: any): number {
-  if (!summary) return 0;
-  const cvs = Number(summary.cycle_views_sum);
-  return Number.isNaN(cvs) ? 0 : cvs;
-}
 
 function PeriodFilter({
   period,
@@ -210,7 +231,35 @@ function PageIpGrid({
                 )}
                 {p.monthNote ? <div className="home-ip-month-note">{p.monthNote}</div> : null}
                 <div className="home-ip-label">{p.viewsLabel}</div>
-                <div className="home-ip-views">{compact(p.views)}</div>
+                <div className="home-ip-views-row">
+                  <div className="home-ip-views">{compact(p.views)}</div>
+                  {period === "tracker" && p.vsAvgDelta != null && p.vsAvgPct != null ? (
+                    <div
+                      className={
+                        "home-ip-vs-avg" +
+                        (p.vsAvgDelta > 0 ? " is-up" : p.vsAvgDelta < 0 ? " is-down" : " is-flat")
+                      }
+                      title={p.vsAvgLabel || "vs last 2-month average"}
+                    >
+                      {p.vsAvgDelta > 0 ? (
+                        <TrendingUp size={14} aria-hidden />
+                      ) : p.vsAvgDelta < 0 ? (
+                        <TrendingDown size={14} aria-hidden />
+                      ) : (
+                        <Minus size={14} aria-hidden />
+                      )}
+                      <span className="home-ip-vs-delta">
+                        {p.vsAvgDelta > 0 ? "+" : p.vsAvgDelta < 0 ? "−" : ""}
+                        {compact(Math.abs(p.vsAvgDelta))}
+                      </span>
+                      <span className="home-ip-vs-pct">
+                        {p.vsAvgPct > 0 ? "+" : ""}
+                        {p.vsAvgPct.toFixed(0)}%
+                      </span>
+                      <span className="home-ip-vs-lab">vs 2-mo avg</span>
+                    </div>
+                  ) : null}
+                </div>
                 {period === "all" ? (
                   <div className="home-ip-foot">
                     <span>{p.reelViews.toLocaleString()} reels</span>
@@ -243,6 +292,7 @@ const SAMPLE = {
     mkPage("Indian Founders Co", "indianfoundersco", 31_200_000, 7_000_000, [1_100_000, 1_300_000, 1_400_000, 1_500_000, 1_600_000]),
     mkPage("Biz India", "bizindia", 27_500_000, 5_100_000, [900_000, 1_000_000, 1_050_000, 1_050_000, 1_100_000]),
     mkPage("India Startup Story", "indiastartupstory", 22_800_000, 4_200_000, [720_000, 820_000, 880_000, 900_000, 980_000]),
+    mkPage("India Happening Now", "indiahappeningnow", 18_200_000, 3_900_000, [650_000, 720_000, 780_000, 820_000, 930_000]),
     mkPage("Startupcoded", "startupcoded", 19_400_000, 3_600_000, [600_000, 680_000, 720_000, 780_000, 820_000]),
     mkPage("Startup by Dog", "startupbydog", 14_100_000, 2_700_000, [440_000, 500_000, 540_000, 600_000, 620_000]),
     mkPage("Founders in India", "foundersinindia", 9_600_000, 1_900_000, [300_000, 340_000, 380_000, 420_000, 460_000]),
@@ -298,6 +348,20 @@ export default function FramerHome() {
   const { data: sixDay } = useQuery({
     queryKey: ["six-day", trackerMonth],
     queryFn: () => getSixDayMonth(trackerMonth),
+    enabled: viewPeriod === "tracker",
+    staleTime: 5 * 60_000,
+  });
+  const priorMonth1 = useMemo(() => shiftMonth(trackerMonth, -1), [trackerMonth]);
+  const priorMonth2 = useMemo(() => shiftMonth(trackerMonth, -2), [trackerMonth]);
+  const { data: sixDayPrior1 } = useQuery({
+    queryKey: ["six-day", priorMonth1],
+    queryFn: () => getSixDayMonth(priorMonth1),
+    enabled: viewPeriod === "tracker",
+    staleTime: 5 * 60_000,
+  });
+  const { data: sixDayPrior2 } = useQuery({
+    queryKey: ["six-day", priorMonth2],
+    queryFn: () => getSixDayMonth(priorMonth2),
     enabled: viewPeriod === "tracker",
     staleTime: 5 * 60_000,
   });
@@ -379,22 +443,56 @@ export default function FramerHome() {
     : monthAgg.views > 0
       ? monthAgg.post
       : (stats?.total_post_views ?? (useSample ? SAMPLE.posts : 0));
-  // Prefer dashboard pages; fall back to six-day summaries so we don't wait on the heavy /dashboard.
-  const rawPages: any[] = stats?.pages?.length
-    ? stats.pages
-    : ((monthSix as any)?.page_summaries?.length
-      ? (monthSix as any).page_summaries.map((p: any) => ({
-        id: p.page_id,
-        handle: p.handle,
-        name: p.name,
-        total_views: p.cycle_views_sum ?? 0,
-        all_time_views: 0,
-        reel_views: 0,
-        post_views: 0,
-      }))
-      : useSample
-        ? SAMPLE.pages
-        : []);
+  // Prefer dashboard pages; fall back to / merge six-day summaries so roster pages
+  // like indiahappeningnow still appear even if /dashboard is incomplete.
+  const rawPages: any[] = useMemo(() => {
+    const fromDash: any[] = stats?.pages?.length ? [...stats.pages] : [];
+    const fromSix =
+      (sixDay as any)?.page_summaries?.length
+        ? (sixDay as any).page_summaries
+        : (monthSix as any)?.page_summaries?.length
+          ? (monthSix as any).page_summaries
+          : [];
+
+    if (!fromDash.length && !fromSix.length) {
+      return useSample ? SAMPLE.pages : [];
+    }
+
+    const byHandle = new Map<string, any>();
+    for (const p of fromDash) {
+      const h = handleKey(p.handle);
+      if (h) byHandle.set(h, p);
+    }
+    for (const p of fromSix) {
+      const h = handleKey(p.handle);
+      if (!h) continue;
+      if (!byHandle.has(h)) {
+        byHandle.set(h, {
+          id: p.page_id,
+          handle: p.handle,
+          name: p.name,
+          total_views: p.cycle_views_sum ?? 0,
+          all_time_views: 0,
+          reel_views: 0,
+          post_views: 0,
+        });
+      }
+    }
+    return [...byHandle.values()];
+  }, [stats, sixDay, monthSix, useSample]);
+
+  const avgByHandle = useMemo(() => {
+    const a = viewsByHandleFromMonth(sixDayPrior1);
+    const b = viewsByHandleFromMonth(sixDayPrior2);
+    const out = new Map<string, number>();
+    const handles = new Set([...a.keys(), ...b.keys()]);
+    for (const h of handles) {
+      const vals = [a.get(h), b.get(h)].filter((v): v is number => v != null && v > 0);
+      if (vals.length === 0) continue;
+      out.set(h, vals.reduce((s, v) => s + v, 0) / vals.length);
+    }
+    return out;
+  }, [sixDayPrior1, sixDayPrior2]);
 
   const pagesLoading =
     viewPeriod === "all"
@@ -433,6 +531,18 @@ export default function FramerHome() {
           }
         }
 
+        let vsAvgDelta: number | null = null;
+        let vsAvgPct: number | null = null;
+        let vsAvgLabel: string | undefined;
+        if (viewPeriod === "tracker") {
+          const avg = avgByHandle.get(h);
+          if (avg != null && avg > 0) {
+            vsAvgDelta = Math.round(views - avg);
+            vsAvgPct = (vsAvgDelta / avg) * 100;
+            vsAvgLabel = `vs avg of ${priorMonth1} + ${priorMonth2} (${compact(avg)})`;
+          }
+        }
+
         return {
           name: p.name || handle || "—",
           handle,
@@ -441,10 +551,26 @@ export default function FramerHome() {
           postViews,
           viewsLabel,
           monthNote,
+          vsAvgDelta,
+          vsAvgPct,
+          vsAvgLabel,
         };
       })
       .sort((a, b) => b.views - a.views);
-  }, [rawPages, viewPeriod, trackerMonth, currentYm, growthAllTimeByHandle, sixDayByPageId, sixDayByHandle, viewsLabel, monthNote]);
+  }, [
+    rawPages,
+    viewPeriod,
+    trackerMonth,
+    currentYm,
+    growthAllTimeByHandle,
+    sixDayByPageId,
+    sixDayByHandle,
+    viewsLabel,
+    monthNote,
+    avgByHandle,
+    priorMonth1,
+    priorMonth2,
+  ]);
 
   // TOP 3 on the "Views this month" slide — always current month (6-day tracker), never all-time.
   const topPages = useMemo(() => {
