@@ -7,7 +7,7 @@ import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, Search } fr
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { getDashboard, getSixDayMonth } from "@/services/api";
 import { readHomeCache, writeHomeCache } from "@/lib/homeCache";
-import { TEAM_ROSTERS, normTeamHandle } from "@/lib/teamRosters";
+import { ACTIVE_TEAM_ROSTERS, ACTIVE_HANDLES, normTeamHandle } from "@/lib/teamRosters";
 import { getOverview, fmtINR } from "@/services/seedingApi";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAreaAccess } from "@/hooks/useAreaAccess";
@@ -191,10 +191,9 @@ function PageIpGrid({
   const q = query.trim().toLowerCase();
 
   const activeHandles = team === "all" ? null : teams.find((t) => t.id === team)?.handles ?? null;
-  const inactiveHandles = teams.find((t) => t.id === "inactive")?.handles ?? null;
   const byTeam = activeHandles
     ? pages.filter((p) => activeHandles.has(handleKey(p.handle)))
-    : pages.filter((p) => !inactiveHandles?.has(handleKey(p.handle)));
+    : pages;
   const filtered = q
     ? byTeam.filter((p) => p.name.toLowerCase().includes(q) || p.handle.toLowerCase().includes(q))
     : byTeam;
@@ -629,7 +628,9 @@ export default function FramerHome() {
           vsAvgScope: compareScope || undefined,
         };
       })
-      .sort((a, b) => b.views - a.views);
+      .sort((a, b) => b.views - a.views)
+      // Home dashboard: active 6-day roster only, and only pages with views filled.
+      .filter((p) => ACTIVE_HANDLES.has(handleKey(p.handle)) && p.views > 0);
   }, [
     rawPages,
     viewPeriod,
@@ -651,32 +652,27 @@ export default function FramerHome() {
   // TOP 3 on the "Views this month" slide — always current month (6-day tracker), never all-time.
   const topPages = useMemo(() => {
     const summaries = ((monthSix as any)?.page_summaries ?? []) as any[];
-    if (summaries.length) {
-      return [...summaries]
-        .map((p) => ({
+    const fromSummaries = summaries.length
+      ? [...summaries].map((p) => ({
           name: p.name || String(p.handle || "").replace(/^@/, "") || "—",
           handle: String(p.handle || "").replace(/^@/, ""),
           views: sixDayViews(p),
         }))
-        .sort((a, b) => b.views - a.views)
-        .slice(0, 3);
-    }
-    // Fallback: dashboard month totals while six-day is still loading
-    return [...rawPages]
-      .map((p) => ({
-        name: p.name || String(p.handle || "").replace(/^@/, "") || "—",
-        handle: String(p.handle || "").replace(/^@/, ""),
-        views: Number(p.total_views) || 0,
-      }))
+      : [...rawPages].map((p) => ({
+          name: p.name || String(p.handle || "").replace(/^@/, "") || "—",
+          handle: String(p.handle || "").replace(/^@/, ""),
+          views: Number(p.total_views) || 0,
+        }));
+    return fromSummaries
+      .filter((p) => ACTIVE_HANDLES.has(handleKey(p.handle)) && p.views > 0)
       .sort((a, b) => b.views - a.views)
       .slice(0, 3);
   }, [monthSix, rawPages]);
 
-  // Team filter pills for the IP grid — from the curated rosters (src/lib/teamRosters.ts),
-  // the same source the SixDay tracker trusts. Only teams that own ≥1 loaded page show.
+  // Team filter pills — active groups only (no Inactive). Same handles as 6-Day Tracker.
   const teams = useMemo<TeamFilter[]>(() => {
     const known = new Set(allPages.map((p) => handleKey(p.handle)));
-    return TEAM_ROSTERS
+    return ACTIVE_TEAM_ROSTERS
       .map((t) => ({
         id: t.id,
         label: t.label,

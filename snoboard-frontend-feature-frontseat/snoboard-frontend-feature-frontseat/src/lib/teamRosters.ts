@@ -56,3 +56,14 @@ export const TEAM_ROSTERS: TeamRoster[] = [
     ],
   },
 ];
+
+/** Active 6-day tracker groups only (excludes Inactive). */
+export const ACTIVE_TEAM_ROSTERS: TeamRoster[] = TEAM_ROSTERS.filter((t) => t.id !== "inactive");
+
+export const INACTIVE_HANDLES = new Set(
+  (TEAM_ROSTERS.find((t) => t.id === "inactive")?.handles ?? []).map(normTeamHandle),
+);
+
+export const ACTIVE_HANDLES = new Set(
+  ACTIVE_TEAM_ROSTERS.flatMap((t) => t.handles.map(normTeamHandle)),
+);
