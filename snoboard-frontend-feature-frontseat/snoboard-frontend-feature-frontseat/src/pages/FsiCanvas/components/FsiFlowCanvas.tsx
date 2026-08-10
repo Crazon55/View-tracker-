@@ -61,16 +61,16 @@ const CANVAS_MAX_ZOOM = 2.5;
 const SNAP_THRESHOLD_PX = 10;
 
 /**
- * Physical mouse wheels report large, integer, single-axis deltas per notch;
- * trackpads report small/fractional deltas (and often move both axes at once)
- * as fingers glide. Pinch / ctrl+scroll sets ctrlKey (or metaKey) — that must
- * zoom, never pan.
+ * Pinch-to-zoom on trackpads sets ctrlKey/metaKey — always canvas zoom, never browser zoom.
+ * Plain mouse-wheel notches (large vertical delta, no horizontal) → canvas zoom.
+ * Everything else (two-finger trackpad glide, including line-mode scroll) → pan only.
  */
-function isMouseWheelNotch(event: WheelEvent): boolean {
-  if (event.ctrlKey || event.metaKey) return false;
-  if (event.deltaX !== 0) return false;
-  if (event.deltaMode === 1) return true; // Firefox reports physical wheels in "line" units
-  return Number.isInteger(event.deltaY) && Math.abs(event.deltaY) >= 40;
+function shouldZoomOnWheel(event: WheelEvent): boolean {
+  if (event.ctrlKey || event.metaKey) return true;
+  if (Math.abs(event.deltaX) > 0.5) return false;
+  if (event.deltaMode === 0) return Math.abs(event.deltaY) >= 50;
+  if (event.deltaMode === 1) return Math.abs(event.deltaY) >= 3;
+  return false;
 }
 
 function eventHasAltKey(e: React.MouseEvent | React.TouchEvent): boolean {
@@ -1124,19 +1124,21 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     [screenToFlowPosition],
   );
 
-  // Own all wheel gestures so trackpad two-finger scroll only pans, pinch only
-  // zooms, and mouse-wheel zoom is snappy. React Flow's panOnScroll/zoomOnPinch
-  // are disabled — they mix pan+zoom on Windows trackpads.
-  const handleWheelCapture = useCallback(
-    (e: React.WheelEvent<HTMLDivElement>) => {
+  // Own all wheel gestures (native passive:false listener — React onWheel cannot
+  // always preventDefault, so pinch would zoom the browser instead of the canvas).
+  useEffect(() => {
+    const root = paneRef.current;
+    if (!root) return;
+
+    const onWheel = (e: WheelEvent) => {
       const target = e.target as HTMLElement | null;
+      if (target?.closest?.(".react-flow__minimap")) return;
       const inScrollableField =
         !!target?.closest?.(".nowheel, input, textarea, select, [contenteditable='true']");
       const isPinch = e.ctrlKey || e.metaKey;
-      // Let focused text fields keep normal scroll unless this is a pinch zoom.
       if (inScrollableField && !isPinch) return;
 
-      const pane = paneRef.current?.querySelector(".react-flow__pane") as HTMLElement | null;
+      const pane = root.querySelector(".react-flow__pane") as HTMLElement | null;
       if (!pane) return;
 
       e.preventDefault();
@@ -1147,8 +1149,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
       const screenY = e.clientY - rect.top;
       const viewport = getViewport();
 
-      if (isPinch || isMouseWheelNotch(e.nativeEvent)) {
-        // Pinch: continuous delta → exponential zoom. Mouse wheel: fixed step.
+      if (shouldZoomOnWheel(e)) {
         const sensitivity = isPinch ? 0.014 : 0;
         const nextZoom = Math.min(
           CANVAS_MAX_ZOOM,
@@ -1164,7 +1165,6 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         return;
       }
 
-      // Two-finger trackpad scroll → pan only (no zoom).
       void setViewport(
         {
           x: viewport.x - e.deltaX,
@@ -1173,9 +1173,11 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         },
         { duration: 0 },
       );
-    },
-    [getViewport, setViewport],
-  );
+    };
+
+    root.addEventListener("wheel", onWheel, { passive: false, capture: true });
+    return () => root.removeEventListener("wheel", onWheel, { capture: true });
+  }, [getViewport, setViewport]);
 
   const handlePanePaste = useCallback(
     (e: React.ClipboardEvent) => {
@@ -1313,13 +1315,12 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
   return (
     <div
       ref={paneRef}
-      className="relative h-full w-full overflow-hidden outline-none select-none"
+      className="relative h-full w-full overflow-hidden outline-none select-none fsi-canvas-wheel-root"
       tabIndex={0}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       onMouseMove={handlePaneMouseMove}
       onPaste={handlePanePaste}
-      onWheelCapture={handleWheelCapture}
     >
       <ReactFlow
         nodes={styledNodes}

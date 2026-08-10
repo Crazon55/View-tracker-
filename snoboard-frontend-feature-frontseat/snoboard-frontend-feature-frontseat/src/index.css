@@ -412,6 +412,13 @@ input[style*="colorScheme"]::-webkit-calendar-picker-indicator {
 }
 
 /* FSI Canvas — keep connection handles on node edges, not clipped */
+.fsi-canvas-wheel-root,
+.fsi-flow-canvas,
+.fsi-flow-canvas .react-flow__pane {
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
 .fsi-flow-canvas .react-flow__node {
   overflow: visible;
 }
