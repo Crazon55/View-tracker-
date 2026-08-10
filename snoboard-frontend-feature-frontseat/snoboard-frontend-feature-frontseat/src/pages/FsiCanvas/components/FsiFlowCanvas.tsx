@@ -70,12 +70,46 @@ function isMouseWheelNotch(event: WheelEvent): boolean {
   return Number.isInteger(event.deltaY) && Math.abs(event.deltaY) >= 40;
 }
 
-/** Two-finger trackpad glide — pan only; overrides line-mode false positives from isMouseWheelNotch. */
-function isTrackpadPanGesture(event: WheelEvent): boolean {
+type WheelGestureState = { lastAt: number; trackpadUntil: number };
+
+/** Trackpad two-finger scroll — pan only; never treat as mouse wheel. */
+function isTrackpadPanGesture(event: WheelEvent, state: WheelGestureState): boolean {
   if (event.ctrlKey || event.metaKey) return false;
-  if (Math.abs(event.deltaX) > 0.5) return true;
-  if (event.deltaMode === 0 && Math.abs(event.deltaY) < 40) return true;
-  if (event.deltaMode === 1 && Math.abs(event.deltaY) < 3) return true;
+
+  const now = performance.now();
+  if (now < state.trackpadUntil) return true;
+
+  if (Math.abs(event.deltaX) > 0.5) {
+    state.trackpadUntil = now + 160;
+    state.lastAt = now;
+    return true;
+  }
+
+  const gap = state.lastAt > 0 ? now - state.lastAt : Infinity;
+  state.lastAt = now;
+
+  if (event.deltaMode === 0) {
+    // Windows mouse notches are ~100px; trackpad glides are smaller or fractional.
+    if (!Number.isInteger(event.deltaY) || Math.abs(event.deltaY) < 100) {
+      if (gap < 150) state.trackpadUntil = now + 160;
+      return true;
+    }
+    return false;
+  }
+
+  if (event.deltaMode === 1) {
+    // Line-mode trackpad fires in rapid bursts; mouse wheel is one isolated tick.
+    if (Math.abs(event.deltaY) < 3) {
+      state.trackpadUntil = now + 160;
+      return true;
+    }
+    if (gap < 120) {
+      state.trackpadUntil = now + 160;
+      return true;
+    }
+    return false;
+  }
+
   return false;
 }
 
@@ -205,6 +239,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     useReactFlow();
   const updateNodeInternals = useUpdateNodeInternals();
   const paneRef = useRef<HTMLDivElement>(null);
+  const wheelGestureRef = useRef<WheelGestureState>({ lastAt: 0, trackpadUntil: 0 });
   const dropLockRef = useRef(false);
   const lastPointerRef = useRef({ x: 200, y: 200 });
   const viewportReadyRef = useRef(false);
@@ -1155,7 +1190,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
       const screenY = e.clientY - rect.top;
       const viewport = getViewport();
 
-      if (isPinch || (isMouseWheelNotch(e) && !isTrackpadPanGesture(e))) {
+      if (isPinch || (isMouseWheelNotch(e) && !isTrackpadPanGesture(e, wheelGestureRef.current))) {
         const sensitivity = isPinch ? 0.014 : 0;
         const nextZoom = Math.min(
           CANVAS_MAX_ZOOM,
@@ -1179,6 +1214,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
         },
         { duration: 0 },
       );
+      wheelGestureRef.current.trackpadUntil = performance.now() + 160;
     };
 
     root.addEventListener("wheel", onWheel, { passive: false, capture: true });
