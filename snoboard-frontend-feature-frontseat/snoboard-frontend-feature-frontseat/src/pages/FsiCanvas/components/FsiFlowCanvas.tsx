@@ -61,15 +61,21 @@ const CANVAS_MAX_ZOOM = 2.5;
 const SNAP_THRESHOLD_PX = 10;
 
 /**
- * Pinch-to-zoom on trackpads sets ctrlKey/metaKey — always canvas zoom, never browser zoom.
- * Plain mouse-wheel notches (large vertical delta, no horizontal) → canvas zoom.
- * Everything else (two-finger trackpad glide, including line-mode scroll) → pan only.
+ * Physical mouse wheels — unchanged. Pinch (ctrlKey) is handled separately for trackpad.
  */
-function shouldZoomOnWheel(event: WheelEvent): boolean {
-  if (event.ctrlKey || event.metaKey) return true;
-  if (Math.abs(event.deltaX) > 0.5) return false;
-  if (event.deltaMode === 0) return Math.abs(event.deltaY) >= 50;
-  if (event.deltaMode === 1) return Math.abs(event.deltaY) >= 3;
+function isMouseWheelNotch(event: WheelEvent): boolean {
+  if (event.ctrlKey || event.metaKey) return false;
+  if (event.deltaX !== 0) return false;
+  if (event.deltaMode === 1) return true;
+  return Number.isInteger(event.deltaY) && Math.abs(event.deltaY) >= 40;
+}
+
+/** Two-finger trackpad glide — pan only; overrides line-mode false positives from isMouseWheelNotch. */
+function isTrackpadPanGesture(event: WheelEvent): boolean {
+  if (event.ctrlKey || event.metaKey) return false;
+  if (Math.abs(event.deltaX) > 0.5) return true;
+  if (event.deltaMode === 0 && Math.abs(event.deltaY) < 40) return true;
+  if (event.deltaMode === 1 && Math.abs(event.deltaY) < 3) return true;
   return false;
 }
 
@@ -1124,8 +1130,8 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
     [screenToFlowPosition],
   );
 
-  // Own all wheel gestures (native passive:false listener — React onWheel cannot
-  // always preventDefault, so pinch would zoom the browser instead of the canvas).
+  // Trackpad pinch must preventDefault via passive:false (blocks browser zoom).
+  // Mouse wheel logic is unchanged — same isMouseWheelNotch as before.
   useEffect(() => {
     const root = paneRef.current;
     if (!root) return;
@@ -1149,7 +1155,7 @@ const FlowInner = forwardRef<FsiFlowCanvasHandle, FlowInnerProps>(function FlowI
       const screenY = e.clientY - rect.top;
       const viewport = getViewport();
 
-      if (shouldZoomOnWheel(e)) {
+      if (isPinch || (isMouseWheelNotch(e) && !isTrackpadPanGesture(e))) {
         const sensitivity = isPinch ? 0.014 : 0;
         const nextZoom = Math.min(
           CANVAS_MAX_ZOOM,
