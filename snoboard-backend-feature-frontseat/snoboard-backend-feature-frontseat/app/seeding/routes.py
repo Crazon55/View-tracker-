@@ -1981,6 +1981,9 @@ async def _reports_overview_body(user: dict, from_date: Optional[str], to_date: 
         max(0.0, deal_price_by_id.get(p["deal_id"], 0.0) - float(p.get("amount_received") or 0))
         for p in payment_pending
     )
+    collected = sum(float(p.get("amount_received") or 0) for p in payments)
+    outstanding = max(0.0, revenue - collected)
+    collection_pct = round((collected / revenue) * 100) if revenue else 0
 
     # views from deliverables
     deliv_q = {"deal_id": {"$in": deal_ids}}
@@ -2052,6 +2055,9 @@ async def _reports_overview_body(user: dict, from_date: Optional[str], to_date: 
 
     return {
         "revenue_closed": revenue,
+        "collected": collected if user["role"] == "admin" else 0,
+        "outstanding": outstanding if user["role"] == "admin" else 0,
+        "collection_pct": collection_pct if user["role"] == "admin" else 0,
         "deals_approved": len(revenue_deals),
         "deals_submitted_pending": len(pending_review),
         "deals_needs_info": len(needs_info),

@@ -49,6 +49,23 @@ export const monthRange = () => {
   return { from_date: start, to_date: end };
 };
 
+/** Local calendar month (YYYY-MM-DD) — avoids UTC shift from toISOString().slice(0, 10). */
+export const calendarMonthDateRange = () => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const from = `${y}-${pad2(m + 1)}-01`;
+  const toDay = new Date(y, m + 1, 0).getDate();
+  const to = `${y}-${pad2(m + 1)}-${pad2(toDay)}`;
+  return { from, to };
+};
+
+/** Query params for /reports/overview — same month filter as Seeding Overview. */
+export const overviewRangeParams = () => {
+  const { from, to } = calendarMonthDateRange();
+  return { from_date: from, to_date: `${to}T23:59:59` };
+};
+
 /** returns a Framer f-pill tone: ok | wait | no | mute | info */
 export const statusTone = (status?: string) => {
   const s = (status || "").toLowerCase();

@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import { TrendingUp, Clock, CheckCircle2, AlertCircle, Eye, Ban, Wallet, Plus, ArrowUpRight } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { api } from "@/services/seeding/client";
-import { formatCurrency, formatDate } from "@/services/seeding/constants";
+import { calendarMonthDateRange, formatCurrency, formatDate } from "@/services/seeding/constants";
 import { StatusBadge } from "@/components/seeding/StatusBadge";
 import { FramerPage, PageHeader, DataTable } from "@/components/framer/Framer";
 import { Reveal } from "@/components/framer/Reveal";
@@ -67,13 +67,7 @@ export default function SeedingOverview() {
   const [data, setData] = useState<any>(null);
   const [pendingBriefs, setPendingBriefs] = useState<any[]>([]);
   const [activeDeals, setActiveDeals] = useState<any[]>([]);
-  const [range, setRange] = useState(() => {
-    const now = new Date();
-    return {
-      from: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10),
-      to: new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10),
-    };
-  });
+  const [range, setRange] = useState(calendarMonthDateRange);
 
   const load = async () => {
     const params = { from_date: range.from, to_date: range.to + "T23:59:59" };

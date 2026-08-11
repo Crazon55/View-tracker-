@@ -9,6 +9,7 @@ import { getDashboard, getSixDayMonth } from "@/services/api";
 import { readHomeCache, writeHomeCache } from "@/lib/homeCache";
 import { ACTIVE_TEAM_ROSTERS, ACTIVE_HANDLES, normTeamHandle } from "@/lib/teamRosters";
 import { getOverview, fmtINR } from "@/services/seedingApi";
+import { calendarMonthDateRange } from "@/services/seeding/constants";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAreaAccess } from "@/hooks/useAreaAccess";
 import { gates } from "@/config/appNav";
@@ -447,7 +448,12 @@ export default function FramerHome() {
     }
     return { views, reel: Math.round(reel), post: Math.round(post) };
   }, [monthSix]);
-  const { data: seeding } = useQuery({ queryKey: ["seeding-overview"], queryFn: getOverview, enabled: canSeeding });
+  const seedingMonth = calendarMonthDateRange();
+  const { data: seeding } = useQuery({
+    queryKey: ["seeding-overview", seedingMonth.from, seedingMonth.to],
+    queryFn: getOverview,
+    enabled: canSeeding,
+  });
 
   // Only show loading skeleton when we have nothing to paint (no cache + still fetching).
   const viewsLoading = monthPending && !monthSix;
