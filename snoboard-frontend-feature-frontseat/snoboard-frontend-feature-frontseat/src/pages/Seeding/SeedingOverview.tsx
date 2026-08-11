@@ -96,7 +96,7 @@ export default function SeedingOverview() {
   return (
     <FramerPage>
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16 }}>
-        <PageHeader eyebrow="SEEDING · BRAND-DEAL OPS" title="Overview" lead="Revenue, approvals, fulfilment and payments — at a glance." />
+        <PageHeader eyebrow="SEEDING · BRAND-DEAL OPS" title="Overview" lead="Revenue, approvals, fulfilment and payments — at a glance. Revenue is counted by payment due date (1st–last day of selected month)." />
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
           <input type="date" value={range.from} onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))} className={inputCls}
             style={{ background: "#0e0e14", border: "1px solid var(--f-line)", borderRadius: 8, padding: "8px 10px", color: "var(--f-ink)", colorScheme: "dark" }} />

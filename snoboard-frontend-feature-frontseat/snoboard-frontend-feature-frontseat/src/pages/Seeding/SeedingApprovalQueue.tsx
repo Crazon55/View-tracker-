@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { FramerPage, PageHeader } from "@/components/framer/Framer";
 import { StatusBadge } from "@/components/seeding/StatusBadge";
 import { api } from "@/services/seeding/client";
-import { formatDateTime, toDatetimeLocalValue, toDateInputValue } from "@/services/seeding/constants";
+import { formatDateTime, toDatetimeLocalValue, toDateInputValue, toStoredCalendarDate } from "@/services/seeding/constants";
 import { useAreaAccess } from "@/hooks/useAreaAccess";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -151,7 +151,7 @@ export default function SeedingApprovalQueue() {
                   <div style={fieldLabel}>Payment due</div>
                   {canReview ? (
                     <input type="date" defaultValue={toDateInputValue(d.payment_due_date)} className={inputCls} style={{ colorScheme: "dark" }}
-                      onBlur={(e) => e.target.value && saveField(d.deal_id, "payment_due_date", new Date(e.target.value).toISOString(), d.payment_due_date)} />
+                      onBlur={(e) => e.target.value && saveField(d.deal_id, "payment_due_date", toStoredCalendarDate(e.target.value), d.payment_due_date)} />
                   ) : (
                     <div style={{ fontSize: 13, color: "var(--f-dim)", paddingTop: 6 }}>{formatDateTime(d.payment_due_date)}</div>
                   )}

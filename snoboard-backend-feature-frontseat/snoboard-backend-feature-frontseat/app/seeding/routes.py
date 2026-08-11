@@ -2,15 +2,29 @@
 Frontseat Seeding — internal dashboard for brand brief inflow,
 admin approval, fulfillment execution and revenue/payment tracking.
 """
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, Request, Response, UploadFile, File, Form, Header, Query
+
+from fastapi import (
+    FastAPI,
+    APIRouter,
+    Depends,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+    File,
+    Form,
+    Header,
+    Query,
+)
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Any, Dict, Literal
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
 from collections import defaultdict
 from pathlib import Path
+from zoneinfo import ZoneInfo
 import asyncio
 import os
 import logging
@@ -32,11 +46,17 @@ from app.auth import verify_token  # shared FSOS Supabase JWT verifier
 
 logger = logging.getLogger(__name__)
 
-APP_NAME = os.environ.get('APP_NAME', 'frontseat-seeding')
-SEED_ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get('SEED_ADMIN_EMAIL', 'jaskaran.sethi@owledmedia.com').split(',') if e.strip()}
-ALLOWED_DOMAIN = os.environ.get('ALLOWED_EMAIL_DOMAIN', 'owledmedia.com').lower()
-SUPABASE_URL = os.environ.get('SUPABASE_URL', '').rstrip('/')
-SUPABASE_JWT_SECRET = os.environ.get('SUPABASE_JWT_SECRET', '')
+APP_NAME = os.environ.get("APP_NAME", "frontseat-seeding")
+SEED_ADMIN_EMAILS = {
+    e.strip().lower()
+    for e in os.environ.get("SEED_ADMIN_EMAIL", "jaskaran.sethi@owledmedia.com").split(
+        ","
+    )
+    if e.strip()
+}
+ALLOWED_DOMAIN = os.environ.get("ALLOWED_EMAIL_DOMAIN", "owledmedia.com").lower()
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
+SUPABASE_JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET", "")
 
 
 async def require_seeding_db():
@@ -92,8 +112,10 @@ api = APIRouter(dependencies=[Depends(require_seeding_db)])
 # per-login verification is a local crypto check with no network round-trip.
 _jwks_client = (
     jwt.PyJWKClient(f"{SUPABASE_URL}/auth/v1/.well-known/jwks.json", cache_keys=True)
-    if SUPABASE_URL else None
+    if SUPABASE_URL
+    else None
 )
+
 
 # ----------------------------- Helpers -----------------------------
 def verify_supabase_jwt(access_token: str) -> dict:
@@ -127,6 +149,7 @@ def verify_supabase_jwt(access_token: str) -> dict:
     except jwt.PyJWTError:
         raise HTTPException(401, "Invalid access token")
 
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -147,18 +170,88 @@ def parse_iso(v: Any) -> Optional[datetime]:
         return None
 
 
+IST = ZoneInfo("Asia/Kolkata")
+
+
+def parse_range_day(iso: Optional[str]) -> Optional[date]:
+    """Parse YYYY-MM-DD range boundaries from the frontend (calendar dates)."""
+    if not iso:
+        return None
+    s = str(iso).strip()
+    if len(s) >= 10:
+        try:
+            return datetime.strptime(s[:10], "%Y-%m-%d").date()
+        except Exception:
+            pass
+    dt = parse_iso(iso)
+    return dt.astimezone(IST).date() if dt else None
+
+
+def parse_payment_due_day(iso: Optional[str]) -> Optional[date]:
+    """Calendar day for payment due — IST when timezone-aware, else stored calendar date."""
+    if not iso:
+        return None
+    s = str(iso).strip()
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        if dt.tzinfo is not None:
+            return dt.astimezone(IST).date()
+        return dt.date()
+    except Exception:
+        try:
+            return datetime.strptime(s[:10], "%Y-%m-%d").date()
+        except Exception:
+            return None
+
+
 # ----------------------------- Constants -----------------------------
 ROLES = {"pending", "admin", "bd", "fulfillment"}
-ADMIN_REVIEW_STATUSES = ["Submitted", "Needs More Info", "Rejected", "Approved", "Cancelled"]
-DEAL_STATUSES = ["Accepted", "In Progress", "Client Review", "Approved", "Scheduled", "Posted", "Completed", "Cancelled"]
-DELIVERABLE_STATUSES = ["Not Started", "Clipping", "Writing", "Designing", "Editing", "Client Review", "Approved", "Scheduled", "Posted", "Completed", "Blocked"]
+ADMIN_REVIEW_STATUSES = [
+    "Submitted",
+    "Needs More Info",
+    "Rejected",
+    "Approved",
+    "Cancelled",
+]
+DEAL_STATUSES = [
+    "Accepted",
+    "In Progress",
+    "Client Review",
+    "Approved",
+    "Scheduled",
+    "Posted",
+    "Completed",
+    "Cancelled",
+]
+DELIVERABLE_STATUSES = [
+    "Not Started",
+    "Clipping",
+    "Writing",
+    "Designing",
+    "Editing",
+    "Client Review",
+    "Approved",
+    "Scheduled",
+    "Posted",
+    "Completed",
+    "Blocked",
+]
 PAYMENT_STATUSES = ["Not Raised", "Raised", "Payment Pending", "Partially Paid", "Paid"]
 DELIVERABLE_TYPES = ["Reel", "Static", "Carousel"]
-OUTPUT_TYPES = ["Writeup", "Canva Link", "Drive Link", "Google Doc Link", "Content Link", "Other"]
+OUTPUT_TYPES = [
+    "Writeup",
+    "Canva Link",
+    "Drive Link",
+    "Google Doc Link",
+    "Content Link",
+    "Other",
+]
 FEEDBACK_STATUSES = ["Open", "In Progress", "Resolved"]
 
 # FSOS Users & Roles → seeding profile (team BD roles map to business team by name).
-_FSOS_ADMIN_ROLES = frozenset({"admin", "boss_man", "ai_dev", "ai_automations", "seeding_admin"})
+_FSOS_ADMIN_ROLES = frozenset(
+    {"admin", "boss_man", "ai_dev", "ai_automations", "seeding_admin"}
+)
 _FSOS_BD_TEAM_ROLES = {
     "hooc_bd": "Hooc",
     "ay_bd": "AY",
@@ -186,13 +279,26 @@ async def _sync_seeding_from_fsos(user: dict) -> dict:
         return user
     try:
         from app.database.client import get_supabase_client
-        rows = get_supabase_client().table("user_roles").select("role").eq("email", email).execute().data or []
+
+        rows = (
+            get_supabase_client()
+            .table("user_roles")
+            .select("role")
+            .eq("email", email)
+            .execute()
+            .data
+            or []
+        )
     except Exception as e:
         logger.debug("FSOS role lookup skipped for %s: %s", email, e)
         return user
     if not rows:
         return user
-    parts = [p.strip().lower() for p in str(rows[0].get("role") or "").split(",") if p.strip()]
+    parts = [
+        p.strip().lower()
+        for p in str(rows[0].get("role") or "").split(",")
+        if p.strip()
+    ]
     if not parts:
         return user
 
@@ -207,28 +313,36 @@ async def _sync_seeding_from_fsos(user: dict) -> dict:
             if not team_name:
                 continue
             try:
-                team = await db.business_teams.find_one({"team_name": team_name}, {"_id": 0})
+                team = await db.business_teams.find_one(
+                    {"team_name": team_name}, {"_id": 0}
+                )
             except Exception:
                 team = None
             if not team:
                 # Ensure the four BD teams exist so role assignment always scopes correctly.
                 tid = new_id("team")
                 try:
-                    await db.business_teams.insert_one({
-                        "team_id": tid,
-                        "team_name": team_name,
-                        "created_at": now_iso(),
-                    })
+                    await db.business_teams.insert_one(
+                        {
+                            "team_id": tid,
+                            "team_name": team_name,
+                            "created_at": now_iso(),
+                        }
+                    )
                     team = {"team_id": tid, "team_name": team_name}
                 except Exception:
                     try:
-                        team = await db.business_teams.find_one({"team_name": team_name}, {"_id": 0})
+                        team = await db.business_teams.find_one(
+                            {"team_name": team_name}, {"_id": 0}
+                        )
                     except Exception:
                         team = None
             if team and team.get("team_id"):
                 team_id = team["team_id"]
                 break
-        if user.get("role") != "bd" or (team_id and user.get("business_team_id") != team_id):
+        if user.get("role") != "bd" or (
+            team_id and user.get("business_team_id") != team_id
+        ):
             patch = {"role": "bd"}
             if team_id:
                 patch["business_team_id"] = team_id
@@ -306,7 +420,9 @@ async def _resolve_user(request: Request) -> dict:
                 user = existing
             else:
                 logger.warning("Could not provision seeding profile for %s", email)
-                raise HTTPException(503, "Seeding database unavailable while provisioning user.")
+                raise HTTPException(
+                    503, "Seeding database unavailable while provisioning user."
+                )
     if user.get("active") is False:
         raise HTTPException(403, "User deactivated")
     return await _sync_seeding_from_fsos(user)
@@ -346,7 +462,9 @@ async def _ensure_business_team(team_name: str) -> Optional[dict]:
         return row
     except Exception:
         try:
-            return await db.business_teams.find_one({"team_name": team_name}, {"_id": 0})
+            return await db.business_teams.find_one(
+                {"team_name": team_name}, {"_id": 0}
+            )
         except Exception:
             return None
 
@@ -403,8 +521,14 @@ def scrub_deal_for_user(deal: dict, user: dict) -> dict:
     """Remove restricted fields based on role. Fulfillment cannot see price/payment."""
     if user.get("role") == "fulfillment":
         money = {
-            "price_closed_at", "payment", "payment_status", "payment_due_date",
-            "amount_received", "payment_notes", "payment_updated_by", "payment_updated_at",
+            "price_closed_at",
+            "payment",
+            "payment_status",
+            "payment_due_date",
+            "amount_received",
+            "payment_notes",
+            "payment_updated_by",
+            "payment_updated_at",
         }
         return {k: v for k, v in deal.items() if k not in money}
     return deal
@@ -486,12 +610,23 @@ class CampaignReportUpdate(BaseModel):
 
 
 class AdminReviewAction(BaseModel):
-    action: Literal["Approve", "Needs More Info", "Reject", "Cancel", "Reopen", "Archive"]
+    action: Literal[
+        "Approve", "Needs More Info", "Reject", "Cancel", "Reopen", "Archive"
+    ]
     comment: Optional[str] = ""
 
 
 class DealStatusUpdate(BaseModel):
-    deal_status: Literal["Accepted", "In Progress", "Client Review", "Approved", "Scheduled", "Posted", "Completed", "Cancelled"]
+    deal_status: Literal[
+        "Accepted",
+        "In Progress",
+        "Client Review",
+        "Approved",
+        "Scheduled",
+        "Posted",
+        "Completed",
+        "Cancelled",
+    ]
 
 
 class DeliverableUpdate(BaseModel):
@@ -518,23 +653,57 @@ class DeliverableAdd(BaseModel):
 class FulfillmentOutputCreate(BaseModel):
     deal_id: str
     deliverable_id: Optional[str] = None
-    output_type: Literal["Writeup", "Canva Link", "Drive Link", "Google Doc Link", "Content Link", "Other"]
+    output_type: Literal[
+        "Writeup",
+        "Canva Link",
+        "Drive Link",
+        "Google Doc Link",
+        "Content Link",
+        "Other",
+    ]
     title: str
     writeup_text: Optional[str] = ""
     link: Optional[str] = ""
     file_attachment: Optional[str] = ""
     visible_to_bd: bool = True
-    status: Optional[Literal["Draft", "Shared with BD", "Changes Requested", "Updated", "Approved", "Final"]] = "Draft"
+    status: Optional[
+        Literal[
+            "Draft",
+            "Shared with BD",
+            "Changes Requested",
+            "Updated",
+            "Approved",
+            "Final",
+        ]
+    ] = "Draft"
 
 
 class FulfillmentOutputUpdate(BaseModel):
-    output_type: Optional[Literal["Writeup", "Canva Link", "Drive Link", "Google Doc Link", "Content Link", "Other"]] = None
+    output_type: Optional[
+        Literal[
+            "Writeup",
+            "Canva Link",
+            "Drive Link",
+            "Google Doc Link",
+            "Content Link",
+            "Other",
+        ]
+    ] = None
     title: Optional[str] = None
     writeup_text: Optional[str] = None
     link: Optional[str] = None
     file_attachment: Optional[str] = None
     visible_to_bd: Optional[bool] = None
-    status: Optional[Literal["Draft", "Shared with BD", "Changes Requested", "Updated", "Approved", "Final"]] = None
+    status: Optional[
+        Literal[
+            "Draft",
+            "Shared with BD",
+            "Changes Requested",
+            "Updated",
+            "Approved",
+            "Final",
+        ]
+    ] = None
 
 
 class InternalNoteCreate(BaseModel):
@@ -615,17 +784,23 @@ async def auth_session(req: SessionRequest, response: Response):
 
     session_token = uuid.uuid4().hex
     expires_at = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
-    await db.user_sessions.insert_one({
-        "user_id": user_doc["user_id"],
-        "session_token": session_token,
-        "expires_at": expires_at,
-        "created_at": now_iso(),
-    })
+    await db.user_sessions.insert_one(
+        {
+            "user_id": user_doc["user_id"],
+            "session_token": session_token,
+            "expires_at": expires_at,
+            "created_at": now_iso(),
+        }
+    )
 
     response.set_cookie(
-        key="session_token", value=session_token,
-        httponly=True, secure=True, samesite="none",
-        max_age=7 * 24 * 3600, path="/",
+        key="session_token",
+        value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        max_age=7 * 24 * 3600,
+        path="/",
     )
     return {"user": user_doc, "session_token": session_token}
 
@@ -641,16 +816,22 @@ async def dev_session(payload: dict, response: Response):
         raise HTTPException(404, "User not found")
     session_token = f"dev_{uuid.uuid4().hex}"
     expires_at = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
-    await db.user_sessions.insert_one({
-        "user_id": user["user_id"],
-        "session_token": session_token,
-        "expires_at": expires_at,
-        "created_at": now_iso(),
-    })
+    await db.user_sessions.insert_one(
+        {
+            "user_id": user["user_id"],
+            "session_token": session_token,
+            "expires_at": expires_at,
+            "created_at": now_iso(),
+        }
+    )
     response.set_cookie(
-        key="session_token", value=session_token,
-        httponly=True, secure=True, samesite="none",
-        max_age=7 * 24 * 3600, path="/",
+        key="session_token",
+        value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        max_age=7 * 24 * 3600,
+        path="/",
     )
     return {"user": user, "session_token": session_token}
 
@@ -659,7 +840,9 @@ async def dev_session(payload: dict, response: Response):
 async def auth_me(request: Request, user: dict = Depends(get_current_user)):
     team = None
     if user.get("business_team_id"):
-        team = await db.business_teams.find_one({"team_id": user["business_team_id"]}, {"_id": 0})
+        team = await db.business_teams.find_one(
+            {"team_id": user["business_team_id"]}, {"_id": 0}
+        )
     # Strip internal impersonation breadcrumbs from the user payload, expose them at top level
     real_admin_id = user.pop("_real_admin_id", None)
     real_admin_email = user.pop("_real_admin_email", None)
@@ -678,21 +861,45 @@ async def preview_targets(real_user: dict = Depends(get_real_user)):
     if real_user.get("role") != "admin":
         raise HTTPException(403, "Admins only")
     targets = await db.users.find(
-        {"email": {"$ne": real_user.get("email")}, "active": {"$ne": False}, "role": {"$in": ["pending", "bd", "fulfillment"]}},
-        {"_id": 0, "user_id": 1, "email": 1, "name": 1, "role": 1, "business_team_id": 1},
+        {
+            "email": {"$ne": real_user.get("email")},
+            "active": {"$ne": False},
+            "role": {"$in": ["pending", "bd", "fulfillment"]},
+        },
+        {
+            "_id": 0,
+            "user_id": 1,
+            "email": 1,
+            "name": 1,
+            "role": 1,
+            "business_team_id": 1,
+        },
     ).to_list(200)
-    teams = {t["team_id"]: t["team_name"] async for t in db.business_teams.find({}, {"_id": 0})}
+    teams = {
+        t["team_id"]: t["team_name"]
+        async for t in db.business_teams.find({}, {"_id": 0})
+    }
     for t in targets:
         t["team_name"] = teams.get(t.get("business_team_id"))
     # ordering: pending → bd → fulfillment → admin
     order = {"pending": 0, "bd": 1, "fulfillment": 2, "admin": 3}
-    targets.sort(key=lambda x: (order.get(x.get("role"), 9), x.get("team_name") or "", x.get("name") or ""))
+    targets.sort(
+        key=lambda x: (
+            order.get(x.get("role"), 9),
+            x.get("team_name") or "",
+            x.get("name") or "",
+        )
+    )
     return targets
 
 
 @api.post("/auth/logout")
 async def auth_logout(request: Request, response: Response):
-    token = request.cookies.get("session_token") or (request.headers.get("authorization", "")[7:] if request.headers.get("authorization", "").lower().startswith("bearer ") else "")
+    token = request.cookies.get("session_token") or (
+        request.headers.get("authorization", "")[7:]
+        if request.headers.get("authorization", "").lower().startswith("bearer ")
+        else ""
+    )
     if token:
         await db.user_sessions.delete_one({"session_token": token})
     response.delete_cookie("session_token", path="/")
@@ -712,8 +919,16 @@ async def list_fulfillment_users(user: dict = Depends(get_current_user)):
     """People who can be assigned to deliverables (fulfillment + production roles)."""
     await require_role(user, ["admin", "fulfillment", "bd"])
     assignable_roles = {
-        "fulfillment", "ve", "cw", "cs", "co", "editors", "design",
-        "carousel_designer", "content_ops_intern", "senior_cs",
+        "fulfillment",
+        "ve",
+        "cw",
+        "cs",
+        "co",
+        "editors",
+        "design",
+        "carousel_designer",
+        "content_ops_intern",
+        "senior_cs",
     }
     by_email: Dict[str, dict] = {}
 
@@ -737,7 +952,15 @@ async def list_fulfillment_users(user: dict = Depends(get_current_user)):
     # Pull FSOS roster so people like Arohi show up once they have a production role.
     try:
         from app.database.client import get_supabase_client
-        rows = get_supabase_client().table("user_roles").select("email,name,role").execute().data or []
+
+        rows = (
+            get_supabase_client()
+            .table("user_roles")
+            .select("email,name,role")
+            .execute()
+            .data
+            or []
+        )
     except Exception as e:
         logger.warning("list_fulfillment_users FSOS lookup failed: %s", e)
         rows = []
@@ -746,11 +969,15 @@ async def list_fulfillment_users(user: dict = Depends(get_current_user)):
         em = (r.get("email") or "").strip().lower()
         if not em:
             continue
-        parts = [p.strip().lower() for p in str(r.get("role") or "").split(",") if p.strip()]
+        parts = [
+            p.strip().lower() for p in str(r.get("role") or "").split(",") if p.strip()
+        ]
         if not any(p in assignable_roles for p in parts):
             continue
         existing = by_email.get(em)
-        display = (r.get("name") or (existing or {}).get("name") or em.split("@")[0]).strip()
+        display = (
+            r.get("name") or (existing or {}).get("name") or em.split("@")[0]
+        ).strip()
         if existing:
             existing["name"] = display or existing["name"]
             existing["role"] = ",".join(parts)
@@ -777,12 +1004,25 @@ async def list_fulfillment_users(user: dict = Depends(get_current_user)):
                 logger.warning("Could not provision seeding user %s: %s", em, e)
                 continue
         elif doc.get("active") is False:
-            await db.users.update_one({"user_id": doc["user_id"]}, {"$set": {"active": True, "updated_at": now_iso()}})
-        # Heal profiles wrongly stamped as fulfillment when FSOS has no fulfillment role.
-        elif doc.get("role") == "fulfillment" and "fulfillment" not in parts and "admin" not in parts:
             await db.users.update_one(
                 {"user_id": doc["user_id"]},
-                {"$set": {"role": "pending", "business_team_id": None, "updated_at": now_iso()}},
+                {"$set": {"active": True, "updated_at": now_iso()}},
+            )
+        # Heal profiles wrongly stamped as fulfillment when FSOS has no fulfillment role.
+        elif (
+            doc.get("role") == "fulfillment"
+            and "fulfillment" not in parts
+            and "admin" not in parts
+        ):
+            await db.users.update_one(
+                {"user_id": doc["user_id"]},
+                {
+                    "$set": {
+                        "role": "pending",
+                        "business_team_id": None,
+                        "updated_at": now_iso(),
+                    }
+                },
             )
             doc = {**doc, "role": "pending", "business_team_id": None}
         by_email[em] = {
@@ -813,7 +1053,9 @@ async def deactivate_user_by_email(email: str, user: dict = Depends(get_current_
 
 
 @api.put("/users/{user_id}/assign")
-async def assign_user(user_id: str, payload: AssignRoleRequest, user: dict = Depends(get_current_user)):
+async def assign_user(
+    user_id: str, payload: AssignRoleRequest, user: dict = Depends(get_current_user)
+):
     await require_role(user, ["admin"])
     if payload.role == "bd" and not payload.business_team_id:
         raise HTTPException(400, "business_team_id required for BD role")
@@ -838,7 +1080,11 @@ async def list_teams(user: dict = Depends(get_current_user)):
 @api.post("/teams")
 async def create_team(payload: TeamCreate, user: dict = Depends(get_current_user)):
     await require_role(user, ["admin"])
-    t = {"team_id": new_id("team"), "team_name": payload.team_name, "created_at": now_iso()}
+    t = {
+        "team_id": new_id("team"),
+        "team_name": payload.team_name,
+        "created_at": now_iso(),
+    }
     await db.business_teams.insert_one(dict(t))
     return t
 
@@ -887,7 +1133,9 @@ async def create_page(payload: PageCreate, user: dict = Depends(get_current_user
 
 
 @api.put("/pages/{page_id}")
-async def update_page(page_id: str, payload: PageUpdate, user: dict = Depends(get_current_user)):
+async def update_page(
+    page_id: str, payload: PageUpdate, user: dict = Depends(get_current_user)
+):
     await require_admin(user)
     upd = {k: v for k, v in payload.model_dump().items() if v is not None}
     upd["updated_at"] = now_iso()
@@ -911,8 +1159,12 @@ async def _enrich_deals(deals: List[dict]) -> List[dict]:
     """Batch-attach submitter + team info (avoids N+1 pool exhaustion)."""
     if not deals:
         return deals
-    user_ids = list({d.get("submitted_by_user_id") for d in deals if d.get("submitted_by_user_id")})
-    team_ids = list({d.get("submitted_by_team_id") for d in deals if d.get("submitted_by_team_id")})
+    user_ids = list(
+        {d.get("submitted_by_user_id") for d in deals if d.get("submitted_by_user_id")}
+    )
+    team_ids = list(
+        {d.get("submitted_by_team_id") for d in deals if d.get("submitted_by_team_id")}
+    )
     users_map: Dict[str, dict] = {}
     teams_map: Dict[str, dict] = {}
     if user_ids:
@@ -955,7 +1207,10 @@ async def _enrich_deal(deal: dict) -> dict:
 
 async def _attach_payment_status(deal: dict) -> dict:
     """Flatten payments.status → deal.payment_status for the frontend cards."""
-    payment = await db.payments.find_one({"deal_id": deal["deal_id"]}, {"_id": 0, "status": 1, "amount_received": 1, "payment_due_date": 1})
+    payment = await db.payments.find_one(
+        {"deal_id": deal["deal_id"]},
+        {"_id": 0, "status": 1, "amount_received": 1, "payment_due_date": 1},
+    )
     if payment:
         deal["payment"] = payment
         deal["payment_status"] = payment.get("status") or "Not Raised"
@@ -990,8 +1245,13 @@ async def create_brief(payload: BriefCreate, user: dict = Depends(get_current_us
     team_id = user.get("business_team_id")
     if user["role"] == "admin":
         if not payload.submitted_by_team_id:
-            raise HTTPException(400, "submitted_by_team_id required when admin submits on behalf of a team")
-        team = await db.business_teams.find_one({"team_id": payload.submitted_by_team_id}, {"_id": 0})
+            raise HTTPException(
+                400,
+                "submitted_by_team_id required when admin submits on behalf of a team",
+            )
+        team = await db.business_teams.find_one(
+            {"team_id": payload.submitted_by_team_id}, {"_id": 0}
+        )
         if not team:
             raise HTTPException(400, "Invalid team")
         team_id = payload.submitted_by_team_id
@@ -1009,7 +1269,9 @@ async def create_brief(payload: BriefCreate, user: dict = Depends(get_current_us
     if user["role"] == "admin":
         if payload.admin_review_status:
             if payload.admin_review_status not in ADMIN_REVIEW_STATUSES + ["Archived"]:
-                raise HTTPException(400, f"Invalid admin_review_status: {payload.admin_review_status}")
+                raise HTTPException(
+                    400, f"Invalid admin_review_status: {payload.admin_review_status}"
+                )
             review_status = payload.admin_review_status
         if payload.deal_status is not None and payload.deal_status != "":
             if payload.deal_status not in DEAL_STATUSES:
@@ -1017,7 +1279,9 @@ async def create_brief(payload: BriefCreate, user: dict = Depends(get_current_us
             deal_status = payload.deal_status
         if payload.payment_status:
             if payload.payment_status not in PAYMENT_STATUSES:
-                raise HTTPException(400, f"Invalid payment_status: {payload.payment_status}")
+                raise HTTPException(
+                    400, f"Invalid payment_status: {payload.payment_status}"
+                )
             payment_status = payload.payment_status
         if review_status == "Approved":
             approved_by = user["user_id"]
@@ -1079,16 +1343,18 @@ async def create_brief(payload: BriefCreate, user: dict = Depends(get_current_us
         await db.deliverables.insert_many([dict(d) for d in delivs])
 
     # Create payment row (admin/bd visible only)
-    await db.payments.insert_one({
-        "payment_id": new_id("pay"),
-        "deal_id": deal_id,
-        "status": payment_status,
-        "payment_due_date": payload.payment_due_date,
-        "amount_received": 0.0,
-        "payment_notes": "",
-        "last_updated_by": user["user_id"],
-        "last_updated_at": now_iso(),
-    })
+    await db.payments.insert_one(
+        {
+            "payment_id": new_id("pay"),
+            "deal_id": deal_id,
+            "status": payment_status,
+            "payment_due_date": payload.payment_due_date,
+            "amount_received": 0.0,
+            "payment_notes": "",
+            "last_updated_by": user["user_id"],
+            "last_updated_at": now_iso(),
+        }
+    )
 
     enriched = await _enrich_deal(deal)
     enriched = await _attach_payment_status(enriched)
@@ -1114,14 +1380,18 @@ async def create_deal_compat(request: Request, user: dict = Depends(get_current_
     for d in drafts:
         if not d.get("page_id"):
             continue
-        specs.append(BriefDeliverableSpec(
-            page_id=str(d["page_id"]),
-            deliverable_type=d.get("deliverable_type") or "Reel",
-            quantity=max(1, int(d.get("quantity") or 1)),
-        ))
+        specs.append(
+            BriefDeliverableSpec(
+                page_id=str(d["page_id"]),
+                deliverable_type=d.get("deliverable_type") or "Reel",
+                quantity=max(1, int(d.get("quantity") or 1)),
+            )
+        )
     assets = body.get("assets_or_reference_links")
     if assets is None and body.get("assets_links"):
-        assets = [ln.strip() for ln in str(body["assets_links"]).splitlines() if ln.strip()]
+        assets = [
+            ln.strip() for ln in str(body["assets_links"]).splitlines() if ln.strip()
+        ]
     team_from_body = None
     submitted = body.get("submitted_by_team") or {}
     if isinstance(submitted, dict):
@@ -1132,13 +1402,18 @@ async def create_deal_compat(request: Request, user: dict = Depends(get_current_
     if user["role"] == "bd":
         submitted_by_team_id = user.get("business_team_id")
         if not submitted_by_team_id:
-            raise HTTPException(400, "BD user must belong to a team — ask Admin to assign HOOC/AY/OWLED Core/Snoball BD")
+            raise HTTPException(
+                400,
+                "BD user must belong to a team — ask Admin to assign HOOC/AY/OWLED Core/Snoball BD",
+            )
     else:
         submitted_by_team_id = team_from_body
 
     payload = BriefCreate(
         brand_name=body.get("brand_name") or body.get("agency_or_client_name") or "",
-        agency_or_client_name=body.get("agency_or_client_name") or body.get("brand_name") or "",
+        agency_or_client_name=body.get("agency_or_client_name")
+        or body.get("brand_name")
+        or "",
         brief_text=body.get("brief_text") or "",
         brief_link=body.get("brief_link") or "",
         assets_or_reference_links=assets or [],
@@ -1191,7 +1466,13 @@ async def list_deals(
             if deal_ids:
                 payments = await db.payments.find(
                     {"deal_id": {"$in": deal_ids}},
-                    {"_id": 0, "deal_id": 1, "status": 1, "amount_received": 1, "payment_due_date": 1},
+                    {
+                        "_id": 0,
+                        "deal_id": 1,
+                        "status": 1,
+                        "amount_received": 1,
+                        "payment_due_date": 1,
+                    },
                 ).to_list(2000)
                 payments_map = {p["deal_id"]: p for p in payments}
 
@@ -1206,7 +1487,11 @@ async def list_deals(
             out.append(d)
 
         if payment_status and user["role"] in {"admin", "bd"}:
-            out = [d for d in out if (d.get("payment_status") or "Not Raised") == payment_status]
+            out = [
+                d
+                for d in out
+                if (d.get("payment_status") or "Not Raised") == payment_status
+            ]
 
         return out
     except HTTPException:
@@ -1222,7 +1507,9 @@ async def get_deal(deal_id: str, user: dict = Depends(get_current_user)):
     if not deal:
         raise HTTPException(404, "Deal not found")
     # role enforcement
-    if user["role"] == "bd" and deal.get("submitted_by_team_id") != user.get("business_team_id"):
+    if user["role"] == "bd" and deal.get("submitted_by_team_id") != user.get(
+        "business_team_id"
+    ):
         raise HTTPException(403, "Forbidden")
     if user["role"] == "fulfillment" and deal.get("admin_review_status") != "Approved":
         raise HTTPException(403, "Forbidden")
@@ -1231,14 +1518,23 @@ async def get_deal(deal_id: str, user: dict = Depends(get_current_user)):
 
     deal = await _enrich_deal(deal)
     delivs = await db.deliverables.find({"deal_id": deal_id}, {"_id": 0}).to_list(500)
-    outputs = await db.fulfillment_outputs.find({"deal_id": deal_id}, {"_id": 0}).sort("created_at", 1).to_list(500)
-    feedback = await db.client_feedback.find({"deal_id": deal_id}, {"_id": 0}).sort("created_at", 1).to_list(500)
+    outputs = (
+        await db.fulfillment_outputs.find({"deal_id": deal_id}, {"_id": 0})
+        .sort("created_at", 1)
+        .to_list(500)
+    )
+    feedback = (
+        await db.client_feedback.find({"deal_id": deal_id}, {"_id": 0})
+        .sort("created_at", 1)
+        .to_list(500)
+    )
     if user["role"] == "bd":
         # BD sees anything marked visible (including Draft if explicitly shared).
         outputs = [o for o in outputs if o.get("visible_to_bd")]
         visible_ids = {o.get("output_id") for o in outputs}
         feedback = [
-            f for f in feedback
+            f
+            for f in feedback
             if not f.get("output_id") or f.get("output_id") in visible_ids
         ]
     payment = None
@@ -1246,7 +1542,11 @@ async def get_deal(deal_id: str, user: dict = Depends(get_current_user)):
         payment = await db.payments.find_one({"deal_id": deal_id}, {"_id": 0})
     notes = []
     if user["role"] in {"admin", "fulfillment"}:
-        notes = await db.internal_notes.find({"deal_id": deal_id}, {"_id": 0}).sort("created_at", -1).to_list(500)
+        notes = (
+            await db.internal_notes.find({"deal_id": deal_id}, {"_id": 0})
+            .sort("created_at", -1)
+            .to_list(500)
+        )
 
     deal = scrub_deal_for_user(deal, user)
     return {
@@ -1261,7 +1561,9 @@ async def get_deal(deal_id: str, user: dict = Depends(get_current_user)):
 
 @api.put("/deals/{deal_id}")
 @api.patch("/deals/{deal_id}")
-async def update_deal(deal_id: str, payload: BriefUpdate, user: dict = Depends(get_current_user)):
+async def update_deal(
+    deal_id: str, payload: BriefUpdate, user: dict = Depends(get_current_user)
+):
     deal = await db.deals.find_one({"deal_id": deal_id}, {"_id": 0})
     if not deal:
         raise HTTPException(404, "Deal not found")
@@ -1303,10 +1605,18 @@ async def update_deal(deal_id: str, payload: BriefUpdate, user: dict = Depends(g
         links = [ln.strip() for ln in str(assets_links).splitlines() if ln.strip()]
         raw["assets_or_reference_links"] = links
 
-    if "deal_status" in raw and raw["deal_status"] is not None and raw["deal_status"] not in DEAL_STATUSES:
+    if (
+        "deal_status" in raw
+        and raw["deal_status"] is not None
+        and raw["deal_status"] not in DEAL_STATUSES
+    ):
         raise HTTPException(400, f"Invalid deal_status: {raw['deal_status']}")
-    if "admin_review_status" in raw and raw["admin_review_status"] not in ADMIN_REVIEW_STATUSES + ["Archived"]:
-        raise HTTPException(400, f"Invalid admin_review_status: {raw['admin_review_status']}")
+    if "admin_review_status" in raw and raw[
+        "admin_review_status"
+    ] not in ADMIN_REVIEW_STATUSES + ["Archived"]:
+        raise HTTPException(
+            400, f"Invalid admin_review_status: {raw['admin_review_status']}"
+        )
 
     # Keep review + deal status in sync when cancelling from the review control.
     if raw.get("admin_review_status") == "Cancelled" and "deal_status" not in raw:
@@ -1318,7 +1628,11 @@ async def update_deal(deal_id: str, payload: BriefUpdate, user: dict = Depends(g
         raw.pop("deal_status", None)
         payment_status = None
 
-    upd = {k: v for k, v in raw.items() if v is not None or k in {"deal_status", "notes", "brief_text", "brief_link"}}
+    upd = {
+        k: v
+        for k, v in raw.items()
+        if v is not None or k in {"deal_status", "notes", "brief_text", "brief_link"}
+    }
     if user["role"] == "bd" and deal.get("admin_review_status") == "Needs More Info":
         upd["admin_review_status"] = "Submitted"
         upd["needs_more_info_comment"] = ""
@@ -1329,12 +1643,14 @@ async def update_deal(deal_id: str, payload: BriefUpdate, user: dict = Depends(g
         if "payment_due_date" in upd:
             await db.payments.update_one(
                 {"deal_id": deal_id},
-                {"$set": {
-                    "payment_due_date": upd["payment_due_date"],
-                    "last_updated_by": user["user_id"],
-                    "last_updated_by_name": user.get("name"),
-                    "last_updated_at": now_iso(),
-                }},
+                {
+                    "$set": {
+                        "payment_due_date": upd["payment_due_date"],
+                        "last_updated_by": user["user_id"],
+                        "last_updated_by_name": user.get("name"),
+                        "last_updated_at": now_iso(),
+                    }
+                },
             )
 
     if payment_status is not None:
@@ -1342,12 +1658,14 @@ async def update_deal(deal_id: str, payload: BriefUpdate, user: dict = Depends(g
             raise HTTPException(400, f"Invalid payment_status: {payment_status}")
         await db.payments.update_one(
             {"deal_id": deal_id},
-            {"$set": {
-                "status": payment_status,
-                "last_updated_by": user["user_id"],
-                "last_updated_by_name": user.get("name"),
-                "last_updated_at": now_iso(),
-            }},
+            {
+                "$set": {
+                    "status": payment_status,
+                    "last_updated_by": user["user_id"],
+                    "last_updated_by_name": user.get("name"),
+                    "last_updated_at": now_iso(),
+                }
+            },
             upsert=True,
         )
 
@@ -1375,10 +1693,12 @@ async def update_campaign_report(
         raise HTTPException(400, "content_rationale required")
     await db.deals.update_one(
         {"deal_id": deal_id},
-        {"$set": {
-            "content_rationale": raw.get("content_rationale") or "",
-            "updated_at": now_iso(),
-        }},
+        {
+            "$set": {
+                "content_rationale": raw.get("content_rationale") or "",
+                "updated_at": now_iso(),
+            }
+        },
     )
     updated = await db.deals.find_one({"deal_id": deal_id}, {"_id": 0})
     updated = await _enrich_deal(updated)
@@ -1403,7 +1723,9 @@ async def delete_deal(deal_id: str, user: dict = Depends(get_current_user)):
 
 
 @api.post("/deals/{deal_id}/review")
-async def admin_review(deal_id: str, payload: AdminReviewAction, user: dict = Depends(get_current_user)):
+async def admin_review(
+    deal_id: str, payload: AdminReviewAction, user: dict = Depends(get_current_user)
+):
     await require_role(user, ["admin"])
     deal = await db.deals.find_one({"deal_id": deal_id}, {"_id": 0})
     if not deal:
@@ -1450,14 +1772,19 @@ async def admin_review(deal_id: str, payload: AdminReviewAction, user: dict = De
 
 
 @api.put("/deals/{deal_id}/status")
-async def update_deal_status(deal_id: str, payload: DealStatusUpdate, user: dict = Depends(get_current_user)):
+async def update_deal_status(
+    deal_id: str, payload: DealStatusUpdate, user: dict = Depends(get_current_user)
+):
     await require_role(user, ["admin", "fulfillment"])
     deal = await db.deals.find_one({"deal_id": deal_id}, {"_id": 0})
     if not deal:
         raise HTTPException(404, "Deal not found")
     if deal.get("admin_review_status") != "Approved":
         raise HTTPException(400, "Deal not approved yet")
-    await db.deals.update_one({"deal_id": deal_id}, {"$set": {"deal_status": payload.deal_status, "updated_at": now_iso()}})
+    await db.deals.update_one(
+        {"deal_id": deal_id},
+        {"$set": {"deal_status": payload.deal_status, "updated_at": now_iso()}},
+    )
     updated = await db.deals.find_one({"deal_id": deal_id}, {"_id": 0})
     try:
         await notify_bd_fulfillment_update(
@@ -1479,7 +1806,10 @@ def _check_bd_own_brief(user: dict, deal: dict, *, require_editable: bool = True
         raise HTTPException(403, "Forbidden")
     if deal.get("submitted_by_user_id") != user.get("user_id"):
         raise HTTPException(403, "You can only edit your own briefs")
-    if require_editable and deal.get("admin_review_status") not in {"Submitted", "Needs More Info"}:
+    if require_editable and deal.get("admin_review_status") not in {
+        "Submitted",
+        "Needs More Info",
+    }:
         raise HTTPException(403, "BD can only edit before approval")
 
 
@@ -1493,7 +1823,9 @@ def _check_deliverable_spec_access(user: dict, deal: dict):
     raise HTTPException(403, "Only admin can modify deliverables after approval")
 
 
-async def _expand_deliverable_rows(deal_id: str, deal: dict, spec: DeliverableAdd) -> List[dict]:
+async def _expand_deliverable_rows(
+    deal_id: str, deal: dict, spec: DeliverableAdd
+) -> List[dict]:
     page = await db.monetisable_pages.find_one({"page_id": spec.page_id}, {"_id": 0})
     if not page:
         raise HTTPException(400, "Invalid page")
@@ -1501,26 +1833,30 @@ async def _expand_deliverable_rows(deal_id: str, deal: dict, spec: DeliverableAd
     views = max(0, int(spec.views or 0))
     rows = []
     for _ in range(max(1, int(spec.quantity))):
-        rows.append({
-            "deliverable_id": new_id("dlv"),
-            "deal_id": deal_id,
-            "page_id": spec.page_id,
-            "page_name": page["page_name"],
-            "deliverable_type": spec.deliverable_type,
-            "go_live_date_time": deal.get("go_live_date_time"),
-            "status": "Not Started",
-            "assigned_fulfillment_user_id": None,
-            "live_link": live_link,
-            "views": views,
-            "notes": "",
-            "created_at": now_iso(),
-            "updated_at": now_iso(),
-        })
+        rows.append(
+            {
+                "deliverable_id": new_id("dlv"),
+                "deal_id": deal_id,
+                "page_id": spec.page_id,
+                "page_name": page["page_name"],
+                "deliverable_type": spec.deliverable_type,
+                "go_live_date_time": deal.get("go_live_date_time"),
+                "status": "Not Started",
+                "assigned_fulfillment_user_id": None,
+                "live_link": live_link,
+                "views": views,
+                "notes": "",
+                "created_at": now_iso(),
+                "updated_at": now_iso(),
+            }
+        )
     return rows
 
 
 @api.post("/deals/{deal_id}/deliverables")
-async def add_deliverables(deal_id: str, payload: DeliverableAdd, user: dict = Depends(get_current_user)):
+async def add_deliverables(
+    deal_id: str, payload: DeliverableAdd, user: dict = Depends(get_current_user)
+):
     """
     Admin/BD: deliverable spec edits (BD only pre-approval).
     Fulfillment: may add deliverables on approved deals (campaign report + brief stay in sync).
@@ -1531,7 +1867,9 @@ async def add_deliverables(deal_id: str, payload: DeliverableAdd, user: dict = D
         raise HTTPException(404, "Deal not found")
     if user["role"] == "fulfillment":
         if deal.get("admin_review_status") != "Approved":
-            raise HTTPException(403, "Fulfillment can only add deliverables on approved deals")
+            raise HTTPException(
+                403, "Fulfillment can only add deliverables on approved deals"
+            )
     else:
         _check_deliverable_spec_access(user, deal)
     rows = await _expand_deliverable_rows(deal_id, deal, payload)
@@ -1542,10 +1880,14 @@ async def add_deliverables(deal_id: str, payload: DeliverableAdd, user: dict = D
 
 
 @api.delete("/deliverables/{deliverable_id}")
-async def delete_deliverable(deliverable_id: str, user: dict = Depends(get_current_user)):
+async def delete_deliverable(
+    deliverable_id: str, user: dict = Depends(get_current_user)
+):
     if user["role"] not in {"admin", "bd"}:
         raise HTTPException(403, "Forbidden")
-    deliv = await db.deliverables.find_one({"deliverable_id": deliverable_id}, {"_id": 0})
+    deliv = await db.deliverables.find_one(
+        {"deliverable_id": deliverable_id}, {"_id": 0}
+    )
     if not deliv:
         raise HTTPException(404, "Deliverable not found")
     deal = await db.deals.find_one({"deal_id": deliv["deal_id"]}, {"_id": 0})
@@ -1556,18 +1898,27 @@ async def delete_deliverable(deliverable_id: str, user: dict = Depends(get_curre
     if count <= 1:
         raise HTTPException(400, "Cannot remove the last deliverable on a deal")
     await db.deliverables.delete_one({"deliverable_id": deliverable_id})
-    await db.deals.update_one({"deal_id": deliv["deal_id"]}, {"$set": {"updated_at": now_iso()}})
+    await db.deals.update_one(
+        {"deal_id": deliv["deal_id"]}, {"$set": {"updated_at": now_iso()}}
+    )
     return {"ok": True}
 
 
 @api.put("/deliverables/{deliverable_id}")
-async def update_deliverable(deliverable_id: str, payload: DeliverableUpdate, user: dict = Depends(get_current_user)):
+async def update_deliverable(
+    deliverable_id: str,
+    payload: DeliverableUpdate,
+    user: dict = Depends(get_current_user),
+):
     await require_role(user, ["admin", "fulfillment"])
     raw = payload.model_dump(exclude_unset=True)
     # Accept assigned_to as alias; empty string clears assignment.
     if "assigned_to" in raw:
         raw["assigned_fulfillment_user_id"] = raw.pop("assigned_to") or None
-    if "assigned_fulfillment_user_id" in raw and raw["assigned_fulfillment_user_id"] == "":
+    if (
+        "assigned_fulfillment_user_id" in raw
+        and raw["assigned_fulfillment_user_id"] == ""
+    ):
         raw["assigned_fulfillment_user_id"] = None
     upd = {k: v for k, v in raw.items() if k != "assigned_to"}
     if not upd:
@@ -1575,31 +1926,47 @@ async def update_deliverable(deliverable_id: str, payload: DeliverableUpdate, us
     if "status" in upd and upd["status"] not in DELIVERABLE_STATUSES:
         raise HTTPException(400, f"Invalid status: {upd['status']}")
     if "page_id" in upd:
-        page = await db.monetisable_pages.find_one({"page_id": upd["page_id"]}, {"_id": 0})
+        page = await db.monetisable_pages.find_one(
+            {"page_id": upd["page_id"]}, {"_id": 0}
+        )
         if not page:
             raise HTTPException(400, "Invalid page")
         upd["page_name"] = page["page_name"]
     upd["updated_at"] = now_iso()
-    res = await db.deliverables.update_one({"deliverable_id": deliverable_id}, {"$set": upd})
+    res = await db.deliverables.update_one(
+        {"deliverable_id": deliverable_id}, {"$set": upd}
+    )
     if res.matched_count == 0:
         raise HTTPException(404, "Deliverable not found")
-    updated = await db.deliverables.find_one({"deliverable_id": deliverable_id}, {"_id": 0})
-    deal = await db.deals.find_one({"deal_id": updated["deal_id"]}, {"_id": 0}) if updated else None
+    updated = await db.deliverables.find_one(
+        {"deliverable_id": deliverable_id}, {"_id": 0}
+    )
+    deal = (
+        await db.deals.find_one({"deal_id": updated["deal_id"]}, {"_id": 0})
+        if updated
+        else None
+    )
     if deal:
         try:
             page = updated.get("page_name") or "a deliverable"
-            await notify_bd_fulfillment_update(deal, user, detail=f"updated deliverable ({page})")
+            await notify_bd_fulfillment_update(
+                deal, user, detail=f"updated deliverable ({page})"
+            )
         except Exception as e:
             logger.warning("notify BD on deliverable update failed: %s", e)
     return updated
 
 
 @api.get("/deliverables")
-async def list_deliverables(user: dict = Depends(get_current_user), status: Optional[str] = None):
+async def list_deliverables(
+    user: dict = Depends(get_current_user), status: Optional[str] = None
+):
     if user.get("role") == "pending":
         raise HTTPException(403, "Pending approval")
     deal_filter = _deal_role_filter(user)
-    deals = await db.deals.find(deal_filter, {"_id": 0, "deal_id": 1, "brand_name": 1, "go_live_date_time": 1}).to_list(1000)
+    deals = await db.deals.find(
+        deal_filter, {"_id": 0, "deal_id": 1, "brand_name": 1, "go_live_date_time": 1}
+    ).to_list(1000)
     deal_map = {d["deal_id"]: d for d in deals}
     q: Dict[str, Any] = {"deal_id": {"$in": list(deal_map.keys())}}
     if status:
@@ -1612,7 +1979,9 @@ async def list_deliverables(user: dict = Depends(get_current_user), status: Opti
 
 # ----------------------------- Fulfillment Outputs -----------------------------
 @api.post("/outputs")
-async def create_output(payload: FulfillmentOutputCreate, user: dict = Depends(get_current_user)):
+async def create_output(
+    payload: FulfillmentOutputCreate, user: dict = Depends(get_current_user)
+):
     await require_role(user, ["fulfillment", "admin"])
     status = payload.status or "Draft"
     # Sharing with BD should never leave the item stuck as invisible Draft.
@@ -1640,16 +2009,24 @@ async def create_output(payload: FulfillmentOutputCreate, user: dict = Depends(g
     if deal:
         try:
             title = payload.title or "an output"
-            await notify_bd_fulfillment_update(deal, user, detail=f"added output ({title})")
+            await notify_bd_fulfillment_update(
+                deal, user, detail=f"added output ({title})"
+            )
         except Exception as e:
             logger.warning("notify BD on output create failed: %s", e)
     return o
 
 
 @api.put("/outputs/{output_id}")
-async def update_output(output_id: str, payload: FulfillmentOutputUpdate, user: dict = Depends(get_current_user)):
+async def update_output(
+    output_id: str,
+    payload: FulfillmentOutputUpdate,
+    user: dict = Depends(get_current_user),
+):
     await require_role(user, ["fulfillment", "admin"])
-    existing = await db.fulfillment_outputs.find_one({"output_id": output_id}, {"_id": 0})
+    existing = await db.fulfillment_outputs.find_one(
+        {"output_id": output_id}, {"_id": 0}
+    )
     if not existing:
         raise HTTPException(404, "Output not found")
     # fulfillment can edit only their own; admin can edit anything
@@ -1664,12 +2041,16 @@ async def update_output(output_id: str, payload: FulfillmentOutputUpdate, user: 
         upd["status"] = "Shared with BD"
     upd["updated_at"] = now_iso()
     await db.fulfillment_outputs.update_one({"output_id": output_id}, {"$set": upd})
-    updated = await db.fulfillment_outputs.find_one({"output_id": output_id}, {"_id": 0})
+    updated = await db.fulfillment_outputs.find_one(
+        {"output_id": output_id}, {"_id": 0}
+    )
     deal = await db.deals.find_one({"deal_id": existing.get("deal_id")}, {"_id": 0})
     if deal:
         try:
             title = (updated or existing).get("title") or "an output"
-            await notify_bd_fulfillment_update(deal, user, detail=f"updated output ({title})")
+            await notify_bd_fulfillment_update(
+                deal, user, detail=f"updated output ({title})"
+            )
         except Exception as e:
             logger.warning("notify BD on output update failed: %s", e)
     return updated
@@ -1677,7 +2058,9 @@ async def update_output(output_id: str, payload: FulfillmentOutputUpdate, user: 
 
 @api.delete("/outputs/{output_id}")
 async def delete_output(output_id: str, user: dict = Depends(get_current_user)):
-    existing = await db.fulfillment_outputs.find_one({"output_id": output_id}, {"_id": 0})
+    existing = await db.fulfillment_outputs.find_one(
+        {"output_id": output_id}, {"_id": 0}
+    )
     if not existing:
         raise HTTPException(404, "Output not found")
     if user["role"] != "admin" and existing.get("created_by") != user["user_id"]:
@@ -1690,7 +2073,9 @@ async def delete_output(output_id: str, user: dict = Depends(get_current_user)):
 
 # ----------------------------- Internal Notes -----------------------------
 @api.post("/notes")
-async def create_note(payload: InternalNoteCreate, user: dict = Depends(get_current_user)):
+async def create_note(
+    payload: InternalNoteCreate, user: dict = Depends(get_current_user)
+):
     await require_role(user, ["fulfillment", "admin"])
     n = {
         "note_id": new_id("note"),
@@ -1710,14 +2095,18 @@ async def _check_deal_access(user: dict, deal: dict):
     """Ensure user can access this deal. Raises 403 if not."""
     if user["role"] == "pending":
         raise HTTPException(403, "Pending approval")
-    if user["role"] == "bd" and deal.get("submitted_by_team_id") != user.get("business_team_id"):
+    if user["role"] == "bd" and deal.get("submitted_by_team_id") != user.get(
+        "business_team_id"
+    ):
         raise HTTPException(403, "Forbidden")
     if user["role"] == "fulfillment" and deal.get("admin_review_status") != "Approved":
         raise HTTPException(403, "Forbidden")
 
 
 @api.post("/feedback")
-async def create_feedback(payload: FeedbackCreate, user: dict = Depends(get_current_user)):
+async def create_feedback(
+    payload: FeedbackCreate, user: dict = Depends(get_current_user)
+):
     await require_role(user, ["bd", "admin", "fulfillment"])
     deal = await db.deals.find_one({"deal_id": payload.deal_id}, {"_id": 0})
     if not deal:
@@ -1726,7 +2115,9 @@ async def create_feedback(payload: FeedbackCreate, user: dict = Depends(get_curr
 
     team_name = None
     if user.get("business_team_id"):
-        team = await db.business_teams.find_one({"team_id": user["business_team_id"]}, {"_id": 0, "team_name": 1})
+        team = await db.business_teams.find_one(
+            {"team_id": user["business_team_id"]}, {"_id": 0, "team_name": 1}
+        )
         team_name = team and team.get("team_name")
 
     fb_type = payload.feedback_type or "comment"
@@ -1756,8 +2147,12 @@ async def create_feedback(payload: FeedbackCreate, user: dict = Depends(get_curr
 
 
 @api.put("/feedback/{feedback_id}")
-async def update_feedback(feedback_id: str, payload: FeedbackUpdate, user: dict = Depends(get_current_user)):
-    existing = await db.client_feedback.find_one({"feedback_id": feedback_id}, {"_id": 0})
+async def update_feedback(
+    feedback_id: str, payload: FeedbackUpdate, user: dict = Depends(get_current_user)
+):
+    existing = await db.client_feedback.find_one(
+        {"feedback_id": feedback_id}, {"_id": 0}
+    )
     if not existing:
         raise HTTPException(404, "Not found")
 
@@ -1769,10 +2164,19 @@ async def update_feedback(feedback_id: str, payload: FeedbackUpdate, user: dict 
     if not upd:
         raise HTTPException(400, "No fields")
 
-    content_keys = {"feedback_text", "image_attachment", "file_attachment", "reference_link"}
+    content_keys = {
+        "feedback_text",
+        "image_attachment",
+        "file_attachment",
+        "reference_link",
+    }
     is_content_edit = bool(content_keys & set(upd.keys()))
     # Author can edit own content; admin can edit anyone's; others can only change status
-    if is_content_edit and user["role"] != "admin" and existing.get("added_by_user_id") != user["user_id"]:
+    if (
+        is_content_edit
+        and user["role"] != "admin"
+        and existing.get("added_by_user_id") != user["user_id"]
+    ):
         raise HTTPException(403, "Only the author or admin can edit this comment")
 
     upd["updated_at"] = now_iso()
@@ -1782,7 +2186,9 @@ async def update_feedback(feedback_id: str, payload: FeedbackUpdate, user: dict 
 
 @api.delete("/feedback/{feedback_id}")
 async def delete_feedback(feedback_id: str, user: dict = Depends(get_current_user)):
-    existing = await db.client_feedback.find_one({"feedback_id": feedback_id}, {"_id": 0})
+    existing = await db.client_feedback.find_one(
+        {"feedback_id": feedback_id}, {"_id": 0}
+    )
     if not existing:
         raise HTTPException(404, "Not found")
     if user["role"] != "admin" and existing.get("added_by_user_id") != user["user_id"]:
@@ -1793,7 +2199,9 @@ async def delete_feedback(feedback_id: str, user: dict = Depends(get_current_use
 
 # ----------------------------- Payments -----------------------------
 @api.put("/payments/{deal_id}")
-async def update_payment(deal_id: str, payload: PaymentUpdate, user: dict = Depends(get_current_user)):
+async def update_payment(
+    deal_id: str, payload: PaymentUpdate, user: dict = Depends(get_current_user)
+):
     await require_role(user, ["admin", "bd"])
     deal = await db.deals.find_one({"deal_id": deal_id}, {"_id": 0})
     if not deal:
@@ -1824,11 +2232,27 @@ async def update_payment(deal_id: str, payload: PaymentUpdate, user: dict = Depe
 
 # ----------------------------- File Upload -----------------------------
 @api.post("/upload")
-async def upload_file(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+async def upload_file(
+    file: UploadFile = File(...), user: dict = Depends(get_current_user)
+):
     if user["role"] == "pending":
         raise HTTPException(403, "Pending approval")
-    ext = file.filename.split(".")[-1].lower() if "." in (file.filename or "") else "bin"
-    if ext not in {"jpg", "jpeg", "png", "gif", "webp", "pdf", "doc", "docx", "txt", "csv", "xlsx"}:
+    ext = (
+        file.filename.split(".")[-1].lower() if "." in (file.filename or "") else "bin"
+    )
+    if ext not in {
+        "jpg",
+        "jpeg",
+        "png",
+        "gif",
+        "webp",
+        "pdf",
+        "doc",
+        "docx",
+        "txt",
+        "csv",
+        "xlsx",
+    }:
         raise HTTPException(400, "Unsupported file type")
     data = await file.read()
     if len(data) > 10 * 1024 * 1024:
@@ -1847,11 +2271,18 @@ async def upload_file(file: UploadFile = File(...), user: dict = Depends(get_cur
         "created_at": now_iso(),
     }
     await db.files.insert_one(dict(record))
-    return {"file_id": file_id, "url": f"/api/files/{file_id}", "original_filename": file.filename, "content_type": file.content_type}
+    return {
+        "file_id": file_id,
+        "url": f"/api/files/{file_id}",
+        "original_filename": file.filename,
+        "content_type": file.content_type,
+    }
 
 
 @api.get("/files/{file_id}")
-async def download_file(file_id: str, request: Request, auth: Optional[str] = Query(None)):
+async def download_file(
+    file_id: str, request: Request, auth: Optional[str] = Query(None)
+):
     # Resolve user via cookie/header (preferred) or ?auth= query token (for <img>)
     user = None
     try:
@@ -1895,7 +2326,9 @@ async def reports_overview(
         raise HTTPException(503, f"Seeding overview query failed: {e}")
 
 
-async def _reports_overview_body(user: dict, from_date: Optional[str], to_date: Optional[str]):
+async def _reports_overview_body(
+    user: dict, from_date: Optional[str], to_date: Optional[str]
+):
     """Overview totals for the selected date range.
 
     Revenue (price closed) is attributed by **payment_due_date**, not go-live,
@@ -1904,18 +2337,10 @@ async def _reports_overview_body(user: dict, from_date: Optional[str], to_date: 
     """
 
     def parse_day(iso: Optional[str]):
-        if not iso:
-            return None
-        try:
-            return datetime.fromisoformat(str(iso).replace("Z", "+00:00")).date()
-        except Exception:
-            try:
-                return datetime.strptime(str(iso)[:10], "%Y-%m-%d").date()
-            except Exception:
-                return None
+        return parse_payment_due_day(iso)
 
-    start_day = parse_day(from_date) if from_date else None
-    end_day = parse_day(to_date) if to_date else None
+    start_day = parse_range_day(from_date) if from_date else None
+    end_day = parse_range_day(to_date) if to_date else None
 
     def in_range(day) -> bool:
         if day is None:
@@ -1935,14 +2360,19 @@ async def _reports_overview_body(user: dict, from_date: Optional[str], to_date: 
     activity_deals = [
         d for d in deals if in_range(parse_day(d.get("created_at") or ""))
     ]
-    pending_review = [d for d in activity_deals if d.get("admin_review_status") == "Submitted"]
-    needs_info = [d for d in activity_deals if d.get("admin_review_status") == "Needs More Info"]
+    pending_review = [
+        d for d in activity_deals if d.get("admin_review_status") == "Submitted"
+    ]
+    needs_info = [
+        d for d in activity_deals if d.get("admin_review_status") == "Needs More Info"
+    ]
 
     approved = [d for d in deals if d.get("admin_review_status") == "Approved"]
     # Cancelled deals stay in Approved history but drop out of revenue / payment totals.
     # Revenue month = payment due month.
     revenue_deals = [
-        d for d in approved
+        d
+        for d in approved
         if d.get("deal_status") != "Cancelled"
         and in_range(parse_day(d.get("payment_due_date") or ""))
     ]
@@ -1961,24 +2391,45 @@ async def _reports_overview_body(user: dict, from_date: Optional[str], to_date: 
     if user["role"] == "admin":
         teams = await db.business_teams.find({}, {"_id": 0}).to_list(100)
         for t in teams:
-            t_approved = [d for d in revenue_deals if d.get("submitted_by_team_id") == t["team_id"]]
-            team_revenue.append({
-                "team_id": t["team_id"],
-                "team_name": t["team_name"],
-                "revenue": sum(float(d.get("price_closed_at") or 0) for d in t_approved),
-                "deals": len(t_approved),
-            })
+            t_approved = [
+                d
+                for d in revenue_deals
+                if d.get("submitted_by_team_id") == t["team_id"]
+            ]
+            team_revenue.append(
+                {
+                    "team_id": t["team_id"],
+                    "team_name": t["team_name"],
+                    "revenue": sum(
+                        float(d.get("price_closed_at") or 0) for d in t_approved
+                    ),
+                    "deals": len(t_approved),
+                }
+            )
             team_deals.append({"team_name": t["team_name"], "count": len(t_approved)})
 
     # payments
     deal_ids = [d["deal_id"] for d in revenue_deals]
-    deal_price_by_id = {d["deal_id"]: float(d.get("price_closed_at") or 0) for d in revenue_deals}
+    deal_price_by_id = {
+        d["deal_id"]: float(d.get("price_closed_at") or 0) for d in revenue_deals
+    }
     payments = []
     if user["role"] != "fulfillment":
-        payments = await db.payments.find({"deal_id": {"$in": deal_ids}}, {"_id": 0}).to_list(2000)
-    payment_pending = [p for p in payments if p.get("status") in {"Not Raised", "Raised", "Payment Pending", "Partially Paid"}]
+        payments = await db.payments.find(
+            {"deal_id": {"$in": deal_ids}}, {"_id": 0}
+        ).to_list(2000)
+    payment_pending = [
+        p
+        for p in payments
+        if p.get("status")
+        in {"Not Raised", "Raised", "Payment Pending", "Partially Paid"}
+    ]
     payment_pending_amount = sum(
-        max(0.0, deal_price_by_id.get(p["deal_id"], 0.0) - float(p.get("amount_received") or 0))
+        max(
+            0.0,
+            deal_price_by_id.get(p["deal_id"], 0.0)
+            - float(p.get("amount_received") or 0),
+        )
         for p in payment_pending
     )
     collected = sum(float(p.get("amount_received") or 0) for p in payments)
@@ -2001,7 +2452,9 @@ async def _reports_overview_body(user: dict, from_date: Optional[str], to_date: 
         rev_q["admin_review_status"] = "Approved"
         all_approved = await db.deals.find(rev_q, {"_id": 0}).to_list(2000)
 
-        buckets: Dict[str, Dict[str, Any]] = defaultdict(lambda: {"revenue": 0.0, "deals": 0})
+        buckets: Dict[str, Dict[str, Any]] = defaultdict(
+            lambda: {"revenue": 0.0, "deals": 0}
+        )
         cur = chart_start
         while cur <= chart_end:
             buckets[cur.isoformat()] = {"revenue": 0.0, "deals": 0}
@@ -2028,30 +2481,61 @@ async def _reports_overview_body(user: dict, from_date: Optional[str], to_date: 
     if user["role"] == "admin":
         teams = await db.business_teams.find({}, {"_id": 0}).to_list(100)
         for t in teams:
-            t_deal_ids = [d["deal_id"] for d in revenue_deals if d.get("submitted_by_team_id") == t["team_id"]]
-            t_views = sum(int(dv.get("views") or 0) for dv in delivs if dv["deal_id"] in t_deal_ids)
+            t_deal_ids = [
+                d["deal_id"]
+                for d in revenue_deals
+                if d.get("submitted_by_team_id") == t["team_id"]
+            ]
+            t_views = sum(
+                int(dv.get("views") or 0)
+                for dv in delivs
+                if dv["deal_id"] in t_deal_ids
+            )
             team_views.append({"team_name": t["team_name"], "views": t_views})
 
             t_payments = [p for p in payments if p["deal_id"] in t_deal_ids]
-            t_pending = [p for p in t_payments if p.get("status") in {"Not Raised", "Raised", "Payment Pending", "Partially Paid"}]
+            t_pending = [
+                p
+                for p in t_payments
+                if p.get("status")
+                in {"Not Raised", "Raised", "Payment Pending", "Partially Paid"}
+            ]
             t_pending_amount = sum(
-                max(0.0, deal_price_by_id.get(p["deal_id"], 0.0) - float(p.get("amount_received") or 0))
+                max(
+                    0.0,
+                    deal_price_by_id.get(p["deal_id"], 0.0)
+                    - float(p.get("amount_received") or 0),
+                )
                 for p in t_pending
             )
             t_paid = [p for p in t_payments if p.get("status") == "Paid"]
-            team_payments.append({
-                "team_id": t["team_id"],
-                "team_name": t["team_name"],
-                "revenue": sum(float(d.get("price_closed_at") or 0) for d in revenue_deals if d.get("submitted_by_team_id") == t["team_id"]),
-                "deals_approved": len(t_deal_ids),
-                "payment_pending_count": len(t_pending),
-                "payment_pending_amount": t_pending_amount,
-                "payment_paid_count": len(t_paid),
-                "by_status": {
-                    status: len([p for p in t_payments if p.get("status") == status])
-                    for status in ["Not Raised", "Raised", "Payment Pending", "Partially Paid", "Paid"]
-                },
-            })
+            team_payments.append(
+                {
+                    "team_id": t["team_id"],
+                    "team_name": t["team_name"],
+                    "revenue": sum(
+                        float(d.get("price_closed_at") or 0)
+                        for d in revenue_deals
+                        if d.get("submitted_by_team_id") == t["team_id"]
+                    ),
+                    "deals_approved": len(t_deal_ids),
+                    "payment_pending_count": len(t_pending),
+                    "payment_pending_amount": t_pending_amount,
+                    "payment_paid_count": len(t_paid),
+                    "by_status": {
+                        status: len(
+                            [p for p in t_payments if p.get("status") == status]
+                        )
+                        for status in [
+                            "Not Raised",
+                            "Raised",
+                            "Payment Pending",
+                            "Partially Paid",
+                            "Paid",
+                        ]
+                    },
+                }
+            )
 
     return {
         "revenue_closed": revenue,
@@ -2080,7 +2564,11 @@ async def seed(force: bool = False):
     """Seed default teams, pages, users and sample deals. Idempotent."""
     existing_teams = await db.business_teams.count_documents({})
     if existing_teams and not force:
-        return {"ok": True, "skipped": True, "message": "Already seeded. Use ?force=true to re-run."}
+        return {
+            "ok": True,
+            "skipped": True,
+            "message": "Already seeded. Use ?force=true to re-run.",
+        }
 
     # Teams
     team_defs = ["Snoball", "Hooc", "OWLED Core", "AY"]
@@ -2091,11 +2579,21 @@ async def seed(force: bool = False):
             team_ids[tname] = existing["team_id"]
             continue
         tid = new_id("team")
-        await db.business_teams.insert_one({"team_id": tid, "team_name": tname, "created_at": now_iso()})
+        await db.business_teams.insert_one(
+            {"team_id": tid, "team_name": tname, "created_at": now_iso()}
+        )
         team_ids[tname] = tid
 
     # Pages
-    page_defs = ["101x Founders", "Biz India", "Startup by Dog", "India Startup Story", "Founders in India", "Indian Founders Co", "Startupcoded"]
+    page_defs = [
+        "101x Founders",
+        "Biz India",
+        "Startup by Dog",
+        "India Startup Story",
+        "Founders in India",
+        "Indian Founders Co",
+        "Startupcoded",
+    ]
     page_ids = {}
     for pname in page_defs:
         existing = await db.monetisable_pages.find_one({"page_name": pname}, {"_id": 0})
@@ -2103,10 +2601,16 @@ async def seed(force: bool = False):
             page_ids[pname] = existing["page_id"]
             continue
         pid = new_id("page")
-        await db.monetisable_pages.insert_one({
-            "page_id": pid, "page_name": pname, "active": True, "notes": "",
-            "created_at": now_iso(), "updated_at": now_iso(),
-        })
+        await db.monetisable_pages.insert_one(
+            {
+                "page_id": pid,
+                "page_name": pname,
+                "active": True,
+                "notes": "",
+                "created_at": now_iso(),
+                "updated_at": now_iso(),
+            }
+        )
         page_ids[pname] = pid
 
     # Users
@@ -2125,18 +2629,33 @@ async def seed(force: bool = False):
         if existing:
             user_ids[email] = existing["user_id"]
             # Make sure role is correctly assigned
-            await db.users.update_one({"user_id": existing["user_id"]}, {"$set": {
+            await db.users.update_one(
+                {"user_id": existing["user_id"]},
+                {
+                    "$set": {
+                        "role": role,
+                        "business_team_id": (
+                            team_ids.get(team_name) if team_name else None
+                        ),
+                        "active": True,
+                    }
+                },
+            )
+            continue
+        uid = new_id("user")
+        await db.users.insert_one(
+            {
+                "user_id": uid,
+                "email": email,
+                "name": name,
+                "picture": None,
                 "role": role,
                 "business_team_id": team_ids.get(team_name) if team_name else None,
                 "active": True,
-            }})
-            continue
-        uid = new_id("user")
-        await db.users.insert_one({
-            "user_id": uid, "email": email, "name": name, "picture": None,
-            "role": role, "business_team_id": team_ids.get(team_name) if team_name else None,
-            "active": True, "created_at": now_iso(), "updated_at": now_iso(),
-        })
+                "created_at": now_iso(),
+                "updated_at": now_iso(),
+            }
+        )
         user_ids[email] = uid
 
     # Sample deals
@@ -2145,30 +2664,71 @@ async def seed(force: bool = False):
         now = datetime.now(timezone.utc)
         samples = [
             # 1. Submitted, pending
-            dict(brand="Razorpay", agency="Direct", bd="snoball.bd@owledmedia.com", price=180000,
-                 status="Submitted", deal_status=None, days=2,
-                 delivs=[("Biz India", "Reel", 1), ("101x Founders", "Static", 2)],
-                 brief="Series of posts to push Razorpay's new SME credit product."),
+            dict(
+                brand="Razorpay",
+                agency="Direct",
+                bd="snoball.bd@owledmedia.com",
+                price=180000,
+                status="Submitted",
+                deal_status=None,
+                days=2,
+                delivs=[("Biz India", "Reel", 1), ("101x Founders", "Static", 2)],
+                brief="Series of posts to push Razorpay's new SME credit product.",
+            ),
             # 2. Needs more info
-            dict(brand="CRED", agency="Wavemaker", bd="hooc.bd@owledmedia.com", price=240000,
-                 status="Needs More Info", deal_status=None, days=4, comment="Need exact creative direction & target audience persona.",
-                 delivs=[("Startup by Dog", "Carousel", 2)],
-                 brief="Brand awareness carousel for new CRED Garage launch."),
+            dict(
+                brand="CRED",
+                agency="Wavemaker",
+                bd="hooc.bd@owledmedia.com",
+                price=240000,
+                status="Needs More Info",
+                deal_status=None,
+                days=4,
+                comment="Need exact creative direction & target audience persona.",
+                delivs=[("Startup by Dog", "Carousel", 2)],
+                brief="Brand awareness carousel for new CRED Garage launch.",
+            ),
             # 3. Rejected
-            dict(brand="ToothlessFoods", agency="Direct", bd="ay.bd@owledmedia.com", price=45000,
-                 status="Rejected", deal_status=None, days=6, comment="Budget below threshold for this brand category.",
-                 delivs=[("Founders in India", "Static", 1)],
-                 brief="Single static post for early-stage D2C food brand."),
+            dict(
+                brand="ToothlessFoods",
+                agency="Direct",
+                bd="ay.bd@owledmedia.com",
+                price=45000,
+                status="Rejected",
+                deal_status=None,
+                days=6,
+                comment="Budget below threshold for this brand category.",
+                delivs=[("Founders in India", "Static", 1)],
+                brief="Single static post for early-stage D2C food brand.",
+            ),
             # 4. Approved + active
-            dict(brand="Notion", agency="Direct", bd="core.bd@owledmedia.com", price=520000,
-                 status="Approved", deal_status="In Progress", days=10,
-                 delivs=[("Startupcoded", "Reel", 1), ("Indian Founders Co", "Carousel", 2), ("India Startup Story", "Static", 1)],
-                 brief="Founder-focused campaign showing Notion AI use cases for Indian startups."),
+            dict(
+                brand="Notion",
+                agency="Direct",
+                bd="core.bd@owledmedia.com",
+                price=520000,
+                status="Approved",
+                deal_status="In Progress",
+                days=10,
+                delivs=[
+                    ("Startupcoded", "Reel", 1),
+                    ("Indian Founders Co", "Carousel", 2),
+                    ("India Startup Story", "Static", 1),
+                ],
+                brief="Founder-focused campaign showing Notion AI use cases for Indian startups.",
+            ),
             # 5. Approved + completed
-            dict(brand="Zoho", agency="Direct", bd="snoball.bd@owledmedia.com", price=320000,
-                 status="Approved", deal_status="Completed", days=25,
-                 delivs=[("101x Founders", "Reel", 2)],
-                 brief="Zoho CRM launch reels series targeting bootstrapped founders."),
+            dict(
+                brand="Zoho",
+                agency="Direct",
+                bd="snoball.bd@owledmedia.com",
+                price=320000,
+                status="Approved",
+                deal_status="Completed",
+                days=25,
+                delivs=[("101x Founders", "Reel", 2)],
+                brief="Zoho CRM launch reels series targeting bootstrapped founders.",
+            ),
         ]
 
         for i, s in enumerate(samples):
@@ -2176,11 +2736,17 @@ async def seed(force: bool = False):
             bd_user = await db.users.find_one({"user_id": bd_user_id}, {"_id": 0})
             deal_id = new_id("deal")
             created = (now - timedelta(days=s["days"])).isoformat()
-            go_live = (now + timedelta(days=14)).isoformat() if s["status"] != "Approved" or s.get("deal_status") != "Completed" else (now - timedelta(days=2)).isoformat()
+            go_live = (
+                (now + timedelta(days=14)).isoformat()
+                if s["status"] != "Approved" or s.get("deal_status") != "Completed"
+                else (now - timedelta(days=2)).isoformat()
+            )
             deal = {
                 "deal_id": deal_id,
-                "brand_name": s["brand"], "agency_or_client_name": s["agency"],
-                "brief_text": s["brief"], "brief_link": "",
+                "brand_name": s["brand"],
+                "agency_or_client_name": s["agency"],
+                "brief_text": s["brief"],
+                "brief_link": "",
                 "assets_or_reference_links": [],
                 "price_closed_at": float(s["price"]),
                 "payment_due_date": (now + timedelta(days=30)).isoformat(),
@@ -2189,9 +2755,17 @@ async def seed(force: bool = False):
                 "submitted_by_team_id": bd_user["business_team_id"],
                 "admin_review_status": s["status"],
                 "deal_status": s.get("deal_status"),
-                "rejection_reason": s.get("comment", "") if s["status"] == "Rejected" else "",
-                "needs_more_info_comment": s.get("comment", "") if s["status"] == "Needs More Info" else "",
-                "approved_by_admin_id": user_ids["jaskaran.sethi@owledmedia.com"] if s["status"] == "Approved" else None,
+                "rejection_reason": (
+                    s.get("comment", "") if s["status"] == "Rejected" else ""
+                ),
+                "needs_more_info_comment": (
+                    s.get("comment", "") if s["status"] == "Needs More Info" else ""
+                ),
+                "approved_by_admin_id": (
+                    user_ids["jaskaran.sethi@owledmedia.com"]
+                    if s["status"] == "Approved"
+                    else None
+                ),
                 "approved_at": created if s["status"] == "Approved" else None,
                 "notes": "",
                 "created_at": created,
@@ -2205,92 +2779,158 @@ async def seed(force: bool = False):
                 for k in range(qty):
                     is_completed = s.get("deal_status") == "Completed"
                     is_in_progress = s.get("deal_status") == "In Progress"
-                    dv_status = "Completed" if is_completed else ("Designing" if is_in_progress and k == 0 else ("Writing" if is_in_progress else "Not Started"))
+                    dv_status = (
+                        "Completed"
+                        if is_completed
+                        else (
+                            "Designing"
+                            if is_in_progress and k == 0
+                            else ("Writing" if is_in_progress else "Not Started")
+                        )
+                    )
                     if is_in_progress and page_name == "Indian Founders Co":
                         dv_status = "Blocked"
-                    await db.deliverables.insert_one({
-                        "deliverable_id": new_id("dlv"),
-                        "deal_id": deal_id,
-                        "page_id": pid, "page_name": page_name,
-                        "deliverable_type": dtype,
-                        "go_live_date_time": go_live,
-                        "status": dv_status,
-                        "assigned_fulfillment_user_id": user_ids["om@owledmedia.com"] if s["status"] == "Approved" else None,
-                        "live_link": "https://instagram.com/p/sample" if is_completed else "",
-                        "views": (35000 + i * 12000 + k * 4500) if is_completed else 0,
-                        "notes": "",
-                        "created_at": created, "updated_at": now_iso(),
-                    })
+                    await db.deliverables.insert_one(
+                        {
+                            "deliverable_id": new_id("dlv"),
+                            "deal_id": deal_id,
+                            "page_id": pid,
+                            "page_name": page_name,
+                            "deliverable_type": dtype,
+                            "go_live_date_time": go_live,
+                            "status": dv_status,
+                            "assigned_fulfillment_user_id": (
+                                user_ids["om@owledmedia.com"]
+                                if s["status"] == "Approved"
+                                else None
+                            ),
+                            "live_link": (
+                                "https://instagram.com/p/sample" if is_completed else ""
+                            ),
+                            "views": (
+                                (35000 + i * 12000 + k * 4500) if is_completed else 0
+                            ),
+                            "notes": "",
+                            "created_at": created,
+                            "updated_at": now_iso(),
+                        }
+                    )
 
             # payment row
-            pay_status = "Paid" if s.get("deal_status") == "Completed" else ("Raised" if s["status"] == "Approved" else "Not Raised")
-            await db.payments.insert_one({
-                "payment_id": new_id("pay"),
-                "deal_id": deal_id,
-                "status": pay_status,
-                "payment_due_date": deal["payment_due_date"],
-                "amount_received": float(s["price"]) if pay_status == "Paid" else 0.0,
-                "payment_notes": "",
-                "last_updated_by": user_ids["jaskaran.sethi@owledmedia.com"],
-                "last_updated_by_name": "Jaskaran Sethi",
-                "last_updated_at": now_iso(),
-            })
+            pay_status = (
+                "Paid"
+                if s.get("deal_status") == "Completed"
+                else ("Raised" if s["status"] == "Approved" else "Not Raised")
+            )
+            await db.payments.insert_one(
+                {
+                    "payment_id": new_id("pay"),
+                    "deal_id": deal_id,
+                    "status": pay_status,
+                    "payment_due_date": deal["payment_due_date"],
+                    "amount_received": (
+                        float(s["price"]) if pay_status == "Paid" else 0.0
+                    ),
+                    "payment_notes": "",
+                    "last_updated_by": user_ids["jaskaran.sethi@owledmedia.com"],
+                    "last_updated_by_name": "Jaskaran Sethi",
+                    "last_updated_at": now_iso(),
+                }
+            )
 
             # Outputs for In Progress deal
             if s.get("deal_status") == "In Progress":
                 out_id_1 = new_id("out")
                 out_id_2 = new_id("out")
-                await db.fulfillment_outputs.insert_one({
-                    "output_id": out_id_1, "deal_id": deal_id, "deliverable_id": None,
-                    "output_type": "Google Doc Link", "title": "Notion launch — script v1",
-                    "writeup_text": "First draft of the founder-narrative script.",
-                    "link": "https://docs.google.com/document/d/sample",
-                    "file_attachment": "", "visible_to_bd": True,
-                    "status": "Shared with BD",
-                    "created_by": user_ids["om@owledmedia.com"],
-                    "created_by_name": "Om", "created_by_role": "fulfillment",
-                    "created_at": now_iso(), "updated_at": now_iso(),
-                })
-                await db.fulfillment_outputs.insert_one({
-                    "output_id": out_id_2, "deal_id": deal_id, "deliverable_id": None,
-                    "output_type": "Canva Link", "title": "Carousel — design v1",
-                    "writeup_text": "Carousel hero design, 10 slides.",
-                    "link": "https://canva.com/design/sample",
-                    "file_attachment": "", "visible_to_bd": True,
-                    "status": "Changes Requested",
-                    "created_by": user_ids["om@owledmedia.com"],
-                    "created_by_name": "Om", "created_by_role": "fulfillment",
-                    "created_at": now_iso(), "updated_at": now_iso(),
-                })
+                await db.fulfillment_outputs.insert_one(
+                    {
+                        "output_id": out_id_1,
+                        "deal_id": deal_id,
+                        "deliverable_id": None,
+                        "output_type": "Google Doc Link",
+                        "title": "Notion launch — script v1",
+                        "writeup_text": "First draft of the founder-narrative script.",
+                        "link": "https://docs.google.com/document/d/sample",
+                        "file_attachment": "",
+                        "visible_to_bd": True,
+                        "status": "Shared with BD",
+                        "created_by": user_ids["om@owledmedia.com"],
+                        "created_by_name": "Om",
+                        "created_by_role": "fulfillment",
+                        "created_at": now_iso(),
+                        "updated_at": now_iso(),
+                    }
+                )
+                await db.fulfillment_outputs.insert_one(
+                    {
+                        "output_id": out_id_2,
+                        "deal_id": deal_id,
+                        "deliverable_id": None,
+                        "output_type": "Canva Link",
+                        "title": "Carousel — design v1",
+                        "writeup_text": "Carousel hero design, 10 slides.",
+                        "link": "https://canva.com/design/sample",
+                        "file_attachment": "",
+                        "visible_to_bd": True,
+                        "status": "Changes Requested",
+                        "created_by": user_ids["om@owledmedia.com"],
+                        "created_by_name": "Om",
+                        "created_by_role": "fulfillment",
+                        "created_at": now_iso(),
+                        "updated_at": now_iso(),
+                    }
+                )
                 # sample comment from BD on the canva output
-                await db.client_feedback.insert_one({
-                    "feedback_id": new_id("fb"), "deal_id": deal_id, "deliverable_id": None,
-                    "output_id": out_id_2,
-                    "feedback_text": "Client wants the headline on slide 1 to lead with the founder, not the product. Can we swap them?",
-                    "image_attachment": "", "file_attachment": "", "reference_link": "",
-                    "status": "Open",
-                    "added_by_user_id": user_ids["core.bd@owledmedia.com"],
-                    "added_by_name": "OWLED Core BD",
-                    "added_by_role": "bd", "added_by_team": "OWLED Core",
-                    "created_at": now_iso(), "updated_at": now_iso(),
-                })
+                await db.client_feedback.insert_one(
+                    {
+                        "feedback_id": new_id("fb"),
+                        "deal_id": deal_id,
+                        "deliverable_id": None,
+                        "output_id": out_id_2,
+                        "feedback_text": "Client wants the headline on slide 1 to lead with the founder, not the product. Can we swap them?",
+                        "image_attachment": "",
+                        "file_attachment": "",
+                        "reference_link": "",
+                        "status": "Open",
+                        "added_by_user_id": user_ids["core.bd@owledmedia.com"],
+                        "added_by_name": "OWLED Core BD",
+                        "added_by_role": "bd",
+                        "added_by_team": "OWLED Core",
+                        "created_at": now_iso(),
+                        "updated_at": now_iso(),
+                    }
+                )
                 # fulfillment response on the same output
-                await db.client_feedback.insert_one({
-                    "feedback_id": new_id("fb"), "deal_id": deal_id, "deliverable_id": None,
-                    "output_id": out_id_2,
-                    "feedback_text": "Got it — swapping the order, will share v2 by EOD.",
-                    "image_attachment": "", "file_attachment": "", "reference_link": "",
-                    "status": "In Progress",
-                    "added_by_user_id": user_ids["om@owledmedia.com"],
-                    "added_by_name": "Om", "added_by_role": "fulfillment", "added_by_team": None,
-                    "created_at": now_iso(), "updated_at": now_iso(),
-                })
-                await db.internal_notes.insert_one({
-                    "note_id": new_id("note"), "deal_id": deal_id, "deliverable_id": None,
-                    "note_text": "Designer is on leave Wed-Thu, may slip by 1 day.",
-                    "created_by": user_ids["om@owledmedia.com"], "created_by_name": "Om",
-                    "created_at": now_iso(),
-                })
+                await db.client_feedback.insert_one(
+                    {
+                        "feedback_id": new_id("fb"),
+                        "deal_id": deal_id,
+                        "deliverable_id": None,
+                        "output_id": out_id_2,
+                        "feedback_text": "Got it — swapping the order, will share v2 by EOD.",
+                        "image_attachment": "",
+                        "file_attachment": "",
+                        "reference_link": "",
+                        "status": "In Progress",
+                        "added_by_user_id": user_ids["om@owledmedia.com"],
+                        "added_by_name": "Om",
+                        "added_by_role": "fulfillment",
+                        "added_by_team": None,
+                        "created_at": now_iso(),
+                        "updated_at": now_iso(),
+                    }
+                )
+                await db.internal_notes.insert_one(
+                    {
+                        "note_id": new_id("note"),
+                        "deal_id": deal_id,
+                        "deliverable_id": None,
+                        "note_text": "Designer is on leave Wed-Thu, may slip by 1 day.",
+                        "created_by": user_ids["om@owledmedia.com"],
+                        "created_by_name": "Om",
+                        "created_at": now_iso(),
+                    }
+                )
 
     return {"ok": True, "seeded": True}
 

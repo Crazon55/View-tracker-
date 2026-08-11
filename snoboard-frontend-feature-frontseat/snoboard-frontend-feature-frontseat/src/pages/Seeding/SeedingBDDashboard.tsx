@@ -8,7 +8,7 @@ import { FileText, CheckCircle2, AlertCircle, Eye, Wallet, Plus } from "lucide-r
 import { useAuth } from "@/contexts/AuthContext";
 import { bdTeamNameForRole } from "@/lib/accessModel";
 import { api } from "@/services/seeding/client";
-import { formatCurrency, formatDate } from "@/services/seeding/constants";
+import { formatCurrency, formatDate, overviewRangeParams, toStoredCalendarDate } from "@/services/seeding/constants";
 import { StatusBadge } from "@/components/seeding/StatusBadge";
 import { FramerPage } from "@/components/framer/Framer";
 
@@ -38,9 +38,7 @@ export default function SeedingBDDashboard() {
   const [filter, setFilter] = useState("all");
 
   useEffect(() => {
-    const now = new Date();
-    const from_date = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-    const to_date = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
+    const { from_date, to_date } = overviewRangeParams();
     Promise.all([
       api.get<any>("/reports/overview", {
         params: {

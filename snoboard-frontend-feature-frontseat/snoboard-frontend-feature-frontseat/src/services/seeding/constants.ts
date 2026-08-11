@@ -42,12 +42,11 @@ export const toDateInputValue = (iso?: string | null) => {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 };
 
-export const monthRange = () => {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
-  return { from_date: start, to_date: end };
-};
+export const monthRange = () => overviewRangeParams();
+
+/** Store a date-picker value without UTC shift (YYYY-MM-DD → YYYY-MM-DDT00:00:00). */
+export const toStoredCalendarDate = (dateInput: string) =>
+  dateInput ? `${dateInput}T00:00:00` : "";
 
 /** Local calendar month (YYYY-MM-DD) — avoids UTC shift from toISOString().slice(0, 10). */
 export const calendarMonthDateRange = () => {
