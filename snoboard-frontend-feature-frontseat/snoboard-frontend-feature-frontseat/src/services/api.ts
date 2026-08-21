@@ -476,7 +476,7 @@ export function createExpApi(playbook: string) {
       page_handle: string; content_type?: string; topic?: string;
       script?: string; status?: string; views?: number; day_date?: string;
       frontseat_pool?: boolean; source_pool_id?: string;
-      source?: string; video_format?: string; comp_link?: string;
+      source?: string; video_format?: string; content_format?: string; comp_link?: string;
       yt_url?: string; yt_timestamps?: string; frame_link?: string;
       kalakar_link?: string; drive_link?: string; created_by?: string;
       origin_playbook?: string; origin_idea_id?: string;

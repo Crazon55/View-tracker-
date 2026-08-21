@@ -11,7 +11,14 @@ import {
   canEditExperimentX,
   getPlaybookViewProfile,
 } from "@/lib/permissions";
-import { buildPlaybookContext, PLAYBOOK_CONFIGS, type PlaybookId } from "@/lib/playbookExperimentConfig";
+import {
+  buildPlaybookContext,
+  CONTENT_FORMATS,
+  CONTENT_FORMAT_ACCENT,
+  PLAYBOOK_CONFIGS,
+  type ContentFormat,
+  type PlaybookId,
+} from "@/lib/playbookExperimentConfig";
 import { PlaybookExperimentContext, usePlaybook } from "@/lib/playbookExperimentContext";
 import { deployExpIdeaToPlaybook } from "@/services/api";
 
@@ -1043,6 +1050,33 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
           </div>
         )}
 
+        {/* Format — the coarse News / A-roll split Content Distribution filters on. */}
+        <div>
+          <label style={ls}>Format</label>
+          {readOnly ? (
+            <span style={{ fontSize: 13, color: idea.content_format ? "#50E0B0" : "#52525b" }}>{idea.content_format || "—"}</span>
+          ) : (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {CONTENT_FORMATS.map(fmt => {
+                const active = idea.content_format === fmt;
+                return (
+                  <button
+                    key={fmt}
+                    type="button"
+                    onClick={() => onUpdate(idea.id, { content_format: active ? "" : fmt })}
+                    style={{
+                      padding: "7px 20px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer",
+                      border: active ? `2px solid ${CONTENT_FORMAT_ACCENT[fmt]}` : "1.5px solid #3f3f46",
+                      background: active ? `${CONTENT_FORMAT_ACCENT[fmt]}22` : "#18181b",
+                      color: active ? CONTENT_FORMAT_ACCENT[fmt] : "#71717a",
+                    }}
+                  >{fmt}</button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         {/* Video format */}
         <div>
           <label style={ls}>Video format</label>
@@ -1231,36 +1265,6 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
         {!readOnly && (
           <PerPageIdeaPanel idea={idea} onUpdate={onUpdate} canEditSchedule canEditPerformance={false} showFrameLink={false} showCompLink={false} />
         )}
-
-        {/* Edited by */}
-        <div>
-          <label style={ls}>Edited by</label>
-          <div style={{ display: "flex", gap: 8 }}>
-            {["Pulkit", "Varun"].map(name => {
-              const active = idea.edited_by === name;
-              return (
-                <button
-                  key={name}
-                  type="button"
-                  onClick={() => onUpdate(idea.id, { edited_by: active ? "" : name })}
-                  style={{
-                    padding: "7px 20px", borderRadius: 8, fontSize: 13, fontWeight: 600,
-                    cursor: "pointer", border: active ? "2px solid #7c3aed" : "1.5px solid #3f3f46",
-                    background: active ? "#7c3aed22" : "#18181b",
-                    color: active ? "#a78bfa" : "#71717a",
-                  }}
-                >{name}</button>
-              );
-            })}
-            {idea.edited_by && (
-              <button
-                type="button"
-                onClick={() => onUpdate(idea.id, { edited_by: "" })}
-                style={{ padding: "7px 12px", borderRadius: 8, fontSize: 12, cursor: "pointer", border: "1.5px solid #3f3f46", background: "transparent", color: "#52525b" }}
-              >Clear</button>
-            )}
-          </div>
-        </div>
 
         {/* Delete — only shown when explicitly allowed (not in Frontseat) */}
         {onDelete && !readOnly && (
@@ -1521,6 +1525,7 @@ function AddIdeaModal({ open, onAdd, onClose }: {
   const [type, setType]               = useState("reel");
   const [source, setSource]           = useState("original");
   const [videoFormat, setVideoFormat] = useState("");
+  const [contentFormat, setContentFormat] = useState("");
   const [topic, setTopic]             = useState("");
   const [hookVars, setHookVars]       = useState("");
   const [musicRef, setMusicRef]       = useState("");
@@ -1546,6 +1551,7 @@ function AddIdeaModal({ open, onAdd, onClose }: {
       yt_timestamps: source === "original" ? ytTs : "",
       comp_link: source === "competitor" ? compLink : "",
       created_by: createdBy, day_date: date, video_format: videoFormat,
+      content_format: contentFormat,
     });
     reset();
   };
@@ -1615,6 +1621,25 @@ function AddIdeaModal({ open, onAdd, onClose }: {
         <div>
           <label style={ls}>Created by</label>
           <div className="fglass-input" style={{ ...is, color: "#a1a1aa" }}>{createdBy || "—"}</div>
+        </div>
+
+        {/* Format — coarse News / A-roll split (Content Distribution filters on this). */}
+        <div>
+          <label style={ls}>Format</label>
+          <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+            {CONTENT_FORMATS.map(cf => (
+              <button
+                key={cf} type="button"
+                onClick={() => setContentFormat(v => v === cf ? "" : cf)}
+                style={{
+                  padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                  border: contentFormat === cf ? `2px solid ${CONTENT_FORMAT_ACCENT[cf]}` : "1.5px solid #3f3f46",
+                  background: contentFormat === cf ? `${CONTENT_FORMAT_ACCENT[cf]}22` : "#18181b",
+                  color: contentFormat === cf ? CONTENT_FORMAT_ACCENT[cf] : "#71717a",
+                }}
+              >{cf}</button>
+            ))}
+          </div>
         </div>
 
         {/* Video format */}
@@ -3379,15 +3404,17 @@ function QuickAddModal({ open, onAdd, onClose }: {
   const [ytTs, setYtTs]               = useState("");
   const [format, setFormat]           = useState<"reel" | "post">("reel");
   const [videoFormat, setVideoFormat] = useState("");
+  const [contentFormat, setContentFormat] = useState("");
 
   const reset = () => {
-    setTitle(""); setCompLink(""); setYtUrl(""); setYtTs(""); setFormat("reel"); setVideoFormat("");
+    setTitle(""); setCompLink(""); setYtUrl(""); setYtTs(""); setFormat("reel"); setVideoFormat(""); setContentFormat("");
   };
 
   const submit = () => {
     if (!title.trim()) return;
     onAdd({
       topic: title.trim(), source, content_type: format, video_format: videoFormat,
+      content_format: contentFormat,
       status: "new", page_handle: "",
       comp_link: source === "competitor" ? compLink : "",
       yt_url: source === "original" ? ytUrl : "",
@@ -3466,6 +3493,25 @@ function QuickAddModal({ open, onAdd, onClose }: {
             ))}
           </div>
         </div>
+        {/* Format — coarse News / A-roll split (Content Distribution filters on this). */}
+        <div>
+          <label style={ls}>Format</label>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {CONTENT_FORMATS.map(cf => (
+              <button
+                key={cf} type="button"
+                onClick={() => setContentFormat(v => v === cf ? "" : cf)}
+                style={{
+                  padding: "5px 11px", borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: "pointer",
+                  border: contentFormat === cf ? `2px solid ${CONTENT_FORMAT_ACCENT[cf]}` : "1.5px solid #3f3f46",
+                  background: contentFormat === cf ? `${CONTENT_FORMAT_ACCENT[cf]}22` : "#18181b",
+                  color: contentFormat === cf ? CONTENT_FORMAT_ACCENT[cf] : "#71717a",
+                }}
+              >{cf}</button>
+            ))}
+          </div>
+        </div>
+
         <div>
           <label style={ls}>Video format</label>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -3522,6 +3568,12 @@ function FrontseatPoolCard({ idea, letter, onDragStart, onClick, onDelete, readO
           ? <span style={{ fontSize: 9, color: "#7BB0FF", background: "#7BB0FF22", borderRadius: 4, padding: "1px 5px" }}>IG</span>
           : <span style={{ fontSize: 9, color: "#FF9580", background: "#FF958022", borderRadius: 4, padding: "1px 5px" }}>YT</span>
         }
+        {idea.content_format && (
+          <span style={{ fontSize: 9, fontWeight: 700, color: CONTENT_FORMAT_ACCENT[idea.content_format as ContentFormat] ?? "#71717a",
+            background: `${CONTENT_FORMAT_ACCENT[idea.content_format as ContentFormat] ?? "#71717a"}22`, borderRadius: 4, padding: "1px 5px" }}>
+            {idea.content_format}
+          </span>
+        )}
       </div>
       <p style={{ margin: 0, fontSize: 12, fontWeight: 500, color: "#e4e4e7", lineHeight: 1.4,
         overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
@@ -3571,6 +3623,12 @@ function FrontseatPageCard({ idea, letter, onClick, onRemoveFromPage }: {
         {idea.content_type && (
           <span style={{ fontSize: 10, color: "#52525b", background: "#27272a", borderRadius: 4, padding: "1px 5px" }}>{idea.content_type}</span>
         )}
+        {idea.content_format && (
+          <span style={{ fontSize: 9, fontWeight: 700, color: CONTENT_FORMAT_ACCENT[idea.content_format as ContentFormat] ?? "#71717a",
+            background: `${CONTENT_FORMAT_ACCENT[idea.content_format as ContentFormat] ?? "#71717a"}22`, borderRadius: 4, padding: "1px 5px" }}>
+            {idea.content_format}
+          </span>
+        )}
       </div>
       <p style={{ margin: 0, fontSize: 12, fontWeight: 500, color: "#e4e4e7", lineHeight: 1.4,
         overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
@@ -3588,10 +3646,20 @@ function FrontseatPageCard({ idea, letter, onClick, onRemoveFromPage }: {
   );
 }
 
+/**
+ * News / A-roll filter for Content Distribution. "all" passes everything; an untagged
+ * idea (content_format "") only shows under "all", so a filter never silently hides
+ * work behind a field nobody has filled in yet.
+ */
+function matchesContentFormat(idea: any, filter: string): boolean {
+  if (filter === "all") return true;
+  return (idea.content_format || "") === filter;
+}
+
 // ---------------------------------------------------------------------------
 // Frontseat tab — current-week ideas organised by page (view layer over Idea Bank)
 // ---------------------------------------------------------------------------
-function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boolean }) {
+function FrontseatTab({ readOnly, opsOnly, formatFilter = "all" }: { readOnly?: boolean; opsOnly?: boolean; formatFilter?: string }) {
   const { pages: playbookPages, pageColors, pageShort, api, id: playbookId } = usePlaybook();
   const qc = useQueryClient();
   const { can } = usePermissions();
@@ -3806,8 +3874,9 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
         i.frontseat_pool === true ||
         (i.frontseat_pool == null && i.status === "new")
       )
+      .filter((i: any) => matchesContentFormat(i, formatFilter))
       .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
-    [todayIdeas]
+    [todayIdeas, formatFilter]
   );
 
   // Letters a, b, c… in creation order — stable for the whole day
@@ -3824,7 +3893,9 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
   const ideasByPage = useMemo(() => {
     const result: Record<string, any[]> = {};
     playbookPages.forEach(p => { result[p] = []; });
-    todayIdeas.filter((i: any) => !i.frontseat_pool).forEach((idea: any) => {
+    todayIdeas
+      .filter((i: any) => !i.frontseat_pool && matchesContentFormat(i, formatFilter))
+      .forEach((idea: any) => {
       const pages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
       pages.forEach((p: string) => { if (result[p]) result[p].push(idea); });
     });
@@ -3837,7 +3908,7 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
       });
     });
     return result;
-  }, [todayIdeas, playbookPages, opsOnly]);
+  }, [todayIdeas, playbookPages, opsOnly, formatFilter]);
 
   const handleDrop = (page: string, e: React.DragEvent) => {
     if (readOnly) return;
@@ -3857,7 +3928,8 @@ function FrontseatTab({ readOnly, opsOnly }: { readOnly?: boolean; opsOnly?: boo
     const hasBaseEdit = !!(idea.drive_link || idea.frame_link);
     createCopyMut.mutate({
       topic: idea.topic, source: idea.source, content_type: idea.content_type,
-      video_format: idea.video_format || "", status: hasBaseEdit ? "base_edit" : "approved", page_handle: page,
+      video_format: idea.video_format || "", content_format: idea.content_format || "",
+      status: hasBaseEdit ? "base_edit" : "approved", page_handle: page,
       hook_variations: idea.hook_variations || "",
       comp_link: idea.comp_link || "", yt_url: idea.yt_url || "",
       yt_timestamps: idea.yt_timestamps || "",
@@ -4154,6 +4226,9 @@ function ExperimentXShell() {
     return (profile?.defaultTab as TabMode) ?? "idea-bank";
   });
   const [pageFilter, setPageFilter] = useState("all");
+  // News / A-roll filter — Content Distribution only, so it sits beside the page filter
+  // but renders on the frontseat tab alone.
+  const [formatFilter, setFormatFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
 
   if (!profile) {
@@ -4214,11 +4289,32 @@ function ExperimentXShell() {
           onChange={e => setSearch(e.target.value)}
           style={{ ...inp, width: 220, flex: "0 0 220px" }}
         />
+        {tab === "frontseat" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {(["all", ...CONTENT_FORMATS] as const).map(f => {
+              const on = formatFilter === f;
+              const accent = f === "all" ? "#a78bfa" : CONTENT_FORMAT_ACCENT[f];
+              return (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setFormatFilter(f)}
+                  style={{
+                    padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                    border: on ? `2px solid ${accent}` : "1.5px solid #3f3f46",
+                    background: on ? `${accent}22` : "#18181b",
+                    color: on ? accent : "#71717a",
+                  }}
+                >{f === "all" ? "All formats" : f}</button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Tab content — per-tab edit rights come from the role's view profile. */}
       <div>
-        {tab === "frontseat"     && <FrontseatTab readOnly={!canEditTab("frontseat")} />}
+        {tab === "frontseat"     && <FrontseatTab readOnly={!canEditTab("frontseat")} formatFilter={formatFilter} />}
         {/* Idea Bank IS the video-editor Production board (Approved → Base edit → Formatted → Posted). */}
         {tab === "idea-bank"     && <ProductionTab pageFilter={pageFilter} search={search} readOnly={!canEditTab("idea-bank")} />}
         {tab === "tracking"      && <TrackingTab pageFilter={pageFilter} search={search} viewOnly={!canEditTab("tracking")} />}

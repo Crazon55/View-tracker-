@@ -5391,6 +5391,7 @@ async def exp_create_idea(playbook: str, req: ExpIdeaCreate):
         "edited_by": req.edited_by,
         "test_result": req.test_result,
         "video_format": req.video_format,
+        "content_format": req.content_format,
         "frontseat_pool": req.frontseat_pool,
         "source_pool_id": req.source_pool_id,
         "page_posting_dates": req.page_posting_dates or {},
@@ -5479,6 +5480,7 @@ async def exp_deploy_idea_to_playbook(target_playbook: str, source_playbook: str
         "edited_by": "",
         "test_result": "",
         "video_format": "",
+        "content_format": source.get("content_format") or "",
         "frontseat_pool": False,
         "source_pool_id": None,
         "page_posting_dates": {},
@@ -5621,6 +5623,7 @@ async def exp_archive_week(playbook: str, request: Request):
             "yt_url": i.get("yt_url", ""),
             "yt_timestamps": i.get("yt_timestamps", ""),
             "comp_link": i.get("comp_link", ""),
+            "content_format": i.get("content_format", ""),
             "created_by": i.get("created_by", ""),
             "page_views": i.get("page_views", {}),
             "page_posting_dates": i.get("page_posting_dates", {}),
@@ -5647,7 +5650,7 @@ async def exp_update_content_bank_item(playbook: str, item_id: str, request: Req
     allowed = {"topic", "script", "views", "status", "content_type", "source", "hook_variations",
                 "music_ref", "frame_link", "yt_url", "yt_timestamps", "comp_link", "kalakar_link",
                 "drive_link", "page_views",
-                "created_by", "edited_by", "test_result", "video_format", "page_handle",
+                "created_by", "edited_by", "test_result", "video_format", "content_format", "page_handle",
                 "page_posting_dates", "page_posting_times", "page_captions", "page_live_links"}
     update_data = {k: v for k, v in body.items() if k in allowed}
     if not update_data:

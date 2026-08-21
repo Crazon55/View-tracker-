@@ -94,3 +94,17 @@ export const PLAYBOOK_NAV_ITEMS = (Object.values(PLAYBOOK_CONFIGS) as PlaybookEx
   label: p.label,
   emoji: p.emoji,
 }));
+
+/**
+ * Coarse editorial format — the News vs A-roll split Content Distribution filters on.
+ * Deliberately separate from ExperimentX's finer `video_format` taxonomy
+ * ("Viral a-roll", "A-roll massy", "Shark Tank", …): this is the two-bucket view,
+ * stored in its own `content_format` column so the vocabularies don't collide.
+ */
+export const CONTENT_FORMATS = ["News", "A-roll"] as const;
+export type ContentFormat = (typeof CONTENT_FORMATS)[number];
+
+export const CONTENT_FORMAT_ACCENT: Record<ContentFormat, string> = {
+  News: "#50E0B0",
+  "A-roll": "#F0C060",
+};

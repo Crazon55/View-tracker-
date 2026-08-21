@@ -15,7 +15,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { canonicalRole } from "@/lib/accessModel";
 import { createExpApi, type ExpApi } from "@/services/api";
-import { PLAYBOOK_CONFIGS, type PlaybookId } from "@/lib/playbookExperimentConfig";
+import {
+  CONTENT_FORMATS,
+  CONTENT_FORMAT_ACCENT,
+  PLAYBOOK_CONFIGS,
+  type ContentFormat,
+  type PlaybookId,
+} from "@/lib/playbookExperimentConfig";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -175,6 +181,7 @@ export default function IdeaEngineGallery() {
       return PB_API[target].createIdea({
         page_handle: "",
         content_type: idea.content_type || "reel",
+        content_format: idea.content_format || "",
         topic: idea.topic || "",
         status: "new",
         frontseat_pool: true,
@@ -340,12 +347,12 @@ function IdeaLinks({ idea, full }: { idea: any; full: boolean }) {
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
       {yt ? (
-        <>
-          <IdeaLinkChip href={yt} label="YouTube" accent="#f472b6" />
-          {ts ? <span style={{ fontSize: 11, color: "var(--f-faint)", fontVariantNumeric: "tabular-nums" }}>⏱ {ts}</span> : null}
-        </>
+        <IdeaLinkChip href={yt} label="YouTube" accent="#f472b6" />
       ) : comp ? (
         <IdeaLinkChip href={comp} label="Comp" accent="#D4952A" />
+      ) : null}
+      {(yt || comp) && ts ? (
+        <span style={{ fontSize: 11, color: "var(--f-faint)", fontVariantNumeric: "tabular-nums" }}>⏱ {ts}</span>
       ) : null}
       {full && kalakar ? <IdeaLinkChip href={kalakar} label="Kalakar" accent="#a78bfa" /> : null}
       {full && drive ? <IdeaLinkChip href={drive} label="Drive link" accent="#4A7FD4" /> : null}
@@ -486,6 +493,7 @@ function AddIdeaModal({ defaultDay, defaultPlaybook, author, onClose, onCreated 
   const [refLink, setRefLink] = useState("");
   const [timestamps, setTimestamps] = useState("");
   const [contentType, setContentType] = useState("Reel");
+  const [format, setFormat] = useState<ContentFormat | "">("");
   const [day, setDay] = useState(defaultDay);
   const [busy, setBusy] = useState(false);
 
@@ -502,12 +510,13 @@ function AddIdeaModal({ defaultDay, defaultPlaybook, author, onClose, onCreated 
         page_handle: "",
         topic: topic.trim(),
         content_type: contentType,
+        content_format: format || undefined,
         views: 0,
         day_date: day,
         created_by: author || undefined,
         comp_link: link && !ytLink ? link : undefined,
         yt_url: ytLink ? link : undefined,
-        yt_timestamps: ytLink ? (timestamps.trim() || undefined) : undefined,
+        yt_timestamps: timestamps.trim() || undefined,
       });
       toast.success("Idea added.");
       onCreated();
@@ -536,16 +545,36 @@ function AddIdeaModal({ defaultDay, defaultPlaybook, author, onClose, onCreated 
               ))}
             </div>
           </Field>
+          {/* Format — the coarse News / A-roll split Content Distribution filters on.
+              Same chip affordance as Playbook above; click an active chip to clear it. */}
+          <Field label="Format">
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {CONTENT_FORMATS.map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setFormat(format === f ? "" : f)}
+                  style={{
+                    ...datePillBase,
+                    cursor: "pointer",
+                    borderColor: format === f ? CONTENT_FORMAT_ACCENT[f] : "var(--f-line)",
+                    color: format === f ? "#fff" : "var(--f-dim)",
+                  }}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
+          </Field>
           <Field label="Idea name *"><input autoFocus value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="What's the idea?" className="fglass-input" style={modalInput} /></Field>
 
-          {/* Reference link (both modes). A YouTube link reveals a timestamps field beside it. */}
-          <div style={{ display: "grid", gridTemplateColumns: yt ? "1fr 150px" : "1fr", gap: 12 }}>
+          {/* Reference link + timestamps. Timestamps sit beside the link for comp
+              references too, not just YouTube — a comp has moments worth marking. */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 150px", gap: 12 }}>
             <Field label={yt ? "YouTube link" : "Comp / YouTube link"}>
               <input value={refLink} onChange={(e) => setRefLink(e.target.value)} placeholder="Paste comp or YouTube link" className="fglass-input" style={modalInput} />
             </Field>
-            {yt && (
-              <Field label="Timestamps"><input value={timestamps} onChange={(e) => setTimestamps(e.target.value)} placeholder="0:12, 1:45" className="fglass-input" style={modalInput} /></Field>
-            )}
+            <Field label="Timestamps"><input value={timestamps} onChange={(e) => setTimestamps(e.target.value)} placeholder="0:12, 1:45" className="fglass-input" style={modalInput} /></Field>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>

@@ -184,6 +184,7 @@ class ExpIdeaCreate(BaseModel):
     edited_by: str = ""
     test_result: str = ""
     video_format: str = ""
+    content_format: str = ""
     frontseat_pool: bool = False
     source_pool_id: str | None = None
     page_posting_dates: dict = {}
@@ -218,6 +219,7 @@ class ExpIdeaUpdate(BaseModel):
     edited_by: str | None = None
     test_result: str | None = None
     video_format: str | None = None
+    content_format: str | None = None
     frontseat_pool: bool | None = None
     source_pool_id: str | None = None
     page_posting_dates: dict | None = None
