@@ -14,7 +14,7 @@ from datetime import datetime, timezone, timedelta
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_BACKEND_ROOT / ".env")
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database.repositories.pages import get_page_repository
@@ -31,7 +31,7 @@ from app.schemas.request import (
     ChatRequest, ContentEntryCreate, ContentEntryUpdate,
     ExpIdeaCreate, ExpIdeaUpdate, ExpSettingsUpdate,
 )
-from app.auth import ALLOWED_DOMAIN
+from app.auth import ALLOWED_DOMAIN, require_admin
 from app.team_roles import (
     cleanup_team_roles,
     cleanup_content_strategists,
@@ -1312,8 +1312,8 @@ async def get_all_user_roles():
 
 
 @app.post("/api/v1/user-roles/cleanup")
-async def admin_cleanup_team_roles():
-    """Purge departed members and deprecated roles (same open API pattern as other routes)."""
+async def admin_cleanup_team_roles(_admin: dict = Depends(require_admin)):
+    """Purge departed members and deprecated roles."""
     from app.database.client import get_supabase_client
     client = get_supabase_client()
     ur = cleanup_team_roles(client)
@@ -1322,7 +1322,7 @@ async def admin_cleanup_team_roles():
 
 
 @app.post("/api/v1/user-role")
-async def set_user_role(req: dict):
+async def set_user_role(req: dict, _admin: dict = Depends(require_admin)):
     from app.database.client import get_supabase_client
     client = get_supabase_client()
     email = (req.get("email") or "").strip().lower()
@@ -1391,7 +1391,7 @@ async def get_role_access():
 
 
 @app.put("/api/v1/role-access/{role}")
-async def set_role_access(role: str, req: dict):
+async def set_role_access(role: str, req: dict, _admin: dict = Depends(require_admin)):
     """Persist one role's full area-access matrix."""
     role = (role or "").strip().lower()
     if not role:
@@ -1431,7 +1431,7 @@ async def get_user_access_modes():
 
 
 @app.put("/api/v1/user-access-mode")
-async def set_user_access_mode(req: dict):
+async def set_user_access_mode(req: dict, _admin: dict = Depends(require_admin)):
     """Set one person's access mode. Default (absent) = 'edit'."""
     email = (req.get("email") or "").strip().lower()
     mode = str(req.get("mode") or "").strip().lower()
@@ -1523,7 +1523,7 @@ async def get_user_access():
 
 
 @app.put("/api/v1/user-access")
-async def set_user_access(req: dict):
+async def set_user_access(req: dict, _admin: dict = Depends(require_admin)):
     """Persist one person's full area-access matrix (Supabase + local file)."""
     email = (req.get("email") or "").strip().lower()
     access = req.get("access")
@@ -1544,12 +1544,12 @@ async def set_user_access(req: dict):
 
 
 @app.delete("/api/v1/user-role/{email}")
-async def delete_user_role(email: str):
+async def delete_user_role(email: str, _admin: dict = Depends(require_admin)):
     return await _remove_user_role_impl(email)
 
 
 @app.post("/api/v1/user-role/remove")
-async def remove_user_role_post(req: dict):
+async def remove_user_role_post(req: dict, _admin: dict = Depends(require_admin)):
     """Remove a team member."""
     email = req.get("email")
     if not email:
