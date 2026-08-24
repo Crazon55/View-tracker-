@@ -75,9 +75,9 @@ app.include_router(fsi_router, prefix="/api/v1/fsi")
 app.include_router(seeding_router, prefix="/api/seeding")  # merged Seeding backend
 register_seeding_middleware(app)
 
-# Exact origins win when ALLOWED_ORIGINS is set (comma-separated). Set it when the
-# frontend moves to a custom domain — the fallback regex only covers Cloud Run hosts
-# in this project plus local dev.
+# Set ALLOWED_ORIGINS (comma-separated) for custom domains. It adds to, rather than
+# replaces, the regex below — so a custom domain doesn't knock out the Cloud Run URL
+# or local dev.
 _ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()]
 _CLOUD_RUN_PROJECT = os.environ.get("CLOUD_RUN_PROJECT_NUMBER", "32085867405")
 _ORIGIN_REGEX = (
@@ -89,10 +89,19 @@ _ORIGIN_REGEX = (
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_ALLOWED_ORIGINS,
-    allow_origin_regex=None if _ALLOWED_ORIGINS else _ORIGIN_REGEX,
+    allow_origin_regex=_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# A blocked origin surfaces in the browser as an opaque CORS error, so record the
+# effective policy at boot to make it diagnosable from the service logs.
+logger.info(
+    "CORS: exact_origins=%s regex=%s | API docs enabled=%s",
+    _ALLOWED_ORIGINS or "(none)",
+    _ORIGIN_REGEX,
+    _DOCS_ENABLED,
 )
 
 
