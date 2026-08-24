@@ -31,7 +31,7 @@ from app.schemas.request import (
     ChatRequest, ContentEntryCreate, ContentEntryUpdate,
     ExpIdeaCreate, ExpIdeaUpdate, ExpSettingsUpdate,
 )
-from app.auth import ALLOWED_DOMAIN, require_admin
+from app.auth import ALLOWED_DOMAIN, is_admin_role, require_admin, require_auth
 from app.team_roles import (
     cleanup_team_roles,
     cleanup_content_strategists,
@@ -1343,8 +1343,16 @@ async def admin_cleanup_team_roles(_admin: dict = Depends(require_admin)):
     return {"success": True, "data": {"user_roles": ur, "content_strategists": cs}}
 
 
+def _caller_is_admin(client, claims: dict) -> bool:
+    caller_email = (claims.get("email") or "").strip().lower()
+    if not caller_email:
+        return False
+    rows = client.table("user_roles").select("role").eq("email", caller_email).execute().data
+    return bool(rows) and is_admin_role(rows[0].get("role", ""))
+
+
 @app.post("/api/v1/user-role")
-async def set_user_role(req: dict, _admin: dict = Depends(require_admin)):
+async def set_user_role(req: dict, claims: dict = Depends(require_auth)):
     from app.database.client import get_supabase_client
     client = get_supabase_client()
     email = (req.get("email") or "").strip().lower()
@@ -1362,6 +1370,14 @@ async def set_user_role(req: dict, _admin: dict = Depends(require_admin)):
     if name:
         payload["name"] = name
     existing = client.table("user_roles").select("id,name,role").eq("email", email).execute().data
+
+    # Admins may set any role. Everyone else gets exactly one self-service action:
+    # creating their own "pending" row on first login, which grants no access and is
+    # what puts them in the admin's queue. Any other write requires admin.
+    if not _caller_is_admin(client, claims):
+        caller_email = (claims.get("email") or "").strip().lower()
+        if email != caller_email or role != "pending" or existing:
+            raise HTTPException(status_code=403, detail="Admin access required")
     try:
         if existing:
             client.table("user_roles").update(payload).eq("email", email).execute()
