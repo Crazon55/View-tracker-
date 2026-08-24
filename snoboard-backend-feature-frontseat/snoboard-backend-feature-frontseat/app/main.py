@@ -60,14 +60,36 @@ from app.seeding.routes import (
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="View Tracker", version="1.0.0")
+# Interactive docs enumerate every route and are off unless explicitly enabled.
+# Set ENABLE_API_DOCS=true locally to get /docs back.
+_DOCS_ENABLED = os.environ.get("ENABLE_API_DOCS", "false").strip().lower() in {"true", "1", "yes"}
+
+app = FastAPI(
+    title="View Tracker",
+    version="1.0.0",
+    docs_url="/docs" if _DOCS_ENABLED else None,
+    redoc_url="/redoc" if _DOCS_ENABLED else None,
+    openapi_url="/openapi.json" if _DOCS_ENABLED else None,
+)
 app.include_router(fsi_router, prefix="/api/v1/fsi")
 app.include_router(seeding_router, prefix="/api/seeding")  # merged Seeding backend
 register_seeding_middleware(app)
 
+# Exact origins win when ALLOWED_ORIGINS is set (comma-separated). Set it when the
+# frontend moves to a custom domain — the fallback regex only covers Cloud Run hosts
+# in this project plus local dev.
+_ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+_CLOUD_RUN_PROJECT = os.environ.get("CLOUD_RUN_PROJECT_NUMBER", "32085867405")
+_ORIGIN_REGEX = (
+    rf"^https://[a-z0-9-]+-{re.escape(_CLOUD_RUN_PROJECT)}\.[a-z0-9-]+\.run\.app$"
+    r"|^http://localhost(:\d+)?$"
+    r"|^http://127\.0\.0\.1(:\d+)?$"
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
+    allow_origin_regex=None if _ALLOWED_ORIGINS else _ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
