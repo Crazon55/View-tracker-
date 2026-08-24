@@ -31,7 +31,7 @@ from app.schemas.request import (
     ChatRequest, ContentEntryCreate, ContentEntryUpdate,
     ExpIdeaCreate, ExpIdeaUpdate, ExpSettingsUpdate,
 )
-from app.auth import ALLOWED_DOMAIN, is_admin_role, require_admin, require_auth
+from app.auth import ALLOWED_DOMAIN, is_admin_role, parse_roles, require_auth
 from app.team_roles import (
     cleanup_team_roles,
     cleanup_content_strategists,
@@ -75,9 +75,10 @@ app.include_router(fsi_router, prefix="/api/v1/fsi")
 app.include_router(seeding_router, prefix="/api/seeding")  # merged Seeding backend
 register_seeding_middleware(app)
 
-# Set ALLOWED_ORIGINS (comma-separated) for custom domains. It adds to, rather than
-# replaces, the regex below — so a custom domain doesn't knock out the Cloud Run URL
-# or local dev.
+# CORS stays open until ALLOWED_ORIGINS names the frontend's domain, so deploying
+# this can't break a frontend whose host isn't known here yet. Setting the variable
+# (comma-separated) switches on the lockdown with no code change; the Cloud Run hosts
+# for this project and local dev are then allowed alongside it.
 _ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()]
 _CLOUD_RUN_PROJECT = os.environ.get("CLOUD_RUN_PROJECT_NUMBER", "32085867405")
 _ORIGIN_REGEX = (
@@ -88,8 +89,8 @@ _ORIGIN_REGEX = (
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_ALLOWED_ORIGINS,
-    allow_origin_regex=_ORIGIN_REGEX,
+    allow_origins=_ALLOWED_ORIGINS or ["*"],
+    allow_origin_regex=_ORIGIN_REGEX if _ALLOWED_ORIGINS else None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -98,9 +99,10 @@ app.add_middleware(
 # A blocked origin surfaces in the browser as an opaque CORS error, so record the
 # effective policy at boot to make it diagnosable from the service logs.
 logger.info(
-    "CORS: exact_origins=%s regex=%s | API docs enabled=%s",
-    _ALLOWED_ORIGINS or "(none)",
-    _ORIGIN_REGEX,
+    "CORS: %s | API docs enabled=%s",
+    f"restricted to {_ALLOWED_ORIGINS} + {_ORIGIN_REGEX}"
+    if _ALLOWED_ORIGINS
+    else "OPEN (set ALLOWED_ORIGINS to restrict)",
     _DOCS_ENABLED,
 )
 
@@ -1342,22 +1344,49 @@ async def get_all_user_roles():
     return {"success": True, "data": cleaned}
 
 
+def _can_manage_roles(claims: dict) -> bool:
+    """Who may write to the Users & Roles surface.
+
+    Mirrors how the frontend gates that page — an admin role, or an explicit
+    user/role override granting the `users_roles` area — so the API check can't
+    lock out someone who has been granted access through the UI.
+    """
+    email = (claims.get("email") or "").strip().lower()
+    if not email:
+        return False
+
+    from app.database.client import get_supabase_client
+
+    try:
+        rows = get_supabase_client().table("user_roles").select("role").eq("email", email).execute().data
+    except Exception as exc:
+        logger.warning("role lookup failed for %s: %s", email, exc)
+        return False
+
+    role_str = (rows[0].get("role") or "") if rows else ""
+    if is_admin_role(role_str):
+        return True
+    if (_read_user_access().get(email) or {}).get("users_roles") == "edit":
+        return True
+    role_access = _read_role_access()
+    return any((role_access.get(r) or {}).get("users_roles") == "edit" for r in parse_roles(role_str))
+
+
+async def require_role_admin(request: Request):
+    claims = await require_auth(request)
+    if not _can_manage_roles(claims):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return claims
+
+
 @app.post("/api/v1/user-roles/cleanup")
-async def admin_cleanup_team_roles(_admin: dict = Depends(require_admin)):
+async def admin_cleanup_team_roles(_admin: dict = Depends(require_role_admin)):
     """Purge departed members and deprecated roles."""
     from app.database.client import get_supabase_client
     client = get_supabase_client()
     ur = cleanup_team_roles(client)
     cs = cleanup_content_strategists(client)
     return {"success": True, "data": {"user_roles": ur, "content_strategists": cs}}
-
-
-def _caller_is_admin(client, claims: dict) -> bool:
-    caller_email = (claims.get("email") or "").strip().lower()
-    if not caller_email:
-        return False
-    rows = client.table("user_roles").select("role").eq("email", caller_email).execute().data
-    return bool(rows) and is_admin_role(rows[0].get("role", ""))
 
 
 @app.post("/api/v1/user-role")
@@ -1383,7 +1412,7 @@ async def set_user_role(req: dict, claims: dict = Depends(require_auth)):
     # Admins may set any role. Everyone else gets exactly one self-service action:
     # creating their own "pending" row on first login, which grants no access and is
     # what puts them in the admin's queue. Any other write requires admin.
-    if not _caller_is_admin(client, claims):
+    if not _can_manage_roles(claims):
         caller_email = (claims.get("email") or "").strip().lower()
         if email != caller_email or role != "pending" or existing:
             raise HTTPException(status_code=403, detail="Admin access required")
@@ -1438,7 +1467,7 @@ async def get_role_access():
 
 
 @app.put("/api/v1/role-access/{role}")
-async def set_role_access(role: str, req: dict, _admin: dict = Depends(require_admin)):
+async def set_role_access(role: str, req: dict, _admin: dict = Depends(require_role_admin)):
     """Persist one role's full area-access matrix."""
     role = (role or "").strip().lower()
     if not role:
@@ -1478,7 +1507,7 @@ async def get_user_access_modes():
 
 
 @app.put("/api/v1/user-access-mode")
-async def set_user_access_mode(req: dict, _admin: dict = Depends(require_admin)):
+async def set_user_access_mode(req: dict, _admin: dict = Depends(require_role_admin)):
     """Set one person's access mode. Default (absent) = 'edit'."""
     email = (req.get("email") or "").strip().lower()
     mode = str(req.get("mode") or "").strip().lower()
@@ -1570,7 +1599,7 @@ async def get_user_access():
 
 
 @app.put("/api/v1/user-access")
-async def set_user_access(req: dict, _admin: dict = Depends(require_admin)):
+async def set_user_access(req: dict, _admin: dict = Depends(require_role_admin)):
     """Persist one person's full area-access matrix (Supabase + local file)."""
     email = (req.get("email") or "").strip().lower()
     access = req.get("access")
@@ -1591,12 +1620,12 @@ async def set_user_access(req: dict, _admin: dict = Depends(require_admin)):
 
 
 @app.delete("/api/v1/user-role/{email}")
-async def delete_user_role(email: str, _admin: dict = Depends(require_admin)):
+async def delete_user_role(email: str, _admin: dict = Depends(require_role_admin)):
     return await _remove_user_role_impl(email)
 
 
 @app.post("/api/v1/user-role/remove")
-async def remove_user_role_post(req: dict, _admin: dict = Depends(require_admin)):
+async def remove_user_role_post(req: dict, _admin: dict = Depends(require_role_admin)):
     """Remove a team member."""
     email = req.get("email")
     if not email:
