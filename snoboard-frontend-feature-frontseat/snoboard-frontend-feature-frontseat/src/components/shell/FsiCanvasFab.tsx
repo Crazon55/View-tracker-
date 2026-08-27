@@ -1,4 +1,5 @@
-// Floating FSI Canvas button (bottom-left).
+// Floating FSI Canvas button (bottom-right — bottom-left is the collapsible
+// sidebar's own footer controls now, and its width varies as it collapses/expands).
 import { Link } from "react-router-dom";
 import { Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -9,7 +10,7 @@ export function FsiCanvasFab() {
       to="/fsi-canvas"
       title="FSI Canvas"
       className={cn(
-        "fixed bottom-5 left-5 z-[60] flex items-center gap-2 rounded-full px-4 py-2.5",
+        "fixed bottom-5 right-5 z-[60] flex items-center gap-2 rounded-full px-4 py-2.5",
         "bg-gradient-to-br from-[#5b3a1a] to-[#7a4d22] text-[#f5e6d0]",
         "text-sm font-bold no-underline",
         "shadow-lg shadow-black/50",

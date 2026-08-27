@@ -3,11 +3,10 @@
 // grouped Home · Content · Seeding · Team growth · Users. Role-gated via `requires`.
 // ─────────────────────────────────────────────────────────────────────────────
 import {
-  Clapperboard, Timer, Newspaper, Ticket, Scissors, FlaskConical,
+  Clapperboard, Timer, Newspaper, Ticket, Scissors, FlaskConical, Kanban,
   FileText, TrendingUp, ClipboardCheck, Handshake, Plus, Lightbulb,
   Users, ShieldCheck, LayoutDashboard, BarChart3, type LucideIcon,
 } from "lucide-react";
-import { PLAYBOOK_CONFIGS, type PlaybookId } from "@/lib/playbookExperimentConfig";
 import { canSeeAnyNonSeeding, canSeeAnySeeding, canView, type PersonAccess } from "@/lib/accessModel";
 
 export type Gate = "seeding" | "admin"; // undefined = everyone
@@ -16,23 +15,13 @@ export type NavMenu =
   | { link: string; label: string; requires?: Gate }
   | { label: string; items: NavLeaf[]; requires?: Gate };
 
-const PLAYBOOK_DESCS: Record<PlaybookId, string> = {
-  bpb: "50M+ views — idea engine",
-  xf: "Entrepreneur & startup reels",
-  tech: "Tech pages experiment bank",
-};
-
-const playbookNavLeaves: NavLeaf[] = (["bpb", "xf", "tech"] as const).map((id) => {
-  const p = PLAYBOOK_CONFIGS[id];
-  return { to: p.route, label: p.label, desc: PLAYBOOK_DESCS[id], icon: FlaskConical };
-});
-
 export const NAV: NavMenu[] = [
   { link: "/", label: "Home" },
 
   { label: "Content", items: [
     { to: "/idea-engine", label: "Idea Engine", desc: "All playbook ideas, one gallery", icon: Lightbulb },
-    ...playbookNavLeaves,
+    { to: "/content-distribution", label: "Content Distribution", desc: "All pages, one board", icon: FlaskConical },
+    { to: "/production",      label: "Production",   desc: "Pipeline board",         icon: Kanban },
     { to: "/news",            label: "News Feed",     desc: "Pre-research feed",      icon: Newspaper },
     { to: "/tickets",         label: "Tickets",       desc: "Bug / request kitchen",  icon: Ticket },
     { to: "http://16.112.125.207:5173/", label: "Pintu", desc: "Batch editor", icon: Scissors, external: true },
@@ -55,7 +44,6 @@ export const NAV: NavMenu[] = [
 
   { label: "Team growth", items: [
     { to: "/growth",           label: "Growth",           desc: "Monthly views",   icon: TrendingUp },
-    { to: "/pages",            label: "IPs / Pages",      desc: "Tracked pages",   icon: FileText },
   ]},
 
   { label: "Users", requires: "admin", items: [

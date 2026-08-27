@@ -5411,12 +5411,43 @@ async def exp_list_idea_bank(
     week: int | None = None,
     page: str | None = None,
     day_date: str | None = None,
+    pending_only: str | None = None,
+    top_performers: str | None = None,
     enrich_cross: str | None = None,
 ):
     pb = validate_playbook(playbook)
     client = get_supabase_client()
     q = _exp_idea_query(client, pb).order("day_date", desc=False).order("created_at", desc=False)
-    if day_date:
+    if top_performers in ("1", "true", "True"):
+        # Idea Engine's "Top 6": a reel with >=200k views, or a carousel with >=1k likes.
+        # Not gated on status="posted" — that's a separate, rare production-pipeline stage
+        # (Approved -> Base edit -> Formatted -> Posted, ~30 rows total); real performance
+        # data lives on ideas at any stage (new/testing/proven_ideas/...), wherever someone
+        # recorded the views/likes. Only excludes "kill" so a dead idea can't headline this.
+        # content_type is stored inconsistently-cased ("Reel" from the Add/Edit modal vs
+        # "reel" elsewhere) so this matches case-insensitively. The threshold itself keeps
+        # the result set small — no separate row limit needed.
+        q = q.neq("status", "kill").or_(
+            "and(content_type.ilike.reel,views.gte.200000),"
+            "and(content_type.ilike.carousel,likes.gte.1000)"
+        ).limit(100)
+    elif pending_only in ("1", "true", "True"):
+        # Production: anything not yet posted carries forward day to day until it is —
+        # plus today's posted copies, so they still show (briefly) in the Posted column
+        # before Tracking takes over from tomorrow. Floored at a FIXED start date (when
+        # this carry-forward behavior shipped), not a rolling window off "today" — a
+        # rolling window would itself age old-but-still-open cards back out a few weeks
+        # later, quietly breaking "carries forward until posted". The floor exists only
+        # to keep pre-existing backlog (1000+ rows going back months, never marked
+        # posted/killed) from flooding in on day one and blowing past Supabase's row cap.
+        from datetime import date
+        EXP_PENDING_CARRYOVER_START = "2026-08-27"
+        q = (
+            q.not_.is_("source_pool_id", "null")
+            .gte("day_date", EXP_PENDING_CARRYOVER_START)
+            .or_(f"status.neq.posted,day_date.eq.{date.today()}")
+        )
+    elif day_date:
         q = q.eq("day_date", day_date)
     elif week is not None:
         q = q.eq("week_number", week)
@@ -5452,6 +5483,7 @@ async def exp_create_idea(playbook: str, req: ExpIdeaCreate):
         "script": req.script,
         "status": req.status,
         "views": req.views,
+        "likes": req.likes,
         "week_number": week_num,
         "day_date": day_str,
         "source": req.source,
@@ -5474,6 +5506,7 @@ async def exp_create_idea(playbook: str, req: ExpIdeaCreate):
         "page_posting_times": req.page_posting_times or {},
         "page_captions": req.page_captions or {},
         "page_live_links": req.page_live_links or {},
+        "assigned_to": req.assigned_to,
     }
     if req.origin_playbook and req.origin_idea_id:
         row["origin_playbook"] = validate_playbook(req.origin_playbook)

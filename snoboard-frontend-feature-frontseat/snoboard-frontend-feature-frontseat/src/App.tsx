@@ -4,22 +4,17 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { getDeadlines, getSixDayConfig, getSixDayDeadlines, getTickets } from "@/services/api";
-import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate, Navigate, useParams } from "react-router-dom";
-import { FileText, Film, Users, LayoutDashboard, Menu, TrendingUp, Radio, Lightbulb, LogOut, Swords, Image, Kanban, Scissors, ClipboardList, Ticket, Newspaper, Sparkles, ShieldCheck, FlaskConical, Eye } from "lucide-react";
+import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate, Navigate } from "react-router-dom";
+import { Sun, Moon } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAreaAccess } from "@/hooks/useAreaAccess";
-import { isRouteAllowed, canAccessPintu } from "@/lib/permissions";
-import { PLAYBOOK_CONFIGS } from "@/lib/playbookExperimentConfig";
+import { isRouteAllowed } from "@/lib/permissions";
 import { useNotifications, NotificationProvider } from "@/hooks/useNotifications";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import Login from "./pages/Login";
 
 import Dashboard from "./pages/Dashboard";
 import WrapView from "./pages/WrapView";
-import PageDetail from "./pages/PageDetail";
-import PagesView from "./pages/PagesView";
 import PostsView from "./pages/PostsView";
 import ReelsStage1View from "./pages/ReelsStage1View";
 import GrowthView from "./pages/GrowthView";
@@ -40,10 +35,12 @@ import ExperimentX from "./pages/ExperimentX";
 import FsiCanvasHub from "./pages/FsiCanvas/FsiCanvasHub";
 import FsiCanvasWorkspace from "./pages/FsiCanvas/FsiCanvasWorkspace";
 import NotFound from "./pages/NotFound";
-import { FramerTopNav } from "./components/shell/FramerTopNav";
+import { AppSidebar } from "./components/shell/AppSidebar";
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { WavyGridBackground } from "./components/shell/WavyGridBackground";
 import { FsiCanvasFab } from "./components/shell/FsiCanvasFab";
 import { DebugBoundary } from "./components/shell/DebugBoundary";
+import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 import SeedingOverview from "./pages/Seeding/SeedingOverview";
 import SeedingBDDashboard from "./pages/Seeding/SeedingBDDashboard";
 import SeedingApprovalQueue from "./pages/Seeding/SeedingApprovalQueue";
@@ -64,44 +61,8 @@ import { RolePreviewBanner } from "./components/RolePreviewBanner";
 import { RolePreviewPicker } from "./components/RolePreviewPicker";
 import { RolePreviewRouteGuard } from "./components/RolePreviewRouteGuard";
 import { RequireArea } from "./components/RequireArea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 const queryClient = new QueryClient();
-
-function RedirectPostIpDetail() {
-  const { pageId } = useParams();
-  return <Navigate to={`/pages/${pageId}?mode=posts`} replace />;
-}
-
-function RedirectLegacyPageDetail() {
-  const { pageId } = useParams();
-  return <Navigate to={`/pages/${pageId}`} replace />;
-}
-
-function getGreeting(): string {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Good morning";
-  if (hour < 17) return "Good afternoon";
-  return "Good evening";
-}
-
-const NAME_OVERRIDES: Record<string, string> = {
-  "krishna.koushik@owledmedia.com": "Koushik",
-};
-
-function getFirstName(user: { user_metadata?: { full_name?: string; name?: string }; email?: string } | null): string {
-  const email = user?.email || "";
-  if (NAME_OVERRIDES[email]) return NAME_OVERRIDES[email];
-  const fullName = user?.user_metadata?.full_name || user?.user_metadata?.name || "";
-  if (fullName) return fullName.split(" ")[0];
-  return email.split("@")[0] || "";
-}
 
 const ANIMALS = [
   "\u{1F436}", "\u{1F431}", "\u{1F43B}", "\u{1F43C}", "\u{1F428}", "\u{1F437}",
@@ -300,164 +261,6 @@ function AnimalPicker({ userId }: { userId: string | undefined }) {
   );
 }
 
-type NavItem = {
-  to: string;
-  label: string;
-  icon: typeof LayoutDashboard;
-  external?: boolean;
-};
-
-const playbookNavItems: NavItem[] = (["bpb", "xf", "tech"] as const).map((id) => ({
-  to: PLAYBOOK_CONFIGS[id].route,
-  label: PLAYBOOK_CONFIGS[id].label,
-  icon: FlaskConical,
-}));
-
-const navItems: NavItem[] = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/fsi-canvas", label: "FSI Canvas", icon: Sparkles },
-  { to: "/content-tracker", label: "Reel Tracker", icon: ClipboardList },
-  ...playbookNavItems,
-  { to: "/post-tracker", label: "Post Tracker", icon: Image },
-  { to: "/six-day-tracker", label: "6-Day Tracker", icon: Radio },
-  { to: "/tickets", label: "Tickets", icon: Ticket },
-  { to: "/news", label: "News Feed", icon: Newspaper },
-  { to: "/growth", label: "Growth", icon: TrendingUp },
-  { to: "/pages", label: "IPs", icon: Users },
-  { to: "http://16.112.125.207:5173/", label: "Pintu", icon: Scissors, external: true },
-];
-
-function FsiCanvasMenuButton({ onNavigate }: { onNavigate?: () => void }) {
-  const navigate = useNavigate();
-  const { role } = usePermissions();
-  if (!isRouteAllowed(role, "/fsi-canvas")) return null;
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        navigate("/fsi-canvas");
-        onNavigate?.();
-      }}
-      className="flex w-full items-center gap-3 rounded-lg border border-amber-500/40 bg-amber-500/15 px-3 py-3 text-sm font-semibold text-amber-100 transition-colors hover:bg-amber-500/25 mb-2"
-    >
-      <Sparkles className="h-4 w-4 shrink-0" />
-      FSI Canvas
-    </button>
-  );
-}
-
-function HamburgerMenu() {
-  const [open, setOpen] = useState(false);
-  const navigate = useNavigate();
-  const { user, signOut, ROLES, canUseRolePreview } = useAuth();
-  const { can, role, isRolePreviewActive, setRolePreview } = usePermissions();
-  const allowedNavItems = navItems.filter((item) =>
-    item.external
-      ? canAccessPintu(role, user?.email, { rolePreviewActive: isRolePreviewActive })
-      : isRouteAllowed(role, item.to)
-  );
-
-  const { data: assignedTickets = [] } = useQuery<any[]>({
-    queryKey: ["tickets-assigned-badge", (user?.email || "").toLowerCase()],
-    queryFn: () => getTickets({ assigned_to_email: user?.email || "" }),
-    enabled: !!user?.email,
-    refetchInterval: 20_000,
-  });
-
-  const ticketsBadgeCount = assignedTickets.filter((t: any) => (t?.status || "") !== "resolved").length;
-
-  return (
-    <div className={`fixed left-5 z-50 ${isRolePreviewActive ? "top-14" : "top-5"}`}>
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-10 w-10 rounded-xl bg-zinc-900/80 border border-zinc-800 backdrop-blur-sm hover:bg-zinc-800 hover:border-violet-500/50"
-          >
-            <Menu className="w-5 h-5 text-white" />
-          </Button>
-        </SheetTrigger>
-        <SheetContent side="left" className="w-64 bg-zinc-950 border-zinc-800 p-0 flex flex-col">
-          <div className="px-5 py-6 border-b border-zinc-800">
-            <h1 className="text-lg font-bold text-white tracking-tight">FSBOARD</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">Frontseat Media</p>
-            {import.meta.env.DEV && (
-              <p className="mt-2 text-[10px] font-medium uppercase tracking-wide text-amber-400">
-                Local dev · port 8080
-              </p>
-            )}
-          </div>
-          <nav className="px-3 py-4 space-y-1 flex-1 overflow-y-auto">
-            <FsiCanvasMenuButton onNavigate={() => setOpen(false)} />
-            {allowedNavItems.filter((item) => item.to !== "/fsi-canvas").map(({ to, label, icon: Icon, external }) => (
-              <button
-                key={to}
-                onClick={() => {
-                  if (external) {
-                    window.open(to, "_blank", "noopener,noreferrer");
-                  } else {
-                    navigate(to);
-                  }
-                  setOpen(false);
-                }}
-                className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors w-full text-left text-zinc-400 hover:text-white hover:bg-zinc-900"
-              >
-                <Icon className="w-4 h-4" />
-                <span className="flex-1">{label}</span>
-                {label === "Tickets" && ticketsBadgeCount > 0 ? (
-                  <span className="min-w-[18px] h-[18px] px-1.5 rounded-full bg-violet-500/20 border border-violet-500/30 text-[10px] font-black text-violet-100 flex items-center justify-center">
-                    {ticketsBadgeCount}
-                  </span>
-                ) : null}
-              </button>
-            ))}
-          </nav>
-          <div className="px-3 py-4 border-t border-zinc-800">
-            <p className="px-3 text-xs text-zinc-600 truncate mb-2">{user?.email}</p>
-            {canUseRolePreview && !isRolePreviewActive && (
-              <div className="px-3 mb-3 space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 flex items-center gap-1.5">
-                  <Eye className="h-3 w-3" />
-                  Preview role view
-                </p>
-                <Select onValueChange={setRolePreview}>
-                  <SelectTrigger className="h-9 border-zinc-700 bg-zinc-900 text-xs text-zinc-200">
-                    <SelectValue placeholder="Select role to preview…" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-zinc-950 border-zinc-800">
-                    {ROLES.map(({ value, label }) => (
-                      <SelectItem key={value} value={value} className="text-sm">
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {can('manage_team') && (
-              <button
-                onClick={() => { navigate("/team-roles"); setOpen(false); }}
-                className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors w-full text-left text-violet-400 hover:text-violet-300 hover:bg-zinc-900"
-              >
-                <ShieldCheck className="w-4 h-4" />
-                Manage Team
-              </button>
-            )}
-            <button
-              onClick={signOut}
-              className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors w-full text-left text-red-400 hover:text-red-300 hover:bg-zinc-900"
-            >
-              <LogOut className="w-4 h-4" />
-              Sign out
-            </button>
-          </div>
-        </SheetContent>
-      </Sheet>
-    </div>
-  );
-}
-
 /** BD sees a team-scoped dashboard; everyone else sees the admin Overview. */
 function SeedingHome() {
   const { role } = usePermissions();
@@ -489,40 +292,23 @@ function Home() {
 
 function AppLayout() {
   const location = useLocation();
-  const { user, signOut, isRolePreviewActive } = useAuth();
+  const { user, signOut } = useAuth();
   const { role: layoutRole } = usePermissions();
-  const sidebarNavItems = navItems.filter((item) =>
-    item.external
-      ? canAccessPintu(layoutRole, user?.email, { rolePreviewActive: isRolePreviewActive })
-      : isRouteAllowed(layoutRole, item.to)
-  );
-
-  const { data: assignedTicketsSidebar = [] } = useQuery<any[]>({
-    queryKey: ["tickets-assigned-badge-sidebar", (user?.email || "").toLowerCase()],
-    queryFn: () => getTickets({ assigned_to_email: user?.email || "" }),
-    enabled: !!user?.email,
-    refetchInterval: 20_000,
-  });
-
-  const ticketsBadgeCount = assignedTicketsSidebar.filter((t: any) => (t?.status || "") !== "resolved").length;
 
   const isFullScreen =
     location.pathname === "/" ||
     location.pathname === "/wrap" ||
     location.pathname === "/content-tracker" ||
     location.pathname === "/post-tracker" ||
-    location.pathname === "/post-ips" ||
-    location.pathname === "/pages" ||
-    location.pathname.startsWith("/pages/") ||
     location.pathname === "/pipeline" ||
     location.pathname === "/six-day-tracker" ||
     location.pathname === "/growth" ||
     location.pathname === "/tickets" ||
     location.pathname === "/news" ||
     location.pathname === "/idea-engine" ||
-    location.pathname.startsWith("/post-ips/") ||
-    location.pathname.startsWith("/page/") ||
     location.pathname === "/team-roles" ||
+    location.pathname === "/content-distribution" ||
+    location.pathname === "/production" ||
     location.pathname.startsWith("/experiment-") ||
     location.pathname === "/fsi-canvas" ||
     location.pathname.startsWith("/fsi-canvas/") ||
@@ -540,88 +326,89 @@ function AppLayout() {
     <>
       <RolePreviewRouteGuard />
       <RolePreviewBanner />
-      {!isCanvasWorkspace && (
-        <FramerTopNav
-          roles={seedingRoles}
-          role={layoutRole}
-          greeting={getGreeting()}
-          userName={getFirstName(user)}
-          onSignOut={signOut}
-          right={<><RolePreviewPicker /><MonthlyWrapOpenButton /><AnimalPicker userId={user?.id} /></>}
-        />
-      )}
-      {showFsiCanvasFab && <FsiCanvasFab />}
-      <DebugBoundary>
-        {isSeeding ? (
-          <div>
-            <SeedingPreviewBanner />
-            <Routes>
-              <Route path="/seeding" element={<RequireArea area="seeding_overview"><SeedingHome /></RequireArea>} />
-              <Route path="/seeding/approvals" element={<RequireArea area="seeding_approvals"><SeedingApprovalQueue /></RequireArea>} />
-              <Route path="/seeding/deals" element={<RequireArea area="seeding_deals"><SeedingAllDeals /></RequireArea>} />
-              <Route path="/seeding/deals/:dealId" element={<RequireArea anyOf={["seeding_deals", "seeding_overview"]}><SeedingDealDetail /></RequireArea>} />
-              <Route path="/seeding/fulfillment" element={<RequireArea area="seeding_fulfillment"><SeedingFulfillmentBoard /></RequireArea>} />
-              <Route path="/seeding/campaign-reports" element={<RequireArea area="seeding_campaign_reports"><SeedingCampaignReports /></RequireArea>} />
-              <Route path="/seeding/campaign-reports/:dealId" element={<RequireArea area="seeding_campaign_reports"><SeedingCampaignReportDetail /></RequireArea>} />
-              <Route path="/seeding/submit" element={<RequireArea area="seeding_submit"><SeedingSubmitBrief /></RequireArea>} />
-              <Route path="/seeding/pages" element={<RequireArea area="seeding_pages"><SeedingSectionPage /></RequireArea>} />
-              <Route path="/seeding/teamwise" element={<RequireArea area="seeding_teamwise"><SeedingTeamwise /></RequireArea>} />
-              <Route path="/seeding/users" element={<RequireArea area="users_roles"><SeedingSectionPage /></RequireArea>} />
-            </Routes>
-          </div>
-        ) : isFullScreen ? (
-          <div className="relative">
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/dashboard-old" element={<Dashboard />} />
-              <Route path="/wrap" element={<WrapView />} />
-              <Route path="/content-tracker" element={<ContentTracker />} />
-              <Route path="/post-tracker" element={<PostTracker />} />
-              <Route path="/pages" element={<PagesView />} />
-              <Route path="/pages/:pageId" element={<PageDetail />} />
-              <Route path="/post-ips" element={<Navigate to="/pages?mode=posts" replace />} />
-              <Route path="/post-ips/:pageId" element={<RedirectPostIpDetail />} />
-              <Route path="/page/:pageId" element={<RedirectLegacyPageDetail />} />
-              <Route path="/pipeline" element={<PipelineView />} />
-            <Route path="/six-day-tracker" element={<SixDayTracker />} />
-            <Route path="/team-performance" element={<Navigate to="/" replace />} />
-            <Route path="/tickets" element={<Tickets />} />
-              <Route path="/news" element={<NewsFeed />} />
-              <Route path="/idea-engine" element={<IdeaEngineGallery />} />
-              <Route path="/ideas" element={<IdeaEngine />} />
-              <Route path="/competitor-ideas" element={<CompetitorIdeas />} />
-              <Route path="/team-roles" element={<TeamRolesPage />} />
-              <Route path="/experiment-bpb" element={<ExperimentX playbookId="bpb" />} />
-              <Route path="/experiment-xf" element={<ExperimentX playbookId="xf" />} />
-              <Route path="/experiment-tech" element={<ExperimentX playbookId="tech" />} />
-              <Route path="/experiment-x" element={<Navigate to="/experiment-bpb" replace />} />
-              <Route path="/fsi-canvas" element={<FsiCanvasHub />} />
-              <Route
-                path="/fsi-canvas/:studyId"
-                element={
-                  <ErrorBoundary title="FSI Canvas crashed">
-                    <FsiCanvasWorkspace />
-                  </ErrorBoundary>
-                }
-              />
-              <Route path="/canvas" element={<Navigate to="/fsi-canvas" replace />} />
-              <Route path="/growth" element={<GrowthView />} />
-            </Routes>
-          </div>
-        ) : (
-          <div className="min-h-screen">
-            {/* Main content (old FSBOARD sidebar removed — nav is now the global FramerTopNav) */}
-            <main>
-              <Routes>
-                <Route path="/posts" element={<PostsView />} />
-                <Route path="/reels/stage1" element={<ReelsStage1View />} />
-                <Route path="/reels/main" element={<MainReelsView />} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </main>
-          </div>
+      <SidebarProvider>
+        {!isCanvasWorkspace && (
+          <AppSidebar
+            roles={seedingRoles}
+            role={layoutRole}
+            onSignOut={signOut}
+            themeToggle={<ThemeToggleButton />}
+            rolePreviewPicker={<RolePreviewPicker />}
+            monthlyWrapButton={<MonthlyWrapOpenButton />}
+            animalPicker={<AnimalPicker userId={user?.id} />}
+          />
         )}
-      </DebugBoundary>
+        <SidebarInset className="bg-transparent">
+          {showFsiCanvasFab && <FsiCanvasFab />}
+          <DebugBoundary>
+            {isSeeding ? (
+              <div>
+                <SeedingPreviewBanner />
+                <Routes>
+                  <Route path="/seeding" element={<RequireArea area="seeding_overview"><SeedingHome /></RequireArea>} />
+                  <Route path="/seeding/approvals" element={<RequireArea area="seeding_approvals"><SeedingApprovalQueue /></RequireArea>} />
+                  <Route path="/seeding/deals" element={<RequireArea area="seeding_deals"><SeedingAllDeals /></RequireArea>} />
+                  <Route path="/seeding/deals/:dealId" element={<RequireArea anyOf={["seeding_deals", "seeding_overview"]}><SeedingDealDetail /></RequireArea>} />
+                  <Route path="/seeding/fulfillment" element={<RequireArea area="seeding_fulfillment"><SeedingFulfillmentBoard /></RequireArea>} />
+                  <Route path="/seeding/campaign-reports" element={<RequireArea area="seeding_campaign_reports"><SeedingCampaignReports /></RequireArea>} />
+                  <Route path="/seeding/campaign-reports/:dealId" element={<RequireArea area="seeding_campaign_reports"><SeedingCampaignReportDetail /></RequireArea>} />
+                  <Route path="/seeding/submit" element={<RequireArea area="seeding_submit"><SeedingSubmitBrief /></RequireArea>} />
+                  <Route path="/seeding/pages" element={<RequireArea area="seeding_pages"><SeedingSectionPage /></RequireArea>} />
+                  <Route path="/seeding/teamwise" element={<RequireArea area="seeding_teamwise"><SeedingTeamwise /></RequireArea>} />
+                  <Route path="/seeding/users" element={<RequireArea area="users_roles"><SeedingSectionPage /></RequireArea>} />
+                </Routes>
+              </div>
+            ) : isFullScreen ? (
+              <div className="relative">
+                <Routes>
+                  <Route path="/" element={<Home />} />
+                  <Route path="/dashboard-old" element={<Dashboard />} />
+                  <Route path="/wrap" element={<WrapView />} />
+                  <Route path="/content-tracker" element={<ContentTracker />} />
+                  <Route path="/post-tracker" element={<PostTracker />} />
+                  <Route path="/pipeline" element={<PipelineView />} />
+                <Route path="/six-day-tracker" element={<SixDayTracker />} />
+                <Route path="/team-performance" element={<Navigate to="/" replace />} />
+                <Route path="/tickets" element={<Tickets />} />
+                  <Route path="/news" element={<NewsFeed />} />
+                  <Route path="/idea-engine" element={<IdeaEngineGallery />} />
+                  <Route path="/ideas" element={<IdeaEngine />} />
+                  <Route path="/competitor-ideas" element={<CompetitorIdeas />} />
+                  <Route path="/team-roles" element={<TeamRolesPage />} />
+                  <Route path="/content-distribution" element={<ExperimentX playbookId="bpb" />} />
+                  <Route path="/production" element={<ExperimentX playbookId="bpb" />} />
+                  <Route path="/experiment-bpb" element={<Navigate to="/content-distribution" replace />} />
+                  <Route path="/experiment-xf" element={<ExperimentX playbookId="xf" />} />
+                  <Route path="/experiment-tech" element={<ExperimentX playbookId="tech" />} />
+                  <Route path="/experiment-x" element={<Navigate to="/content-distribution" replace />} />
+                  <Route path="/fsi-canvas" element={<FsiCanvasHub />} />
+                  <Route
+                    path="/fsi-canvas/:studyId"
+                    element={
+                      <ErrorBoundary title="FSI Canvas crashed">
+                        <FsiCanvasWorkspace />
+                      </ErrorBoundary>
+                    }
+                  />
+                  <Route path="/canvas" element={<Navigate to="/fsi-canvas" replace />} />
+                  <Route path="/growth" element={<GrowthView />} />
+                </Routes>
+              </div>
+            ) : (
+              <div className="min-h-screen">
+                <main>
+                  <Routes>
+                    <Route path="/posts" element={<PostsView />} />
+                    <Route path="/reels/stage1" element={<ReelsStage1View />} />
+                    <Route path="/reels/main" element={<MainReelsView />} />
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                </main>
+              </div>
+            )}
+          </DebugBoundary>
+        </SidebarInset>
+      </SidebarProvider>
     </>
   );
 }
@@ -682,18 +469,40 @@ function AuthGate() {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <WavyGridBackground />
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AuthProvider>
-          <NotificationProvider>
-            <AuthGate />
-          </NotificationProvider>
-        </AuthProvider>
-      </BrowserRouter>
+      <ThemeProvider>
+        <WavyGridBackgroundThemed />
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <AuthProvider>
+            <NotificationProvider>
+              <AuthGate />
+            </NotificationProvider>
+          </AuthProvider>
+        </BrowserRouter>
+      </ThemeProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );
+
+function WavyGridBackgroundThemed() {
+  const { theme } = useTheme();
+  return <WavyGridBackground theme={theme} />;
+}
+
+function ThemeToggleButton() {
+  const { theme, toggleTheme } = useTheme();
+  return (
+    <button
+      type="button"
+      onClick={toggleTheme}
+      title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+      className="f-ghost"
+      style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: 8 }}
+    >
+      {theme === "dark" ? <Sun size={16} strokeWidth={1.8} /> : <Moon size={16} strokeWidth={1.8} />}
+    </button>
+  );
+}
 
 export default App;

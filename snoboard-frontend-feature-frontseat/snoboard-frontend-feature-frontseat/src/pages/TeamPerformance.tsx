@@ -474,7 +474,7 @@ export default function TeamPerformance() {
                   )}
                 </span>
               </div>
-              <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight leading-none">
+              <h1 className="text-3xl sm:text-5xl font-black text-[color:var(--f-ink)] tracking-tight leading-none">
                 Leader<span className="text-amber-400">board</span>
               </h1>
               <p className="text-sm text-zinc-400 mt-2 max-w-2xl">
@@ -1019,7 +1019,7 @@ function TeamCard({
             <span className="text-3xl shrink-0" aria-hidden>
               {team.emoji}
             </span>
-            <h2 className="text-xl font-black text-white truncate">{team.label}</h2>
+            <h2 className="text-xl font-black text-[color:var(--f-ink)] truncate">{team.label}</h2>
             {isLeader && (
               <Badge className="bg-amber-500/15 text-amber-200 border-amber-500/25 gap-1 shrink-0">
                 <Trophy className="w-3 h-3" /> Leading
@@ -1146,7 +1146,7 @@ function PeopleLeaderboard({
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
         <div className="flex items-center gap-2">
           <Medal className="w-4 h-4 text-amber-400" />
-          <h2 className="text-sm font-black uppercase tracking-[0.2em] text-white">
+          <h2 className="text-sm font-black uppercase tracking-[0.2em] text-[color:var(--f-ink)]">
             Creator leaderboard
           </h2>
         </div>

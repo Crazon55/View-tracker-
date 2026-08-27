@@ -202,7 +202,7 @@ export default function PostsView() {
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-white">Posts</h2>
+          <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--f-ink)]">Posts</h2>
           <p className="text-sm text-zinc-500 mt-1">
             Track expected vs actual views on Instagram posts
           </p>

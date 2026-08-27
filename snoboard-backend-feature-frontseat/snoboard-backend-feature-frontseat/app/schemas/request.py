@@ -170,6 +170,7 @@ class ExpIdeaCreate(BaseModel):
     script: str = ""
     status: str = "new"
     views: int = 0
+    likes: int = 0
     day_date: str | None = None
     source: str = "original"
     hook_variations: str = ""
@@ -193,6 +194,7 @@ class ExpIdeaCreate(BaseModel):
     page_live_links: dict = {}
     origin_playbook: str | None = None
     origin_idea_id: str | None = None
+    assigned_to: str | None = None
 
 
 class ExpIdeaUpdate(BaseModel):
@@ -203,6 +205,8 @@ class ExpIdeaUpdate(BaseModel):
     status: str | None = None
     views: int | None = None
     page_views: dict | None = None
+    likes: int | None = None
+    page_likes: dict | None = None
     page_test_results: dict | None = None
     day_date: str | None = None
     source: str | None = None
@@ -226,6 +230,7 @@ class ExpIdeaUpdate(BaseModel):
     page_posting_times: dict | None = None
     page_captions: dict | None = None
     page_live_links: dict | None = None
+    assigned_to: str | None = None
 
 
 class ExpSettingsUpdate(BaseModel):

@@ -1,12 +1,13 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from "react";
-import { useSearchParams } from "react-router-dom";
-import { Calendar } from "lucide-react";
+import { useSearchParams, useLocation } from "react-router-dom";
+import { Calendar, ChevronDown } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as DayCalendar } from "@/components/ui/calendar";
 import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { canonicalRole } from "@/lib/accessModel";
 import {
   canEditExperimentX,
   getPlaybookViewProfile,
@@ -16,6 +17,9 @@ import {
   CONTENT_FORMATS,
   CONTENT_FORMAT_ACCENT,
   PLAYBOOK_CONFIGS,
+  ASSIGNEE_OPTIONS,
+  assigneeOptionsFor,
+  isAssignee,
   type ContentFormat,
   type PlaybookId,
 } from "@/lib/playbookExperimentConfig";
@@ -70,17 +74,60 @@ function expIdeaUpdateMutationOpts(
 // ---------------------------------------------------------------------------
 // Constants (shared across playbooks)
 // ---------------------------------------------------------------------------
-const STAGES = ["new","approved","base_edit","formatted","testing","proven_ideas","scheduled","posted","kill"] as const;
+const STAGES = ["new","approved","base_edit","script_hook","designed","formatted","review","gtg","testing","proven_ideas","scheduled","posted","kill"] as const;
 type IdeaStage = (typeof STAGES)[number];
 
-// Video-editor production board columns (Approved → Base edit → Formatted → Posted).
-const PRODUCTION_STAGES = ["approved","base_edit","formatted","posted"] as const;
+// Single flat order works for both pipelines: each pipeline's own stages are still
+// monotonically increasing along this scale, even though the two never share every step.
+const PRODUCTION_STAGE_ORDER: Record<string, number> = {
+  approved: 0, base_edit: 1, script_hook: 2, designed: 3, formatted: 4, review: 5, gtg: 6, posted: 7,
+};
+
+/** Carousel: Approved → Designed → Review → GTG → Posted. Reel (default): Approved →
+ *  Base edit → Script/Hook → Formatted → Review → GTG → Posted. Posted is reached the
+ *  same way for both, but is gated to Ops/admin regardless of content type (see
+ *  ProductionTab's `advance`). */
+function getProductionNext(contentType: string | null | undefined, stage: string): { to: string; label: string } | null {
+  const isCarousel = (contentType || "").trim().toLowerCase() === "carousel";
+  if (isCarousel) {
+    return (
+      {
+        approved: { to: "designed", label: "Mark designed" },
+        designed: { to: "review", label: "Send to review" },
+        review:   { to: "gtg", label: "Mark GTG" },
+        gtg:      { to: "posted", label: "Mark posted" },
+      } as Record<string, { to: string; label: string }>
+    )[stage] || null;
+  }
+  return (
+    {
+      approved:    { to: "base_edit", label: "Start base edit" },
+      base_edit:   { to: "script_hook", label: "Add script/hook" },
+      script_hook: { to: "formatted", label: "Mark formatted" },
+      formatted:   { to: "review", label: "Send to review" },
+      review:      { to: "gtg", label: "Mark GTG" },
+      gtg:         { to: "posted", label: "Mark posted" },
+    } as Record<string, { to: string; label: string }>
+  )[stage] || null;
+}
+
+/** Is `stage` actually part of this content type's pipeline? Used to stop a reel card
+ *  being dropped on "Designed" (or a carousel card on "Base edit" etc.) via drag-and-drop. */
+function isStageInPipeline(contentType: string | null | undefined, stage: string): boolean {
+  const isCarousel = (contentType || "").trim().toLowerCase() === "carousel";
+  if (isCarousel) return ["approved", "designed", "review", "gtg", "posted"].includes(stage);
+  return ["approved", "base_edit", "script_hook", "formatted", "review", "gtg", "posted"].includes(stage);
+}
 
 const STAGE_LABEL: Record<IdeaStage, string> = {
   new:          "New",
   approved:     "Approved",
   base_edit:    "Base edit",
+  script_hook:  "Script/Hook",
+  designed:     "Designed",
   formatted:    "Formatted",
+  review:       "Review",
+  gtg:          "GTG",
   testing:      "Testing",
   proven_ideas: "Proven",
   scheduled:    "Scheduled",
@@ -92,7 +139,11 @@ const STATUS_STYLE: Record<string, { bg: string; text: string }> = {
   new:          { bg: "rgba(74,127,212,0.15)",   text: "#7BB0FF" },
   approved:     { bg: "rgba(45,158,95,0.15)",    text: "#5AE0A0" },
   base_edit:    { bg: "rgba(123,97,196,0.15)",   text: "#B49EFF" },
+  script_hook:  { bg: "rgba(255,149,128,0.15)",  text: "#FF9580" },
+  designed:     { bg: "rgba(255,126,182,0.15)",  text: "#FF7EB6" },
   formatted:    { bg: "rgba(56,189,248,0.15)",   text: "#5AD1FF" },
+  review:       { bg: "rgba(255,209,102,0.15)",  text: "#FFD166" },
+  gtg:          { bg: "rgba(80,224,176,0.15)",   text: "#50E0B0" },
   testing:      { bg: "rgba(212,149,42,0.15)",   text: "#F0C060" },
   proven_ideas: { bg: "rgba(29,158,117,0.15)",   text: "#50E0B0" },
   scheduled:    { bg: "rgba(83,74,183,0.15)",    text: "#9B8FFF" },
@@ -196,6 +247,116 @@ function calendarPagesForIdea(idea: any): string[] {
   return [...keys].filter(pg => (dates[pg] || "").slice(0, 10));
 }
 
+// ── Page filter ──────────────────────────────────────────────────────────────
+// Holds "all" or a comma-joined list of page handles. Staying a single string
+// means every tab's existing `pageFilter` prop keeps working — only the
+// comparisons below had to learn about multiple pages.
+const ALL_PAGES = "all";
+
+function pageFilterList(filter: string): string[] {
+  return filter === ALL_PAGES ? [] : filter.split(",").map(p => p.trim()).filter(Boolean);
+}
+
+/** Nothing picked — every page passes. */
+function isAllPages(filter: string): boolean {
+  return pageFilterList(filter).length === 0;
+}
+
+function pageInFilter(filter: string, page: string): boolean {
+  const list = pageFilterList(filter);
+  return list.length === 0 || list.includes(page);
+}
+
+/** Does any of an idea's comma-joined pages pass the filter? */
+function ideaInPageFilter(filter: string, pageHandle: string | null | undefined): boolean {
+  if (isAllPages(filter)) return true;
+  return (pageHandle || "").split(",").some(p => pageInFilter(filter, p.trim()));
+}
+
+/** The API narrows by a single page, so only push it server-side on an exact
+ *  one-page pick; multi-page selections fetch wide and filter on the client. */
+function singlePageParam(filter: string): string | undefined {
+  const list = pageFilterList(filter);
+  return list.length === 1 ? list[0] : undefined;
+}
+
+/** Page filter control — pick any number of pages; none picked means all. */
+function PageMultiSelect({ pages, labels, value, onChange }: {
+  pages: readonly string[]; labels: Record<string, string>; value: string; onChange: (next: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const picked = pageFilterList(value);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const commit = (next: string[]) => onChange(next.length ? next.join(",") : ALL_PAGES);
+  const toggle = (p: string) =>
+    commit(picked.includes(p) ? picked.filter(x => x !== p) : [...picked, p]);
+
+  const label = picked.length === 0
+    ? "All pages"
+    : picked.length === 1
+      ? (labels[picked[0]] || picked[0])
+      : `${picked.length} pages`;
+
+  const row = (on: boolean): React.CSSProperties => ({
+    display: "flex", alignItems: "center", gap: 8, width: "100%",
+    padding: "6px 8px", borderRadius: 7, border: "none", cursor: "pointer",
+    fontSize: 12, fontFamily: "inherit", textAlign: "left",
+    background: on ? "rgba(139,92,246,.16)" : "transparent",
+    color: on ? "#c4b5fd" : "var(--pb-ink)",
+  });
+  const box = (on: boolean): React.CSSProperties => ({
+    width: 13, height: 13, flexShrink: 0, borderRadius: 4,
+    border: `1.5px solid ${on ? "#8b5cf6" : "var(--pb-border)"}`,
+    background: on ? "#8b5cf6" : "transparent",
+    display: "grid", placeItems: "center", fontSize: 9, color: "#fff", lineHeight: 1,
+  });
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{ ...sel, fontFamily: "inherit", display: "inline-flex", alignItems: "center", justifyContent: "space-between", gap: 8, minWidth: 132 }}
+      >
+        <span>{label}</span>
+        <ChevronDown size={13} style={{ opacity: 0.6, transform: open ? "rotate(180deg)" : undefined, transition: "transform .15s" }} />
+      </button>
+      {open && (
+        <div style={{
+          position: "absolute", zIndex: 60, top: "calc(100% + 4px)", left: 0, minWidth: 190,
+          background: "var(--pb-panel)", border: "1px solid var(--pb-border)", borderRadius: 10,
+          boxShadow: "0 12px 30px rgba(0,0,0,.38)", padding: 5, maxHeight: 300, overflowY: "auto",
+        }}>
+          <button type="button" onClick={() => commit([])} style={row(picked.length === 0)}>
+            <span style={box(picked.length === 0)}>{picked.length === 0 ? "✓" : ""}</span>
+            All pages
+          </button>
+          <div style={{ height: 1, background: "var(--pb-chip)", margin: "4px 2px" }} />
+          {pages.map(p => {
+            const on = picked.includes(p);
+            return (
+              <button key={p} type="button" onClick={() => toggle(p)} style={row(on)}>
+                <span style={box(on)}>{on ? "✓" : ""}</span>
+                {labels[p] || p}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function buildCalendarEntries(
   ideas: any[], weekStart: string, weekEnd: string, pageFilter: string, search: string,
 ): CalEntry[] {
@@ -212,7 +373,7 @@ function buildCalendarEntries(
     for (const page of calendarPagesForIdea(idea)) {
       const date = (dates[page] || "").slice(0, 10);
       if (!date || date < weekStart || date > weekEnd) continue;
-      if (pageFilter !== "all" && page !== pageFilter) continue;
+      if (!pageInFilter(pageFilter, page)) continue;
       const caption = captions[page] || "";
       if (q && !(idea.topic || "").toLowerCase().includes(q) && !caption.toLowerCase().includes(q)) continue;
       out.push({ idea, page, date, time: times[page] || "", caption, status });
@@ -223,21 +384,22 @@ function buildCalendarEntries(
 
 // Shared input/button styles
 const inp: React.CSSProperties = {
-  padding: "7px 10px", borderRadius: 7, border: "1.5px solid #3f3f46",
-  fontSize: 12, background: "#09090b", color: "#e4e4e7", outline: "none", width: "100%",
+  padding: "7px 10px", borderRadius: 7, border: "1.5px solid var(--pb-border)",
+  fontSize: 12, background: "var(--pb-bg)", color: "var(--pb-ink)", outline: "none", width: "100%",
   boxSizing: "border-box",
 };
 const sel: React.CSSProperties = {
-  padding: "5px 10px", borderRadius: 7, border: "1.5px solid #3f3f46",
-  fontSize: 12, background: "#09090b", color: "#e4e4e7", cursor: "pointer",
+  padding: "5px 10px", borderRadius: 7, border: "1.5px solid var(--pb-border)",
+  fontSize: 12, background: "var(--pb-bg)", color: "var(--pb-ink)", cursor: "pointer",
+  colorScheme: "dark",
 };
 const btnPrimary: React.CSSProperties = {
   padding: "6px 16px", borderRadius: 7, border: "none",
   background: "#7c3aed", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer",
 };
 const btnSecondary: React.CSSProperties = {
-  padding: "6px 14px", borderRadius: 7, border: "1px solid #3f3f46",
-  background: "transparent", color: "#a1a1aa", fontSize: 12, cursor: "pointer",
+  padding: "6px 14px", borderRadius: 7, border: "1px solid var(--pb-border)",
+  background: "transparent", color: "var(--pb-dim2)", fontSize: 12, cursor: "pointer",
 };
 
 function PbGlassModalShell({ onClose, wide, children }: {
@@ -275,7 +437,7 @@ function ViewsEdit({ value, onSave }: { value: number; onSave: (v: number) => vo
       <span
         onClick={() => { setDraft(String(value)); setEditing(true); }}
         title="Click to edit views"
-        style={{ cursor: "pointer", color: value > 0 ? "#50E0B0" : "#52525b", fontSize: 12, fontWeight: 600, minWidth: 36 }}
+        style={{ cursor: "pointer", color: value > 0 ? "#50E0B0" : "var(--pb-faint)", fontSize: 12, fontWeight: 600, minWidth: 36 }}
       >
         {value > 0 ? fmt(value) : "—"}
       </span>
@@ -310,12 +472,12 @@ function DayGroup({ dateStr, count, children }: { dateStr: string; count: number
         style={{
           display: "flex", alignItems: "center", gap: 8,
           background: "none", border: "none", cursor: "pointer",
-          color: "#71717a", fontSize: 11, fontWeight: 600, padding: "2px 0", marginBottom: 6, width: "100%",
+          color: "var(--pb-dim)", fontSize: 11, fontWeight: 600, padding: "2px 0", marginBottom: 6, width: "100%",
         }}
       >
-        <span style={{ color: open ? "#7c3aed" : "#3f3f46", fontSize: 9 }}>{open ? "▼" : "▶"}</span>
-        <span style={{ color: "#a1a1aa" }}>{fmtDay(dateStr)}</span>
-        <span style={{ color: "#52525b", fontWeight: 400 }}>· {count} idea{count !== 1 ? "s" : ""}</span>
+        <span style={{ color: open ? "#7c3aed" : "var(--pb-border)", fontSize: 9 }}>{open ? "▼" : "▶"}</span>
+        <span style={{ color: "var(--pb-dim2)" }}>{fmtDay(dateStr)}</span>
+        <span style={{ color: "var(--pb-faint)", fontWeight: 400 }}>· {count} idea{count !== 1 ? "s" : ""}</span>
       </button>
       {open && <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingLeft: 14 }}>{children}</div>}
     </div>
@@ -348,15 +510,15 @@ function CrossPlaybookViewsBlock({ idea }: { idea: any }) {
     pb => pb !== playbookId && (cv[pb] || 0) > 0,
   );
   return (
-    <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid #1f1f22" }}>
+    <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid var(--pb-chip)" }}>
       <div style={{ fontSize: 10, fontWeight: 700, color: "#50E0B0", marginBottom: 3 }}>
         {fmt(cv.total)} cross-playbook
       </div>
       {(cv.own || 0) > 0 && (
-        <div style={{ fontSize: 9, color: "#71717a" }}>{playbookLabel}: {fmt(cv.own)}</div>
+        <div style={{ fontSize: 9, color: "var(--pb-dim)" }}>{playbookLabel}: {fmt(cv.own)}</div>
       )}
       {otherPlaybooks.map(pb => (
-        <div key={pb} style={{ fontSize: 9, color: "#71717a" }}>
+        <div key={pb} style={{ fontSize: 9, color: "var(--pb-dim)" }}>
           {PLAYBOOK_CONFIGS[pb].label}: {fmt(cv[pb] || 0)}
         </div>
       ))}
@@ -404,19 +566,19 @@ function DeployPlaybookModal({ idea, open, onClose }: { idea: any; open: boolean
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          background: "#18181b", border: "1px solid #3f3f46", borderRadius: 12,
+          background: "var(--pb-card)", border: "1px solid var(--pb-border)", borderRadius: 12,
           padding: "22px 24px", width: "100%", maxWidth: 380,
         }}
       >
-        <h3 style={{ margin: "0 0 6px", fontSize: 15, fontWeight: 700, color: "#fff" }}>
+        <h3 style={{ margin: "0 0 6px", fontSize: 15, fontWeight: 700, color: "var(--pb-ink)" }}>
           Use in another playbook
         </h3>
-        <p style={{ margin: "0 0 16px", fontSize: 12, color: "#71717a", lineHeight: 1.45 }}>
-          Copies <strong style={{ color: "#e4e4e7" }}>{idea.topic || "Untitled"}</strong> plus frame / drive links only.
+        <p style={{ margin: "0 0 16px", fontSize: 12, color: "var(--pb-dim)", lineHeight: 1.45 }}>
+          Copies <strong style={{ color: "var(--pb-ink)" }}>{idea.topic || "Untitled"}</strong> plus frame / drive links only.
           Views, baselines, and scheduling stay separate per playbook.
         </p>
         {targets.length === 0 ? (
-          <p style={{ fontSize: 12, color: "#52525b", margin: 0 }}>
+          <p style={{ fontSize: 12, color: "var(--pb-faint)", margin: 0 }}>
             No other playbooks available (already deployed or no edit access).
           </p>
         ) : (
@@ -429,8 +591,8 @@ function DeployPlaybookModal({ idea, open, onClose }: { idea: any; open: boolean
                 onClick={() => deployMut.mutate(pb)}
                 style={{
                   display: "flex", alignItems: "center", gap: 10,
-                  padding: "12px 14px", borderRadius: 8, border: "1px solid #3f3f46",
-                  background: "#111113", color: "#e4e4e7", cursor: "pointer",
+                  padding: "12px 14px", borderRadius: 8, border: "1px solid var(--pb-border)",
+                  background: "var(--pb-panel)", color: "var(--pb-ink)", cursor: "pointer",
                   fontSize: 13, fontWeight: 600, textAlign: "left",
                 }}
               >
@@ -445,7 +607,7 @@ function DeployPlaybookModal({ idea, open, onClose }: { idea: any; open: boolean
           onClick={onClose}
           style={{
             marginTop: 16, width: "100%", padding: "8px 0", border: "none",
-            background: "transparent", color: "#71717a", fontSize: 12, cursor: "pointer",
+            background: "transparent", color: "var(--pb-dim)", fontSize: 12, cursor: "pointer",
           }}
         >
           Cancel
@@ -579,80 +741,6 @@ function PbKanbanCardShell({
 }
 
 /** Content Ops — prominent Today / Yesterday badge. */
-function OpsDayTag({ isToday, size = "md" }: { isToday: boolean; size?: "sm" | "md" | "lg" }) {
-  const color = isToday ? "#50E0B0" : "#D4952A";
-  const bg = isToday ? "#50E0B022" : "#D4952A22";
-  const border = isToday ? "#50E0B066" : "#D4952A66";
-  const fontSize = size === "lg" ? 11 : size === "md" ? 10 : 9;
-  const padding = size === "lg" ? "3px 9px" : size === "md" ? "2px 8px" : "1px 6px";
-  return (
-    <span style={{
-      fontSize, fontWeight: 800, letterSpacing: "0.05em", textTransform: "uppercase",
-      color, background: bg, border: `1px solid ${border}`,
-      borderRadius: 5, padding, flexShrink: 0,
-    }}>
-      {isToday ? "Today" : "Yesterday"}
-    </span>
-  );
-}
-
-/** Content Ops — Frontseat page column card (today + yesterday checklist). */
-function OpsFrontseatPageCard({ idea, letter, todayStr, onClick }: {
-  idea: any; letter: string; todayStr: string; onClick: () => void;
-}) {
-  const stage = idea.status || "new";
-  const ss = STATUS_STYLE[stage] || STATUS_STYLE.new;
-  const dayIso = (idea.day_date || "").slice(0, 10);
-  const isToday = dayIso === todayStr;
-  const testCfg = opsCardBaselineTag(idea);
-  const { date: pgDate, time: pgTime } = opsCardScheduleSummary(idea);
-  const viewCount = (idea.views || 0) > 0 ? idea.views : 0;
-  const dayAccent = isToday ? "#50E0B0" : "#D4952A";
-
-  return (
-    <div
-      onClick={onClick}
-      className={pbKanbanCardClass()}
-      style={{ ...pbKanbanCardStyle, overflow: "hidden", borderLeft: `3px solid ${dayAccent}` }}
-    >
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6,
-        padding: "5px 10px",
-        background: isToday ? "#50E0B012" : "#D4952A12",
-        borderBottom: `1px solid ${dayAccent}33`,
-      }}>
-        <OpsDayTag isToday={isToday} size="lg" />
-        <span style={{ fontSize: 9, color: "#71717a", fontWeight: 600 }}>{fmtDay(dayIso)}</span>
-      </div>
-      <div style={{ padding: "8px 10px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 10, fontWeight: 800, color: "#a78bfa", background: "#7c3aed22", borderRadius: 4, padding: "1px 6px" }}>{letter}</span>
-          <span style={{ fontSize: 10, fontWeight: 600, color: ss.text, background: ss.bg, borderRadius: 4, padding: "1px 6px" }}>
-            {STAGE_LABEL[stage as IdeaStage] || stage}
-          </span>
-        </div>
-        <p style={{ margin: 0, fontSize: 12, fontWeight: 500, color: "#e4e4e7", lineHeight: 1.4,
-          overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
-          {idea.topic || <em style={{ color: "#52525b" }}>Untitled</em>}
-        </p>
-        <p style={{ margin: "5px 0 0", fontSize: 10, color: pgDate ? "#a78bfa" : "#52525b" }}>
-          {pgDate ? `${fmtShortDate(pgDate)}${pgTime ? ` · ${fmtTimeLabel(pgTime)}` : ""}` : "No posting date"}
-        </p>
-        <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: viewCount > 0 ? "#50E0B0" : "#52525b" }}>
-            {viewCount > 0 ? `${fmt(viewCount)} views` : "— views · tap to update"}
-          </span>
-          {testCfg && (
-            <span style={{ fontSize: 9, fontWeight: 700, color: testCfg.color, background: testCfg.bg, borderRadius: 4, padding: "1px 6px" }}>
-              {testCfg.label}
-            </span>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /** Content Ops — kanban card with schedule, views, baseline, frame & comp links. */
 // Views-updated tint for the Tracking card: green glass once views are logged,
 // neutral grey while they're still pending — reuses the premium pb-baseline-glow.
@@ -671,10 +759,10 @@ function OpsKanbanCard({ idea, onClick, isSelected }: { idea: any; onClick: () =
   return (
     <PbKanbanCardShell testCfg={tintCfg} isSelected={isSelected} onClick={onClick}>
       <p style={{
-        margin: 0, fontSize: 13, fontWeight: 500, color: "#fff", lineHeight: 1.35,
+        margin: 0, fontSize: 13, fontWeight: 500, color: "var(--pb-ink)", lineHeight: 1.35,
         overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", minWidth: 0,
       } as any}>
-        {idea.topic || <em style={{ color: "#52525b", fontWeight: 400 }}>Untitled</em>}
+        {idea.topic || <em style={{ color: "var(--pb-faint)", fontWeight: 400 }}>Untitled</em>}
       </p>
       {baselineCfg && (
         <div style={{ marginTop: 6 }}>
@@ -684,7 +772,7 @@ function OpsKanbanCard({ idea, onClick, isSelected }: { idea: any; onClick: () =
       {pages.length > 0 && (
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 8, marginBottom: 8 }}>
           {pages.map((pg: string) => {
-            const pgc = pageColors[pg] || "#a1a1aa";
+            const pgc = pageColors[pg] || "var(--pb-dim2)";
             return (
               <span key={pg} style={{ fontSize: 10, fontWeight: 700, color: pgc, background: pgc + "22", borderRadius: 4, padding: "1px 6px" }}>
                 {pg}
@@ -693,11 +781,11 @@ function OpsKanbanCard({ idea, onClick, isSelected }: { idea: any; onClick: () =
           })}
         </div>
       )}
-      <p style={{ margin: "0 0 6px", fontSize: 11, color: pgDate ? "#a78bfa" : "#52525b" }}>
+      <p style={{ margin: "0 0 6px", fontSize: 11, color: pgDate ? "#a78bfa" : "var(--pb-faint)" }}>
         {pgDate ? `${fmtShortDate(pgDate)}${pgTime ? ` · ${fmtTimeLabel(pgTime)}` : ""}` : "No posting date"}
       </p>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: viewCount > 0 ? "#50E0B0" : "#52525b" }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: viewCount > 0 ? "#50E0B0" : "var(--pb-faint)" }}>
           {viewCount > 0 ? `${fmt(viewCount)} views` : "— views"}
         </span>
         {idea.frame_link && (
@@ -751,10 +839,10 @@ function KanbanCard({ idea, onUpdate, onDelete, onClick, readOnly, isSelected }:
       onClick={onClick}
     >
       <p style={{
-        margin: 0, fontSize: 13, fontWeight: 500, color: "#fff", lineHeight: 1.35,
+        margin: 0, fontSize: 13, fontWeight: 500, color: "var(--pb-ink)", lineHeight: 1.35,
         overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", minWidth: 0,
       } as any}>
-        {idea.topic || <em style={{ color: "#52525b", fontWeight: 400 }}>Untitled</em>}
+        {idea.topic || <em style={{ color: "var(--pb-faint)", fontWeight: 400 }}>Untitled</em>}
       </p>
       {(testCfg || viewCount > 0) && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 6, minWidth: 0 }}>
@@ -775,14 +863,14 @@ function KanbanCard({ idea, onUpdate, onDelete, onClick, readOnly, isSelected }:
           {idea.source === "competitor" ? "Comp" : "Orig"}
         </span>
         {pages.map((pg: string) => {
-          const pgc = pageColors[pg] || "#a1a1aa";
+          const pgc = pageColors[pg] || "var(--pb-dim2)";
           return (
             <span key={pg} style={{ fontSize: 10, fontWeight: 700, color: pgc, background: pgc + "22", borderRadius: 99, padding: "1px 7px" }}>
               {pg}
             </span>
           );
         })}
-        <span style={{ fontSize: 10, color: "#a1a1aa", background: "#27272a", borderRadius: 99, padding: "1px 7px" }}>
+        <span style={{ fontSize: 10, color: "var(--pb-dim2)", background: "var(--pb-chip)", borderRadius: 99, padding: "1px 7px" }}>
           {idea.content_type}
         </span>
         {idea.video_format && (
@@ -839,7 +927,7 @@ function PostedViewsInput({ value, onSave }: { value: number; onSave: (v: number
         style={{
           width: 160, padding: "9px 13px", border: "1.5px solid #2D9E5F",
           borderRadius: 9, fontSize: 14, fontWeight: 700,
-          outline: "none", background: "#09090b", color: "#50E0B0",
+          outline: "none", background: "var(--pb-bg)", color: "#50E0B0",
           boxSizing: "border-box",
         }}
       />
@@ -874,7 +962,7 @@ function PerPageViewInput({ value, pageColor, onSave }: { value: number; pageCol
         style={{
           width: 140, padding: "7px 11px", border: `1.5px solid ${pageColor}66`,
           borderRadius: 8, fontSize: 13, fontWeight: 700,
-          outline: "none", background: "#09090b", color: pageColor,
+          outline: "none", background: "var(--pb-bg)", color: pageColor,
           boxSizing: "border-box",
         }}
       />
@@ -900,7 +988,7 @@ function SafeField({ value, onSave, placeholder, style, readOnly, bare }: { valu
   const dirty = useRef(false);
   useEffect(() => { if (!dirty.current) setLocal(value || ""); }, [value]);
   if (readOnly) {
-    return <span style={{ fontSize: 13, color: value ? "#e4e4e7" : "#52525b", ...style }}>{value || placeholder || "—"}</span>;
+    return <span style={{ fontSize: 13, color: value ? "var(--pb-ink)" : "var(--pb-faint)", ...style }}>{value || placeholder || "—"}</span>;
   }
   return (
     <input
@@ -919,7 +1007,7 @@ function SafeArea({ value, onSave, placeholder, rows, readOnly }: { value: strin
   const dirty = useRef(false);
   useEffect(() => { if (!dirty.current) setLocal(value || ""); }, [value]);
   if (readOnly) {
-    return <p style={{ margin: 0, fontSize: 13, color: value ? "#e4e4e7" : "#52525b", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{value || placeholder || "—"}</p>;
+    return <p style={{ margin: 0, fontSize: 13, color: value ? "var(--pb-ink)" : "var(--pb-faint)", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{value || placeholder || "—"}</p>;
   }
   return (
     <textarea
@@ -948,12 +1036,12 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
   const stage = idea.status || "new";
   const ss = STATUS_STYLE[stage] || STATUS_STYLE.new;
   const primaryPage = (idea.page_handle || "").split(",")[0].trim();
-  const pc = pageColors[primaryPage] || "#a1a1aa";
+  const pc = pageColors[primaryPage] || "var(--pb-dim2)";
   const actions = STAGE_ACTIONS[stage] || [];
   const selectedPages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
   const noEdit = readOnly || hideStageActions;
 
-  const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "#71717a", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
+  const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "var(--pb-dim)", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
 
   return (
     <PbGlassModalShell onClose={onClose} wide>
@@ -961,8 +1049,8 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 2, paddingBottom: 14, borderBottom: "1px solid rgba(255,255,255,.08)" }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             {readOnly ? (
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: "#fff", letterSpacing: "-0.02em", lineHeight: 1.35 }}>
-                {idea.topic || <em style={{ color: "#52525b", fontWeight: 400 }}>Untitled</em>}
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: "var(--pb-ink)", letterSpacing: "-0.02em", lineHeight: 1.35 }}>
+                {idea.topic || <em style={{ color: "var(--pb-faint)", fontWeight: 400 }}>Untitled</em>}
               </h2>
             ) : (
               <SafeField
@@ -970,7 +1058,7 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
                 value={idea.topic}
                 onSave={v => onUpdate(idea.id, { topic: v })}
                 placeholder="Topic / hook"
-                style={{ fontSize: 18, fontWeight: 600, color: "#fff", border: "none", background: "transparent", padding: 0, width: "100%", outline: "none" }}
+                style={{ fontSize: 18, fontWeight: 600, color: "var(--pb-ink)", border: "none", background: "transparent", padding: 0, width: "100%", outline: "none" }}
               />
             )}
           </div>
@@ -986,10 +1074,10 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
             {idea.source === "competitor" ? "Competitor" : "Original"}
           </span>
           {selectedPages.map((pg: string) => {
-            const pgc = pageColors[pg] || "#a1a1aa";
+            const pgc = pageColors[pg] || "var(--pb-dim2)";
             return <span key={pg} style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, background: pgc + "22", color: pgc, fontWeight: 600 }}>{pg}</span>;
           })}
-          <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, background: "#27272a", color: "#71717a" }}>
+          <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, background: "var(--pb-chip)", color: "var(--pb-dim)" }}>
             {idea.content_type}
           </span>
           <DeployedFromBadge idea={idea} />
@@ -1022,14 +1110,14 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
             {readOnly ? (
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {selectedPages.map((pg: string) => {
-                  const c = pageColors[pg] || "#a1a1aa";
+                  const c = pageColors[pg] || "var(--pb-dim2)";
                   return <span key={pg} style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, background: c + "22", color: c, fontWeight: 600 }}>{pg}</span>;
                 })}
               </div>
             ) : (
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               {playbookPages.map(p => {
-                const c = pageColors[p] || "#a1a1aa";
+                const c = pageColors[p] || "var(--pb-dim2)";
                 const active = selectedPages.includes(p);
                 return (
                   <button key={p} type="button" onClick={() => {
@@ -1039,9 +1127,9 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
                     if (next.length > 0) onUpdate(idea.id, { page_handle: next.join(",") });
                   }} style={{
                     padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                    border: active ? `2px solid ${c}` : "1.5px solid #3f3f46",
-                    background: active ? c + "22" : "#18181b",
-                    color: active ? c : "#71717a",
+                    border: active ? `2px solid ${c}` : "1.5px solid var(--pb-border)",
+                    background: active ? c + "22" : "var(--pb-card)",
+                    color: active ? c : "var(--pb-dim)",
                   }}>{p}</button>
                 );
               })}
@@ -1050,11 +1138,11 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
           </div>
         )}
 
-        {/* Format — the coarse News / A-roll split Content Distribution filters on. */}
+        {/* Format — the coarse News / A-roll split Today's Board filters on. */}
         <div>
           <label style={ls}>Format</label>
           {readOnly ? (
-            <span style={{ fontSize: 13, color: idea.content_format ? "#50E0B0" : "#52525b" }}>{idea.content_format || "—"}</span>
+            <span style={{ fontSize: 13, color: idea.content_format ? "#50E0B0" : "var(--pb-faint)" }}>{idea.content_format || "—"}</span>
           ) : (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {CONTENT_FORMATS.map(fmt => {
@@ -1066,9 +1154,9 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
                     onClick={() => onUpdate(idea.id, { content_format: active ? "" : fmt })}
                     style={{
                       padding: "7px 20px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer",
-                      border: active ? `2px solid ${CONTENT_FORMAT_ACCENT[fmt]}` : "1.5px solid #3f3f46",
-                      background: active ? `${CONTENT_FORMAT_ACCENT[fmt]}22` : "#18181b",
-                      color: active ? CONTENT_FORMAT_ACCENT[fmt] : "#71717a",
+                      border: active ? `2px solid ${CONTENT_FORMAT_ACCENT[fmt]}` : "1.5px solid var(--pb-border)",
+                      background: active ? `${CONTENT_FORMAT_ACCENT[fmt]}22` : "var(--pb-card)",
+                      color: active ? CONTENT_FORMAT_ACCENT[fmt] : "var(--pb-dim)",
                     }}
                   >{fmt}</button>
                 );
@@ -1081,7 +1169,7 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
         <div>
           <label style={ls}>Video format</label>
           {readOnly ? (
-            <span style={{ fontSize: 13, color: idea.video_format ? "#50E0B0" : "#52525b" }}>{idea.video_format || "—"}</span>
+            <span style={{ fontSize: 13, color: idea.video_format ? "#50E0B0" : "var(--pb-faint)" }}>{idea.video_format || "—"}</span>
           ) : (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {VIDEO_FORMATS.map(fmt => {
@@ -1150,7 +1238,7 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
             <label style={ls}>Views per page</label>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {selectedPages.map((pg: string) => {
-                const pgc = pageColors[pg] || "#a1a1aa";
+                const pgc = pageColors[pg] || "var(--pb-dim2)";
                 const pgViews = ((idea.page_views || {}) as Record<string, number>)[pg] || 0;
                 return (
                   <div key={pg} style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -1172,8 +1260,8 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
                 );
               })}
               {(idea.views || 0) > 0 && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 4, borderTop: "1px solid #27272a" }}>
-                  <span style={{ fontSize: 11, color: "#71717a", fontWeight: 600 }}>Total</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 4, borderTop: "1px solid var(--pb-chip)" }}>
+                  <span style={{ fontSize: 11, color: "var(--pb-dim)", fontWeight: 600 }}>Total</span>
                   <span style={{ fontSize: 13, color: "#50E0B0", fontWeight: 700 }}>{fmt(idea.views)}</span>
                 </div>
               )}
@@ -1188,7 +1276,7 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
             ) : (
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <ViewsEdit value={idea.views || 0} onSave={v => onUpdate(idea.id, { views: v })} />
-                <span style={{ fontSize: 11, color: "#52525b" }}>(click to edit)</span>
+                <span style={{ fontSize: 11, color: "var(--pb-faint)" }}>(click to edit)</span>
               </div>
             )}
           </div>
@@ -1202,7 +1290,7 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
               /* Per-page test results */
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 {selectedPages.map((pg: string) => {
-                  const pgc = pageColors[pg] || "#a1a1aa";
+                  const pgc = pageColors[pg] || "var(--pb-dim2)";
                   const pgResult = ((idea.page_test_results || {}) as Record<string, string>)[pg] || "";
                   return (
                     <div key={pg}>
@@ -1224,9 +1312,9 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
                               }}
                               style={{
                                 padding: "6px 13px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer",
-                                border: active ? `2px solid ${color}` : "1.5px solid #3f3f46",
-                                background: active ? bg : "#18181b",
-                                color: active ? color : "#71717a",
+                                border: active ? `2px solid ${color}` : "1.5px solid var(--pb-border)",
+                                background: active ? bg : "var(--pb-card)",
+                                color: active ? color : "var(--pb-dim)",
                               }}
                             >{label}</button>
                           );
@@ -1249,9 +1337,9 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
                       style={{
                         padding: "7px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600,
                         cursor: "pointer",
-                        border: active ? `2px solid ${color}` : "1.5px solid #3f3f46",
-                        background: active ? bg : "#18181b",
-                        color: active ? color : "#71717a",
+                        border: active ? `2px solid ${color}` : "1.5px solid var(--pb-border)",
+                        background: active ? bg : "var(--pb-card)",
+                        color: active ? color : "var(--pb-dim)",
                       }}
                     >{label}</button>
                   );
@@ -1270,7 +1358,7 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
         {onDelete && !readOnly && (
           <button
             onClick={() => { if (confirm("Delete this idea?")) { onDelete(idea.id); onClose(); } }}
-            style={{ padding: "9px 20px", background: "transparent", color: "#FF7070", border: "1.5px solid #3f3f46", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: "pointer", marginTop: 4 }}
+            style={{ padding: "9px 20px", background: "transparent", color: "#FF7070", border: "1.5px solid var(--pb-border)", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: "pointer", marginTop: 4 }}
           >
             Delete idea
           </button>
@@ -1295,15 +1383,15 @@ function ArchiveRow({ item, onUpdate, onDelete, readOnly }: { item: any; onUpdat
         className="fglass-card pb-gallery-card"
         style={{ borderRadius: 14, padding: "12px 14px", cursor: "pointer", display: "flex", flexDirection: "column", gap: 8, minHeight: 108 }}
       >
-        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#fff", lineHeight: 1.35, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
-          {item.topic || <em style={{ color: "#52525b", fontWeight: 400 }}>No topic</em>}
+        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "var(--pb-ink)", lineHeight: 1.35, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
+          {item.topic || <em style={{ color: "var(--pb-faint)", fontWeight: 400 }}>No topic</em>}
         </p>
         <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
           {pages.map((pg: string) => {
-            const pgc = pageColors[pg] || "#a1a1aa";
+            const pgc = pageColors[pg] || "var(--pb-dim2)";
             return <span key={pg} style={{ fontSize: 10, fontWeight: 700, color: pgc, background: pgc + "22", borderRadius: 99, padding: "2px 8px" }}>{pg}</span>;
           })}
-          <span style={{ fontSize: 10, color: "#a1a1aa", background: "#27272a", borderRadius: 99, padding: "2px 8px" }}>{item.content_type}</span>
+          <span style={{ fontSize: 10, color: "var(--pb-dim2)", background: "var(--pb-chip)", borderRadius: 99, padding: "2px 8px" }}>{item.content_type}</span>
           <span style={{ fontSize: 10, fontWeight: 600, color: ss.text, background: ss.bg, borderRadius: 99, padding: "2px 8px" }}>{STAGE_LABEL[item.status] || item.status}</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: "auto", paddingTop: 6, borderTop: "1px solid rgba(255,255,255,.06)" }}>
@@ -1316,7 +1404,7 @@ function ArchiveRow({ item, onUpdate, onDelete, readOnly }: { item: any; onUpdat
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: item.views > 0 ? "#50E0B0" : "#3f3f46" }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: item.views > 0 ? "#50E0B0" : "var(--pb-border)" }}>
               {item.views > 0 ? fmt(item.views) : "—"}
             </span>
             <span className="fglass-muted" style={{ fontSize: 10 }}>Open →</span>
@@ -1348,71 +1436,71 @@ function WorkingIdeaDetailModal({ item, onClose }: { item: any; onClose: () => v
     enabled: !!item.source_id,
   });
 
-  const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "#71717a", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
+  const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "var(--pb-dim)", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
   const fieldStyle: React.CSSProperties = { width: "100%", padding: "9px 13px", borderRadius: 9, fontSize: 13, boxSizing: "border-box" };
-  const pc = pageColors[item.page_handle] || "#a1a1aa";
+  const pc = pageColors[item.page_handle] || "var(--pb-dim2)";
   const idea = fullIdea || item;
 
   return (
     <PbGlassModalShell onClose={onClose}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "#fff" }}>{item.topic || "Untitled"}</h2>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "var(--pb-ink)" }}>{item.topic || "Untitled"}</h2>
           <button onClick={onClose} className="fglass-muted" style={pbModalCloseBtn}>✕</button>
         </div>
 
         {/* Tags */}
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: pc, background: pc + "22", borderRadius: 99, padding: "3px 10px" }}>{item.page_handle}</span>
-          <span style={{ fontSize: 11, color: "#71717a", background: "#27272a", borderRadius: 99, padding: "3px 10px" }}>{item.content_type}</span>
-          <span style={{ fontSize: 11, color: "#71717a", background: "#27272a", borderRadius: 99, padding: "3px 10px" }}>Week {item.week_number}</span>
+          <span style={{ fontSize: 11, color: "var(--pb-dim)", background: "var(--pb-chip)", borderRadius: 99, padding: "3px 10px" }}>{item.content_type}</span>
+          <span style={{ fontSize: 11, color: "var(--pb-dim)", background: "var(--pb-chip)", borderRadius: 99, padding: "3px 10px" }}>Week {item.week_number}</span>
           <span style={{ fontSize: 12, fontWeight: 700, color: "#50E0B0", marginLeft: "auto" }}>{fmt(item.views_achieved)} views</span>
         </div>
 
         {isLoading ? (
-          <p style={{ color: "#52525b", fontSize: 12 }}>Loading idea content…</p>
+          <p style={{ color: "var(--pb-faint)", fontSize: 12 }}>Loading idea content…</p>
         ) : (
           <>
             <div>
               <label style={ls}>Hook variations</label>
-              <pre className="fglass-input" style={{ ...fieldStyle, margin: 0, whiteSpace: "pre-wrap", fontFamily: "inherit", color: idea.hook_variations ? "#e4e4e7" : "#3f3f46", minHeight: 60 }}>
+              <pre className="fglass-input" style={{ ...fieldStyle, margin: 0, whiteSpace: "pre-wrap", fontFamily: "inherit", color: idea.hook_variations ? "var(--pb-ink)" : "var(--pb-border)", minHeight: 60 }}>
                 {idea.hook_variations || "No hook variations added"}
               </pre>
             </div>
             <div>
               <label style={ls}>Script / notes</label>
-              <pre className="fglass-input" style={{ ...fieldStyle, margin: 0, whiteSpace: "pre-wrap", fontFamily: "inherit", color: idea.script ? "#e4e4e7" : "#3f3f46", minHeight: 60 }}>
+              <pre className="fglass-input" style={{ ...fieldStyle, margin: 0, whiteSpace: "pre-wrap", fontFamily: "inherit", color: idea.script ? "var(--pb-ink)" : "var(--pb-border)", minHeight: 60 }}>
                 {idea.script || "No script added"}
               </pre>
             </div>
             <div>
               <label style={ls}>Music reference</label>
-              <div style={{ ...fieldStyle, color: idea.music_ref ? "#e4e4e7" : "#3f3f46" }}>{idea.music_ref || "—"}</div>
+              <div style={{ ...fieldStyle, color: idea.music_ref ? "var(--pb-ink)" : "var(--pb-border)" }}>{idea.music_ref || "—"}</div>
             </div>
             <div style={{ display: "flex", gap: 10 }}>
               <div style={{ flex: 1 }}>
                 <label style={ls}>YT link</label>
                 {idea.yt_url
                   ? <a href={idea.yt_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block" }}>{idea.yt_url}</a>
-                  : <div style={{ ...fieldStyle, color: "#3f3f46" }}>—</div>
+                  : <div style={{ ...fieldStyle, color: "var(--pb-border)" }}>—</div>
                 }
               </div>
               <div style={{ flex: "0 0 140px" }}>
                 <label style={ls}>Timestamps</label>
-                <div style={{ ...fieldStyle, color: idea.yt_timestamps ? "#e4e4e7" : "#3f3f46" }}>{idea.yt_timestamps || "—"}</div>
+                <div style={{ ...fieldStyle, color: idea.yt_timestamps ? "var(--pb-ink)" : "var(--pb-border)" }}>{idea.yt_timestamps || "—"}</div>
               </div>
             </div>
             <div>
               <label style={ls}>Drive link (base edit link)</label>
               {idea.frame_link
                 ? <a href={idea.frame_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block" }}>{idea.frame_link}</a>
-                : <div style={{ ...fieldStyle, color: "#3f3f46" }}>—</div>
+                : <div style={{ ...fieldStyle, color: "var(--pb-border)" }}>—</div>
               }
             </div>
             <div>
               <label style={ls}>Comp link</label>
               {idea.comp_link
                 ? <a href={idea.comp_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block" }}>{idea.comp_link}</a>
-                : <div style={{ ...fieldStyle, color: "#3f3f46" }}>—</div>
+                : <div style={{ ...fieldStyle, color: "var(--pb-border)" }}>—</div>
               }
             </div>
           </>
@@ -1468,16 +1556,16 @@ function WorkingRow({ item, rank, onDistribute, readOnly }: { item: any; rank: n
           </span>
         </div>
 
-        <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "#fff", lineHeight: 1.35, flex: 1, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical" } as any}>
-          {item.topic || <em style={{ color: "#52525b", fontWeight: 400 }}>No topic</em>}
+        <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "var(--pb-ink)", lineHeight: 1.35, flex: 1, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical" } as any}>
+          {item.topic || <em style={{ color: "var(--pb-faint)", fontWeight: 400 }}>No topic</em>}
         </p>
 
         <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
           {pages.map((pg: string) => {
-            const pgc = pageColors[pg] || "#a1a1aa";
+            const pgc = pageColors[pg] || "var(--pb-dim2)";
             return <span key={pg} style={{ fontSize: 10, fontWeight: 700, color: pgc, background: pgc + "22", borderRadius: 99, padding: "2px 8px" }}>{pg}</span>;
           })}
-          <span className="fglass-muted" style={{ fontSize: 10, background: "#27272a", borderRadius: 99, padding: "2px 8px" }}>
+          <span className="fglass-muted" style={{ fontSize: 10, background: "var(--pb-chip)", borderRadius: 99, padding: "2px 8px" }}>
             Week {item.week_number}
           </span>
         </div>
@@ -1559,14 +1647,14 @@ function AddIdeaModal({ open, onAdd, onClose }: {
   if (!open) return null;
 
   // Shared label + input styles matching Content Tracker exactly
-  const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "#71717a", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
+  const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "var(--pb-dim)", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
   const is: React.CSSProperties = { width: "100%", padding: "9px 13px", borderRadius: 9, fontSize: 13, outline: "none", boxSizing: "border-box" };
 
   return (
     <PbGlassModalShell onClose={onClose}>
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 600, color: "#fff", letterSpacing: "-0.02em" }}>Add new idea</h2>
+          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 600, color: "var(--pb-ink)", letterSpacing: "-0.02em" }}>Add new idea</h2>
           <button onClick={onClose} className="fglass-muted" style={pbModalCloseBtn}>✕</button>
         </div>
 
@@ -1578,7 +1666,7 @@ function AddIdeaModal({ open, onAdd, onClose }: {
             autoFocus value={topic} onChange={e => setTopic(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") submit(); }}
             placeholder="e.g. How Ambani built his first business"
-            style={{ ...is, color: "#e4e4e7" }}
+            style={{ ...is, color: "var(--pb-ink)" }}
           />
         </div>
 
@@ -1613,17 +1701,17 @@ function AddIdeaModal({ open, onAdd, onClose }: {
           </div>
           <div style={{ flex: 1 }}>
             <label style={ls}>Date</label>
-            <input type="date" className="fglass-input" value={date} onChange={e => setDate(e.target.value)} style={{ ...is, color: "#e4e4e7" }} />
+            <input type="date" className="fglass-input" value={date} onChange={e => setDate(e.target.value)} style={{ ...is, color: "var(--pb-ink)" }} />
           </div>
         </div>
 
         {/* Created by */}
         <div>
           <label style={ls}>Created by</label>
-          <div className="fglass-input" style={{ ...is, color: "#a1a1aa" }}>{createdBy || "—"}</div>
+          <div className="fglass-input" style={{ ...is, color: "var(--pb-dim2)" }}>{createdBy || "—"}</div>
         </div>
 
-        {/* Format — coarse News / A-roll split (Content Distribution filters on this). */}
+        {/* Format — coarse News / A-roll split (Today's Board filters on this). */}
         <div>
           <label style={ls}>Format</label>
           <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
@@ -1633,9 +1721,9 @@ function AddIdeaModal({ open, onAdd, onClose }: {
                 onClick={() => setContentFormat(v => v === cf ? "" : cf)}
                 style={{
                   padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                  border: contentFormat === cf ? `2px solid ${CONTENT_FORMAT_ACCENT[cf]}` : "1.5px solid #3f3f46",
-                  background: contentFormat === cf ? `${CONTENT_FORMAT_ACCENT[cf]}22` : "#18181b",
-                  color: contentFormat === cf ? CONTENT_FORMAT_ACCENT[cf] : "#71717a",
+                  border: contentFormat === cf ? `2px solid ${CONTENT_FORMAT_ACCENT[cf]}` : "1.5px solid var(--pb-border)",
+                  background: contentFormat === cf ? `${CONTENT_FORMAT_ACCENT[cf]}22` : "var(--pb-card)",
+                  color: contentFormat === cf ? CONTENT_FORMAT_ACCENT[cf] : "var(--pb-dim)",
                 }}
               >{cf}</button>
             ))}
@@ -1663,7 +1751,7 @@ function AddIdeaModal({ open, onAdd, onClose }: {
             className="fglass-input"
             value={hookVars} onChange={e => setHookVars(e.target.value)}
             rows={4} placeholder={"Hook variation 1\nHook variation 2\nHook variation 3"}
-            style={{ ...is, resize: "vertical", minHeight: 80, color: "#e4e4e7" }}
+            style={{ ...is, resize: "vertical", minHeight: 80, color: "var(--pb-ink)" }}
           />
         </div>
 
@@ -1671,14 +1759,14 @@ function AddIdeaModal({ open, onAdd, onClose }: {
         <div>
           <label style={ls}>Music reference / suggestions</label>
           <input className="fglass-input" value={musicRef} onChange={e => setMusicRef(e.target.value)}
-            placeholder="e.g. Dark cinematic, trending audio XYZ" style={{ ...is, color: "#e4e4e7" }} />
+            placeholder="e.g. Dark cinematic, trending audio XYZ" style={{ ...is, color: "var(--pb-ink)" }} />
         </div>
 
         {/* Frame link */}
         <div>
           <label style={ls}>Drive link (base edit link)</label>
           <input className="fglass-input" value={frameLink} onChange={e => setFrameLink(e.target.value)}
-            placeholder="Google Drive base edit link" style={{ ...is, color: "#e4e4e7" }} />
+            placeholder="Google Drive base edit link" style={{ ...is, color: "var(--pb-ink)" }} />
         </div>
 
         {/* YT / Comp links */}
@@ -1687,12 +1775,12 @@ function AddIdeaModal({ open, onAdd, onClose }: {
             <div style={{ flex: 1 }}>
               <label style={ls}>YT link (original source)</label>
               <input className="fglass-input" value={ytUrl} onChange={e => setYtUrl(e.target.value)}
-                placeholder="https://youtube.com/watch?v=..." style={{ ...is, color: "#e4e4e7" }} />
+                placeholder="https://youtube.com/watch?v=..." style={{ ...is, color: "var(--pb-ink)" }} />
             </div>
             <div style={{ flex: "0 0 140px" }}>
               <label style={ls}>YT timestamps</label>
               <input className="fglass-input" value={ytTs} onChange={e => setYtTs(e.target.value)}
-                placeholder="0:30–1:45" style={{ ...is, color: "#e4e4e7" }} />
+                placeholder="0:30–1:45" style={{ ...is, color: "var(--pb-ink)" }} />
             </div>
           </div>
         )}
@@ -1700,7 +1788,7 @@ function AddIdeaModal({ open, onAdd, onClose }: {
           <div>
             <label style={ls}>Comp link</label>
             <input className="fglass-input" value={compLink} onChange={e => setCompLink(e.target.value)}
-              placeholder="Competitor reel / post URL" style={{ ...is, color: "#e4e4e7" }} />
+              placeholder="Competitor reel / post URL" style={{ ...is, color: "var(--pb-ink)" }} />
           </div>
         )}
 
@@ -1761,16 +1849,16 @@ function bestTestResult(results: Record<string, string> | string[]): string {
 // Content Ops — view-only reference links (frame + comp from CS)
 // ---------------------------------------------------------------------------
 function OpsViewOnlyLinks({ idea }: { idea: any }) {
-  const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "#71717a", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
+  const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "var(--pb-dim)", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingBottom: 12, borderBottom: "1px solid #27272a" }}>
-      <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "#52525b", letterSpacing: "0.06em", textTransform: "uppercase" }}>View only</p>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingBottom: 12, borderBottom: "1px solid var(--pb-chip)" }}>
+      <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "var(--pb-faint)", letterSpacing: "0.06em", textTransform: "uppercase" }}>View only</p>
       <div>
         <label style={ls}>Drive link (base edit link)</label>
         {idea.frame_link ? (
           <a href={idea.frame_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#4A7FD4", wordBreak: "break-all" }}>{idea.frame_link}</a>
         ) : (
-          <span style={{ fontSize: 13, color: "#52525b" }}>—</span>
+          <span style={{ fontSize: 13, color: "var(--pb-faint)" }}>—</span>
         )}
       </div>
       <div>
@@ -1778,7 +1866,7 @@ function OpsViewOnlyLinks({ idea }: { idea: any }) {
         {idea.comp_link ? (
           <a href={idea.comp_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#D4952A", wordBreak: "break-all" }}>{idea.comp_link}</a>
         ) : (
-          <span style={{ fontSize: 13, color: "#52525b" }}>—</span>
+          <span style={{ fontSize: 13, color: "var(--pb-faint)" }}>—</span>
         )}
       </div>
     </div>
@@ -1799,7 +1887,7 @@ function PerPageIdeaPanel({ idea, onUpdate, canEditSchedule, canEditPerformance,
   showCompLink?: boolean;
 }) {
   const { pageColors } = usePlaybook();
-  const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "#71717a", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
+  const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "var(--pb-dim)", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
   const pages = ideaPages(idea);
   const stage = idea.status || "new";
   const editCaption = canEditCaption ?? !!canEditSchedule;
@@ -1812,14 +1900,14 @@ function PerPageIdeaPanel({ idea, onUpdate, canEditSchedule, canEditPerformance,
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "14px 0 4px", borderTop: "1px solid #27272a" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "14px 0 4px", borderTop: "1px solid var(--pb-chip)" }}>
       {showFrameLink && (
         <div>
           <label style={ls}>Drive link (base edit link)</label>
           {idea.frame_link ? (
             <a href={idea.frame_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#4A7FD4", wordBreak: "break-all" }}>{idea.frame_link}</a>
           ) : (
-            <span style={{ fontSize: 13, color: "#52525b" }}>—</span>
+            <span style={{ fontSize: 13, color: "var(--pb-faint)" }}>—</span>
           )}
         </div>
       )}
@@ -1830,15 +1918,15 @@ function PerPageIdeaPanel({ idea, onUpdate, canEditSchedule, canEditPerformance,
           {idea.comp_link ? (
             <a href={idea.comp_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#D4952A", wordBreak: "break-all" }}>{idea.comp_link}</a>
           ) : (
-            <span style={{ fontSize: 13, color: "#52525b" }}>—</span>
+            <span style={{ fontSize: 13, color: "var(--pb-faint)" }}>—</span>
           )}
         </div>
       )}
 
       {!pages.length ? (
-        <p style={{ fontSize: 12, color: "#52525b", margin: 0 }}>No pages assigned yet.</p>
+        <p style={{ fontSize: 12, color: "var(--pb-faint)", margin: 0 }}>No pages assigned yet.</p>
       ) : pages.map(pg => {
-        const pgc = pageColors[pg] || "#a1a1aa";
+        const pgc = pageColors[pg] || "var(--pb-dim2)";
         const pgDate = ((idea.page_posting_dates || {}) as Record<string, string>)[pg] || "";
         const pgLive = ((idea.page_live_links || {}) as Record<string, string>)[pg] || "";
         const pgCaption = ((idea.page_captions || {}) as Record<string, string>)[pg] || "";
@@ -1846,7 +1934,7 @@ function PerPageIdeaPanel({ idea, onUpdate, canEditSchedule, canEditPerformance,
         const pgResult = ((idea.page_test_results || {}) as Record<string, string>)[pg] || "";
 
         return (
-          <div key={pg} style={{ padding: "12px 14px", background: "#111113", borderRadius: 10, border: "1px solid #27272a" }}>
+          <div key={pg} style={{ padding: "12px 14px", background: "var(--pb-panel)", borderRadius: 10, border: "1px solid var(--pb-chip)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
               <span style={{ width: 8, height: 8, borderRadius: "50%", background: pgc, flexShrink: 0 }} />
               <span style={{ fontSize: 12, fontWeight: 700, color: pgc }}>{pg}</span>
@@ -1859,7 +1947,7 @@ function PerPageIdeaPanel({ idea, onUpdate, canEditSchedule, canEditPerformance,
                   {canEditSchedule ? (
                     <input type="date" value={pgDate.slice(0, 10)} onChange={e => patchPageField("page_posting_dates", pg, e.target.value)} style={inp} />
                   ) : (
-                    <span style={{ fontSize: 13, color: "#e4e4e7" }}>{pgDate ? fmtShortDate(pgDate.slice(0, 10)) : "—"}</span>
+                    <span style={{ fontSize: 13, color: "var(--pb-ink)" }}>{pgDate ? fmtShortDate(pgDate.slice(0, 10)) : "—"}</span>
                   )}
                 </div>
                 <div style={{ marginBottom: 10 }}>
@@ -1869,7 +1957,7 @@ function PerPageIdeaPanel({ idea, onUpdate, canEditSchedule, canEditPerformance,
                   ) : pgLive ? (
                     <a href={pgLive} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#4A7FD4", wordBreak: "break-all" }}>{pgLive}</a>
                   ) : (
-                    <span style={{ fontSize: 13, color: "#52525b" }}>—</span>
+                    <span style={{ fontSize: 13, color: "var(--pb-faint)" }}>—</span>
                   )}
                 </div>
                 <div style={{ marginBottom: canEditPerformance ? 10 : 0 }}>
@@ -1877,7 +1965,7 @@ function PerPageIdeaPanel({ idea, onUpdate, canEditSchedule, canEditPerformance,
                   {editCaption ? (
                     <SafeArea value={pgCaption} onSave={v => patchPageField("page_captions", pg, v)} placeholder="Instagram caption" rows={3} />
                   ) : (
-                    <p style={{ margin: 0, fontSize: 13, color: pgCaption ? "#e4e4e7" : "#52525b", whiteSpace: "pre-wrap" }}>{pgCaption || "—"}</p>
+                    <p style={{ margin: 0, fontSize: 13, color: pgCaption ? "var(--pb-ink)" : "var(--pb-faint)", whiteSpace: "pre-wrap" }}>{pgCaption || "—"}</p>
                   )}
                 </div>
               </>
@@ -1926,9 +2014,9 @@ function PerPageIdeaPanel({ idea, onUpdate, canEditSchedule, canEditPerformance,
                           style={{
                             padding: "6px 13px", borderRadius: 7, fontSize: 11, fontWeight: 600,
                             cursor: canEditPerformance ? "pointer" : "default",
-                            border: active ? `2px solid ${color}` : "1.5px solid #3f3f46",
-                            background: active ? bg : "#18181b",
-                            color: active ? color : "#71717a",
+                            border: active ? `2px solid ${color}` : "1.5px solid var(--pb-border)",
+                            background: active ? bg : "var(--pb-card)",
+                            color: active ? color : "var(--pb-dim)",
                           }}
                         >{label}</button>
                       );
@@ -1959,15 +2047,15 @@ function ContentOpsIdeaModal({ idea, onUpdate, onClose, viewOnly }: {
     <PbGlassModalShell onClose={onClose}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
           <div>
-            <p style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "#fff" }}>
-              {idea.topic || <em style={{ color: "#52525b", fontWeight: 400 }}>Untitled</em>}
+            <p style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "var(--pb-ink)" }}>
+              {idea.topic || <em style={{ color: "var(--pb-faint)", fontWeight: 400 }}>Untitled</em>}
             </p>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
               <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 99, background: ss.bg, color: ss.text }}>
                 {STAGE_LABEL[stage] || stage}
               </span>
               {selectedPages.map((pg: string) => {
-                const c = pageColors[pg] || "#a1a1aa";
+                const c = pageColors[pg] || "var(--pb-dim2)";
                 return <span key={pg} style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, background: c + "22", color: c, fontWeight: 600 }}>{pg}</span>;
               })}
             </div>
@@ -2024,7 +2112,7 @@ function CalendarTab({ pageFilter, search, opsOnly, calendarViewOnly }: {
   );
 
   const displayPages = useMemo(() => {
-    if (pageFilter !== "all") return [pageFilter];
+    if (!isAllPages(pageFilter)) return playbookPages.filter(p => pageInFilter(pageFilter, p));
     return [...playbookPages];
   }, [pageFilter, playbookPages]);
 
@@ -2057,9 +2145,9 @@ function CalendarTab({ pageFilter, search, opsOnly, calendarViewOnly }: {
         {entry.time ? (
           <p style={{ margin: "0 0 3px", fontSize: 10, fontWeight: 700, color: "#D4952A" }}>{fmtTimeLabel(entry.time)}</p>
         ) : (
-          <p style={{ margin: "0 0 3px", fontSize: 9, color: "#52525b" }}>No time set</p>
+          <p style={{ margin: "0 0 3px", fontSize: 9, color: "var(--pb-faint)" }}>No time set</p>
         )}
-        <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: "#fff", lineHeight: 1.3,
+        <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: "var(--pb-ink)", lineHeight: 1.3,
           overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
           {entry.idea.topic || "Untitled"}
         </p>
@@ -2076,7 +2164,7 @@ function CalendarTab({ pageFilter, search, opsOnly, calendarViewOnly }: {
     );
   };
 
-  if (isLoading) return <p style={{ color: "#52525b", fontSize: 12, padding: "20px 0" }}>Loading…</p>;
+  if (isLoading) return <p style={{ color: "var(--pb-faint)", fontSize: 12, padding: "20px 0" }}>Loading…</p>;
 
   return (
     <div>
@@ -2084,30 +2172,30 @@ function CalendarTab({ pageFilter, search, opsOnly, calendarViewOnly }: {
         <button onClick={() => setWeekStart(addDays(weekStart, -7))} style={btnSecondary}>← Prev</button>
         <button onClick={() => setWeekStart(getMonday(new Date()))} style={btnSecondary}>Today</button>
         <button onClick={() => setWeekStart(addDays(weekStart, 7))} style={btnSecondary}>Next →</button>
-        <span style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--pb-ink)" }}>
           {fmtShortDate(weekStart)} – {fmtShortDate(weekEnd)}
         </span>
-        <span style={{ fontSize: 12, color: "#52525b" }}>{calEntries.length} post{calEntries.length !== 1 ? "s" : ""}</span>
-        <span style={{ fontSize: 11, color: "#71717a" }}>Testing & Proven only</span>
-        {calReadOnly && !opsOnly && <span style={{ fontSize: 11, color: "#71717a" }}>View only</span>}
+        <span style={{ fontSize: 12, color: "var(--pb-faint)" }}>{calEntries.length} post{calEntries.length !== 1 ? "s" : ""}</span>
+        <span style={{ fontSize: 11, color: "var(--pb-dim)" }}>Testing & Proven only</span>
+        {calReadOnly && !opsOnly && <span style={{ fontSize: 11, color: "var(--pb-dim)" }}>View only</span>}
       </div>
 
-      <div style={{ overflowX: "auto", borderRadius: 10, border: "1px solid #27272a" }}>
+      <div style={{ overflowX: "auto", borderRadius: 10, border: "1px solid var(--pb-chip)" }}>
         <div style={{
           display: "grid",
           gridTemplateColumns: `minmax(120px, 150px) repeat(7, minmax(130px, 1fr))`,
           minWidth: 900,
-          background: "#27272a",
+          background: "var(--pb-chip)",
           gap: 1,
         }}>
           {/* Header row */}
-          <div style={{ background: "#111113", padding: "10px 12px" }} />
+          <div style={{ background: "var(--pb-panel)", padding: "10px 12px" }} />
           {days.map((day, i) => {
             const isToday = day === todayStr;
             return (
-              <div key={day} style={{ background: isToday ? "#1a1a14" : "#111113", padding: "8px 10px", textAlign: "center" }}>
-                <span style={{ fontSize: 10, fontWeight: 600, color: isToday ? "#D4952A" : "#71717a", display: "block" }}>{dayLabels[i]}</span>
-                <span style={{ fontSize: 14, fontWeight: isToday ? 700 : 500, color: isToday ? "#fff" : "#a1a1aa" }}>
+              <div key={day} style={{ background: isToday ? "#1a1a14" : "var(--pb-panel)", padding: "8px 10px", textAlign: "center" }}>
+                <span style={{ fontSize: 10, fontWeight: 600, color: isToday ? "#D4952A" : "var(--pb-dim)", display: "block" }}>{dayLabels[i]}</span>
+                <span style={{ fontSize: 14, fontWeight: isToday ? 700 : 500, color: isToday ? "#fff" : "var(--pb-dim2)" }}>
                   {new Date(day + "T00:00:00").getDate()}
                 </span>
               </div>
@@ -2119,21 +2207,21 @@ function CalendarTab({ pageFilter, search, opsOnly, calendarViewOnly }: {
             const c = pageColors[page] || "#7c3aed";
             const short = pageShort[page] || page;
             const rowHasItems = calEntries.some(e => e.page === page);
-            if (pageFilter === "all" && !rowHasItems) return null;
+            if (isAllPages(pageFilter) && !rowHasItems) return null;
 
             return (
               <Fragment key={page}>
                 <div
                   style={{
-                    background: "#111113", padding: "10px 12px",
+                    background: "var(--pb-panel)", padding: "10px 12px",
                     display: "flex", alignItems: "flex-start", gap: 8,
-                    borderTop: "1px solid #27272a",
+                    borderTop: "1px solid var(--pb-chip)",
                   }}
                 >
                   <span style={{ width: 8, height: 8, borderRadius: "50%", background: c, flexShrink: 0, marginTop: 4 }} />
                   <div>
                     <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: c, lineHeight: 1.2 }}>{short}</p>
-                    <p style={{ margin: "2px 0 0", fontSize: 9, color: "#52525b", lineHeight: 1.2 }}>{page}</p>
+                    <p style={{ margin: "2px 0 0", fontSize: 9, color: "var(--pb-faint)", lineHeight: 1.2 }}>{page}</p>
                   </div>
                 </div>
                 {days.map(day => {
@@ -2145,13 +2233,13 @@ function CalendarTab({ pageFilter, search, opsOnly, calendarViewOnly }: {
                     <div
                       key={`${page}-${day}`}
                       style={{
-                        background: isToday ? "#1a1a14" : "#111113",
+                        background: isToday ? "#1a1a14" : "var(--pb-panel)",
                         padding: 6, minHeight: 88,
-                        borderTop: "1px solid #27272a",
+                        borderTop: "1px solid var(--pb-chip)",
                       }}
                     >
                       {dayItems.length === 0 ? (
-                        <p style={{ fontSize: 10, color: "#3f3f46", textAlign: "center", padding: "16px 4px", margin: 0 }}>—</p>
+                        <p style={{ fontSize: 10, color: "var(--pb-border)", textAlign: "center", padding: "16px 4px", margin: 0 }}>—</p>
                       ) : dayItems.map(renderCalCard)}
                     </div>
                   );
@@ -2163,7 +2251,7 @@ function CalendarTab({ pageFilter, search, opsOnly, calendarViewOnly }: {
       </div>
 
       {calEntries.length === 0 && (
-        <p style={{ fontSize: 12, color: "#52525b", marginTop: 16, textAlign: "center" }}>
+        <p style={{ fontSize: 12, color: "var(--pb-faint)", marginTop: 16, textAlign: "center" }}>
           No Testing or Proven ideas with a posting date this week. Set posting dates on ideas in those stages.
         </p>
       )}
@@ -2189,7 +2277,8 @@ function CalendarTab({ pageFilter, search, opsOnly, calendarViewOnly }: {
 
 // Stage column dot colors
 const STAGE_DOT: Record<string, string> = {
-  new: "#4A7FD4", approved: "#2D9E5F", base_edit: "#7B61C4", formatted: "#38BDF8",
+  new: "#4A7FD4", approved: "#2D9E5F", base_edit: "#7B61C4", script_hook: "#FF9580",
+  designed: "#FF7EB6", formatted: "#38BDF8", review: "#FFD166", gtg: "#50E0B0",
   testing: "#D4952A", proven_ideas: "#1D9E75", scheduled: "#534AB7",
   posted: "#2D9E5F", kill: "#C93B3B",
 };
@@ -2369,33 +2458,33 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
     return (
       <div style={{ padding: "24px 0", color: "#fca5a5", fontSize: 13 }}>
         <p style={{ marginBottom: 8 }}>{msg}</p>
-        <p style={{ color: "#71717a", fontSize: 12 }}>If this started after a deploy, rebuild the backend (docker) and confirm VITE_API_URL in the frontend build.</p>
+        <p style={{ color: "var(--pb-dim)", fontSize: 12 }}>If this started after a deploy, rebuild the backend (docker) and confirm VITE_API_URL in the frontend build.</p>
       </div>
     );
   }
 
-  if (isLoading) return <p style={{ color: "#52525b", fontSize: 12, padding: "20px 0" }}>Loading…</p>;
+  if (isLoading) return <p style={{ color: "var(--pb-faint)", fontSize: 12, padding: "20px 0" }}>Loading…</p>;
 
   if (opsOnly) {
     return (
       <div>
-        <p style={{ fontSize: 12, color: "#71717a", marginBottom: 14 }}>
+        <p style={{ fontSize: 12, color: "var(--pb-dim)", marginBottom: 14 }}>
           Week {currentWeek} · {opsFiltered.length} idea{opsFiltered.length !== 1 ? "s" : ""} · tap to edit posting date, views & baseline
         </p>
         <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 20, minHeight: "calc(100vh - 260px)" }}>
           {OPS_KANBAN_STAGES.map(stage => {
             const stageIdeas = opsFiltered.filter((i: any) => (i.status || "") === stage);
-            const dot = STAGE_DOT[stage] || "#71717a";
+            const dot = STAGE_DOT[stage] || "var(--pb-dim)";
             return (
               <div key={stage} style={{ minWidth: 220, maxWidth: 280, flex: "1 0 220px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, padding: "0 2px" }}>
                   <span style={{ width: 8, height: 8, borderRadius: "50%", background: dot, flexShrink: 0 }} />
-                  <span style={{ fontSize: 13, fontWeight: 600, color: "#e4e4e7" }}>{STAGE_LABEL[stage as IdeaStage] || stage}</span>
-                  <span style={{ fontSize: 12, color: "#52525b" }}>{opsStageCounts[stage] ?? stageIdeas.length}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "var(--pb-ink)" }}>{STAGE_LABEL[stage as IdeaStage] || stage}</span>
+                  <span style={{ fontSize: 12, color: "var(--pb-faint)" }}>{opsStageCounts[stage] ?? stageIdeas.length}</span>
                 </div>
                 <div className="fglass-lane" style={{ minHeight: 120 }}>
                   {stageIdeas.length === 0 ? (
-                    <p style={{ fontSize: 11, color: "#3f3f46", textAlign: "center", padding: "24px 8px", border: "1.5px dashed #27272a", borderRadius: 8 }}>Empty</p>
+                    <p style={{ fontSize: 11, color: "var(--pb-border)", textAlign: "center", padding: "24px 8px", border: "1.5px dashed var(--pb-chip)", borderRadius: 8 }}>Empty</p>
                   ) : stageIdeas.map((idea: any) => (
                     <OpsKanbanCard key={idea.id} idea={idea} isSelected={detailIdea?.id === idea.id} onClick={() => setDetailIdea(idea)} />
                   ))}
@@ -2452,8 +2541,8 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
           >
             {/* Column header — label only, not interactive */}
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, padding: "0 2px" }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: STAGE_DOT[stage] || "#52525b", flexShrink: 0 }} />
-              <span style={{ fontSize: 11, fontWeight: 600, color: STATUS_STYLE[stage]?.text || "#a1a1aa" }}>{STAGE_LABEL[stage]}</span>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: STAGE_DOT[stage] || "var(--pb-faint)", flexShrink: 0 }} />
+              <span style={{ fontSize: 11, fontWeight: 600, color: STATUS_STYLE[stage]?.text || "var(--pb-dim2)" }}>{STAGE_LABEL[stage]}</span>
               <span className="fglass-muted" style={{ fontSize: 10, fontWeight: 500 }}>{stageCounts[stage] ?? 0}</span>
             </div>
 
@@ -2482,7 +2571,7 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
                 ))
               }
               {(stageCounts[stage] ?? 0) === 0 && (
-                <div style={{ padding: "20px 10px", textAlign: "center", color: "#3f3f46", fontSize: 11, border: "1.5px dashed #27272a", borderRadius: 9 }}>
+                <div style={{ padding: "20px 10px", textAlign: "center", color: "var(--pb-border)", fontSize: 11, border: "1.5px dashed var(--pb-chip)", borderRadius: 9 }}>
                   Empty
                 </div>
               )}
@@ -2513,7 +2602,6 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
 // Base edit → Formatted → Posted rewrites the underlying copies' status, which
 // is exactly what the Frontseat page cards read — so CS sees progress live.
 // ---------------------------------------------------------------------------
-const PRODUCTION_STAGE_ORDER: Record<string, number> = { approved: 0, base_edit: 1, formatted: 2, posted: 3 };
 
 /** A distributed copy enters production at "approved"; treat any legacy "new" copy as approved. */
 function prodStage(status: string | undefined | null): string {
@@ -2549,8 +2637,13 @@ function groupBySourcePool(copies: ProdCopy[]): ProdGroup[] {
   return groups;
 }
 
-function ProductionTab({ pageFilter, search, readOnly }: { pageFilter: string; search: string; readOnly?: boolean }) {
+function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy, personFilter }: {
+  pageFilter: string; search: string; readOnly?: boolean;
+  contentTypeFilter: "reel" | "carousel"; viewBy: "stage" | "person"; personFilter: string;
+}) {
   const { api, id: playbookId, pageColors } = usePlaybook();
+  const { user } = useAuth();
+  const { role } = usePermissions();
   const qc = useQueryClient();
   const [detailGroup, setDetailGroup] = useState<ProdGroup | null>(null);
   const [checklist, setChecklist] = useState<{ group: ProdGroup; to: "formatted" | "posted" } | null>(null);
@@ -2559,12 +2652,15 @@ function ProductionTab({ pageFilter, search, readOnly }: { pageFilter: string; s
 
   const todayStr = toLocalISO(new Date());
 
-  // Fetch TODAY only — the SAME query the Frontseat uses, so Production reads the exact
-  // same rows the CS is distributing (and stays in sync with it). Fetching the whole bank
-  // instead would hit the DB row cap and silently drop today's newest rows.
+  // Fetch everything still in the pipeline (not yet posted), regardless of which day it
+  // was distributed on — plus anything posted today, so it lingers in the Posted column
+  // for the rest of today before Tracking takes over. A card that misses its posting day
+  // isn't lost: it just keeps showing up here, still at whatever stage it's stuck on,
+  // until someone actually marks it posted. Own cache key (not Frontseat's "today" one) —
+  // the two now hold different-shaped data and must not collide.
   const { data: allIdeas = [], isLoading } = useQuery({
-    queryKey: expQk(playbookId, "idea-bank", "today", todayStr),
-    queryFn: () => api.getIdeaBank({ day_date: todayStr }),
+    queryKey: expQk(playbookId, "idea-bank", "pending"),
+    queryFn: () => api.getIdeaBank({ pending_only: true }),
     staleTime: EXP_STALE_MS,
     refetchOnWindowFocus: false,
   });
@@ -2586,30 +2682,80 @@ function ProductionTab({ pageFilter, search, readOnly }: { pageFilter: string; s
     onSettled: () => qc.invalidateQueries({ queryKey: ["exp", playbookId] }),
   });
 
-  // Pipeline copies (not pool ideas) sitting in a production stage. Posted copies only
-  // linger on the board for the day they went out — after that they belong to Tracking.
-  const groups = useMemo(() => {
-    const q = search.toLowerCase().trim();
-    const copies = (allIdeas as any[]).filter((i: any) => {
+  // Video editors / carousel designers (both canonicalize to "ve") are assignees, not
+  // managers — scope their board to just what's assigned to them so it isn't a wall of
+  // everyone else's cards. CS/CO/admin/etc. still see everything.
+  const myEmail = user?.email || null;
+  const roleList = (role || "").split(",").map((r) => canonicalRole(r.trim())).filter(Boolean);
+  const soloView = roleList.length > 0 && roleList.every((r) => r === "ve");
+
+  // Content Ops / admin manage across everyone — they get the choice of a per-person
+  // workload view alongside the usual per-stage board (not CS/VE), and they're the
+  // only ones who can move a card into Posted.
+  const isOpsOrAdmin = roleList.some((r) => r === "co" || r === "admin" || r === "senior_cs");
+  // contentTypeFilter/viewBy/personFilter are owned by ExperimentXShell now (rendered
+  // in the shared top filter bar, always visible without scrolling) and passed down.
+  const boardStages = contentTypeFilter === "carousel"
+    ? (["approved", "designed", "review", "gtg", "posted"] as const)
+    : (["approved", "base_edit", "script_hook", "formatted", "review", "gtg", "posted"] as const);
+
+  // Pipeline copies (not pool ideas) sitting in a production stage. The backend already
+  // scoped `allIdeas` to "not posted (any day) OR posted today" — a card that missed its
+  // posting day keeps showing here, at whatever stage it's stuck on, until it's posted.
+  const copies = useMemo(() => {
+    return (allIdeas as any[]).filter((i: any) => {
       if (i.frontseat_pool) return false;
       // Only ideas CS distributed through Frontseat (they carry source_pool_id) belong on the
       // production board — this keeps legacy idea-bank rows off it.
       if (!i.source_pool_id) return false;
-      // Mirror the Frontseat exactly: only today's distributed copies (Frontseat is day-scoped).
-      if ((i.day_date || "").slice(0, 10) !== todayStr) return false;
       const s = prodStage(i.status);
       if (!(s in PRODUCTION_STAGE_ORDER)) return false;
-      if (pageFilter !== "all" && !(i.page_handle || "").split(",").some((p: string) => p.trim() === pageFilter)) return false;
+      if (!ideaInPageFilter(pageFilter, i.page_handle)) return false;
+      if (soloView && !isAssignee(i.assigned_to, myEmail)) return false;
+      const isCarousel = (i.content_type || "").trim().toLowerCase() === "carousel";
+      if (isCarousel !== (contentTypeFilter === "carousel")) return false;
       return true;
     });
+  }, [allIdeas, pageFilter, soloView, myEmail, contentTypeFilter]);
+
+  const groups = useMemo(() => {
+    const q = search.toLowerCase().trim();
     let gs = groupBySourcePool(copies);
     if (q) gs = gs.filter((g) => g.topic.toLowerCase().includes(q));
     return gs;
-  }, [allIdeas, search, pageFilter, todayStr]);
+  }, [copies, search]);
+
+  // Same copies, bucketed by who's actually doing the work — lets Ops/admin see
+  // per-person workload instead of digging through every stage column.
+  const byPerson = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    const filtered = q ? copies.filter((c: any) => (c.topic || "").toLowerCase().includes(q)) : copies;
+    const buckets = new Map<string, any[]>();
+    filtered.forEach((c: any) => {
+      const who = (c.assigned_to || "").trim() || "Unassigned";
+      if (!buckets.has(who)) buckets.set(who, []);
+      buckets.get(who)!.push(c);
+    });
+    const entries = [...buckets.entries()].sort(([a], [b]) => {
+      if (a === "Unassigned") return 1;
+      if (b === "Unassigned") return -1;
+      return a.localeCompare(b);
+    });
+    return personFilter === "all" ? entries : entries.filter(([who]) => who === personFilter);
+  }, [copies, search, personFilter]);
+
+  // Lets a person-view card open the same detail modal as the stage board.
+  const groupByCopyId = useMemo(() => {
+    const map = new Map<string, ProdGroup>();
+    groups.forEach((g) => g.copies.forEach((c: any) => map.set(c.id, g)));
+    return map;
+  }, [groups]);
 
   // Formatted/Posted ask which pages (page checklist); Approved/Base edit apply to the
-  // whole group directly. Used by both the button and drag-and-drop between columns.
+  // whole group directly. Used by both the button and drag-and-drop between columns —
+  // gating Posted here (not just on the button) closes the drag-and-drop path too.
   const advance = (group: ProdGroup, to: string) => {
+    if (to === "posted" && !isOpsOrAdmin) return;
     if (to === "formatted" || to === "posted") {
       setChecklist({ group, to });
     } else {
@@ -2637,15 +2783,75 @@ function ProductionTab({ pageFilter, search, readOnly }: { pageFilter: string; s
     setChecklist(null);
   };
 
-  if (isLoading) return <p style={{ color: "#52525b", fontSize: 12, padding: "20px 0" }}>Loading…</p>;
+  if (isLoading) return <p style={{ color: "var(--pb-faint)", fontSize: 12, padding: "20px 0" }}>Loading…</p>;
 
   return (
     <div>
-      <p style={{ fontSize: 12, color: "#71717a", marginBottom: 14 }}>
-        {groups.length} idea{groups.length !== 1 ? "s" : ""} in production · one card per idea (grouped across pages)
-      </p>
+      {soloView && (
+        <p style={{ fontSize: 12, color: "#a78bfa", fontWeight: 600, marginBottom: 12 }}>
+          Showing only tasks assigned to you
+        </p>
+      )}
+      {viewBy === "person" && isOpsOrAdmin ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 22, paddingBottom: 20 }}>
+          {byPerson.length === 0 ? (
+            <div style={{ padding: "20px 10px", textAlign: "center", color: "var(--pb-border)", fontSize: 11, border: "1.5px dashed var(--pb-chip)", borderRadius: 9 }}>Nothing in production</div>
+          ) : byPerson.map(([who, items]) => (
+            <div key={who}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: who === "Unassigned" ? "var(--pb-dim)" : "#a78bfa" }}>{who}</span>
+                <span className="fglass-muted" style={{ fontSize: 10.5 }}>{items.length} idea{items.length !== 1 ? "s" : ""}</span>
+              </div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {items.map((c: any) => {
+                  const ss = STATUS_STYLE[prodStage(c.status)] || STATUS_STYLE.approved;
+                  return (
+                    <div
+                      key={c.id}
+                      onClick={() => { const g = groupByCopyId.get(c.id); if (g) setDetailGroup(g); }}
+                      style={{
+                        width: 220, padding: "10px 12px", borderRadius: 9, cursor: "pointer",
+                        border: "1px solid var(--pb-chip)", background: "var(--pb-panel-2)", borderLeft: `3px solid ${ss.text}`,
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                        <span style={{ fontSize: 10, fontWeight: 600, color: ss.text, background: ss.bg, borderRadius: 4, padding: "1px 6px" }}>
+                          {STAGE_LABEL[prodStage(c.status) as IdeaStage] || c.status}
+                        </span>
+                        <span style={{ fontSize: 10, color: pageColors[(c.page_handle || "").trim()] || "var(--pb-dim2)" }}>{(c.page_handle || "").trim()}</span>
+                      </div>
+                      <p style={{ margin: 0, fontSize: 12.5, fontWeight: 500, color: "var(--pb-ink)", lineHeight: 1.35,
+                        overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
+                        {c.topic || <em style={{ color: "var(--pb-faint)" }}>Untitled</em>}
+                      </p>
+                      {isOpsOrAdmin && !readOnly && (
+                        <div onClick={e => e.stopPropagation()} style={{ marginTop: 8 }}>
+                          <select
+                            value={c.assigned_to || ""}
+                            onChange={e => batchMut.mutate({ ids: [c.id], data: { assigned_to: e.target.value } })}
+                            style={{
+                              fontSize: 10, fontWeight: 600, color: c.assigned_to ? "#a78bfa" : "var(--pb-dim)",
+                              background: "var(--pb-card)", border: "1px solid var(--pb-border)", borderRadius: 5,
+                              padding: "3px 6px", cursor: "pointer", width: "100%",
+                            }}
+                          >
+                            <option value="">Assign to…</option>
+                            {assigneeOptionsFor(c.content_type).map(a => (
+                              <option key={a.name} value={a.name}>{a.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
       <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 20, minHeight: "calc(100vh - 260px)" }}>
-        {PRODUCTION_STAGES.map((stage) => {
+        {boardStages.map((stage) => {
           const colGroups = groups.filter((g) => g.stage === stage);
           return (
             <div
@@ -2658,17 +2864,17 @@ function ProductionTab({ pageFilter, search, readOnly }: { pageFilter: string; s
                 const key = e.dataTransfer.getData("text/plain");
                 setDraggingKey(null); setDropStage(null);
                 const g = groups.find((x) => x.key === key);
-                if (g && g.stage !== stage) advance(g, stage);
+                if (g && g.stage !== stage && isStageInPipeline(g.content_type, stage)) advance(g, stage);
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, padding: "0 2px" }}>
-                <span style={{ width: 7, height: 7, borderRadius: "50%", background: STAGE_DOT[stage] || "#52525b", flexShrink: 0 }} />
-                <span style={{ fontSize: 11, fontWeight: 600, color: STATUS_STYLE[stage]?.text || "#a1a1aa" }}>{STAGE_LABEL[stage]}</span>
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: STAGE_DOT[stage] || "var(--pb-faint)", flexShrink: 0 }} />
+                <span style={{ fontSize: 11, fontWeight: 600, color: STATUS_STYLE[stage]?.text || "var(--pb-dim2)" }}>{STAGE_LABEL[stage]}</span>
                 <span className="fglass-muted" style={{ fontSize: 10, fontWeight: 500 }}>{colGroups.length}</span>
               </div>
               <div className={`fglass-lane${dropStage === stage ? " is-drop-target" : ""}`}>
                 {colGroups.length === 0 ? (
-                  <div style={{ padding: "20px 10px", textAlign: "center", color: "#3f3f46", fontSize: 11, border: "1.5px dashed #27272a", borderRadius: 9 }}>Empty</div>
+                  <div style={{ padding: "20px 10px", textAlign: "center", color: "var(--pb-border)", fontSize: 11, border: "1.5px dashed var(--pb-chip)", borderRadius: 9 }}>Empty</div>
                 ) : colGroups.map((g) => (
                   <div
                     key={g.key}
@@ -2681,6 +2887,7 @@ function ProductionTab({ pageFilter, search, readOnly }: { pageFilter: string; s
                       group={g}
                       pageColors={pageColors}
                       readOnly={readOnly}
+                      canMarkPosted={isOpsOrAdmin}
                       onOpen={() => setDetailGroup(g)}
                       onAdvance={(to) => advance(g, to)}
                     />
@@ -2691,6 +2898,7 @@ function ProductionTab({ pageFilter, search, readOnly }: { pageFilter: string; s
           );
         })}
       </div>
+      )}
 
       {checklist && (
         <PageChecklistModal
@@ -2706,6 +2914,7 @@ function ProductionTab({ pageFilter, search, readOnly }: { pageFilter: string; s
           group={detailGroup}
           pageColors={pageColors}
           readOnly={readOnly}
+          canMarkPosted={isOpsOrAdmin}
           onAdvance={(to) => advance(detailGroup, to)}
           onSaveGroup={(data) => batchMut.mutate({ ids: detailGroup.copies.map((c) => c.id), data })}
           onClose={() => setDetailGroup(null)}
@@ -2715,16 +2924,17 @@ function ProductionTab({ pageFilter, search, readOnly }: { pageFilter: string; s
   );
 }
 
-function ProductionDetailModal({ group, pageColors, readOnly, onAdvance, onSaveGroup, onClose }: {
+function ProductionDetailModal({ group, pageColors, readOnly, canMarkPosted, onAdvance, onSaveGroup, onClose }: {
   group: ProdGroup;
   pageColors: Record<string, string>;
   readOnly?: boolean;
+  canMarkPosted?: boolean;
   onAdvance: (to: string) => void;
   onSaveGroup: (data: Record<string, unknown>) => void;
   onClose: () => void;
 }) {
-  const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "#71717a", marginBottom: 8, letterSpacing: "0.04em", textTransform: "uppercase" };
-  const next = PRODUCTION_NEXT[group.stage];
+  const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "var(--pb-dim)", marginBottom: 8, letterSpacing: "0.04em", textTransform: "uppercase" };
+  const next = getProductionNext(group.content_type, group.stage);
   const ss = STATUS_STYLE[group.stage] || STATUS_STYLE.approved;
   // Reference fields are idea-level (shared across pages) — edits apply to every page copy.
   const src = group.copies[0] || {};
@@ -2732,7 +2942,7 @@ function ProductionDetailModal({ group, pageColors, readOnly, onAdvance, onSaveG
     <PbGlassModalShell onClose={onClose}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-          <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#fff" }}>{group.topic || "Untitled"}</h3>
+          <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "var(--pb-ink)" }}>{group.topic || "Untitled"}</h3>
           <span style={{ fontSize: 10, fontWeight: 700, color: ss.text, background: ss.bg, borderRadius: 99, padding: "2px 8px", flexShrink: 0 }}>
             {STAGE_LABEL[group.stage as IdeaStage] || group.stage}
           </span>
@@ -2746,12 +2956,12 @@ function ProductionDetailModal({ group, pageColors, readOnly, onAdvance, onSaveG
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {group.copies.map((c) => {
             const page = (c.page_handle || "").trim();
-            const col = pageColors[page] || "#a1a1aa";
+            const col = pageColors[page] || "var(--pb-dim2)";
             return (
-              <div key={c.id} style={{ border: "1px solid #27272a", borderRadius: 9, padding: "10px 12px", background: "#0f0f11" }}>
+              <div key={c.id} style={{ border: "1px solid var(--pb-chip)", borderRadius: 9, padding: "10px 12px", background: "var(--pb-panel-2)" }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: col, background: col + "22", borderRadius: 99, padding: "2px 9px" }}>{page}</span>
-                <p style={{ margin: "8px 0 0", fontSize: 13, color: "#e4e4e7", whiteSpace: "pre-wrap", lineHeight: 1.4 }}>
-                  {(c.hook_variations || "").trim() || <span style={{ color: "#52525b" }}>No hook yet</span>}
+                <p style={{ margin: "8px 0 0", fontSize: 13, color: "var(--pb-ink)", whiteSpace: "pre-wrap", lineHeight: 1.4 }}>
+                  {(c.hook_variations || "").trim() || <span style={{ color: "var(--pb-faint)" }}>No hook yet</span>}
                 </p>
               </div>
             );
@@ -2763,7 +2973,7 @@ function ProductionDetailModal({ group, pageColors, readOnly, onAdvance, onSaveG
       <div>
         <label style={ls}>Video format</label>
         {readOnly ? (
-          <span style={{ fontSize: 13, color: src.video_format ? "#50E0B0" : "#52525b" }}>{src.video_format || "—"}</span>
+          <span style={{ fontSize: 13, color: src.video_format ? "#50E0B0" : "var(--pb-faint)" }}>{src.video_format || "—"}</span>
         ) : (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {VIDEO_FORMATS.map((fmt) => {
@@ -2809,7 +3019,7 @@ function ProductionDetailModal({ group, pageColors, readOnly, onAdvance, onSaveG
         {src.comp_link && <a href={src.comp_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block", marginTop: 4 }}>{src.comp_link}</a>}
       </div>
 
-      {!readOnly && next && (
+      {!readOnly && next && (next.to !== "posted" || canMarkPosted) && (
         <div style={{ display: "flex", gap: 8 }}>
           <button type="button" onClick={() => { onAdvance(next.to); onClose(); }} style={btnPrimary}>{next.label}</button>
           <button type="button" onClick={onClose} style={btnSecondary}>Close</button>
@@ -2819,21 +3029,15 @@ function ProductionDetailModal({ group, pageColors, readOnly, onAdvance, onSaveG
   );
 }
 
-const PRODUCTION_NEXT: Record<string, { to: string; label: string } | null> = {
-  approved: { to: "base_edit", label: "Start base edit" },
-  base_edit: { to: "formatted", label: "Mark formatted" },
-  formatted: { to: "posted", label: "Mark posted" },
-  posted: null,
-};
-
-function ProductionCard({ group, pageColors, readOnly, onOpen, onAdvance }: {
+function ProductionCard({ group, pageColors, readOnly, canMarkPosted, onOpen, onAdvance }: {
   group: ProdGroup;
   pageColors: Record<string, string>;
   readOnly?: boolean;
+  canMarkPosted?: boolean;
   onOpen: () => void;
   onAdvance: (to: string) => void;
 }) {
-  const next = PRODUCTION_NEXT[group.stage];
+  const next = getProductionNext(group.content_type, group.stage);
   // Per-page progress ticks — a page is "done for this stage" once its copy reached it.
   const pageStage = (page: string): string => {
     const c = group.copies.find((x) => (x.page_handle || "").trim() === page);
@@ -2842,15 +3046,15 @@ function ProductionCard({ group, pageColors, readOnly, onOpen, onAdvance }: {
   return (
     <PbKanbanCardShell isSelected={false} onClick={onOpen}>
       <p style={{
-        margin: 0, fontSize: 12.5, fontWeight: 500, color: "#fff", lineHeight: 1.3,
+        margin: 0, fontSize: 12.5, fontWeight: 500, color: "var(--pb-ink)", lineHeight: 1.3,
         overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", minWidth: 0,
       } as any}>
-        {group.topic || <em style={{ color: "#52525b", fontWeight: 400 }}>Untitled</em>}
+        {group.topic || <em style={{ color: "var(--pb-faint)", fontWeight: 400 }}>Untitled</em>}
       </p>
       <div style={{ display: "flex", gap: 4, marginTop: 5, flexWrap: "wrap", alignItems: "center" }}>
-        <span style={{ fontSize: 9.5, color: "#a1a1aa", background: "#27272a", borderRadius: 99, padding: "1px 6px" }}>{group.content_type}</span>
+        <span style={{ fontSize: 9.5, color: "var(--pb-dim2)", background: "var(--pb-chip)", borderRadius: 99, padding: "1px 6px" }}>{group.content_type}</span>
         {group.pages.map((pg) => {
-          const c = pageColors[pg] || "#a1a1aa";
+          const c = pageColors[pg] || "var(--pb-dim2)";
           // Dim a page that hasn't caught up to the card's furthest stage.
           const behind = PRODUCTION_STAGE_ORDER[pageStage(pg)] < PRODUCTION_STAGE_ORDER[group.stage];
           return (
@@ -2862,7 +3066,22 @@ function ProductionCard({ group, pageColors, readOnly, onOpen, onAdvance }: {
         })}
         {group.created_by && <span className="fglass-muted" style={{ fontSize: 9.5 }}>· {group.created_by}</span>}
       </div>
-      {!readOnly && next && (
+      {(() => {
+        // Who's actually working this idea — one name per page-copy, deduped. A group
+        // spanning multiple pages can have different people on different pages.
+        const assignees = [...new Set(group.copies.map((c: any) => (c.assigned_to || "").trim()).filter(Boolean))];
+        return assignees.length > 0 ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 5, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 9.5, color: "var(--pb-faint)" }}>Assigned:</span>
+            {assignees.map((name) => (
+              <span key={name} style={{ fontSize: 9.5, fontWeight: 600, color: "#a78bfa", background: "#7c3aed1a", borderRadius: 99, padding: "1px 6px" }}>
+                {name}
+              </span>
+            ))}
+          </div>
+        ) : null;
+      })()}
+      {!readOnly && next && (next.to !== "posted" || canMarkPosted) && (
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onAdvance(next.to); }}
@@ -2890,18 +3109,18 @@ function PageChecklistModal({ group, to, pageColors, onConfirm, onClose }: {
   return (
     <PbGlassModalShell onClose={onClose}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#fff" }}>Which pages is it {verb} for?</h3>
+        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "var(--pb-ink)" }}>Which pages is it {verb} for?</h3>
         <button onClick={onClose} style={pbModalCloseBtn}>×</button>
       </div>
       <p className="fglass-muted" style={{ margin: 0, fontSize: 12 }}>{group.topic || "Untitled idea"}</p>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {allPages.map((p) => {
-          const c = pageColors[p] || "#a1a1aa";
+          const c = pageColors[p] || "var(--pb-dim2)";
           const active = picked.includes(p);
           return (
             <button key={p} type="button" onClick={() => setPicked((cur) => active ? cur.filter((x) => x !== p) : [...cur, p])}
               style={{ padding: "8px 14px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-                border: active ? `2px solid ${c}` : "1.5px solid #3f3f46", background: active ? c + "22" : "#18181b", color: active ? c : "#71717a" }}>
+                border: active ? `2px solid ${c}` : "1.5px solid var(--pb-border)", background: active ? c + "22" : "var(--pb-card)", color: active ? c : "var(--pb-dim)" }}>
               {active ? "✓ " : ""}{p}
             </button>
           );
@@ -2954,13 +3173,13 @@ function TrackingTab({ pageFilter, search, viewOnly }: { pageFilter: string; sea
       const dates = (i.page_posting_dates || {}) as Record<string, unknown>;
       const postedOnDay = Object.values(dates).some((d) => String(d).slice(0, 10) === targetDay);
       if (!postedOnDay) return false;
-      if (pageFilter !== "all" && !(i.page_handle || "").split(",").some((p: string) => p.trim() === pageFilter)) return false;
+      if (!ideaInPageFilter(pageFilter, i.page_handle)) return false;
       if (q && !(i.topic || "").toLowerCase().includes(q)) return false;
       return true;
     });
   }, [allIdeas, targetDay, pageFilter, search]);
 
-  const seg: React.CSSProperties = { padding: "6px 14px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer", border: "1px solid #27272a" };
+  const seg: React.CSSProperties = { padding: "6px 14px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer", border: "1px solid var(--pb-chip)" };
 
   return (
     <div>
@@ -2969,7 +3188,7 @@ function TrackingTab({ pageFilter, search, viewOnly }: { pageFilter: string; sea
           const on = targetDay === iso;
           return (
             <button key={label} type="button" onClick={() => setTargetDay(iso)}
-              style={{ ...seg, background: on ? "#fff" : "transparent", color: on ? "#000" : "#a1a1aa", borderColor: on ? "#fff" : "#27272a" }}>
+              style={{ ...seg, background: on ? "#fff" : "transparent", color: on ? "#000" : "var(--pb-dim2)", borderColor: on ? "#fff" : "var(--pb-chip)" }}>
               {label === "today" ? "Today" : "Yesterday"}
             </button>
           );
@@ -2979,7 +3198,7 @@ function TrackingTab({ pageFilter, search, viewOnly }: { pageFilter: string; sea
           <PopoverTrigger asChild>
             <button type="button"
               style={{ ...seg, display: "inline-flex", alignItems: "center", gap: 7, cursor: "pointer",
-              background: isCustomDay ? "#fff" : "transparent", color: isCustomDay ? "#000" : "#a1a1aa", borderColor: isCustomDay ? "#fff" : "#27272a" }}>
+              background: isCustomDay ? "#fff" : "transparent", color: isCustomDay ? "#000" : "var(--pb-dim2)", borderColor: isCustomDay ? "#fff" : "var(--pb-chip)" }}>
               <Calendar size={14} strokeWidth={1.8} />
               {isCustomDay ? fmtShortDate(targetDay) : "Pick a day"}
             </button>
@@ -3001,11 +3220,11 @@ function TrackingTab({ pageFilter, search, viewOnly }: { pageFilter: string; sea
       </div>
 
       {isLoading ? (
-        <p style={{ color: "#52525b", fontSize: 12, padding: "20px 0" }}>Loading…</p>
+        <p style={{ color: "var(--pb-faint)", fontSize: 12, padding: "20px 0" }}>Loading…</p>
       ) : cards.length === 0 ? (
-        <div style={{ padding: "56px 0", textAlign: "center", border: "1.5px dashed #27272a", borderRadius: 14 }}>
-          <p style={{ margin: 0, fontSize: 14, color: "#e4e4e7" }}>Nothing posted {dayWord}.</p>
-          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#52525b" }}>When the editor marks content Posted, it lands here to be tracked.</p>
+        <div style={{ padding: "56px 0", textAlign: "center", border: "1.5px dashed var(--pb-chip)", borderRadius: 14 }}>
+          <p style={{ margin: 0, fontSize: 14, color: "var(--pb-ink)" }}>Nothing posted {dayWord}.</p>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "var(--pb-faint)" }}>When the editor marks content Posted, it lands here to be tracked.</p>
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12, paddingBottom: 20 }}>
@@ -3050,7 +3269,7 @@ function ContentBankTab({ pageFilter, search, readOnly }: { pageFilter: string; 
   const { data: rawItems = [], isLoading } = useQuery({
     queryKey: expQk(playbookId, "content-bank-all", pageFilter),
     queryFn: () => api.getIdeaBank({
-      page: pageFilter !== "all" ? pageFilter : undefined,
+      page: singlePageParam(pageFilter),
       enrich_cross: false,
     }),
     staleTime: EXP_STALE_MS,
@@ -3059,8 +3278,9 @@ function ContentBankTab({ pageFilter, search, readOnly }: { pageFilter: string; 
 
   // Show all ideas across all weeks — team decides topline/baseline from views + status
   const allValidItems = useMemo(() =>
-    rawItems.filter((i: any) => i.status !== "new" && i.status !== "testing"),
-    [rawItems]);
+    rawItems.filter((i: any) =>
+      i.status !== "new" && i.status !== "testing" && ideaInPageFilter(pageFilter, i.page_handle)),
+    [rawItems, pageFilter]);
 
   // Apply optional month filter on top
   const monthItems = useMemo(() => {
@@ -3139,10 +3359,10 @@ function ContentBankTab({ pageFilter, search, readOnly }: { pageFilter: string; 
     <div>
       {/* Month navigator */}
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 4, background: "#27272a", borderRadius: 7, border: "1px solid #3f3f46", padding: "2px 4px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 4, background: "var(--pb-chip)", borderRadius: 7, border: "1px solid var(--pb-border)", padding: "2px 4px" }}>
           <button
             onClick={() => { setMonthFilter(null); setWeekFilter("all"); setDayFilter("all"); }}
-            style={{ padding: "4px 10px", background: !monthFilter ? "#3f3f46" : "none", border: "none", color: !monthFilter ? "#fff" : "#a1a1aa", cursor: "pointer", fontSize: 11, fontWeight: 600, borderRadius: 5 }}
+            style={{ padding: "4px 10px", background: !monthFilter ? "var(--pb-border)" : "none", border: "none", color: !monthFilter ? "var(--pb-ink)" : "var(--pb-dim2)", cursor: "pointer", fontSize: 11, fontWeight: 600, borderRadius: 5 }}
           >All time</button>
           {availableMonths.map(({ year, month }) => {
             const active = monthFilter?.year === year && monthFilter?.month === month;
@@ -3150,7 +3370,7 @@ function ContentBankTab({ pageFilter, search, readOnly }: { pageFilter: string; 
               <button
                 key={`${year}-${month}`}
                 onClick={() => { setMonthFilter({ year, month }); setWeekFilter("all"); setDayFilter("all"); }}
-                style={{ padding: "4px 10px", background: active ? "#3f3f46" : "none", border: "none", color: active ? "#fff" : "#a1a1aa", cursor: "pointer", fontSize: 11, fontWeight: active ? 600 : 400, borderRadius: 5, whiteSpace: "nowrap" }}
+                style={{ padding: "4px 10px", background: active ? "var(--pb-border)" : "none", border: "none", color: active ? "var(--pb-ink)" : "var(--pb-dim2)", cursor: "pointer", fontSize: 11, fontWeight: active ? 600 : 400, borderRadius: 5, whiteSpace: "nowrap" }}
               >{fmtMonthLabel(year, month)}</button>
             );
           })}
@@ -3158,16 +3378,16 @@ function ContentBankTab({ pageFilter, search, readOnly }: { pageFilter: string; 
 
         {/* Week filter */}
         {weeksInMonth.length > 0 && (
-          <div style={{ display: "flex", background: "#27272a", borderRadius: 7, overflow: "hidden", border: "1px solid #3f3f46" }}>
+          <div style={{ display: "flex", background: "var(--pb-chip)", borderRadius: 7, overflow: "hidden", border: "1px solid var(--pb-border)" }}>
             <button
               onClick={() => { setWeekFilter("all"); setDayFilter("all"); }}
-              style={{ padding: "5px 12px", border: "none", fontSize: 11, fontWeight: 500, cursor: "pointer", background: weekFilter === "all" ? "#3f3f46" : "transparent", color: weekFilter === "all" ? "#fff" : "#71717a" }}
+              style={{ padding: "5px 12px", border: "none", fontSize: 11, fontWeight: 500, cursor: "pointer", background: weekFilter === "all" ? "var(--pb-border)" : "transparent", color: weekFilter === "all" ? "var(--pb-ink)" : "var(--pb-dim)" }}
             >All weeks</button>
             {weeksInMonth.map(([wn, label]) => (
               <button
                 key={wn}
                 onClick={() => { setWeekFilter(wn); setDayFilter("all"); }}
-                style={{ padding: "5px 12px", border: "none", fontSize: 11, fontWeight: 500, cursor: "pointer", background: weekFilter === wn ? "#3f3f46" : "transparent", color: weekFilter === wn ? "#fff" : "#71717a" }}
+                style={{ padding: "5px 12px", border: "none", fontSize: 11, fontWeight: 500, cursor: "pointer", background: weekFilter === wn ? "var(--pb-border)" : "transparent", color: weekFilter === wn ? "var(--pb-ink)" : "var(--pb-dim)" }}
               >{label}</button>
             ))}
           </div>
@@ -3175,43 +3395,43 @@ function ContentBankTab({ pageFilter, search, readOnly }: { pageFilter: string; 
 
         {/* Day filter — only shows when a week is selected */}
         {weekFilter !== "all" && daysInWeek.length > 0 && (
-          <div style={{ display: "flex", background: "#27272a", borderRadius: 7, overflow: "hidden", border: "1px solid #3f3f46" }}>
+          <div style={{ display: "flex", background: "var(--pb-chip)", borderRadius: 7, overflow: "hidden", border: "1px solid var(--pb-border)" }}>
             <button
               onClick={() => setDayFilter("all")}
-              style={{ padding: "5px 12px", border: "none", fontSize: 11, fontWeight: 500, cursor: "pointer", background: dayFilter === "all" ? "#3f3f46" : "transparent", color: dayFilter === "all" ? "#fff" : "#71717a" }}
+              style={{ padding: "5px 12px", border: "none", fontSize: 11, fontWeight: 500, cursor: "pointer", background: dayFilter === "all" ? "var(--pb-border)" : "transparent", color: dayFilter === "all" ? "var(--pb-ink)" : "var(--pb-dim)" }}
             >All days</button>
             {daysInWeek.map(d => (
               <button
                 key={d}
                 onClick={() => setDayFilter(d)}
-                style={{ padding: "5px 12px", border: "none", fontSize: 11, fontWeight: 500, cursor: "pointer", background: dayFilter === d ? "#3f3f46" : "transparent", color: dayFilter === d ? "#fff" : "#71717a" }}
+                style={{ padding: "5px 12px", border: "none", fontSize: 11, fontWeight: 500, cursor: "pointer", background: dayFilter === d ? "var(--pb-border)" : "transparent", color: dayFilter === d ? "var(--pb-ink)" : "var(--pb-dim)" }}
               >{fmtDay(d)}</button>
             ))}
           </div>
         )}
 
         {/* Status filter */}
-        <div style={{ display: "flex", background: "#27272a", borderRadius: 7, overflow: "hidden", border: "1px solid #3f3f46" }}>
+        <div style={{ display: "flex", background: "var(--pb-chip)", borderRadius: 7, overflow: "hidden", border: "1px solid var(--pb-border)" }}>
           {([["all", "All"], ["approved", "Approved"], ["proven_ideas", "Proven"]] as const).map(([val, label]) => (
             <button
               key={val}
               onClick={() => setStatusFilter(val)}
               style={{
                 padding: "5px 12px", border: "none", fontSize: 11, fontWeight: 500, cursor: "pointer",
-                background: statusFilter === val ? (val === "approved" ? "#1a3a2a" : val === "proven_ideas" ? "#1a1a3a" : "#3f3f46") : "transparent",
-                color: statusFilter === val ? (val === "approved" ? "#4ade80" : val === "proven_ideas" ? "#a78bfa" : "#fff") : "#71717a",
+                background: statusFilter === val ? (val === "approved" ? "#1a3a2a" : val === "proven_ideas" ? "#1a1a3a" : "var(--pb-border)") : "transparent",
+                color: statusFilter === val ? (val === "approved" ? "#4ade80" : val === "proven_ideas" ? "#a78bfa" : "var(--pb-ink)") : "var(--pb-dim)",
               }}
             >{label}</button>
           ))}
         </div>
 
-        <span style={{ fontSize: 12, color: "#52525b" }}>{filtered.length} idea{filtered.length !== 1 ? "s" : ""}</span>
+        <span style={{ fontSize: 12, color: "var(--pb-faint)" }}>{filtered.length} idea{filtered.length !== 1 ? "s" : ""}</span>
       </div>
 
       {isLoading ? (
-        <p style={{ color: "#52525b", fontSize: 12 }}>Loading…</p>
+        <p style={{ color: "var(--pb-faint)", fontSize: 12 }}>Loading…</p>
       ) : grouped.length === 0 ? (
-        <p style={{ color: "#52525b", fontSize: 12 }}>
+        <p style={{ color: "var(--pb-faint)", fontSize: 12 }}>
           {search ? "No ideas match your search." : allValidItems.length === 0 ? "No approved or proven ideas yet." : monthFilter ? "No ideas in this month." : "No ideas match the selected filters."}
         </p>
       ) : (
@@ -3260,7 +3480,7 @@ function WorkingIdeasTab({ pageFilter, search, readOnly }: { pageFilter: string;
 
   const { data: ideas = [], isLoading } = useQuery({
     queryKey: expQk(playbookId, "working-ideas", pageFilter),
-    queryFn: () => api.getWorkingIdeas({ page: pageFilter !== "all" ? pageFilter : undefined }),
+    queryFn: () => api.getWorkingIdeas({ page: singlePageParam(pageFilter) }),
     staleTime: EXP_STALE_MS,
   });
 
@@ -3272,7 +3492,8 @@ function WorkingIdeasTab({ pageFilter, search, readOnly }: { pageFilter: string;
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    const valid = ideas.filter((i: any) => i.source_id != null);
+    const valid = ideas.filter((i: any) =>
+      i.source_id != null && ideaInPageFilter(pageFilter, i.page_handle));
     const searched = !q ? valid : valid.filter((i: any) =>
       (i.topic || "").toLowerCase().includes(q) ||
       (i.script || "").toLowerCase().includes(q)
@@ -3282,7 +3503,7 @@ function WorkingIdeasTab({ pageFilter, search, readOnly }: { pageFilter: string;
         ? (b.views_achieved || 0) - (a.views_achieved || 0)
         : new Date(b.flagged_at).getTime() - new Date(a.flagged_at).getTime()
     );
-  }, [ideas, search, sortBy]);
+  }, [ideas, search, sortBy, pageFilter]);
 
   const topIdea = filtered[0] ?? null;
 
@@ -3315,7 +3536,7 @@ function WorkingIdeasTab({ pageFilter, search, readOnly }: { pageFilter: string;
             </button>
           </>
         )}
-        <span style={{ color: "#52525b", fontSize: 12 }}>· {ideas.length} proven idea{ideas.length !== 1 ? "s" : ""}</span>
+        <span style={{ color: "var(--pb-faint)", fontSize: 12 }}>· {ideas.length} proven idea{ideas.length !== 1 ? "s" : ""}</span>
 
         {/* Sort toggle */}
         <div className="six-day-seg" style={{ marginLeft: "auto" }}>
@@ -3325,9 +3546,9 @@ function WorkingIdeasTab({ pageFilter, search, readOnly }: { pageFilter: string;
       </div>
 
       {isLoading ? (
-        <p style={{ color: "#52525b", fontSize: 12 }}>Loading…</p>
+        <p style={{ color: "var(--pb-faint)", fontSize: 12 }}>Loading…</p>
       ) : filtered.length === 0 ? (
-        <p style={{ color: "#52525b", fontSize: 12 }}>
+        <p style={{ color: "var(--pb-faint)", fontSize: 12 }}>
           {search ? "No ideas match your search." : `No ideas have crossed ${fmt(viewGoal)} views yet. Keep going!`}
         </p>
       ) : (
@@ -3349,13 +3570,13 @@ function WorkingIdeasTab({ pageFilter, search, readOnly }: { pageFilter: string;
                     {(() => {
                       const pages = (topIdea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
                       return pages.map((pg: string) => {
-                        const pgc = pageColors[pg] || "#a1a1aa";
+                        const pgc = pageColors[pg] || "var(--pb-dim2)";
                         return <span key={pg} style={{ fontSize: 10, fontWeight: 700, color: pgc, background: pgc + "22", borderRadius: 99, padding: "2px 8px" }}>{pg}</span>;
                       });
                     })()}
                   </div>
-                  <p style={{ margin: 0, fontSize: 17, fontWeight: 600, color: "#fff", lineHeight: 1.35, letterSpacing: "-0.02em" }}>
-                    {topIdea.topic || <em style={{ color: "#52525b" }}>No topic</em>}
+                  <p style={{ margin: 0, fontSize: 17, fontWeight: 600, color: "var(--pb-ink)", lineHeight: 1.35, letterSpacing: "-0.02em" }}>
+                    {topIdea.topic || <em style={{ color: "var(--pb-faint)" }}>No topic</em>}
                   </p>
                   {topIdea.created_by && (
                     <p className="fglass-muted" style={{ margin: "6px 0 0", fontSize: 11 }}>by {topIdea.created_by}</p>
@@ -3426,27 +3647,27 @@ function QuickAddModal({ open, onAdd, onClose }: {
   };
 
   if (!open) return null;
-  const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "#71717a", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
-  const is: React.CSSProperties = { width: "100%", padding: "9px 13px", border: "1.5px solid #3f3f46", borderRadius: 9, fontSize: 13, outline: "none", background: "#09090b", color: "#e4e4e7", boxSizing: "border-box" };
+  const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "var(--pb-dim)", marginBottom: 4, letterSpacing: "0.04em", textTransform: "uppercase" };
+  const is: React.CSSProperties = { width: "100%", padding: "9px 13px", border: "1.5px solid var(--pb-border)", borderRadius: 9, fontSize: 13, outline: "none", background: "var(--pb-bg)", color: "var(--pb-ink)", boxSizing: "border-box" };
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onClose}>
       <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} />
       <div onClick={e => e.stopPropagation()} style={{
-        position: "relative", background: "#18181b", borderRadius: 16,
+        position: "relative", background: "var(--pb-card)", borderRadius: 16,
         padding: "24px 28px", maxWidth: 460, width: "94%", maxHeight: "88vh", overflowY: "auto",
-        boxShadow: "0 24px 80px rgba(0,0,0,0.5)", border: "1px solid #27272a",
+        boxShadow: "0 24px 80px rgba(0,0,0,0.5)", border: "1px solid var(--pb-chip)",
         display: "flex", flexDirection: "column", gap: 14,
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "#fff" }}>New idea</h2>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#71717a" }}>✕</button>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "var(--pb-ink)" }}>New idea</h2>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "var(--pb-dim)" }}>✕</button>
         </div>
         <div>
           <label style={ls}>Title *</label>
           <input autoFocus value={title} onChange={e => setTitle(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") submit(); }}
-            placeholder="e.g. JRD Tata story" style={{ ...is, color: "#e4e4e7" }} />
+            placeholder="e.g. JRD Tata story" style={{ ...is, color: "var(--pb-ink)" }} />
         </div>
         <div>
           <label style={ls}>Source</label>
@@ -3454,8 +3675,8 @@ function QuickAddModal({ open, onAdd, onClose }: {
             {(["competitor", "original"] as const).map(s => (
               <button key={s} onClick={() => setSource(s)} style={{
                 flex: 1, padding: "8px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                border: source === s ? "2px solid #7c3aed" : "1.5px solid #3f3f46",
-                background: source === s ? "#27272a" : "#18181b", color: source === s ? "#fff" : "#71717a",
+                border: source === s ? "2px solid #7c3aed" : "1.5px solid var(--pb-border)",
+                background: source === s ? "var(--pb-chip)" : "var(--pb-card)", color: source === s ? "var(--pb-ink)" : "var(--pb-dim)",
               }}>{s === "competitor" ? "Competitor (IG)" : "YouTube"}</button>
             ))}
           </div>
@@ -3464,19 +3685,19 @@ function QuickAddModal({ open, onAdd, onClose }: {
           <div>
             <label style={ls}>Comp link</label>
             <input value={compLink} onChange={e => setCompLink(e.target.value)}
-              placeholder="https://instagram.com/reel/..." style={{ ...is, color: "#e4e4e7" }} />
+              placeholder="https://instagram.com/reel/..." style={{ ...is, color: "var(--pb-ink)" }} />
           </div>
         ) : (
           <div style={{ display: "flex", gap: 10 }}>
             <div style={{ flex: 1 }}>
               <label style={ls}>YouTube link</label>
               <input value={ytUrl} onChange={e => setYtUrl(e.target.value)}
-                placeholder="https://youtube.com/..." style={{ ...is, color: "#e4e4e7" }} />
+                placeholder="https://youtube.com/..." style={{ ...is, color: "var(--pb-ink)" }} />
             </div>
             <div style={{ flex: "0 0 130px" }}>
               <label style={ls}>Timestamp</label>
               <input value={ytTs} onChange={e => setYtTs(e.target.value)}
-                placeholder="0:30–1:45" style={{ ...is, color: "#e4e4e7" }} />
+                placeholder="0:30–1:45" style={{ ...is, color: "var(--pb-ink)" }} />
             </div>
           </div>
         )}
@@ -3487,13 +3708,13 @@ function QuickAddModal({ open, onAdd, onClose }: {
               <button key={f} onClick={() => setFormat(f)} style={{
                 flex: 1, padding: "8px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
                 textTransform: "capitalize",
-                border: format === f ? "2px solid #7c3aed" : "1.5px solid #3f3f46",
-                background: format === f ? "#27272a" : "#18181b", color: format === f ? "#fff" : "#71717a",
+                border: format === f ? "2px solid #7c3aed" : "1.5px solid var(--pb-border)",
+                background: format === f ? "var(--pb-chip)" : "var(--pb-card)", color: format === f ? "var(--pb-ink)" : "var(--pb-dim)",
               }}>{f}</button>
             ))}
           </div>
         </div>
-        {/* Format — coarse News / A-roll split (Content Distribution filters on this). */}
+        {/* Format — coarse News / A-roll split (Today's Board filters on this). */}
         <div>
           <label style={ls}>Format</label>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -3503,9 +3724,9 @@ function QuickAddModal({ open, onAdd, onClose }: {
                 onClick={() => setContentFormat(v => v === cf ? "" : cf)}
                 style={{
                   padding: "5px 11px", borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: "pointer",
-                  border: contentFormat === cf ? `2px solid ${CONTENT_FORMAT_ACCENT[cf]}` : "1.5px solid #3f3f46",
-                  background: contentFormat === cf ? `${CONTENT_FORMAT_ACCENT[cf]}22` : "#18181b",
-                  color: contentFormat === cf ? CONTENT_FORMAT_ACCENT[cf] : "#71717a",
+                  border: contentFormat === cf ? `2px solid ${CONTENT_FORMAT_ACCENT[cf]}` : "1.5px solid var(--pb-border)",
+                  background: contentFormat === cf ? `${CONTENT_FORMAT_ACCENT[cf]}22` : "var(--pb-card)",
+                  color: contentFormat === cf ? CONTENT_FORMAT_ACCENT[cf] : "var(--pb-dim)",
                 }}
               >{cf}</button>
             ))}
@@ -3518,9 +3739,9 @@ function QuickAddModal({ open, onAdd, onClose }: {
             {VIDEO_FORMATS.map(vf => (
               <button key={vf} onClick={() => setVideoFormat(v => v === vf ? "" : vf)} style={{
                 padding: "5px 11px", borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: "pointer",
-                border: videoFormat === vf ? "2px solid #50E0B0" : "1.5px solid #3f3f46",
-                background: videoFormat === vf ? "rgba(80,224,176,0.12)" : "#18181b",
-                color: videoFormat === vf ? "#50E0B0" : "#71717a",
+                border: videoFormat === vf ? "2px solid #50E0B0" : "1.5px solid var(--pb-border)",
+                background: videoFormat === vf ? "rgba(80,224,176,0.12)" : "var(--pb-card)",
+                color: videoFormat === vf ? "#50E0B0" : "var(--pb-dim)",
               }}>{vf}</button>
             ))}
           </div>
@@ -3547,41 +3768,41 @@ function FrontseatPoolCard({ idea, letter, onDragStart, onClick, onDelete, readO
       onDragStart={readOnly ? undefined : e => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", idea.id); onDragStart(); }}
       onClick={onClick}
       className={pbKanbanCardClass()}
-      style={{ ...pbKanbanCardStyle, position: "relative" }}
+      style={{ ...pbKanbanCardStyle, padding: "9px 10px", marginBottom: 0, position: "relative" }}
     >
       {!readOnly && onDelete && (
       <button
         onClick={e => { e.stopPropagation(); e.preventDefault(); onDelete(); }}
         title="Delete idea"
         style={{
-          position: "absolute", top: 5, right: 5,
-          padding: "2px 6px", fontSize: 9, fontWeight: 700,
-          background: "#3f3f46", color: "#a1a1aa", border: "none", borderRadius: 3, cursor: "pointer",
+          position: "absolute", top: 6, right: 6,
+          width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 9, fontWeight: 700,
+          background: "var(--pb-chip)", color: "var(--pb-dim2)", border: "none", borderRadius: 999, cursor: "pointer",
           zIndex: 2,
         }}
       >✕</button>
       )}
-      <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
-        <span style={{ fontSize: 10, fontWeight: 800, color: "#a78bfa", background: "#7c3aed22", borderRadius: 4, padding: "1px 6px" }}>{letter}</span>
-        <span style={{ fontSize: 10, color: "#52525b", background: "#27272a", borderRadius: 4, padding: "1px 5px" }}>{idea.content_type}</span>
+      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 5, marginBottom: 6, paddingRight: 18 }}>
+        <span style={{ fontSize: 9.5, fontWeight: 800, color: "#a78bfa", background: "#7c3aed22", borderRadius: 5, padding: "2px 6px" }}>{letter}</span>
+        <span style={{ fontSize: 9.5, color: "var(--pb-faint)", background: "var(--pb-chip)", borderRadius: 5, padding: "2px 6px" }}>{idea.content_type}</span>
         {idea.source === "competitor"
-          ? <span style={{ fontSize: 9, color: "#7BB0FF", background: "#7BB0FF22", borderRadius: 4, padding: "1px 5px" }}>IG</span>
-          : <span style={{ fontSize: 9, color: "#FF9580", background: "#FF958022", borderRadius: 4, padding: "1px 5px" }}>YT</span>
+          ? <span style={{ fontSize: 9, color: "#7BB0FF", background: "#7BB0FF22", borderRadius: 5, padding: "2px 6px" }}>IG</span>
+          : <span style={{ fontSize: 9, color: "#FF9580", background: "#FF958022", borderRadius: 5, padding: "2px 6px" }}>YT</span>
         }
         {idea.content_format && (
-          <span style={{ fontSize: 9, fontWeight: 700, color: CONTENT_FORMAT_ACCENT[idea.content_format as ContentFormat] ?? "#71717a",
-            background: `${CONTENT_FORMAT_ACCENT[idea.content_format as ContentFormat] ?? "#71717a"}22`, borderRadius: 4, padding: "1px 5px" }}>
+          <span style={{ fontSize: 9, fontWeight: 700, color: CONTENT_FORMAT_ACCENT[idea.content_format as ContentFormat] ?? "var(--pb-dim)",
+            background: `${CONTENT_FORMAT_ACCENT[idea.content_format as ContentFormat] ?? "var(--pb-dim)"}22`, borderRadius: 5, padding: "2px 6px" }}>
             {idea.content_format}
           </span>
         )}
       </div>
-      <p style={{ margin: 0, fontSize: 12, fontWeight: 500, color: "#e4e4e7", lineHeight: 1.4,
+      <p style={{ margin: 0, fontSize: 12, fontWeight: 500, color: "var(--pb-ink)", lineHeight: 1.4,
         overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
-        {idea.topic || <em style={{ color: "#52525b" }}>Untitled</em>}
+        {idea.topic || <em style={{ color: "var(--pb-faint)" }}>Untitled</em>}
       </p>
-      <div style={{ display: "flex", gap: 5, marginTop: 6, flexWrap: "wrap", alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 5, marginTop: 7, flexWrap: "wrap", alignItems: "center" }}>
         <DeployedFromBadge idea={idea} />
-        <DeployToPlaybookButton idea={idea} readOnly={readOnly} />
       </div>
       <CrossPlaybookViewsBlock idea={idea} />
     </div>
@@ -3591,8 +3812,9 @@ function FrontseatPoolCard({ idea, letter, onDragStart, onClick, onDelete, readO
 // ---------------------------------------------------------------------------
 // Frontseat — page column card (clickable, status colour-coded)
 // ---------------------------------------------------------------------------
-function FrontseatPageCard({ idea, letter, onClick, onRemoveFromPage }: {
+function FrontseatPageCard({ idea, letter, onClick, onRemoveFromPage, onAssign, readOnly }: {
   idea: any; letter: string; onClick: () => void; onRemoveFromPage?: () => void;
+  onAssign?: (name: string) => void; readOnly?: boolean;
 }) {
   const stage = idea.status || "new";
   const ss = STATUS_STYLE[stage] || STATUS_STYLE.new;
@@ -3608,46 +3830,124 @@ function FrontseatPageCard({ idea, letter, onClick, onRemoveFromPage }: {
           onClick={e => { e.stopPropagation(); e.preventDefault(); onRemoveFromPage(); }}
           title="Remove from this page"
           style={{
-            position: "absolute", top: 5, right: 5,
-            padding: "2px 6px", fontSize: 9, fontWeight: 700,
-            background: "#3f3f46", color: "#a1a1aa", border: "none", borderRadius: 3, cursor: "pointer",
+            position: "absolute", top: 7, right: 7,
+            width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 9, fontWeight: 700,
+            background: "var(--pb-chip)", color: "var(--pb-dim2)", border: "none", borderRadius: 999, cursor: "pointer",
             zIndex: 2,
           }}
         >✕</button>
       )}
-      <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
-        <span style={{ fontSize: 10, fontWeight: 800, color: "#a78bfa", background: "#7c3aed22", borderRadius: 4, padding: "1px 6px" }}>{letter}</span>
-        <span style={{ fontSize: 10, fontWeight: 600, color: ss.text, background: ss.bg, borderRadius: 4, padding: "1px 6px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 6, paddingRight: 20, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 10, fontWeight: 800, color: "#a78bfa", background: "#7c3aed22", borderRadius: 5, padding: "2px 7px" }}>{letter}</span>
+        <span style={{ fontSize: 10, fontWeight: 600, color: ss.text, background: ss.bg, borderRadius: 5, padding: "2px 7px" }}>
           {STAGE_LABEL[stage as IdeaStage] || stage}
         </span>
         {idea.content_type && (
-          <span style={{ fontSize: 10, color: "#52525b", background: "#27272a", borderRadius: 4, padding: "1px 5px" }}>{idea.content_type}</span>
+          <span style={{ fontSize: 10, color: "var(--pb-faint)", background: "var(--pb-chip)", borderRadius: 5, padding: "2px 6px" }}>{idea.content_type}</span>
         )}
         {idea.content_format && (
-          <span style={{ fontSize: 9, fontWeight: 700, color: CONTENT_FORMAT_ACCENT[idea.content_format as ContentFormat] ?? "#71717a",
-            background: `${CONTENT_FORMAT_ACCENT[idea.content_format as ContentFormat] ?? "#71717a"}22`, borderRadius: 4, padding: "1px 5px" }}>
+          <span style={{ fontSize: 9, fontWeight: 700, color: CONTENT_FORMAT_ACCENT[idea.content_format as ContentFormat] ?? "var(--pb-dim)",
+            background: `${CONTENT_FORMAT_ACCENT[idea.content_format as ContentFormat] ?? "var(--pb-dim)"}22`, borderRadius: 5, padding: "2px 6px" }}>
             {idea.content_format}
           </span>
         )}
       </div>
-      <p style={{ margin: 0, fontSize: 12, fontWeight: 500, color: "#e4e4e7", lineHeight: 1.4,
+      <p style={{ margin: 0, fontSize: 12.5, fontWeight: 500, color: "var(--pb-ink)", lineHeight: 1.45,
         overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
-        {idea.topic || <em style={{ color: "#52525b" }}>Untitled</em>}
+        {idea.topic || <em style={{ color: "var(--pb-faint)" }}>Untitled</em>}
       </p>
       {idea.video_format && (
-        <p style={{ margin: "4px 0 0", fontSize: 10, color: "#50E0B0", fontWeight: 600 }}>{idea.video_format}</p>
+        <p style={{ margin: "5px 0 0", fontSize: 10, color: "#50E0B0", fontWeight: 600 }}>{idea.video_format}</p>
       )}
-      <div style={{ display: "flex", gap: 5, marginTop: 6, flexWrap: "wrap", alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 5, marginTop: 7, flexWrap: "wrap", alignItems: "center" }}>
         <DeployedFromBadge idea={idea} />
-        <DeployToPlaybookButton idea={idea} />
+      </div>
+      <div onClick={e => e.stopPropagation()} style={{ marginTop: 7 }}>
+        {readOnly || !onAssign ? (
+          idea.assigned_to ? (
+            <span style={{ fontSize: 10, fontWeight: 600, color: "#a78bfa", background: "#7c3aed22", borderRadius: 5, padding: "2px 7px" }}>
+              {idea.assigned_to}
+            </span>
+          ) : null
+        ) : (
+          <select
+            value={idea.assigned_to || ""}
+            onChange={e => onAssign(e.target.value)}
+            style={{
+              fontSize: 10, fontWeight: 600, color: idea.assigned_to ? "#a78bfa" : "var(--pb-dim)",
+              background: "var(--pb-card)", border: "1px solid var(--pb-border)", borderRadius: 5,
+              padding: "3px 6px", cursor: "pointer",
+            }}
+          >
+            <option value="">Assign to…</option>
+            {assigneeOptionsFor(idea.content_type).map(a => (
+              <option key={a.name} value={a.name}>{a.name}</option>
+            ))}
+          </select>
+        )}
       </div>
       <CrossPlaybookViewsBlock idea={idea} />
     </div>
   );
 }
 
+// ---------------------------------------------------------------------------
+// Frontseat — "+" add-page chip, used by the Ideas Pool panel (shared by both
+// the kanban and table/page-accordion views) to assign a page without dragging.
+// ---------------------------------------------------------------------------
+/** "+" chip opening a popover to assign the idea to one more page. */
+function AddPageChip({ pages, pageColors, pageShort, onAdd }: {
+  pages: string[]; pageColors: Record<string, string>; pageShort: Record<string, string>;
+  onAdd: (page: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  if (pages.length === 0) return null;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          onClick={e => e.stopPropagation()}
+          title="Add page"
+          style={{
+            display: "inline-flex", alignItems: "center", justifyContent: "center",
+            width: 18, height: 18, borderRadius: 4, fontSize: 12, fontWeight: 700, lineHeight: 1,
+            color: "var(--pb-dim)", background: "var(--pb-chip)", border: "1px solid var(--pb-border)", cursor: "pointer",
+          }}
+        >
+          +
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start" className="w-auto p-1.5"
+        style={{ background: "var(--pb-card)", borderColor: "var(--pb-border)" }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 220, overflowY: "auto", minWidth: 150 }}>
+          {pages.map(p => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => { onAdd(p); setOpen(false); }}
+              style={{
+                display: "flex", alignItems: "center", gap: 6, textAlign: "left",
+                padding: "5px 8px", borderRadius: 5, border: "none", background: "transparent",
+                fontSize: 11.5, fontWeight: 600, color: pageColors[p] || "var(--pb-dim2)", cursor: "pointer",
+              }}
+            >
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: pageColors[p] || "var(--pb-dim2)", flexShrink: 0 }} />
+              {pageShort[p] || p}
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 /**
- * News / A-roll filter for Content Distribution. "all" passes everything; an untagged
+ * News / A-roll filter for Today's Board. "all" passes everything; an untagged
  * idea (content_format "") only shows under "all", so a filter never silently hides
  * work behind a field nobody has filled in yet.
  */
@@ -3659,16 +3959,30 @@ function matchesContentFormat(idea: any, filter: string): boolean {
 // ---------------------------------------------------------------------------
 // Frontseat tab — current-week ideas organised by page (view layer over Idea Bank)
 // ---------------------------------------------------------------------------
-function FrontseatTab({ readOnly, opsOnly, formatFilter = "all" }: { readOnly?: boolean; opsOnly?: boolean; formatFilter?: string }) {
-  const { pages: playbookPages, pageColors, pageShort, api, id: playbookId } = usePlaybook();
+function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", search = "", view = "kanban" }: {
+  readOnly?: boolean; formatFilter?: string; pageFilter?: string; search?: string; view?: "kanban" | "table";
+}) {
+  const { pages: allPlaybookPages, pageColors, pageShort, api, id: playbookId } = usePlaybook();
+  const playbookPages = isAllPages(pageFilter)
+    ? allPlaybookPages
+    : allPlaybookPages.filter(p => pageInFilter(pageFilter, p));
   const qc = useQueryClient();
-  const { can } = usePermissions();
-  const [addOpen, setAddOpen]       = useState(false);
+  const { role } = usePermissions();
+  const { user } = useAuth();
   const [detailIdea, setDetailIdea] = useState<any>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  // Table view's page cards — which ones are expanded open.
+  const [expandedPages, setExpandedPages] = useState<Set<string>>(new Set());
   const pagesScrollRef = useRef<HTMLDivElement>(null);
-  const poolScrollRef = useRef<HTMLDivElement>(null);
+  const roleList = (role || "").split(",").map(r => canonicalRole(r.trim())).filter(Boolean);
+  // Assigning WHO works an idea is Content Ops' call (both full and intern — both
+  // canonicalize to "co") — not CS, even though CS can otherwise edit Today's Board.
+  const canAssign = roleList.some(r => r === "co" || r === "admin" || r === "senior_cs");
+  // Video editors / carousel designers are assignees, not managers — once something's
+  // assigned to them, Today's Board narrows to just their tasks (same as Production).
+  const soloView = roleList.length > 0 && roleList.every(r => r === "ve");
+  const myEmail = user?.email || null;
 
   // Edge auto-scroll while dragging pool ideas onto page columns (horizontal pages
   // strip + vertical window/column scroll when a page has many cards).
@@ -3715,14 +4029,6 @@ function FrontseatTab({ readOnly, opsOnly, formatFilter = "all" }: { readOnly?: 
         const r = pagesEl.getBoundingClientRect();
         if (lastX >= r.left - 8 && lastX <= r.right + 8 && lastY >= r.top - 8 && lastY <= r.bottom + 8) {
           scrollAxis(pagesEl, lastX, r.left, r.right, true);
-        }
-      }
-
-      const poolEl = poolScrollRef.current;
-      if (poolEl) {
-        const r = poolEl.getBoundingClientRect();
-        if (lastX >= r.left && lastX <= r.right && lastY >= r.top && lastY <= r.bottom) {
-          scrollAxis(poolEl, lastY, r.top, r.bottom, false);
         }
       }
 
@@ -3775,48 +4081,17 @@ function FrontseatTab({ readOnly, opsOnly, formatFilter = "all" }: { readOnly?: 
     return computeCurrentWeek(start);
   }, [settings]);
 
-  // Fetch by local date — ops also loads yesterday for morning view updates
   const todayStr = toLocalISO(new Date());
-  const yesterdayStr = addDays(todayStr, -1);
   const QK = expQk(playbookId, "idea-bank", "today", todayStr);
-  const QK_YESTERDAY = expQk(playbookId, "idea-bank", "today", yesterdayStr);
-  const { data: todayIdeasRaw = [], isLoading: loadingToday } = useQuery({
+  // enrich_cross: false — the cross-playbook views block is a pre-consolidation
+  // relic (this is one system now) and doubles the payload at 200+ ideas/day for
+  // data almost no row ever displays; IdeaDetailModal fetches its own data anyway.
+  const { data: ideas = [], isLoading } = useQuery({
     queryKey: QK,
-    queryFn: () => api.getIdeaBank({ day_date: todayStr }),
+    queryFn: () => api.getIdeaBank({ day_date: todayStr, enrich_cross: false }),
     staleTime: EXP_STALE_MS,
   });
-  const { data: yesterdayIdeasRaw = [], isLoading: loadingYesterday } = useQuery({
-    queryKey: QK_YESTERDAY,
-    queryFn: () => api.getIdeaBank({ day_date: yesterdayStr }),
-    staleTime: EXP_STALE_MS,
-    enabled: !!opsOnly,
-  });
-  const ideas = opsOnly
-    ? [...(todayIdeasRaw as any[]), ...(yesterdayIdeasRaw as any[])]
-    : (todayIdeasRaw as any[]);
-  const isLoading = opsOnly ? loadingToday || loadingYesterday : loadingToday;
 
-  const createMut = useMutation({
-    mutationFn: api.createIdea,
-    onMutate: async (newData) => {
-      await qc.cancelQueries({ queryKey: QK });
-      const prev = qc.getQueryData(QK);
-      const optimistic = {
-        id: `temp-${Date.now()}`, ...newData,
-        frontseat_pool: true, week_number: currentWeek,
-        created_at: new Date().toISOString(), views: 0,
-        page_views: {}, page_test_results: {},
-      };
-      qc.setQueryData(QK, (old: any[] = []) => [...old, optimistic]);
-      return { prev };
-    },
-    onSuccess: () => toast.success("Idea added"),
-    onError: (e: any, _v, ctx: any) => {
-      if (ctx?.prev) qc.setQueryData(QK, ctx.prev);
-      toast.error(e?.message || "Failed to add idea");
-    },
-    onSettled: () => qc.invalidateQueries({ queryKey: expQk(playbookId, "idea-bank") }),
-  });
   const updateMut = useMutation(expIdeaUpdateMutationOpts(qc, playbookId, api, {
     onDetail: (id, patch) => setDetailIdea((p: any) => p?.id === id ? { ...p, ...patch } : p),
   }));
@@ -3852,19 +4127,14 @@ function FrontseatTab({ readOnly, opsOnly, formatFilter = "all" }: { readOnly?: 
     onSettled: () => qc.invalidateQueries({ queryKey: expQk(playbookId, "idea-bank") }),
   });
 
-  const frontseatDaySet = useMemo(
-    () => new Set(opsOnly ? [yesterdayStr, todayStr] : [todayStr]),
-    [opsOnly, yesterdayStr, todayStr],
-  );
-  // Guards against stale optimistic entries; ops includes yesterday for morning view updates
+  // Guards against stale optimistic entries carried over from a different day.
   const todayIdeas = useMemo(() =>
-    (ideas as any[]).filter((i: any) => frontseatDaySet.has((i.day_date || "").slice(0, 10))),
-    [ideas, frontseatDaySet],
+    (ideas as any[]).filter((i: any) => (i.day_date || "").slice(0, 10) === todayStr),
+    [ideas, todayStr],
   );
-  const opsPageIdeas = useMemo(() =>
-    todayIdeas.filter((i: any) => !i.frontseat_pool),
-    [todayIdeas],
-  );
+
+  const searchQ = search.toLowerCase().trim();
+  const matchesSearch = (idea: any) => !searchQ || (idea.topic || "").toLowerCase().includes(searchQ);
 
   // Pool = permanent ideas added via Frontseat "+ New".
   // After migration: frontseat_pool === true. Before migration runs (column is null): fall back to status === "new".
@@ -3874,19 +4144,22 @@ function FrontseatTab({ readOnly, opsOnly, formatFilter = "all" }: { readOnly?: 
         i.frontseat_pool === true ||
         (i.frontseat_pool == null && i.status === "new")
       )
-      .filter((i: any) => matchesContentFormat(i, formatFilter))
+      .filter((i: any) => matchesContentFormat(i, formatFilter) && matchesSearch(i))
       .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
-    [todayIdeas, formatFilter]
+    [todayIdeas, formatFilter, searchQ]
   );
 
   // Letters a, b, c… in creation order — stable for the whole day
   const ideaLetterMap = useMemo(() => {
     const map: Record<string, string> = {};
-    poolIdeas.forEach((idea: any, i: number) => {
-      map[idea.id] = String.fromCharCode(97 + (i % 26));
-    });
+    todayIdeas
+      .filter((i: any) => i.frontseat_pool === true || (i.frontseat_pool == null && i.status === "new"))
+      .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+      .forEach((idea: any, i: number) => {
+        map[idea.id] = String.fromCharCode(97 + (i % 26));
+      });
     return map;
-  }, [poolIdeas]);
+  }, [todayIdeas]);
 
   // Page columns: copies only (frontseat_pool === false or null before migration).
   // !i.frontseat_pool covers both false and null, so old pre-migration ideas still appear.
@@ -3894,21 +4167,17 @@ function FrontseatTab({ readOnly, opsOnly, formatFilter = "all" }: { readOnly?: 
     const result: Record<string, any[]> = {};
     playbookPages.forEach(p => { result[p] = []; });
     todayIdeas
-      .filter((i: any) => !i.frontseat_pool && matchesContentFormat(i, formatFilter))
+      .filter((i: any) => !i.frontseat_pool && matchesContentFormat(i, formatFilter) && matchesSearch(i))
+      .filter((i: any) => !soloView || isAssignee(i.assigned_to, myEmail))
       .forEach((idea: any) => {
       const pages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
       pages.forEach((p: string) => { if (result[p]) result[p].push(idea); });
     });
     playbookPages.forEach(p => {
-      result[p].sort((a: any, b: any) => {
-        const da = (a.day_date || "").slice(0, 10);
-        const db = (b.day_date || "").slice(0, 10);
-        if (da !== db) return opsOnly ? db.localeCompare(da) : da.localeCompare(db);
-        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-      });
+      result[p].sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
     });
     return result;
-  }, [todayIdeas, playbookPages, opsOnly, formatFilter]);
+  }, [todayIdeas, playbookPages, formatFilter, soloView, myEmail, searchQ]);
 
   const handleDrop = (page: string, e: React.DragEvent) => {
     if (readOnly) return;
@@ -3945,142 +4214,261 @@ function FrontseatTab({ readOnly, opsOnly, formatFilter = "all" }: { readOnly?: 
   };
 
   const legendStages: IdeaStage[] = ["approved", "base_edit", "testing", "proven_ideas", "kill"];
-  const dragDisabled = readOnly || opsOnly;
 
-  return (
-    <div style={{ display: "flex", gap: 0, minHeight: "calc(100vh - 220px)" }}>
+  // Ideas Pool panel — identical in both the kanban and the page-accordion (table)
+  // view, so it's built once here rather than duplicated.
+  const poolPanel = !soloView && (
+    <div style={{
+      width: 240, flexShrink: 0, display: "flex", flexDirection: "column",
+      background: "var(--pb-panel)", border: "1px solid var(--pb-chip)", borderRadius: 12,
+      padding: 10, alignSelf: "flex-start",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
+        <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: "var(--pb-ink)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+          Ideas Pool
+        </p>
+        <span style={{ fontSize: 10, color: "var(--pb-faint)", fontWeight: 600, flexShrink: 0 }}>
+          {poolIdeas.length}
+        </span>
+      </div>
+      <p style={{ margin: "0 0 8px", fontSize: 9.5, color: "var(--pb-faint)" }}>
+        {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · drag to assign
+      </p>
 
-      {/* ── Left panel: idea pool ── */}
-      <div style={{
-        width: 210, flexShrink: 0, paddingRight: 16, marginRight: 16,
-        borderRight: "1px solid #27272a", display: "flex", flexDirection: "column",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-          <div>
-            <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "#a1a1aa", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-              {opsOnly ? "Morning checklist" : "Ideas Pool"}
-            </p>
-            <p style={{ margin: "2px 0 0", fontSize: 10, color: "#52525b" }}>
-              {opsOnly
-                ? "Today & yesterday · tap to update views"
-                : `${new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · drag to assign`}
-            </p>
-          </div>
-          {can("add_experiment_idea") && !dragDisabled && (
-            <button onClick={() => setAddOpen(true)} style={{
-              padding: "4px 10px", background: "#7c3aed", color: "#fff", border: "none",
-              borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer",
-            }}>+ New</button>
-          )}
+      {/* Colour legend — a quiet keyed list, single column. */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 9 }}>
+        {legendStages.map(s => (
+          <span key={s} style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            fontSize: 9.5, fontWeight: 600, color: "var(--pb-dim2)",
+          }}>
+            <span style={{
+              width: 6, height: 6, borderRadius: 999, flexShrink: 0,
+              background: STATUS_STYLE[s]?.text || "var(--pb-dim)",
+            }} />
+            {STAGE_LABEL[s]}
+          </span>
+        ))}
+      </div>
+
+      {isLoading ? (
+        <p style={{ color: "var(--pb-faint)", fontSize: 12 }}>Loading…</p>
+      ) : poolIdeas.length === 0 ? (
+        <div style={{ padding: "24px 10px", textAlign: "center", color: "var(--pb-border)", fontSize: 11, border: "1.5px dashed var(--pb-chip)", borderRadius: 12 }}>
+          No ideas today<br />
+          <span style={{ fontSize: 10 }}>New ideas are added from Idea Engine</span>
         </div>
-
-        {/* Colour legend */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12, padding: "8px 10px", background: "#111113", borderRadius: 7, border: "1px solid #1f1f22" }}>
-          {legendStages.map(s => (
-            <div key={s} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: STATUS_STYLE[s]?.text || "#52525b", flexShrink: 0 }} />
-              <span style={{ fontSize: 10, color: STATUS_STYLE[s]?.text || "#71717a" }}>{STAGE_LABEL[s]}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* Pool cards (editors) or day summary (ops) */}
-        <div ref={poolScrollRef} style={{ flex: 1, overflowY: "auto" }}>
-          {isLoading ? (
-            <p style={{ color: "#52525b", fontSize: 12 }}>Loading…</p>
-          ) : opsOnly ? (
-            [todayStr, yesterdayStr].map(day => {
-              const dayIdeas = opsPageIdeas.filter((i: any) => (i.day_date || "").slice(0, 10) === day);
-              const isToday = day === todayStr;
-              return (
-                <div key={day} style={{ marginBottom: 14 }}>
-                  <div style={{
-                    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6,
-                    marginBottom: 8, padding: "6px 8px", borderRadius: 7,
-                    background: isToday ? "#50E0B00A" : "#D4952A0A",
-                    border: `1px solid ${isToday ? "#50E0B033" : "#D4952A33"}`,
-                  }}>
-                    <OpsDayTag isToday={isToday} size="lg" />
-                    <span style={{ fontSize: 9, color: "#71717a", fontWeight: 600 }}>{fmtDay(day)}</span>
-                  </div>
-                  {dayIdeas.length === 0 ? (
-                    <p style={{ margin: 0, fontSize: 10, color: "#3f3f46", padding: "4px 8px" }}>No page assignments</p>
-                  ) : (
-                    dayIdeas.map((idea: any) => {
-                      const views = (idea.views || 0) > 0 ? idea.views : 0;
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {poolIdeas.map((idea: any) => {
+            const assignedPages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+            const unassignedPages = allPlaybookPages.filter(p => !assignedPages.includes(p));
+            return (
+              <div
+                key={idea.id}
+                onDragEnd={() => { setDraggingId(null); setDropTarget(null); }}
+                style={{ display: "flex", flexDirection: "column", opacity: draggingId === idea.id ? 0.4 : 1, transition: "opacity 0.12s" }}
+              >
+                <FrontseatPoolCard
+                  idea={idea}
+                  letter={ideaLetterMap[idea.id] || "?"}
+                  readOnly={readOnly}
+                  onDragStart={() => setDraggingId(idea.id)}
+                  onClick={() => setDetailIdea(idea)}
+                  onDelete={readOnly ? undefined : () => {
+                    // Delete pool idea + all its page copies
+                    const copies = (ideas as any[]).filter((i: any) => i.source_pool_id === idea.id);
+                    copies.forEach((c: any) => deleteMut.mutate(c.id));
+                    deleteMut.mutate(idea.id);
+                  }}
+                />
+                {/* Assigned page chips + a "+" to assign without dragging */}
+                {(assignedPages.length > 0 || (!readOnly && unassignedPages.length > 0)) && (
+                  <div
+                    onClick={e => e.stopPropagation()}
+                    style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center", marginTop: 4, paddingLeft: 3 }}
+                  >
+                    {assignedPages.map((p: string) => {
+                      const c = pageColors[p] || "var(--pb-dim2)";
+                      const short = pageShort[p] || p;
                       return (
-                        <button
-                          key={idea.id}
-                          type="button"
-                          onClick={() => setDetailIdea(idea)}
-                          style={{
-                            display: "block", width: "100%", textAlign: "left", marginBottom: 5,
-                            padding: "7px 8px", background: "#18181b",
-                            border: `1px solid ${isToday ? "#50E0B033" : "#D4952A33"}`,
-                            borderLeft: `3px solid ${isToday ? "#50E0B0" : "#D4952A"}`,
-                            borderRadius: 7, cursor: "pointer",
-                          }}
-                        >
-                          <div style={{ marginBottom: 4 }}>
-                            <OpsDayTag isToday={isToday} size="sm" />
-                          </div>
-                          <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: "#e4e4e7", lineHeight: 1.3,
-                            overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
-                            {idea.topic || "Untitled"}
-                          </p>
-                          <p style={{ margin: "3px 0 0", fontSize: 10, color: views > 0 ? "#50E0B0" : "#52525b", fontWeight: 600 }}>
-                            {views > 0 ? `${fmt(views)} views` : "Update views"}
-                          </p>
-                        </button>
+                        <span key={p} style={{ fontSize: 9, fontWeight: 700, color: c, background: c + "22", borderRadius: 4, padding: "1px 6px" }}>
+                          {short}
+                        </span>
                       );
-                    })
-                  )}
-                </div>
-              );
-            })
-          ) : poolIdeas.length === 0 ? (
-            <div style={{ padding: "24px 10px", textAlign: "center", color: "#3f3f46", fontSize: 11, border: "1.5px dashed #27272a", borderRadius: 9 }}>
-              No ideas today<br />
-              <span style={{ fontSize: 10 }}>Add one above</span>
-            </div>
-          ) : (
-            poolIdeas.map((idea: any) => {
-              const assignedPages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+                    })}
+                    {!readOnly && (
+                      <AddPageChip pages={unassignedPages} pageColors={pageColors} pageShort={pageShort} onAdd={page => assignToPage(idea, page)} />
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
+  // Page copies indexed by the pool idea they belong to — lets assignToPage guard
+  // against a duplicate copy for the same pool-idea+page pair (used by the pool
+  // panel's "+" add-page button, shared by both the kanban and table views).
+  const copiesBySourceId = useMemo(() => {
+    const map: Record<string, any[]> = {};
+    todayIdeas.filter((i: any) => !i.frontseat_pool).forEach((copy: any) => {
+      const key = copy.source_pool_id;
+      if (!key) return;
+      (map[key] ||= []).push(copy);
+    });
+    return map;
+  }, [todayIdeas]);
+
+  const assignToPage = (pool: any, page: string) => {
+    if (readOnly) return;
+    const alreadyAssigned = (copiesBySourceId[pool.id] || []).some((c: any) => (c.page_handle || "").trim() === page);
+    if (alreadyAssigned) return;
+    const hasBaseEdit = !!(pool.drive_link || pool.frame_link);
+    createCopyMut.mutate({
+      topic: pool.topic, source: pool.source, content_type: pool.content_type,
+      video_format: pool.video_format || "", content_format: pool.content_format || "",
+      status: hasBaseEdit ? "base_edit" : "approved", page_handle: page,
+      hook_variations: pool.hook_variations || "",
+      comp_link: pool.comp_link || "", yt_url: pool.yt_url || "",
+      yt_timestamps: pool.yt_timestamps || "",
+      frame_link: pool.frame_link || "", drive_link: pool.drive_link || "", kalakar_link: pool.kalakar_link || "",
+      created_by: pool.created_by || "",
+      day_date: todayStr, frontseat_pool: false, source_pool_id: pool.id,
+    });
+    const existingPages = (pool.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+    if (!existingPages.includes(page)) {
+      updateMut.mutate({ id: pool.id, data: { page_handle: [...existingPages, page].join(",") } });
+    }
+  };
+
+  if (view === "table") {
+    return (
+      <>
+        {soloView && (
+          <p style={{ fontSize: 12, color: "#a78bfa", fontWeight: 600, marginBottom: 12 }}>
+            Showing only tasks assigned to you
+          </p>
+        )}
+        <div style={{ display: "flex", gap: 16, alignItems: "flex-start", minHeight: "calc(100vh - 220px)" }}>
+          {poolPanel}
+
+          {/* ── Right panel: one collapsible card per page instead of a wide
+              horizontal-scrolling row — click a page to open it and see/drag/assign
+              its ideas; a collapsed card is still a valid drop target. ── */}
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+            {playbookPages.map(page => {
+              const short    = pageShort[page] || page;
+              const color    = pageColors[page] || "var(--pb-dim2)";
+              const colIdeas = ideasByPage[page] || [];
+              const isDrop   = dropTarget === page;
+              const isOpen   = expandedPages.has(page);
+
               return (
-                <div key={idea.id} onDragEnd={() => { setDraggingId(null); setDropTarget(null); }} style={{ opacity: draggingId === idea.id ? 0.4 : 1, transition: "opacity 0.12s" }}>
-                  <FrontseatPoolCard
-                    idea={idea}
-                    letter={ideaLetterMap[idea.id] || "?"}
-                    readOnly={dragDisabled}
-                    onDragStart={() => setDraggingId(idea.id)}
-                    onClick={() => setDetailIdea(idea)}
-                    onDelete={dragDisabled || opsOnly ? undefined : () => {
-                      // Delete pool idea + all its page copies
-                      const copies = (ideas as any[]).filter((i: any) => i.source_pool_id === idea.id);
-                      copies.forEach((c: any) => deleteMut.mutate(c.id));
-                      deleteMut.mutate(idea.id);
+                <div
+                  key={page}
+                  style={{
+                    border: `1px solid ${isDrop ? color : "var(--pb-chip)"}`,
+                    borderRadius: 12,
+                    background: `color-mix(in srgb, ${color} 4%, var(--pb-panel))`,
+                    transition: "border-color 0.15s, background 0.15s",
+                    overflow: "hidden",
+                  }}
+                  onDragOver={readOnly ? undefined : e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropTarget(page); }}
+                  onDragLeave={readOnly ? undefined : e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTarget(null); }}
+                  onDrop={readOnly ? undefined : e => {
+                    handleDrop(page, e);
+                    setExpandedPages(prev => new Set(prev).add(page));
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setExpandedPages(prev => {
+                      const next = new Set(prev);
+                      if (next.has(page)) next.delete(page); else next.add(page);
+                      return next;
+                    })}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center", gap: 8,
+                      padding: "10px 12px", background: "transparent", border: "none", cursor: "pointer", textAlign: "left",
                     }}
-                  />
-                  {/* Show assigned page chips below the card */}
-                  {assignedPages.length > 0 && (
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: -3, marginBottom: 6, paddingLeft: 2 }}>
-                      {assignedPages.map((p: string) => {
-                        const c = pageColors[p] || "#a1a1aa";
-                        const short = pageShort[p] || p;
-                        return (
-                          <span key={p} style={{ fontSize: 9, fontWeight: 700, color: c, background: c + "22", borderRadius: 3, padding: "1px 5px" }}>
-                            {short}
-                          </span>
-                        );
-                      })}
+                  >
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, fontWeight: 700, color, letterSpacing: "-0.01em", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {short}
+                    </span>
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, color: colIdeas.length > 0 ? color : "var(--pb-faint)",
+                      background: colIdeas.length > 0 ? `${color}18` : "var(--pb-chip)",
+                      borderRadius: 999, padding: "1px 7px", flexShrink: 0,
+                    }}>
+                      {colIdeas.length}
+                    </span>
+                    <ChevronDown size={14} style={{ color: "var(--pb-dim)", flexShrink: 0, transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+                  </button>
+
+                  {isOpen && (
+                    <div style={{ padding: "0 10px 10px", display: "flex", flexDirection: "column", gap: 6 }}>
+                      {colIdeas.length === 0 ? (
+                        <div style={{
+                          padding: "20px 10px", textAlign: "center", color: "var(--pb-faint)", fontSize: 10.5,
+                          border: `1.5px dashed color-mix(in srgb, ${color} 18%, var(--pb-chip))`, borderRadius: 10,
+                        }}>
+                          Drop an idea here
+                        </div>
+                      ) : colIdeas.map((idea: any) => (
+                        <FrontseatPageCard
+                          key={idea.id}
+                          idea={idea}
+                          letter={ideaLetterMap[idea.source_pool_id] || "?"}
+                          onClick={() => setDetailIdea(idea)}
+                          readOnly={readOnly}
+                          onAssign={readOnly || !canAssign ? undefined : (name) => updateMut.mutate({ id: idea.id, data: { assigned_to: name } })}
+                          onRemoveFromPage={readOnly ? undefined : () => {
+                            deleteMut.mutate(idea.id);
+                            const poolIdea = poolIdeas.find((pi: any) => pi.id === idea.source_pool_id);
+                            if (poolIdea) {
+                              const remaining = (poolIdea.page_handle || "")
+                                .split(",").map((s: string) => s.trim()).filter((p: string) => p && p !== page);
+                              updateMut.mutate({ id: poolIdea.id, data: { page_handle: remaining.join(",") } });
+                            }
+                          }}
+                        />
+                      ))}
                     </div>
                   )}
                 </div>
               );
-            })
-          )}
+            })}
+          </div>
         </div>
-      </div>
+
+        {detailIdea && (
+          <IdeaDetailModal
+            idea={detailIdea}
+            readOnly={readOnly}
+            onUpdate={(id, data) => updateMut.mutate({ id, data })}
+            onClose={() => setDetailIdea(null)}
+            hideStageActions={detailIdea.frontseat_pool === true}
+          />
+        )}
+      </>
+    );
+  }
+
+  return (
+    <>
+      {soloView && (
+        <p style={{ fontSize: 12, color: "#a78bfa", fontWeight: 600, marginBottom: 12 }}>
+          Showing only tasks assigned to you
+        </p>
+      )}
+    <div style={{ display: "flex", gap: 16, alignItems: "flex-start", minHeight: "calc(100vh - 220px)" }}>
+
+      {poolPanel}
 
       {/* ── Right panel: page columns ── */}
       <div
@@ -4089,76 +4477,60 @@ function FrontseatTab({ readOnly, opsOnly, formatFilter = "all" }: { readOnly?: 
       >
         {playbookPages.map(page => {
           const short    = pageShort[page] || page;
-          const color    = pageColors[page] || "#a1a1aa";
+          const color    = pageColors[page] || "var(--pb-dim2)";
           const colIdeas = ideasByPage[page] || [];
           const isDrop   = dropTarget === page;
 
           return (
             <div
               key={page}
-              style={{ minWidth: 195, flex: "1 0 195px", maxWidth: 250 }}
-              onDragOver={dragDisabled ? undefined : e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropTarget(page); }}
-              onDragLeave={dragDisabled ? undefined : e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTarget(null); }}
-              onDrop={dragDisabled ? undefined : e => handleDrop(page, e)}
+              style={{
+                minWidth: 195, flex: "1 0 195px", maxWidth: 250,
+                background: `color-mix(in srgb, ${color} 4%, var(--pb-panel))`,
+                border: `1px solid ${isDrop ? color : "var(--pb-chip)"}`,
+                borderRadius: 12, padding: "8px 8px 10px",
+                transition: "border-color 0.15s, background 0.15s",
+              }}
+              onDragOver={readOnly ? undefined : e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropTarget(page); }}
+              onDragLeave={readOnly ? undefined : e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTarget(null); }}
+              onDrop={readOnly ? undefined : e => handleDrop(page, e)}
             >
               {/* Column header */}
               <div style={{
                 display: "flex", alignItems: "center", gap: 6,
-                padding: "6px 8px 8px", marginBottom: 4,
-                borderBottom: `2px solid ${color}30`,
+                padding: "2px 2px 8px", marginBottom: 4,
+                borderBottom: `1px solid color-mix(in srgb, ${color} 22%, var(--pb-chip))`,
               }}>
-                <span style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
-                <span style={{ fontSize: 13, fontWeight: 700, color, letterSpacing: "-0.01em" }}>{short}</span>
-                {colIdeas.length > 0 && (
-                  <span style={{ fontSize: 10, color: "#52525b", fontWeight: 500 }}>{colIdeas.length}</span>
-                )}
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: color, flexShrink: 0 }} />
+                <span style={{ fontSize: 13, fontWeight: 700, color, letterSpacing: "-0.01em", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {short}
+                </span>
+                <span style={{ fontSize: 10, color: "var(--pb-faint)", fontWeight: 500, flexShrink: 0 }}>
+                  {colIdeas.length}
+                </span>
               </div>
 
               {/* Drop zone + cards */}
               <div style={{
-                minHeight: 120, padding: "6px 4px", borderRadius: 9,
-                border: isDrop ? "2px dashed #7c3aed" : "2px dashed transparent",
-                background: isDrop ? "rgba(124,58,237,0.05)" : "transparent",
+                minHeight: 120, borderRadius: 9,
+                border: isDrop ? `2px dashed ${color}` : "2px dashed transparent",
+                background: isDrop ? `${color}0D` : "transparent",
                 transition: "all 0.12s",
               }}>
-                {colIdeas.length === 0 && !isDrop && (
-                  <div style={{ padding: "24px 10px", textAlign: "center", color: "#3f3f46", fontSize: 10 }}>
-                    {opsOnly ? "No ideas yesterday or today" : "Drop an idea here"}
+                {colIdeas.length === 0 && (
+                  <div style={{ padding: "24px 10px", textAlign: "center", color: "var(--pb-border)", fontSize: 10 }}>
+                    Drop an idea here
                   </div>
                 )}
-                {opsOnly ? (
-                  [todayStr, yesterdayStr].map(day => {
-                    const dayColIdeas = colIdeas.filter((i: any) => (i.day_date || "").slice(0, 10) === day);
-                    if (dayColIdeas.length === 0) return null;
-                    const isToday = day === todayStr;
-                    return (
-                      <Fragment key={day}>
-                        <div style={{
-                          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6,
-                          padding: "5px 4px 7px", marginTop: day === todayStr ? 0 : 10,
-                        }}>
-                          <OpsDayTag isToday={isToday} size="lg" />
-                          <span style={{ fontSize: 9, color: "#52525b", fontWeight: 600 }}>{fmtDay(day)}</span>
-                        </div>
-                        {dayColIdeas.map((idea: any) => (
-                          <OpsFrontseatPageCard
-                            key={idea.id}
-                            idea={idea}
-                            letter={ideaLetterMap[idea.source_pool_id] || "?"}
-                            todayStr={todayStr}
-                            onClick={() => setDetailIdea(idea)}
-                          />
-                        ))}
-                      </Fragment>
-                    );
-                  })
-                ) : colIdeas.map((idea: any) => (
+                {colIdeas.map((idea: any) => (
                   <FrontseatPageCard
                     key={idea.id}
                     idea={idea}
                     letter={ideaLetterMap[idea.source_pool_id] || "?"}
                     onClick={() => setDetailIdea(idea)}
-                    onRemoveFromPage={dragDisabled ? undefined : () => {
+                    readOnly={readOnly}
+                    onAssign={readOnly || !canAssign ? undefined : (name) => updateMut.mutate({ id: idea.id, data: { assigned_to: name } })}
+                    onRemoveFromPage={readOnly ? undefined : () => {
                       // Delete the copy
                       deleteMut.mutate(idea.id);
                       // Remove page from pool idea's chip tracking
@@ -4177,15 +4549,7 @@ function FrontseatTab({ readOnly, opsOnly, formatFilter = "all" }: { readOnly?: 
         })}
       </div>
 
-      <QuickAddModal open={addOpen} onAdd={data => createMut.mutate(data)} onClose={() => setAddOpen(false)} />
-      {detailIdea && opsOnly && (
-        <ContentOpsIdeaModal
-          idea={detailIdea}
-          onUpdate={(id, data) => updateMut.mutate({ id, data })}
-          onClose={() => setDetailIdea(null)}
-        />
-      )}
-      {detailIdea && !opsOnly && (
+      {detailIdea && (
         <IdeaDetailModal
           idea={detailIdea}
           readOnly={readOnly}
@@ -4195,6 +4559,7 @@ function FrontseatTab({ readOnly, opsOnly, formatFilter = "all" }: { readOnly?: 
         />
       )}
     </div>
+    </>
   );
 }
 
@@ -4211,30 +4576,67 @@ export default function PlaybookExperimentPage({ playbookId }: { playbookId: Pla
 }
 
 function ExperimentXShell() {
-  const { pages: playbookPages, id: playbookId, label, emoji } = usePlaybook();
+  const { pages: playbookPages, pageShort, id: playbookId, label, emoji } = usePlaybook();
   const { role } = usePermissions();
   // Role decides which tabs show and which are editable (VE → Production only,
   // CS → Frontseat edit + rest view, CO → edit all).
   const profile = getPlaybookViewProfile(role, playbookId);
   const [searchParams] = useSearchParams();
-  // Honor a ?tab= deep-link (e.g. Idea Engine shortcuts land CS on Content
-  // Distribution, VE on Production) when it's a tab this role can see; else the
-  // role's default tab.
+  const location = useLocation();
+  // /content-distribution and /production are now separate sidebar entries, each
+  // showing exactly one tab and no switcher — a ?tab= deep-link (e.g. from Idea
+  // Engine) or the role's own default only applies on the older /experiment-xf,
+  // /experiment-tech routes, which still bundle every tab behind the switcher.
+  const isSingleTabRoute = location.pathname === "/content-distribution" || location.pathname === "/production";
   const [tab, setTab] = useState<TabMode>(() => {
+    if (location.pathname === "/production") return "idea-bank";
+    if (location.pathname === "/content-distribution") return "frontseat";
     const requested = searchParams.get("tab") as TabMode | null;
     if (requested && (profile?.tabs as TabMode[] | undefined)?.includes(requested)) return requested;
     return (profile?.defaultTab as TabMode) ?? "idea-bank";
   });
+  // /content-distribution and /production render the same <ExperimentX playbookId="bpb">
+  // element, just from different <Route>s — React Router doesn't remount the component
+  // when navigating between them client-side (same type+props in the same tree slot), so
+  // the useState initializer above only fires once and can go stale. This keeps `tab`
+  // correct on every navigation between the two, not just the first mount.
+  useEffect(() => {
+    if (location.pathname === "/production") setTab("idea-bank");
+    else if (location.pathname === "/content-distribution") setTab("frontseat");
+  }, [location.pathname]);
+  // /production is its own sidebar destination now — it shouldn't carry the Content
+  // Distribution page's name in its own heading.
+  const pageTitle = location.pathname === "/production" ? "Production" : label;
   const [pageFilter, setPageFilter] = useState("all");
-  // News / A-roll filter — Content Distribution only, so it sits beside the page filter
+  // News / A-roll filter — Today's Board only, so it sits beside the page filter
   // but renders on the frontseat tab alone.
   const [formatFilter, setFormatFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
+  // Today's Board: kanban (drag-and-drop) vs. table (flat, sortable) — same filters,
+  // just two different ways to look at and act on the same pool ideas.
+  const [todaysBoardView, setTodaysBoardView] = useState<"kanban" | "table">("kanban");
+
+  // Production's Reel/Carousel + By stage/By person controls — owned here (not inside
+  // ProductionTab) and rendered in the shared filter row below, so they sit right under
+  // the tab switcher and are always visible without scrolling, instead of living further
+  // down inside the tab's own (previously easy-to-scroll-past) toolbar.
+  const roleListProd = (role || "").split(",").map(r => canonicalRole(r.trim())).filter(Boolean);
+  const soloViewProd = roleListProd.length > 0 && roleListProd.every(r => r === "ve");
+  const isOpsOrAdminProd = roleListProd.some(r => r === "co" || r === "admin" || r === "senior_cs");
+  const isCarouselRoleProd = (role || "").split(",").map(r => r.trim().toLowerCase()).includes("carousel_designer");
+  const [contentTypeFilterChoice, setContentTypeFilterChoice] = useState<"reel" | "carousel">("reel");
+  const contentTypeFilter = soloViewProd ? (isCarouselRoleProd ? "carousel" : "reel") : contentTypeFilterChoice;
+  const [viewBy, setViewBy] = useState<"stage" | "person">("stage");
+  const [personFilter, setPersonFilter] = useState<string>("all");
+  const allAssigneeNames = useMemo(
+    () => [...new Set([...ASSIGNEE_OPTIONS.carousel, ...ASSIGNEE_OPTIONS.reel].map(a => a.name))],
+    [],
+  );
 
   if (!profile) {
     return (
-      <div style={{ minHeight: "100vh", background: "#09090b", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-        <p style={{ color: "#71717a", fontSize: 14 }}>You don&apos;t have permission to view {label}.</p>
+      <div style={{ minHeight: "100vh", background: "var(--pb-bg)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <p style={{ color: "var(--pb-dim)", fontSize: 14 }}>You don&apos;t have permission to view {label}.</p>
       </div>
     );
   }
@@ -4243,7 +4645,7 @@ function ExperimentXShell() {
   const canEditTab = (t: TabMode) => profile.edit.includes(t as any);
 
   const tabLabels: Record<TabMode, string> = {
-    "frontseat":     "Content Distribution",
+    "frontseat":     "Today's Board",
     "idea-bank":     "Production",
     "tracking":      "Tracking",
     "calendar":      "Calendar",
@@ -4257,32 +4659,35 @@ function ExperimentXShell() {
 
       {/* Header */}
       <div className="fglass-divider" style={{ marginBottom: 14, paddingBottom: 12, borderBottomWidth: 1, borderBottomStyle: "solid" }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: "#fff", margin: 0, letterSpacing: "-0.02em" }}>
-          {label} <span style={{ fontSize: 15 }}>{emoji}</span>
+        <h1 style={{ fontSize: 20, fontWeight: 700, color: "var(--pb-ink)", margin: 0, letterSpacing: "-0.02em" }}>
+          {pageTitle} <span style={{ fontSize: 15 }}>{emoji}</span>
         </h1>
-        <p className="fglass-muted" style={{ fontSize: 12, margin: "4px 0 0" }}>
-          {playbookPages.length} pages · {playbookPages.join(", ")}
-        </p>
       </div>
 
-      {/* Tab switcher — single glass seg, no outer bar */}
-      <div className="six-day-seg" style={{ marginBottom: 10 }}>
-        {visibleTabs.map(t => (
-          <button
-            key={t}
-            type="button"
-            className={tab === t ? "is-on" : ""}
-            onClick={() => { setTab(t); setSearch(""); }}
-          >
-            {tabLabels[t]}
-          </button>
-        ))}
-      </div>
+      {/* Tab switcher — single glass seg, no outer bar. Hidden on the dedicated
+          /content-distribution and /production routes, which each show exactly
+          one fixed tab now that Production has its own sidebar entry. */}
+      {!isSingleTabRoute && (
+        <div className="six-day-seg" style={{ marginBottom: 10 }}>
+          {visibleTabs.map(t => (
+            <button
+              key={t}
+              type="button"
+              className={tab === t ? "is-on" : ""}
+              onClick={() => { setTab(t); setSearch(""); }}
+            >
+              {tabLabels[t]}
+            </button>
+          ))}
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 22, flexWrap: "wrap" }}>
-        <select value={pageFilter} onChange={e => setPageFilter(e.target.value)} style={sel}>
-          <option value="all">All pages</option>
-          {playbookPages.map(p => <option key={p} value={p}>{p}</option>)}
-        </select>
+        <PageMultiSelect
+          pages={playbookPages}
+          labels={pageShort}
+          value={pageFilter}
+          onChange={setPageFilter}
+        />
         <input
           placeholder="Search ideas…"
           value={search}
@@ -4301,22 +4706,104 @@ function ExperimentXShell() {
                   onClick={() => setFormatFilter(f)}
                   style={{
                     padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                    border: on ? `2px solid ${accent}` : "1.5px solid #3f3f46",
-                    background: on ? `${accent}22` : "#18181b",
-                    color: on ? accent : "#71717a",
+                    border: on ? `2px solid ${accent}` : "1.5px solid var(--pb-border)",
+                    background: on ? `${accent}22` : "var(--pb-card)",
+                    color: on ? accent : "var(--pb-dim)",
                   }}
                 >{f === "all" ? "All formats" : f}</button>
               );
             })}
           </div>
         )}
+        {tab === "frontseat" && (
+          <div aria-hidden style={{ width: 1, alignSelf: "stretch", minHeight: 28, background: "var(--pb-border)", margin: "0 4px" }} />
+        )}
+        {tab === "frontseat" && (
+          <div style={{ display: "flex", gap: 6 }}>
+            {(["kanban", "table"] as const).map(v => {
+              const on = todaysBoardView === v;
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setTodaysBoardView(v)}
+                  style={{
+                    padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                    border: on ? "2px solid #7c3aed" : "1.5px solid var(--pb-border)",
+                    background: on ? "rgba(124,58,237,0.15)" : "var(--pb-card)",
+                    color: on ? "#a78bfa" : "var(--pb-dim)",
+                  }}
+                >{v === "kanban" ? "Kanban" : "Table"}</button>
+              );
+            })}
+          </div>
+        )}
+        {tab === "idea-bank" && (
+          <>
+            {/* A solo (VE) viewer only ever works one pipeline — their own — so there's
+                nothing to switch between; the toggle is Ops/admin's tool for looking at
+                either team's board. */}
+            {!soloViewProd && (
+              <div style={{ display: "flex", gap: 6 }}>
+                {(["reel", "carousel"] as const).map(ct => {
+                  const on = contentTypeFilter === ct;
+                  return (
+                    <button
+                      key={ct}
+                      type="button"
+                      onClick={() => setContentTypeFilterChoice(ct)}
+                      style={{
+                        padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                        border: on ? "2px solid #7c3aed" : "1.5px solid var(--pb-border)",
+                        background: on ? "rgba(124,58,237,0.15)" : "var(--pb-card)",
+                        color: on ? "#a78bfa" : "var(--pb-dim)",
+                      }}
+                    >{ct === "reel" ? "Reel" : "Carousel"}</button>
+                  );
+                })}
+              </div>
+            )}
+            {isOpsOrAdminProd && (
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                {(["stage", "person"] as const).map(v => {
+                  const on = viewBy === v;
+                  return (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setViewBy(v)}
+                      style={{
+                        padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                        border: on ? "2px solid #7c3aed" : "1.5px solid var(--pb-border)",
+                        background: on ? "rgba(124,58,237,0.15)" : "var(--pb-card)",
+                        color: on ? "#a78bfa" : "var(--pb-dim)",
+                      }}
+                    >{v === "stage" ? "By stage" : "By person"}</button>
+                  );
+                })}
+                {viewBy === "person" && (
+                  <select value={personFilter} onChange={e => setPersonFilter(e.target.value)} style={sel}>
+                    <option value="all">All people</option>
+                    {allAssigneeNames.map(name => <option key={name} value={name}>{name}</option>)}
+                    <option value="Unassigned">Unassigned</option>
+                  </select>
+                )}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* Tab content — per-tab edit rights come from the role's view profile. */}
       <div>
-        {tab === "frontseat"     && <FrontseatTab readOnly={!canEditTab("frontseat")} formatFilter={formatFilter} />}
+        {tab === "frontseat"     && <FrontseatTab readOnly={!canEditTab("frontseat")} formatFilter={formatFilter} pageFilter={pageFilter} search={search} view={todaysBoardView} />}
         {/* Idea Bank IS the video-editor Production board (Approved → Base edit → Formatted → Posted). */}
-        {tab === "idea-bank"     && <ProductionTab pageFilter={pageFilter} search={search} readOnly={!canEditTab("idea-bank")} />}
+        {tab === "idea-bank"     && (
+          <ProductionTab
+            pageFilter={pageFilter} search={search} readOnly={!canEditTab("idea-bank")}
+            contentTypeFilter={contentTypeFilter} viewBy={viewBy} personFilter={personFilter}
+          />
+        )}
         {tab === "tracking"      && <TrackingTab pageFilter={pageFilter} search={search} viewOnly={!canEditTab("tracking")} />}
         {tab === "calendar"      && <CalendarTab pageFilter={pageFilter} search={search} calendarViewOnly={!canEditTab("calendar")} />}
         {tab === "content-bank"  && <ContentBankTab pageFilter={pageFilter} search={search} readOnly={!canEditTab("content-bank")} />}

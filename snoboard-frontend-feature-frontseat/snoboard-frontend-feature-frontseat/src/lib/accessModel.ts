@@ -32,7 +32,7 @@ export type AreaDef = { key: AreaKey; label: string; group: AreaGroup; route: st
 export const AREAS: AreaDef[] = [
   { key: "idea_engine", label: "Idea Engine", group: "Content", route: "/idea-engine" },
   { key: "six_day", label: "6-Day Tracker", group: "Content", route: "/six-day-tracker" },
-  { key: "playbook_bpb", label: "Playbook · BPB", group: "Content", route: "/experiment-bpb" },
+  { key: "playbook_bpb", label: "Content Distribution", group: "Content", route: "/content-distribution" },
   { key: "playbook_xf", label: "Playbook · XF", group: "Content", route: "/experiment-xf" },
   { key: "playbook_tech", label: "Playbook · Tech", group: "Content", route: "/experiment-tech" },
   { key: "news", label: "News Feed", group: "Content", route: "/news" },
@@ -360,8 +360,17 @@ export function canViewMonthlyWrap(
   return canView(role, "six_day", undefined, personAccess);
 }
 
+// Routes that share an AREAS entry's permission without being a literal alias of its
+// `route` (kept out of AREAS itself so the admin permission matrix shows one row per
+// permission, not one per route). /production is the Content Distribution page's
+// Production tab, promoted to its own sidebar entry/URL — same access as playbook_bpb.
+const AREA_ROUTE_ALIASES: Record<string, AreaKey> = {
+  "/production": "playbook_bpb",
+};
+
 /** Map a nav route to its access area (exact, then prefix for sub-routes). */
 export function areaForRoute(route: string): AreaKey | null {
+  if (route in AREA_ROUTE_ALIASES) return AREA_ROUTE_ALIASES[route];
   const exact = AREAS.find((a) => a.route === route);
   if (exact) return exact.key;
   const pre = AREAS.find((a) => !a.route.startsWith("http") && route.startsWith(a.route + "/"));

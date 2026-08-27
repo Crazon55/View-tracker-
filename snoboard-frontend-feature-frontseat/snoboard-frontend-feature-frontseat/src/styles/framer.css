@@ -11,9 +11,169 @@
   --f-ink:#f4f4f7;
   --f-dim:#8a8a94;
   --f-faint:#5a5a64;
-  --accent:#8b5cf6; --accent-2:#a78bfa;         /* site purple */
+  --accent:#8b5cf6; --accent-2:#a78bfa;         /* site purple — same in both themes */
   --f-radius-card:16px; --f-radius-ctl:10px;
+
+  /* Content Distribution's own neutral scale — ExperimentX.tsx uses these literal hex
+     values inline (not the --f-* tokens above), so it gets its own set. Semantic/status
+     colors (stage greens, reds, the purple accent) are unchanged — only structural
+     backgrounds/borders/text swap. */
+  --pb-bg:#09090b; --pb-panel:#111113; --pb-panel-2:#0f0f11; --pb-card:#18181b; --pb-chip:#27272a;
+  --pb-border:#3f3f46; --pb-ink:#e4e4e7; --pb-dim2:#a1a1aa; --pb-dim:#71717a; --pb-faint:#52525b;
 }
+
+/* Light theme — manual toggle only (no OS-preference fallback), applied via
+   data-theme="light" on <html> by ThemeContext. Covers the shared --f-* tokens
+   plus the nav bar, dropdown menus, and glass panel/input surfaces below (they
+   hard-code specific hex values rather than reading the tokens, so each needs
+   its own override), and the --pb-* tokens Content Distribution's own inline
+   styles read. */
+:root[data-theme="light"]{
+  --f-bg:#f4f4f7;
+  --f-panel:#ffffff;
+  --f-panel-2:#f0f0f3;
+  --f-line:rgba(0,0,0,.11);
+  --f-ink:#141417;
+  --f-dim:#5a5a64;
+  --pb-bg:#f4f4f7; --pb-panel:#ffffff; --pb-panel-2:#f7f7f9; --pb-card:#eeeef1; --pb-chip:#e4e4ea;
+  --pb-border:#d4d4da; --pb-ink:#18181b; --pb-dim2:#52525b; --pb-dim:#71717a; --pb-faint:#a1a1aa;
+  --f-faint:#8a8a94;
+
+  /* AppSidebar (components/ui/sidebar.tsx) reads these HSL vars via Tailwind's
+     bg-sidebar/text-sidebar-* classes — dark defaults live in index.css, this is
+     the light half. */
+  --sidebar-background: 0 0% 100%;
+  --sidebar-foreground: 240 6% 38%;
+  --sidebar-primary: 258 90% 66%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 258 60% 95%;
+  --sidebar-accent-foreground: 258 60% 32%;
+  --sidebar-border: 240 8% 88%;
+  --sidebar-ring: 258 90% 66%;
+}
+:root[data-theme="light"] .f-topwrap{ background:rgba(255,255,255,.92); }
+:root[data-theme="light"] .f-panel{ background:#ffffff; box-shadow:0 30px 60px -20px rgba(0,0,0,.25), 0 0 0 1px rgba(0,0,0,.08); }
+:root[data-theme="light"] .f-item:hover .f-trigger{ color:#000; background:rgba(0,0,0,.05); }
+:root[data-theme="light"] .f-trigger.active{ color:#000; }
+:root[data-theme="light"] .f-ws{ background:#e8e8ed; }
+:root[data-theme="light"] .f-ws button .d{ background:#c6c6ce; }
+:root[data-theme="light"] .f-ws button[aria-selected="true"]{ color:#000; }
+:root[data-theme="light"] .f-plink .ic{ background:#eeeef2; }
+
+/* Home dashboard — bento stat cards + IP grid cards (separate class systems from
+   .fglass-panel, so they need their own light backgrounds/text). */
+:root[data-theme="light"] .bento .b{
+  background:
+    radial-gradient(88% 58% at 50% 0%, rgba(0,0,0,.025), transparent 62%),
+    linear-gradient(165deg, rgba(0,0,0,.02) 0%, rgba(255,255,255,.85) 38%, rgba(250,250,252,.9) 68%, rgba(255,255,255,.7) 100%);
+  border-color:color-mix(in srgb, #7c3aed 12%, rgba(0,0,0,.08));
+}
+:root[data-theme="light"] .b .b-big{ color:#000; }
+:root[data-theme="light"] .home-ips-title,
+:root[data-theme="light"] .home-ip-card-title{ color:#000; }
+:root[data-theme="light"] .fglass-card{
+  background:
+    radial-gradient(85% 55% at 50% 0%, rgba(0,0,0,.015), transparent 70%),
+    linear-gradient(168deg, rgba(255,255,255,.98) 0%, rgba(247,247,249,.99) 55%, rgba(251,251,252,.98) 100%);
+  border:1px solid rgba(0,0,0,.1);
+}
+:root[data-theme="light"] .fglass-card:hover{
+  background:
+    radial-gradient(100% 70% at 50% 0%, rgba(0,0,0,.03), transparent 58%),
+    radial-gradient(90% 75% at 0% 100%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 60%),
+    linear-gradient(168deg, rgba(255,255,255,.98) 0%, rgba(248,248,250,.99) 52%, rgba(252,252,253,.98) 100%);
+}
+:root[data-theme="light"] .fglass-card.is-selected,
+:root[data-theme="light"] .fglass-card.is-selected:hover{
+  background:
+    radial-gradient(100% 75% at 50% 0%, rgba(0,0,0,.03), transparent 55%),
+    radial-gradient(95% 85% at 0% 100%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 58%),
+    linear-gradient(168deg, rgba(255,255,255,.98) 0%, rgba(249,247,255,.99) 100%);
+}
+:root[data-theme="light"] .fglass-panel.fglass-purple-shadow{
+  background:
+    radial-gradient(85% 55% at 50% 0%, rgba(0,0,0,.01), transparent 70%),
+    linear-gradient(168deg, rgba(255,255,255,1) 0%, rgba(250,250,251,1) 55%, rgba(253,253,254,1) 100%);
+}
+
+/* Segmented pill control (team filters on Home, tab switchers on Content
+   Distribution, etc.) — dark translucent bar reads as muddy on a light page. */
+:root[data-theme="light"] .six-day-seg{
+  background:
+    radial-gradient(90% 70% at 0% 100%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 58%),
+    linear-gradient(165deg, rgba(0,0,0,.02) 0%, rgba(255,255,255,.85) 55%, rgba(0,0,0,.01) 100%);
+  border:1px solid color-mix(in srgb, var(--accent) 10%, rgba(0,0,0,.08));
+}
+:root[data-theme="light"] .six-day-seg button{ color:rgba(60,60,68,.85); }
+:root[data-theme="light"] .six-day-seg button.is-on{
+  color:#000;
+  background:linear-gradient(165deg, rgba(0,0,0,.04) 0%, rgba(139,92,246,.14) 100%);
+}
+
+/* 6-Day Tracker — its own dark-glass classes (not the shared --f-* tokens), so each
+   needs an explicit light body. Accent radial glows already use color-mix(...,transparent)
+   so they carry over unchanged; only the opaque linear-gradient fill and text need it. */
+:root[data-theme="light"] .six-day-title{ color:#141417; }
+:root[data-theme="light"] .six-day-lead{ color:rgba(70,70,78,.9); }
+:root[data-theme="light"] .six-day-glass-bar{
+  background:
+    radial-gradient(75% 60% at 0% 100%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 62%),
+    radial-gradient(60% 45% at 100% 0%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 58%),
+    linear-gradient(168deg, rgba(255,255,255,.95) 0%, rgba(250,250,252,.93) 100%);
+  border:1px solid color-mix(in srgb, var(--accent) 11%, rgba(0,0,0,.07));
+}
+:root[data-theme="light"] .six-day-filters-label{ color:rgba(80,80,90,.95); }
+:root[data-theme="light"] .fglass-filter-pill{
+  background:
+    radial-gradient(85% 70% at 0% 100%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 58%),
+    radial-gradient(65% 50% at 100% 0%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 55%),
+    linear-gradient(165deg, rgba(0,0,0,.02) 0%, rgba(255,255,255,.85) 48%, rgba(0,0,0,.01) 100%);
+  border:1px solid color-mix(in srgb, var(--accent) 8%, rgba(0,0,0,.08));
+  color:rgba(60,60,68,.9);
+}
+:root[data-theme="light"] .fglass-filter-pill:hover{ border-color:rgba(0,0,0,.14); color:rgba(20,20,23,.95); }
+:root[data-theme="light"] .fglass-filter-pill.is-on{
+  color:#000;
+  border-color:color-mix(in srgb, var(--accent) 32%, rgba(0,0,0,.12));
+  background:
+    radial-gradient(95% 85% at 0% 100%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 58%),
+    radial-gradient(70% 55% at 100% 0%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 55%),
+    linear-gradient(165deg, rgba(0,0,0,.02) 0%, rgba(255,255,255,.9) 52%, rgba(0,0,0,.01) 100%);
+}
+:root[data-theme="light"] .fglass-filter-pill.is-on-orange{ background:linear-gradient(165deg, rgba(251,146,60,.16) 0%, rgba(255,255,255,.88) 55%); color:#9a4a0f; }
+:root[data-theme="light"] .fglass-filter-pill.is-on-amber{ background:linear-gradient(165deg, rgba(245,158,11,.18) 0%, rgba(255,255,255,.88) 55%); color:#8a5a05; }
+:root[data-theme="light"] .fglass-filter-pill.is-on-sky{ background:linear-gradient(165deg, rgba(56,189,248,.16) 0%, rgba(255,255,255,.88) 55%); color:#0a6a91; }
+:root[data-theme="light"] .fglass-filter-pill.is-on-rose{ background:linear-gradient(165deg, rgba(251,113,133,.16) 0%, rgba(255,255,255,.88) 55%); color:#a4243b; }
+:root[data-theme="light"] .fglass-filter-pill.is-on-cyan{ background:linear-gradient(165deg, rgba(34,211,238,.16) 0%, rgba(255,255,255,.88) 55%); color:#0a6e78; }
+:root[data-theme="light"] .fglass-filter-pill.is-on-violet{ background:linear-gradient(165deg, rgba(167,139,250,.18) 0%, rgba(255,255,255,.88) 55%); color:#5b3ec9; }
+:root[data-theme="light"] .six-day-icon-btn{
+  background:
+    radial-gradient(80% 70% at 0% 100%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 60%),
+    linear-gradient(165deg, rgba(0,0,0,.02) 0%, rgba(255,255,255,.9) 100%);
+  border:1px solid color-mix(in srgb, var(--accent) 9%, rgba(0,0,0,.08));
+  color:rgba(60,60,68,.9);
+}
+:root[data-theme="light"] .six-day-icon-btn:hover{
+  border-color:rgba(0,0,0,.14); color:#000;
+  background:linear-gradient(165deg, rgba(0,0,0,.03) 0%, rgba(255,255,255,.95) 100%);
+}
+:root[data-theme="light"] .six-day-stat-card,
+:root[data-theme="light"] .six-day-stat-card--accent{
+  background:
+    radial-gradient(80% 70% at 0% 100%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 60%),
+    linear-gradient(168deg, rgba(255,255,255,.95) 0%, rgba(250,250,252,.93) 100%);
+  border-color:color-mix(in srgb, var(--accent) 9%, rgba(0,0,0,.07));
+}
+:root[data-theme="light"] .six-day-stat-label{ color:rgba(80,80,90,.95); }
+:root[data-theme="light"] .six-day-stat-value{ color:#141417; }
+:root[data-theme="light"] .six-day-stat-sub{ color:rgba(90,90,100,.9); }
+:root[data-theme="light"] .six-day-alert{
+  background:linear-gradient(165deg, rgba(251,191,36,.16) 0%, rgba(255,255,255,.94) 55%);
+  border-color:rgba(217,119,6,.32);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5), 0 8px 28px -16px rgba(0,0,0,.12);
+}
+:root[data-theme="light"] .six-day-alert p:first-child{ color:#92400e !important; }
+:root[data-theme="light"] .six-day-alert p:last-child{ color:rgba(146,64,14,.85) !important; }
 
 /* ── site-wide background (GPU fluid smoke + film grain) ── */
 .fs-moving-bg{
@@ -43,6 +203,9 @@
 .f-brand{ display:flex; align-items:center; gap:8px; text-decoration:none; flex-shrink:0; margin-left:-10px; margin-right:8px; }
 .f-brand-mark{ height:22px; width:auto; display:block; object-fit:contain; flex-shrink:0; }
 .f-brand-word{ height:15px; width:auto; display:block; object-fit:contain; flex-shrink:0; opacity:.98; }
+/* The wordmark SVG is solid white paths (baked into the file) — can't be reached with
+   color/fill from here, so light mode inverts it to black instead. */
+:root[data-theme="light"] .f-brand-word{ filter:invert(1); }
 
 /* workspace switcher */
 .f-ws{ display:flex; gap:3px; padding:4px; border:1px solid var(--f-line); border-radius:11px; background:#0c0c11; }
@@ -111,7 +274,7 @@
   color:var(--accent-2); border:1px solid color-mix(in srgb, var(--accent) 40%, transparent); }
 .f-badge.good{ color:#7ee2a8; border-color:rgba(52,211,153,.4); }
 .f-badge.risk{ color:#ecc06a; border-color:rgba(224,165,58,.4); }
-.f-num{ font-family:'JetBrains Mono',monospace; font-weight:600; letter-spacing:-.02em; color:#fff; }
+.f-num{ font-family:'JetBrains Mono',monospace; font-weight:600; letter-spacing:-.02em; color:var(--f-ink); }
 .f-pill{
   display:inline-flex; align-items:center; justify-content:center;
   font-size:11px; font-weight:600; line-height:1.2;
@@ -290,7 +453,7 @@
   letter-spacing:.15em; text-transform:uppercase; color:#a78bfa;
 }
 .home-ip-views{
-  font-size:clamp(28px, 4vw, 36px); font-weight:800; color:#fff;
+  font-size:clamp(28px, 4vw, 36px); font-weight:800; color:var(--f-ink);
   font-variant-numeric:tabular-nums; letter-spacing:-.02em; line-height:1;
 }
 .home-ip-views-row{
@@ -977,6 +1140,10 @@
   content:""; position:absolute; top:0; left:4%; right:4%; height:1px; pointer-events:none; z-index:0;
   background:linear-gradient(90deg, transparent, rgba(255,255,255,.18), transparent);
 }
+:root[data-theme="light"] .fglass-cycle{
+  background:linear-gradient(168deg, rgba(0,0,0,.015) 0%, rgba(255,255,255,.9) 42%, rgba(0,0,0,.008) 100%);
+  border:1px solid rgba(0,0,0,.08);
+}
 
 /* gallery — row-based so detail opens under the clicked row */
 .six-day-gallery{
@@ -1053,6 +1220,18 @@
     0 0 14px -10px rgba(251,191,36,.1),
     0 8px 28px -10px rgba(0,0,0,.85);
 }
+:root[data-theme="light"] .fglass-chip{
+  background:linear-gradient(165deg, rgba(0,0,0,.02) 0%, rgba(255,255,255,.88) 48%, rgba(0,0,0,.01) 100%);
+  border:1px solid rgba(0,0,0,.09);
+}
+:root[data-theme="light"] .fglass-chip:hover{
+  border-color:rgba(0,0,0,.15);
+  background:linear-gradient(165deg, rgba(0,0,0,.03) 0%, rgba(255,255,255,.95) 48%, rgba(0,0,0,.015) 100%);
+}
+:root[data-theme="light"] .fglass-chip.fglass-chip-on{
+  border-color:rgba(180,120,0,.3);
+  background:linear-gradient(165deg, rgba(0,0,0,.015) 0%, rgba(251,191,36,.1) 50%, rgba(255,255,255,.85) 100%);
+}
 
 /* detail sheet below gallery */
 .fglass-sheet{
@@ -1075,6 +1254,10 @@
 .fglass-sheet::before{
   content:""; position:absolute; inset:0; pointer-events:none; z-index:0;
   background:radial-gradient(80% 50% at 50% -30%, rgba(255,255,255,.05), transparent 70%);
+}
+:root[data-theme="light"] .fglass-sheet{
+  background:linear-gradient(168deg, rgba(0,0,0,.02) 0%, rgba(255,255,255,.9) 50%, rgba(0,0,0,.008) 100%);
+  border:1px solid rgba(0,0,0,.09);
 }
 .fglass-sheet::after{
   content:""; position:absolute; top:0; left:5%; right:5%; height:1px; pointer-events:none; z-index:0;
@@ -1128,6 +1311,11 @@
   transition:border-color .15s, box-shadow .15s, background .15s;
 }
 .fglass-input::placeholder{ color:rgba(161,161,170,.72) !important; }
+/* Native <select> popup ignores backdrop-filter glass and renders light by default —
+   force the dropdown list itself dark too (Chromium/Edge honor option bg/color). App is
+   dark-themed throughout, so this is safe to apply to every select, not just glass inputs. */
+select{ color-scheme:dark; }
+select option{ background-color:#18181b !important; color:rgba(244,244,247,.95) !important; }
 .fglass-input:focus,
 .fglass-input:focus-visible{
   border-color:rgba(255,255,255,.26) !important;
@@ -1142,6 +1330,40 @@
 .fglass-muted{ color:rgba(196,196,206,.96); }
 .fglass-meta{ color:rgba(156,156,166,.95); }
 .fglass-label{ color:rgba(176,176,186,.98); letter-spacing:.08em; }
+
+/* ── Light theme — glass panels/inputs flip to a light glass instead of dark. ── */
+:root[data-theme="light"] .fglass-panel{
+  background:
+    radial-gradient(85% 55% at 50% 0%, rgba(0,0,0,.02), transparent 70%),
+    linear-gradient(168deg, rgba(255,255,255,.98) 0%, rgba(247,247,249,.99) 55%, rgba(251,251,252,.98) 100%);
+  border:1px solid rgba(0,0,0,.1);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.6),
+    inset 0 -1px 0 rgba(0,0,0,.05),
+    0 8px 32px -12px rgba(0,0,0,.18);
+}
+:root[data-theme="light"] .fglass-panel::before{
+  background:radial-gradient(95% 42% at 50% 0%, rgba(0,0,0,.025), transparent 74%);
+}
+:root[data-theme="light"] .fglass-input{
+  background:rgba(255,255,255,.6) !important;
+  border:1px solid rgba(0,0,0,.14) !important;
+  color:rgba(20,20,23,.95) !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5), inset 0 1px 3px rgba(0,0,0,.04);
+}
+:root[data-theme="light"] .fglass-input::placeholder{ color:rgba(90,90,100,.65) !important; }
+:root[data-theme="light"] select{ color-scheme:light; }
+:root[data-theme="light"] select option{ background-color:#ffffff !important; color:rgba(20,20,23,.95) !important; }
+:root[data-theme="light"] .fglass-input:focus,
+:root[data-theme="light"] .fglass-input:focus-visible{
+  border-color:rgba(0,0,0,.24) !important;
+  background:rgba(255,255,255,.75) !important;
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.05), 0 0 0 3px rgba(0,0,0,.05) !important;
+}
+:root[data-theme="light"] .fglass-divider{ border-color:rgba(0,0,0,.08) !important; }
+:root[data-theme="light"] .fglass-muted{ color:rgba(70,70,78,.9); }
+:root[data-theme="light"] .fglass-meta{ color:rgba(100,100,110,.9); }
+:root[data-theme="light"] .fglass-label{ color:rgba(80,80,90,.95); }
 
 /* ── News feed — newspaper masthead + purple glass ─────────────────────────── */
 .news-page{
@@ -1781,6 +2003,32 @@ button.news-pill:hover{
   border-color:color-mix(in srgb, #7c3aed 35%, rgba(255,255,255,.12));
 }
 .seeding-detail-section.seeding-surface{ padding:20px 22px; margin-top:14px; }
+
+/* Light theme — the pill/card surfaces used inside glass panels (e.g. the "@page"
+   chips on Idea Engine cards) flip to light glass too, not just the panel itself. */
+:root[data-theme="light"] .seeding-surface{
+  background:rgba(255,255,255,.85);
+  border:1px solid rgba(0,0,0,.09);
+}
+:root[data-theme="light"] .seeding-surface-nested{
+  background:linear-gradient(168deg, rgba(0,0,0,.03) 0%, rgba(255,255,255,.6) 50%, rgba(0,0,0,.015) 100%);
+  border:1px solid rgba(0,0,0,.1);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.7),
+    inset 0 -1px 0 rgba(0,0,0,.04),
+    0 4px 20px -10px rgba(0,0,0,.12);
+}
+:root[data-theme="light"] .seeding-surface-nested:hover{
+  border-color:rgba(0,0,0,.16);
+  background:linear-gradient(168deg, rgba(0,0,0,.04) 0%, rgba(255,255,255,.7) 50%, rgba(0,0,0,.02) 100%);
+}
+:root[data-theme="light"] .seeding-card{
+  background:rgba(255,255,255,.85);
+  border:1px solid color-mix(in srgb, #7c3aed 22%, rgba(0,0,0,.09));
+}
+:root[data-theme="light"] .seeding-card.is-selected{
+  background:rgba(250,248,255,.96);
+}
 .seeding-deliverable-card.seeding-surface-nested{
   position:relative;
   overflow:hidden;

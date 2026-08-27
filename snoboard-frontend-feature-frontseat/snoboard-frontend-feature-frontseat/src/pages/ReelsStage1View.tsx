@@ -203,7 +203,7 @@ export default function ReelsStage1View() {
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-white">Reels Stage 1</h2>
+          <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--f-ink)]">Reels Stage 1</h2>
           <p className="text-sm text-zinc-500 mt-1">
             Manually tracked reels
           </p>

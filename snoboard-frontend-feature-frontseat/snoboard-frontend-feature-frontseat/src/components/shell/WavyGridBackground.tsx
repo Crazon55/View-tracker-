@@ -7,10 +7,13 @@ import { useEffect, useRef } from "react";
 
 const GAP = 34;          // spacing between grid lines (px)
 const AMP = 7;           // max displacement of each vertex (px)
-const LINE = "rgba(255,255,255,0.07)";
 const SPEED = 0.00022;   // time scale — lower = slower drift
+const COLORS = {
+  dark:  { bg: "#000000", line: "rgba(255,255,255,0.07)" },
+  light: { bg: "#f4f4f7", line: "rgba(0,0,0,0.07)" },
+} as const;
 
-export function WavyGridBackground() {
+export function WavyGridBackground({ theme = "dark" }: { theme?: "dark" | "light" }) {
   const ref = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -18,6 +21,7 @@ export function WavyGridBackground() {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    const { bg, line } = COLORS[theme];
 
     let w = 0, h = 0, dpr = 1;
     let raf = 0;
@@ -48,10 +52,10 @@ export function WavyGridBackground() {
     const draw = (time: number) => {
       const t = time * SPEED;
       ctx.clearRect(0, 0, w, h);
-      ctx.fillStyle = "#000000";
+      ctx.fillStyle = bg;
       ctx.fillRect(0, 0, w, h);
       ctx.lineWidth = 1;
-      ctx.strokeStyle = LINE;
+      ctx.strokeStyle = line;
 
       const cols = Math.ceil(w / GAP) + 2;
       const rows = Math.ceil(h / GAP) + 2;
@@ -97,7 +101,7 @@ export function WavyGridBackground() {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
     };
-  }, []);
+  }, [theme]);
 
   return (
     <canvas
@@ -110,7 +114,7 @@ export function WavyGridBackground() {
         height: "100%",
         zIndex: -1,
         pointerEvents: "none",
-        background: "#000",
+        background: COLORS[theme].bg,
       }}
     />
   );

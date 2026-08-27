@@ -815,7 +815,7 @@ export default function Tickets() {
               <TicketIcon className="w-5 h-5 text-violet-400" />
             </div>
             <div>
-              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">Bug Tickets</h1>
+              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-[color:var(--f-ink)]">Bug Tickets</h1>
               <p className="text-xs text-zinc-500 mt-1">Add ticket → incoming → in progress → finished.</p>
             </div>
           </div>

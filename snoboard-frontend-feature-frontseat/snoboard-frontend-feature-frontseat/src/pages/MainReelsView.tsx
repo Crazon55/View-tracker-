@@ -198,7 +198,7 @@ export default function MainReelsView() {
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-white">Main Reels</h2>
+          <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--f-ink)]">Main Reels</h2>
           <p className="text-sm text-zinc-500 mt-1">
             Reels from your main IP accounts — manually add links, views, and posting time
           </p>

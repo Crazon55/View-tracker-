@@ -89,7 +89,7 @@ function cycleScopeLabel(throughCycle: number): string {
   return `W1–${throughCycle}`;
 }
 
-function Donut({ reels, posts }: { reels: number; posts: number }) {
+function Donut({ reels, posts, monthLabel }: { reels: number; posts: number; monthLabel: string }) {
   const total = reels + posts, size = 210, stroke = 22, r = (size - stroke) / 2;
   const C = 2 * Math.PI * r, gap = 0.02;
   const reelLen = (total ? reels / total : 0) * C * (1 - gap);
@@ -104,7 +104,7 @@ function Donut({ reels, posts }: { reels: number; posts: number }) {
         </>}
       </svg>
       <div style={{ position: "absolute", inset: 0, display: "grid", placeContent: "center", textAlign: "center" }}>
-        <div className="b-lab">THIS MONTH</div>
+        <div className="b-lab">{monthLabel.toUpperCase()}</div>
         <div className="b-big" style={{ fontSize: 42 }}>{compact(total)}</div>
         <div style={{ fontSize: 11, color: "var(--f-dim)" }}>views</div>
       </div>
@@ -363,11 +363,19 @@ export default function FramerHome() {
   };
   const [trackerMonth, setTrackerMonth] = useState(localYm);
   const currentYm = useMemo(() => localYm(), []);
+  // Which month the "Views this month" slide shows — defaults to the real current
+  // month, but can be paged back/forward with the arrows next to its heading.
+  const [viewsMonth, setViewsMonth] = useState(currentYm);
+  const viewsMonthLabel = useMemo(
+    () => new Date(viewsMonth + "-01T12:00:00").toLocaleDateString("en-US", { month: "long", year: "numeric" }),
+    [viewsMonth],
+  );
+  const isCurrentViewsMonth = viewsMonth === currentYm;
 
   // Instant paint on refresh: show last successful response while refetching.
   const cachedDashboard = useMemo(() => readHomeCache<any>("dashboard"), []);
   const cachedGrowth = useMemo(() => readHomeCache<any[]>("growth-data"), []);
-  const cachedMonthSix = useMemo(() => readHomeCache<any>(`six-day-current:${currentYm}`), [currentYm]);
+  const cachedMonthSix = useMemo(() => readHomeCache<any>(`six-day-current:${viewsMonth}`), [viewsMonth]);
 
   const { data: stats, isPending: statsPending } = useQuery({
     queryKey: ["dashboard"],
@@ -412,13 +420,14 @@ export default function FramerHome() {
     enabled: viewPeriod === "tracker",
     staleTime: 5 * 60_000,
   });
-  // Current-month 6-day data — the dashboard "This month" donut sources from the SAME
-  // data the 6-Day Tracker renders, so the two never disagree.
+  // Views-slide 6-day data — sources from the SAME data the 6-Day Tracker renders
+  // for viewsMonth (defaults to current month, pageable via the slide's arrows),
+  // so the two never disagree.
   const { data: monthSix, isPending: monthPending } = useQuery({
-    queryKey: ["six-day-current", currentYm],
+    queryKey: ["six-day-current", viewsMonth],
     queryFn: async () => {
-      const data = await getSixDayMonth(currentYm);
-      writeHomeCache(`six-day-current:${currentYm}`, data);
+      const data = await getSixDayMonth(viewsMonth);
+      writeHomeCache(`six-day-current:${viewsMonth}`, data);
       return data;
     },
     staleTime: 5 * 60_000,
@@ -697,10 +706,35 @@ export default function FramerHome() {
   const allTime = chart.reduce((s, d) => s + d.views, 0);
   const peak = chart.reduce((a, b) => (b.views > a.views ? b : a), { name: "—", views: 0 });
 
+  const viewsMonthNav = (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+      <button
+        type="button"
+        className="f-ghost"
+        onClick={() => setViewsMonth((m) => shiftMonth(m, -1))}
+        style={{ width: 24, height: 24, borderRadius: 7, border: "1px solid var(--f-line)", display: "grid", placeItems: "center" }}
+        aria-label="Previous month"
+      >
+        <ChevronLeft size={13} />
+      </button>
+      <div className="f-eyebrow">ECOSYSTEM · {isCurrentViewsMonth ? "THIS MONTH" : viewsMonthLabel.toUpperCase()}</div>
+      <button
+        type="button"
+        className="f-ghost"
+        onClick={() => setViewsMonth((m) => shiftMonth(m, 1))}
+        disabled={isCurrentViewsMonth}
+        style={{ width: 24, height: 24, borderRadius: 7, border: "1px solid var(--f-line)", display: "grid", placeItems: "center", opacity: isCurrentViewsMonth ? 0.35 : 1, cursor: isCurrentViewsMonth ? "default" : "pointer" }}
+        aria-label="Next month"
+      >
+        <ChevronRight size={13} />
+      </button>
+    </div>
+  );
+
   const viewsSlideBody = viewsLoading ? (
     <div>
-      <div className="f-eyebrow" style={{ marginBottom: 10 }}>ECOSYSTEM · THIS MONTH</div>
-      <h1 className="f-h1" style={{ marginBottom: 24 }}>Views this month.</h1>
+      {viewsMonthNav}
+      <h1 className="f-h1" style={{ marginBottom: 24 }}>Views {isCurrentViewsMonth ? "this month" : `in ${viewsMonthLabel}`}.</h1>
       <div className="bento">
         <div className="b b-pur b-glow col-2 row-2" style={{ display: "grid", placeContent: "center", minHeight: 220 }}>
           <div style={{ color: "var(--f-dim)", fontSize: 13 }}>Loading views…</div>
@@ -714,8 +748,8 @@ export default function FramerHome() {
     </div>
   ) : (
     <div>
-      <div className="f-eyebrow" style={{ marginBottom: 10 }}>ECOSYSTEM · THIS MONTH</div>
-      <h1 className="f-h1" style={{ marginBottom: 24 }}>Views this month.</h1>
+      {viewsMonthNav}
+      <h1 className="f-h1" style={{ marginBottom: 24 }}>Views {isCurrentViewsMonth ? "this month" : `in ${viewsMonthLabel}`}.</h1>
       <div className="bento">
         <div className="b b-pur b-glow col-2 row-2" style={{ display: "flex", flexDirection: "column" }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
@@ -725,7 +759,7 @@ export default function FramerHome() {
             </span>
           </div>
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Donut reels={reels} posts={posts} />
+            <Donut reels={reels} posts={posts} monthLabel={isCurrentViewsMonth ? "This month" : viewsMonthLabel} />
           </div>
         </div>
         <div className="b b-mag">
@@ -737,7 +771,7 @@ export default function FramerHome() {
           <div className="b-big" style={{ fontSize: 34, marginTop: "auto" }}>{compact(posts)}</div>
         </div>
         <div className="b b-dark col-2">
-          <div className="b-lab" style={{ marginBottom: 16 }}>🏆 TOP 3 PAGES · THIS MONTH</div>
+          <div className="b-lab" style={{ marginBottom: 16 }}>🏆 TOP 3 PAGES · {isCurrentViewsMonth ? "THIS MONTH" : viewsMonthLabel.toUpperCase()}</div>
           {viewsLoading ? (
             <div style={{ color: "var(--f-faint)", fontSize: 13, margin: "auto" }}>Loading…</div>
           ) : topPages.length && topPages[0].views > 0 ? (

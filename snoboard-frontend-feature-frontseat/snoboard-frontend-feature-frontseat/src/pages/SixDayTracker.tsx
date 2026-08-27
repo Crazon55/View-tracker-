@@ -433,12 +433,12 @@ export default function SixDayTracker() {
           <button type="button" onClick={() => shiftMonth(-1)} className="six-day-icon-btn" aria-label="Previous month">
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <h2 className="text-sm font-semibold text-white w-36 text-center tracking-tight">{monthLabel}</h2>
+          <h2 className="text-sm font-semibold text-[color:var(--f-ink)] w-36 text-center tracking-tight">{monthLabel}</h2>
           <button type="button" onClick={() => shiftMonth(1)} className="six-day-icon-btn" aria-label="Next month">
             <ChevronRight className="w-4 h-4" />
           </button>
           <div className="flex items-baseline gap-1.5 pl-1">
-            <span className="text-xl font-bold text-white tabular-nums tracking-tight">{fmt(totalCycleViews)}</span>
+            <span className="text-xl font-bold text-[color:var(--f-ink)] tabular-nums tracking-tight">{fmt(totalCycleViews)}</span>
             <span className="text-[11px] fglass-muted font-medium">total views</span>
             {monthFetching && <span className="text-[10px] fglass-meta ml-1">updating…</span>}
           </div>
@@ -657,7 +657,7 @@ function CycleCard({
               ? <Clock className="w-4 h-4 text-amber-400 shrink-0" />
               : <Clock className="w-4 h-4 text-zinc-600 shrink-0" />}
           <div>
-            <span className="text-white font-bold text-base">Cycle {cycle.cycle}</span>
+            <span className="text-[color:var(--f-ink)] font-bold text-base">Cycle {cycle.cycle}</span>
             <span className="fglass-muted text-xs ml-3">{fmtShort(cycle.start)} — {fmtShort(cycle.end)}</span>
           </div>
           <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${accent.badge}`}>
@@ -669,13 +669,13 @@ function CycleCard({
           {/* Views */}
           <div className="text-right hidden sm:block">
             <p className="text-[10px] uppercase tracking-wider fglass-label mb-0.5">Views</p>
-            <p className="text-xl font-black text-white tabular-nums leading-none">{fmt(totalViews)}</p>
+            <p className="text-xl font-black text-[color:var(--f-ink)] tabular-nums leading-none">{fmt(totalViews)}</p>
           </div>
 
           {/* IPs Filled + progress bar */}
           <div className="hidden sm:block text-right min-w-[80px]">
             <p className="text-[10px] uppercase tracking-wider fglass-label mb-0.5">IPs Filled</p>
-            <p className="text-sm font-bold text-white leading-none">
+            <p className="text-sm font-bold text-[color:var(--f-ink)] leading-none">
               {filledCount}<span className="fglass-meta">/{pages.length}</span>
             </p>
             <div className="mt-2 h-1 w-20 bg-white/8 rounded-full overflow-hidden">
@@ -782,7 +782,7 @@ function IPGalleryChip({
     >
       <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${hasData ? "bg-emerald-400/75" : "bg-zinc-500/55"}`} />
       <div className="flex-1 min-w-0">
-        <span className="block text-[13px] font-medium text-white/88 truncate leading-tight">
+        <span className="block text-[13px] font-medium text-[color:color-mix(in_srgb,var(--f-ink)_88%,transparent)] truncate leading-tight">
           {page.name || page.handle}
         </span>
         <span className="block text-[11px] fglass-muted truncate">@{page.handle}</span>
@@ -790,7 +790,7 @@ function IPGalleryChip({
       {(views > 0 || reelPct != null || postPct != null) && (
         <div className="flex flex-col items-end gap-1 shrink-0 mr-0.5">
           {views > 0 && (
-            <span className="text-[12px] font-bold text-white tabular-nums leading-none">{fmt(views)}</span>
+            <span className="text-[12px] font-bold text-[color:var(--f-ink)] tabular-nums leading-none">{fmt(views)}</span>
           )}
           {(reelPct != null || postPct != null) && (
             <div className="flex items-center gap-1">
@@ -966,15 +966,15 @@ function IPDetailSheet({
     <div className="fglass-sheet overflow-hidden">
       <div className="flex items-center justify-between gap-3 px-4 py-3 border-b fglass-divider">
         <div className="min-w-0">
-          <div className="text-sm font-semibold text-white/90 truncate">{page.name || page.handle}</div>
+          <div className="text-sm font-semibold text-[color:color-mix(in_srgb,var(--f-ink)_90%,transparent)] truncate">{page.name || page.handle}</div>
           <div className="text-xs fglass-muted truncate">@{page.handle}</div>
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          {views > 0 && <span className="text-sm font-bold text-white/80 tabular-nums">{fmt(views)}</span>}
+          {views > 0 && <span className="text-sm font-bold text-[color:color-mix(in_srgb,var(--f-ink)_80%,transparent)] tabular-nums">{fmt(views)}</span>}
           <button
             type="button"
             onClick={() => { saveIfDirty(); onClose(); }}
-            className="p-1.5 rounded-lg fglass-muted hover:text-white/75 hover:bg-white/5 transition-colors"
+            className="p-1.5 rounded-lg fglass-muted hover:text-[color:color-mix(in_srgb,var(--f-ink)_75%,transparent)] hover:bg-white/5 transition-colors"
             aria-label="Close"
           >
             <ChevronDown className="w-4 h-4 rotate-180" />
@@ -1180,11 +1180,11 @@ function ContentItemRow({ item, onUpdate, onDelete, canEdit }: {
         <ExternalLink className="w-3 h-3 shrink-0" />
         <span className="truncate">{item.link?.replace(/https?:\/\/(www\.)?instagram\.com\//, "").slice(0, 40)}</span>
       </a>
-      <span className="text-white font-bold text-xs tabular-nums shrink-0">{fmt(item.views || 0)}</span>
+      <span className="text-[color:var(--f-ink)] font-bold text-xs tabular-nums shrink-0">{fmt(item.views || 0)}</span>
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
         {canEdit && (
           <>
-        <button onClick={() => setEditing(true)} className="text-zinc-500 hover:text-white text-xs px-1">Edit</button>
+        <button onClick={() => setEditing(true)} className="text-zinc-500 hover:text-[color:var(--f-ink)] text-xs px-1">Edit</button>
         <button onClick={onDelete} className="text-red-400/60 hover:text-red-400">
           <Trash2 className="w-3 h-3" />
         </button>
@@ -1291,7 +1291,7 @@ function ReconcileView({
       {/* ── Gallery header ── */}
       <div className="six-day-glass-bar flex items-center justify-between gap-3 px-4 py-3">
         <div>
-          <h3 className="text-sm font-semibold text-white tracking-tight">Monthly Reconciliation</h3>
+          <h3 className="text-sm font-semibold text-[color:var(--f-ink)] tracking-tight">Monthly Reconciliation</h3>
           <p className="text-xs fglass-muted mt-0.5">Enter actual IG dashboard totals — drift feeds the Growth chart</p>
         </div>
         {canEdit && (
@@ -1379,7 +1379,7 @@ function ReconcileGalleryChip({
     >
       <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${hasActual ? "bg-violet-400/80" : "bg-zinc-500/55"}`} />
       <div className="flex-1 min-w-0 text-left">
-        <span className="block text-[13px] font-medium text-white/88 truncate leading-tight">
+        <span className="block text-[13px] font-medium text-[color:color-mix(in_srgb,var(--f-ink)_88%,transparent)] truncate leading-tight">
           {page.name || page.handle}
         </span>
         <span className="block text-[11px] fglass-muted truncate">@{page.handle}</span>
@@ -1417,13 +1417,13 @@ function ReconcileDetailSheet({
     <div className="fglass-sheet overflow-hidden">
       <div className="flex items-center justify-between gap-3 px-4 py-3 border-b fglass-divider">
         <div className="min-w-0">
-          <div className="text-sm font-semibold text-white truncate">{page.name || page.handle}</div>
+          <div className="text-sm font-semibold text-[color:var(--f-ink)] truncate">{page.name || page.handle}</div>
           <div className="text-xs fglass-muted truncate">@{page.handle}</div>
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="p-1.5 rounded-lg fglass-muted hover:text-white/75 hover:bg-white/5 transition-colors"
+          className="p-1.5 rounded-lg fglass-muted hover:text-[color:color-mix(in_srgb,var(--f-ink)_75%,transparent)] hover:bg-white/5 transition-colors"
           aria-label="Close"
         >
           <ChevronUp className="w-4 h-4" />
@@ -1431,11 +1431,11 @@ function ReconcileDetailSheet({
       </div>
 
       <div className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="rounded-xl border border-white/[0.06] bg-black/20 px-3 py-2.5">
+        <div className="rounded-xl border border-[color-mix(in_srgb,var(--f-ink)_6%,transparent)] bg-[color-mix(in_srgb,var(--f-ink)_5%,transparent)] px-3 py-2.5">
           <p className="text-[9px] uppercase fglass-label mb-1">Cycle sum</p>
-          <p className="text-lg font-bold text-white tabular-nums">{fmt(cycleSum)}</p>
+          <p className="text-lg font-bold text-[color:var(--f-ink)] tabular-nums">{fmt(cycleSum)}</p>
         </div>
-        <div className="rounded-xl border border-white/[0.06] bg-black/20 px-3 py-2.5">
+        <div className="rounded-xl border border-[color-mix(in_srgb,var(--f-ink)_6%,transparent)] bg-[color-mix(in_srgb,var(--f-ink)_5%,transparent)] px-3 py-2.5">
           <p className="text-[9px] uppercase fglass-label mb-1">IG dashboard</p>
           <Input
             type="number"
@@ -1448,7 +1448,7 @@ function ReconcileDetailSheet({
             className="h-9 w-full text-sm fglass-input tabular-nums mt-0.5"
           />
         </div>
-        <div className="rounded-xl border border-white/[0.06] bg-black/20 px-3 py-2.5 flex flex-col justify-center">
+        <div className="rounded-xl border border-[color-mix(in_srgb,var(--f-ink)_6%,transparent)] bg-[color-mix(in_srgb,var(--f-ink)_5%,transparent)] px-3 py-2.5 flex flex-col justify-center">
           <p className="text-[9px] uppercase fglass-label mb-1">Drift</p>
           {drift != null ? (
             <span className={`inline-flex items-center gap-1 text-sm font-bold tabular-nums ${

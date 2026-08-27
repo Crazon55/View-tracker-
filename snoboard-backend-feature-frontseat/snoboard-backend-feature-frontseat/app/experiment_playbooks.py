@@ -13,7 +13,11 @@ PLAYBOOK_PAGES: dict[str, list[str]] = {
         "indianbusinesscom",
         "indiastartupstory",
         "indiafounderscore",
-        "indiafounderbrief",
+        "indiantechdaily",
+        "bizzindia",
+        "101xfounders",
+        "thechangingorder",
+        "indiahappeningnow",
     ],
     "xf": [
         "entrepreneurial.india",

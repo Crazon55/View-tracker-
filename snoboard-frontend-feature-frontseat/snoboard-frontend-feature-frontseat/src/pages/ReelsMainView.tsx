@@ -52,7 +52,7 @@ export default function ReelsMainView() {
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-white">Reels Main IPs</h2>
+          <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--f-ink)]">Reels Main IPs</h2>
           <p className="text-sm text-zinc-500 mt-1">
             Reels auto-scraped from Main IP accounts. Add accounts in the Pages tab with "Auto Scrape" on.
           </p>

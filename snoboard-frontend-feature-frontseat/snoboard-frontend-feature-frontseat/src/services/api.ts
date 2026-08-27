@@ -462,9 +462,11 @@ export function createExpApi(playbook: string) {
     getSettings: () => fetchApi<any>(`${base}/settings`),
     updateSettings: (data: { view_goal?: number; experiment_start_date?: string }) =>
       fetchApi<any>(`${base}/settings`, { method: "PATCH", body: JSON.stringify(data) }),
-    getIdeaBank: (params?: { week?: number; page?: string; day_date?: string; enrich_cross?: boolean }) => {
+    getIdeaBank: (params?: { week?: number; page?: string; day_date?: string; pending_only?: boolean; top_performers?: boolean; enrich_cross?: boolean }) => {
       const q = new URLSearchParams();
-      if (params?.day_date) q.set("day_date", params.day_date);
+      if (params?.top_performers) q.set("top_performers", "1");
+      else if (params?.pending_only) q.set("pending_only", "1");
+      else if (params?.day_date) q.set("day_date", params.day_date);
       else if (params?.week != null) q.set("week", String(params.week));
       if (params?.page) q.set("page", params.page);
       if (params?.enrich_cross === false) q.set("enrich_cross", "0");
@@ -479,7 +481,7 @@ export function createExpApi(playbook: string) {
       source?: string; video_format?: string; content_format?: string; comp_link?: string;
       yt_url?: string; yt_timestamps?: string; frame_link?: string;
       kalakar_link?: string; drive_link?: string; created_by?: string;
-      origin_playbook?: string; origin_idea_id?: string;
+      origin_playbook?: string; origin_idea_id?: string; assigned_to?: string;
     }) => fetchApi<any>(`${base}/idea-bank`, { method: "POST", body: JSON.stringify(data) }),
     updateIdea: (id: string, data: Record<string, unknown>) =>
       fetchApi<any>(`${base}/idea-bank/${id}`, { method: "PATCH", body: JSON.stringify(data) }),

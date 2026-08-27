@@ -6,7 +6,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, ExternalLink, Eye, Search, X, Check, CalendarDays, ChevronDown } from "lucide-react";
+import { Plus, ExternalLink, Eye, Search, X, Check, CalendarDays, Trophy, Heart } from "lucide-react";
 import { toast } from "sonner";
 import { FramerPage, PageHeader } from "@/components/framer/Framer";
 import { Calendar as DayCalendar } from "@/components/ui/calendar";
@@ -29,14 +29,6 @@ const PLAYBOOKS: PlaybookId[] = ["bpb", "xf", "tech"];
 const PB_SHORT: Record<PlaybookId, string> = { bpb: "Bizz", xf: "XF", tech: "Tech" };
 const PB_ACCENT: Record<PlaybookId, string> = { bpb: "#a78bfa", xf: "#f472b6", tech: "#38bdf8" };
 
-// Where a playbook shortcut should land, by role: CS + VE → Content Distribution
-// (frontseat). Others use the playbook's own default.
-function shortcutTabForRole(role: string | null | undefined): "frontseat" | "idea-bank" | null {
-  const roles = String(role || "").split(",").map((r) => canonicalRole(r.trim()));
-  if (roles.includes("ve") || roles.includes("cs")) return "frontseat";
-  return null;
-}
-
 // One ExpApi per playbook, memoised at module load (they're just closures over a base URL).
 const PB_API: Record<PlaybookId, ExpApi> = {
   bpb: createExpApi("bpb"),
@@ -54,6 +46,14 @@ function sumViews(idea: any): number {
   const pv = idea.page_views as Record<string, number> | undefined;
   if (pv && Object.keys(pv).length) return Object.values(pv).reduce((a, b) => a + (Number(b) || 0), 0);
   return Number(idea.views) || 0;
+}
+function sumLikes(idea: any): number {
+  const pl = idea.page_likes as Record<string, number> | undefined;
+  if (pl && Object.keys(pl).length) return Object.values(pl).reduce((a, b) => a + (Number(b) || 0), 0);
+  return Number(idea.likes) || 0;
+}
+function isCarousel(idea: any): boolean {
+  return String(idea.content_type || "").trim().toLowerCase() === "carousel";
 }
 function pagesOf(idea: any): string[] {
   return String(idea.page_handle || "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -74,6 +74,20 @@ function perPageViews(idea: any): Record<string, number> {
   }
   return out;
 }
+// Same as perPageViews, for likes (carousels).
+function perPageLikes(idea: any): Record<string, number> {
+  const pl = (idea.page_likes || {}) as Record<string, number>;
+  const pages = pagesOf(idea);
+  const out: Record<string, number> = {};
+  if (Object.keys(pl).length) {
+    for (const [p, v] of Object.entries(pl)) out[p.trim()] = Number(v) || 0;
+  } else if (pages.length === 1) {
+    out[pages[0]] = Number(idea.likes) || 0;
+  } else {
+    for (const p of pages) out[p] = 0;
+  }
+  return out;
+}
 
 // The backend stores each posting as its own row (same topic, different pages). Collapse
 // same-topic rows within a playbook into one card that unions their pages + views.
@@ -85,11 +99,13 @@ function mergeIdeasByTopic(list: any[]): any[] {
     const key = topic ? `${idea._playbook}::${topic.toLowerCase()}` : `${idea._playbook}::__${idea.id}`;
     let g = map.get(key);
     if (!g) {
-      g = { ...idea, page_views: {}, _deployed: new Set<string>() };
+      g = { ...idea, page_views: {}, page_likes: {}, _deployed: new Set<string>() };
       map.set(key, g);
     }
     const pv = g.page_views as Record<string, number>;
     for (const [p, v] of Object.entries(perPageViews(idea))) pv[p] = Math.max(pv[p] || 0, v);
+    const pl = g.page_likes as Record<string, number>;
+    for (const [p, v] of Object.entries(perPageLikes(idea))) pl[p] = Math.max(pl[p] || 0, v);
     if (!g.created_by && idea.created_by) g.created_by = idea.created_by;
     // Links live on whichever row has them (e.g. the posted copy, not the empty pool
     // card) — fill from any row so the merged card actually surfaces them.
@@ -104,6 +120,7 @@ function mergeIdeasByTopic(list: any[]): any[] {
     ...g,
     page_handle: Object.keys(g.page_views).join(","),
     views: Object.values(g.page_views as Record<string, number>).reduce((a, b) => a + b, 0),
+    likes: Object.values(g.page_likes as Record<string, number>).reduce((a, b) => a + b, 0),
     deployed_to_playbooks: [...g._deployed],
   }));
 }
@@ -134,6 +151,9 @@ function ideaSignalCount(idea: any): number {
   return n;
 }
 function isExistingIdea(idea: any): boolean {
+  // Once it's actually posted, it's unambiguously existing — no need for the signal
+  // heuristic to guess.
+  if (idea.status === "posted") return true;
   return ideaSignalCount(idea) >= 2;
 }
 
@@ -144,12 +164,15 @@ export default function IdeaEngineGallery() {
   const qc = useQueryClient();
   const { user } = useAuth();
   const { role } = usePermissions();
+  // Editing an idea's info/views straight from Idea Engine (any day) is Ops/admin's
+  // call — same tier that manages Production, not CS/VE.
+  const canEditIdeas = (role || "").split(",").map((r) => canonicalRole(r.trim())).some((r) => r === "co" || r === "admin" || r === "senior_cs");
 
   const [dayDate, setDayDate] = useState<string>(TODAY);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [pbFilter, setPbFilter] = useState<PlaybookId | "all">("all");
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
+  const [editIdea, setEditIdea] = useState<Idea | null>(null);
 
   const { data: ideas = [], isLoading } = useQuery<Idea[]>({
     queryKey: ["idea-engine", dayDate],
@@ -169,6 +192,34 @@ export default function IdeaEngineGallery() {
 
   // Collapse duplicate postings of the same idea into one card.
   const merged = useMemo(() => mergeIdeasByTopic(ideas), [ideas]);
+
+  // "Top 6" — best-performing posted ideas across all playbooks, all-time (not scoped to
+  // the day-picker below). Backend already filters to posted ideas crossing either
+  // threshold (reel ≥200k views, carousel ≥1k likes), so this just merges + ranks by how
+  // far over its own threshold each idea is, so a breakout carousel can outrank a
+  // so-so reel instead of raw view-counts always winning.
+  const { data: topCandidates = [] } = useQuery<Idea[]>({
+    queryKey: ["idea-engine-top6"],
+    queryFn: async () => {
+      const perPb = await Promise.all(
+        PLAYBOOKS.map((pb) =>
+          PB_API[pb]
+            .getIdeaBank({ top_performers: true, enrich_cross: false })
+            .then((rows) => (rows || []).map((r: any) => ({ ...r, _playbook: pb })))
+            .catch(() => [] as Idea[]),
+        ),
+      );
+      return perPb.flat();
+    },
+    refetchOnWindowFocus: false,
+  });
+  const top6 = useMemo(() => {
+    return mergeIdeasByTopic(topCandidates)
+      .map((idea) => ({ idea, score: isCarousel(idea) ? sumLikes(idea) / 1000 : sumViews(idea) / 200000 }))
+      .filter((x) => x.score >= 1)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 6);
+  }, [topCandidates]);
 
   // Send an idea into a chosen playbook's Frontseat "Ideas Pool" (a fresh pool card
   // there), while a copy stays here. origin_* links it back so the source card shows
@@ -203,7 +254,7 @@ export default function IdeaEngineGallery() {
     onSuccess: (_d, { idea, target }) => {
       const key = `${idea._playbook}-${idea.id}`;
       setSentLocal((m) => ({ ...m, [key]: [...new Set([...(m[key] || []), target])] }));
-      toast.success(`Sent to ${PLAYBOOK_CONFIGS[target].label} · Frontseat`);
+      toast.success(`Sent to ${PLAYBOOK_CONFIGS[target].label}`);
       qc.invalidateQueries({ queryKey: ["idea-engine"] });
     },
     onError: (e: any) => toast.error(e?.message || "Couldn't send idea"),
@@ -212,16 +263,9 @@ export default function IdeaEngineGallery() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return merged
-      .filter((i) => (pbFilter === "all" ? true : i._playbook === pbFilter))
       .filter((i) => (q ? String(i.topic || "").toLowerCase().includes(q) || pagesOf(i).some((p) => p.toLowerCase().includes(q)) : true))
       .sort((a, b) => sumViews(b) - sumViews(a));
-  }, [merged, pbFilter, search]);
-
-  const countsByPb = useMemo(() => {
-    const c: Record<string, number> = { all: merged.length };
-    for (const pb of PLAYBOOKS) c[pb] = merged.filter((i) => i._playbook === pb).length;
-    return c;
-  }, [merged]);
+  }, [merged, search]);
 
   return (
     <FramerPage>
@@ -232,29 +276,32 @@ export default function IdeaEngineGallery() {
         </button>
       </div>
 
-      {/* Playbook shortcuts — jump straight into a playbook workspace. */}
-      <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
-        {PLAYBOOKS.map((pb) => (
-          <button
-            key={pb}
-            type="button"
-            onClick={() => {
-              const t = shortcutTabForRole(role);
-              navigate(t ? `${PLAYBOOK_CONFIGS[pb].route}?tab=${t}` : PLAYBOOK_CONFIGS[pb].route);
-            }}
-            style={{
-              display: "inline-flex", alignItems: "center", gap: 9,
-              padding: "9px 15px", borderRadius: 11,
-              border: `1px solid ${PB_ACCENT[pb]}44`,
-              background: `${PB_ACCENT[pb]}14`,
-              color: "var(--f-ink)", fontSize: 13.5, fontWeight: 600, cursor: "pointer",
-            }}
-          >
-            <span style={{ width: 8, height: 8, borderRadius: "50%", background: PB_ACCENT[pb], flexShrink: 0 }} />
-            {PLAYBOOK_CONFIGS[pb].label}
-            <span style={{ color: PB_ACCENT[pb], fontSize: 15, lineHeight: 1 }}>→</span>
-          </button>
-        ))}
+      <div style={{ marginTop: 22 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
+          <Trophy size={14} strokeWidth={2} color="#facc15" />
+          <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--f-faint)" }}>
+            Top 6 · best performing ideas
+          </span>
+          <span style={{ fontSize: 11, color: "var(--f-faint)", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
+            — posted reels ≥200K views, carousels ≥1K likes
+          </span>
+        </div>
+        {top6.length ? (
+          <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 4 }}>
+            {top6.map(({ idea }, i) => (
+              <Top6Card
+                key={`${idea._playbook}-${idea.id}`}
+                idea={idea}
+                rank={i + 1}
+                onOpen={() => (canEditIdeas ? setEditIdea(idea) : navigate(PLAYBOOK_CONFIGS[idea._playbook as PlaybookId].route))}
+              />
+            ))}
+          </div>
+        ) : (
+          <div style={{ padding: "16px 18px", borderRadius: 14, border: "1px dashed var(--f-line)", fontSize: 12.5, color: "var(--f-faint)" }}>
+            No ideas have crossed the bar yet — posted reels need 200K+ views, posted carousels need 1K+ likes.
+          </div>
+        )}
       </div>
 
       {/* Date rail — always lands on today, yesterday one click away, or pick a day. */}
@@ -273,16 +320,6 @@ export default function IdeaEngineGallery() {
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search topic or page…"
             className="fglass-input" style={{ width: "100%", borderRadius: 9, padding: "8px 10px 8px 32px", fontSize: 13 }} />
         </div>
-      </div>
-
-      {/* Playbook filter pills */}
-      <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-        <FilterPill active={pbFilter === "all"} onClick={() => setPbFilter("all")} count={countsByPb.all}>All playbooks</FilterPill>
-        {PLAYBOOKS.map((pb) => (
-          <FilterPill key={pb} active={pbFilter === pb} onClick={() => setPbFilter(pb)} count={countsByPb[pb]} dot={PB_ACCENT[pb]}>
-            {PLAYBOOK_CONFIGS[pb].label}
-          </FilterPill>
-        ))}
       </div>
 
       {/* Gallery */}
@@ -304,7 +341,8 @@ export default function IdeaEngineGallery() {
                 sentTo={sentLocal[key] || []}
                 sending={sendMut.isPending && sendMut.variables?.idea === idea}
                 onSend={(target) => sendMut.mutate({ idea, target })}
-                onOpen={() => navigate(PLAYBOOK_CONFIGS[idea._playbook as PlaybookId].route)}
+                onOpen={() => (canEditIdeas ? setEditIdea(idea) : navigate(PLAYBOOK_CONFIGS[idea._playbook as PlaybookId].route))}
+                canEdit={canEditIdeas}
               />
             );
           })}
@@ -314,10 +352,23 @@ export default function IdeaEngineGallery() {
       {showAdd && (
         <AddIdeaModal
           defaultDay={dayDate}
-          defaultPlaybook={pbFilter === "all" ? "bpb" : pbFilter}
           author={user?.user_metadata?.full_name || user?.email?.split("@")[0] || ""}
           onClose={() => setShowAdd(false)}
           onCreated={() => { setShowAdd(false); qc.invalidateQueries({ queryKey: ["idea-engine"] }); }}
+        />
+      )}
+
+      {editIdea && (
+        <EditIdeaModal
+          idea={editIdea}
+          onClose={() => setEditIdea(null)}
+          onSaved={(patch) => {
+            setEditIdea(null);
+            qc.setQueryData<Idea[]>(["idea-engine", dayDate], (old) =>
+              (old || []).map((i) => (i.id === editIdea.id && i._playbook === editIdea._playbook ? { ...i, ...patch } : i)),
+            );
+            qc.invalidateQueries({ queryKey: ["idea-engine-top6"] });
+          }}
         />
       )}
     </FramerPage>
@@ -360,21 +411,62 @@ function IdeaLinks({ idea, full }: { idea: any; full: boolean }) {
   );
 }
 
-function IdeaCard({ idea, sentTo, sending, onSend, onOpen }: {
+// Compact highlight card for the Top 6 strip — simpler than IdeaCard, no send/edit
+// actions, just enough to identify the idea and jump into it.
+function Top6Card({ idea, rank, onOpen }: { idea: Idea; rank: number; onOpen: () => void }) {
+  const pb = idea._playbook as PlaybookId;
+  const carousel = isCarousel(idea);
+  const metricValue = carousel ? sumLikes(idea) : sumViews(idea);
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      style={{
+        textAlign: "left", cursor: "pointer", flex: "0 0 220px", padding: "14px 16px",
+        borderRadius: 14, border: "1px solid var(--f-line)", background: "rgba(255,255,255,.03)",
+        display: "flex", flexDirection: "column", gap: 8,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 10.5, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: PB_ACCENT[pb] }}>
+          <span style={{ width: 6, height: 6, borderRadius: 99, background: PB_ACCENT[pb] }} />
+          {PB_SHORT[pb]}
+        </span>
+        <span style={{ fontSize: 10.5, fontWeight: 700, color: "#facc15" }}>#{rank}</span>
+      </div>
+      <div style={{
+        fontSize: 13.5, fontWeight: 600, color: "var(--f-ink)", lineHeight: 1.35,
+        display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+      }}>
+        {idea.topic || "Untitled idea"}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, color: "#4ade80" }}>
+        {carousel ? <Heart size={13} strokeWidth={2} /> : <Eye size={13} strokeWidth={2} />}
+        {fmtViews(metricValue)} {carousel ? "likes" : "views"}
+        <span style={{ fontSize: 10, fontWeight: 600, color: "var(--f-faint)", textTransform: "uppercase", letterSpacing: ".05em" }}>
+          {carousel ? "Carousel" : "Reel"}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+function IdeaCard({ idea, sentTo, sending, onSend, onOpen, canEdit }: {
   idea: Idea;
   sentTo: PlaybookId[];
   sending: boolean;
   onSend: (target: PlaybookId) => void;
   onOpen: () => void;
+  canEdit?: boolean;
 }) {
   const pb = idea._playbook as PlaybookId;
   const pages = pagesOf(idea);
   const pv = (idea.page_views || {}) as Record<string, number>;
   const total = sumViews(idea);
   const existing = isExistingIdea(idea);
-  const [pickOpen, setPickOpen] = useState(false);
   // Playbooks this idea is already in: backend-derived (deployed_to_playbooks) ∪ this session's sends.
   const sent = [...new Set([...(idea.deployed_to_playbooks || []), ...sentTo])] as PlaybookId[];
+  const alreadySent = sent.includes("bpb");
 
   return (
     <article className="fglass-panel fglass-purple-shadow" style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
@@ -433,62 +525,25 @@ function IdeaCard({ idea, sentTo, sending, onSend, onOpen }: {
         <span style={{ fontSize: 11.5, color: "var(--f-faint)" }}>{idea.created_by ? <>by <strong style={{ color: "var(--f-dim)", fontWeight: 600 }}>{idea.created_by}</strong></> : "—"}</span>
         <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 8 }}>
           <button type="button" onClick={onOpen} style={ghostBtnSm}>
-            Open <ExternalLink size={12} strokeWidth={1.6} />
+            {canEdit ? "Edit" : "Open"} <ExternalLink size={12} strokeWidth={1.6} />
           </button>
           <button
             type="button"
-            disabled={sending}
-            onClick={() => setPickOpen((o) => !o)}
-            style={{ ...sendBtn, opacity: sending ? 0.6 : 1 }}
+            disabled={sending || alreadySent}
+            onClick={() => onSend("bpb")}
+            style={{ ...sendBtn, opacity: sending || alreadySent ? 0.6 : 1 }}
           >
-            {sending ? "Sending…" : <>Send to playbook <ChevronDown size={13} strokeWidth={2} /></>}
+            {sending ? "Sending…" : alreadySent ? <>Sent <Check size={13} strokeWidth={2} /></> : "Send to Content Distribution"}
           </button>
-
-          {pickOpen && (
-            <>
-              {/* click-away */}
-              <div onClick={() => setPickOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
-              <div style={{
-                position: "absolute", bottom: "calc(100% + 6px)", right: 0, zIndex: 41,
-                minWidth: 190, padding: 6, borderRadius: 12,
-                background: "rgba(16,16,18,.98)", border: "1px solid var(--f-line)",
-                boxShadow: "0 12px 32px -12px rgba(0,0,0,.8), 0 0 24px -12px rgba(124,58,237,.5)",
-              }}>
-                <div style={{ fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--f-faint)", padding: "4px 8px 6px" }}>Send to Frontseat pool</div>
-                {PLAYBOOKS.map((p) => {
-                  const already = sent.includes(p);
-                  return (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => { setPickOpen(false); onSend(p); }}
-                      style={{
-                        display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left",
-                        padding: "8px 8px", borderRadius: 8, border: "none", background: "transparent",
-                        color: "var(--f-ink)", fontSize: 12.5, cursor: "pointer",
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,.06)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                    >
-                      <span style={{ width: 7, height: 7, borderRadius: 99, background: PB_ACCENT[p] }} />
-                      {PLAYBOOK_CONFIGS[p].label}
-                      {already ? <Check size={13} strokeWidth={2} style={{ marginLeft: "auto", color: "#a78bfa" }} /> : null}
-                    </button>
-                  );
-                })}
-              </div>
-            </>
-          )}
         </div>
       </div>
     </article>
   );
 }
 
-function AddIdeaModal({ defaultDay, defaultPlaybook, author, onClose, onCreated }: {
-  defaultDay: string; defaultPlaybook: PlaybookId; author: string; onClose: () => void; onCreated: () => void;
+function AddIdeaModal({ defaultDay, author, onClose, onCreated }: {
+  defaultDay: string; author: string; onClose: () => void; onCreated: () => void;
 }) {
-  const [pb, setPb] = useState<PlaybookId>(defaultPlaybook);
   const [topic, setTopic] = useState("");
   const [refLink, setRefLink] = useState("");
   const [timestamps, setTimestamps] = useState("");
@@ -506,7 +561,7 @@ function AddIdeaModal({ defaultDay, defaultPlaybook, author, onClose, onCreated 
       const link = refLink.trim();
       const ytLink = isYouTube(link);
       // "New idea" only — a fresh idea carries just its reference link (comp / YouTube).
-      await PB_API[pb].createIdea({
+      await PB_API.bpb.createIdea({
         page_handle: "",
         topic: topic.trim(),
         content_type: contentType,
@@ -536,17 +591,7 @@ function AddIdeaModal({ defaultDay, defaultPlaybook, author, onClose, onCreated 
         </div>
 
         <div style={{ display: "grid", gap: 14 }}>
-          <Field label="Playbook">
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {PLAYBOOKS.map((p) => (
-                <button key={p} type="button" onClick={() => setPb(p)} style={{ ...datePillBase, cursor: "pointer", borderColor: pb === p ? PB_ACCENT[p] : "var(--f-line)", color: pb === p ? "#fff" : "var(--f-dim)" }}>
-                  {PLAYBOOK_CONFIGS[p].label}
-                </button>
-              ))}
-            </div>
-          </Field>
-          {/* Format — the coarse News / A-roll split Content Distribution filters on.
-              Same chip affordance as Playbook above; click an active chip to clear it. */}
+          {/* Format — the coarse News / A-roll / Tech / Post split Content Distribution filters on. */}
           <Field label="Format">
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {CONTENT_FORMATS.map((f) => (
@@ -558,7 +603,7 @@ function AddIdeaModal({ defaultDay, defaultPlaybook, author, onClose, onCreated 
                     ...datePillBase,
                     cursor: "pointer",
                     borderColor: format === f ? CONTENT_FORMAT_ACCENT[f] : "var(--f-line)",
-                    color: format === f ? "#fff" : "var(--f-dim)",
+                    color: format === f ? "var(--f-ink)" : "var(--f-dim)",
                   }}
                 >
                   {f}
@@ -580,7 +625,7 @@ function AddIdeaModal({ defaultDay, defaultPlaybook, author, onClose, onCreated 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <Field label="Content type">
               <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="fglass-input" style={{ ...modalInput, colorScheme: "dark" }}>
-                {["Reel", "Carousel", "Static"].map((t) => <option key={t} value={t}>{t}</option>)}
+                {["Reel", "Carousel"].map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </Field>
             <Field label="Date"><input type="date" value={day} max={TODAY} onChange={(e) => setDay(e.target.value)} onClick={(e) => (e.target as HTMLInputElement).showPicker?.()} className="fglass-input" style={{ ...modalInput, colorScheme: "dark", cursor: "pointer" }} /></Field>
@@ -589,6 +634,161 @@ function AddIdeaModal({ defaultDay, defaultPlaybook, author, onClose, onCreated 
 
         <div style={{ display: "flex", gap: 8, marginTop: 22 }}>
           <button type="button" disabled={busy} onClick={submit} style={primaryBtn}><Check size={14} strokeWidth={2} /> {busy ? "Adding…" : "Add idea"}</button>
+          <button type="button" disabled={busy} onClick={onClose} style={{ ...ghostBtnSm, padding: "9px 14px" }}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Ops/admin editing an idea's info + views straight from Idea Engine, on any day —
+ *  not scoped to today, unlike the New-idea flow. */
+function EditIdeaModal({ idea, onClose, onSaved }: {
+  idea: Idea; onClose: () => void; onSaved: (patch: Record<string, unknown>) => void;
+}) {
+  const [topic, setTopic] = useState(idea.topic || "");
+  const [refLink, setRefLink] = useState(idea.yt_url || idea.comp_link || "");
+  const [timestamps, setTimestamps] = useState(idea.yt_timestamps || "");
+  const [contentType, setContentType] = useState(idea.content_type || "Reel");
+  const [format, setFormat] = useState<ContentFormat | "">((idea.content_format as ContentFormat) || "");
+  const [views, setViews] = useState(String(idea.views ?? 0));
+  const [likes, setLikes] = useState(String(idea.likes ?? 0));
+  const pages = pagesOf(idea);
+  const [pageViews, setPageViews] = useState<Record<string, string>>(() => {
+    const pv = (idea.page_views || {}) as Record<string, number>;
+    const out: Record<string, string> = {};
+    pages.forEach((p) => { out[p] = String(pv[p] ?? 0); });
+    return out;
+  });
+  const [pageLikes, setPageLikes] = useState<Record<string, string>>(() => {
+    const pl = (idea.page_likes || {}) as Record<string, number>;
+    const out: Record<string, string> = {};
+    pages.forEach((p) => { out[p] = String(pl[p] ?? 0); });
+    return out;
+  });
+  const [busy, setBusy] = useState(false);
+
+  const yt = isYouTube(refLink);
+  // Carousels are judged by likes, not views — follows whatever content type is
+  // currently selected in this edit, so switching Reel↔Carousel here swaps the field.
+  const editingCarousel = contentType.trim().toLowerCase() === "carousel";
+
+  const submit = async () => {
+    if (!topic.trim()) { toast.error("Give the idea a name."); return; }
+    setBusy(true);
+    try {
+      const link = refLink.trim();
+      const ytLink = isYouTube(link);
+      const patch: Record<string, unknown> = {
+        topic: topic.trim(),
+        content_type: contentType,
+        content_format: format || "",
+        comp_link: link && !ytLink ? link : "",
+        yt_url: ytLink ? link : "",
+        yt_timestamps: timestamps.trim(),
+      };
+      if (editingCarousel) {
+        if (pages.length > 1) {
+          const pl: Record<string, number> = {};
+          pages.forEach((p) => { pl[p] = parseInt(pageLikes[p]?.replace(/[^0-9]/g, "") || "0", 10) || 0; });
+          patch.page_likes = pl;
+          patch.likes = Object.values(pl).reduce((a, b) => a + b, 0);
+        } else {
+          patch.likes = parseInt(likes.replace(/[^0-9]/g, "") || "0", 10) || 0;
+        }
+      } else if (pages.length > 1) {
+        const pv: Record<string, number> = {};
+        pages.forEach((p) => { pv[p] = parseInt(pageViews[p]?.replace(/[^0-9]/g, "") || "0", 10) || 0; });
+        patch.page_views = pv;
+        patch.views = Object.values(pv).reduce((a, b) => a + b, 0);
+      } else {
+        patch.views = parseInt(views.replace(/[^0-9]/g, "") || "0", 10) || 0;
+      }
+      await PB_API[idea._playbook].updateIdea(idea.id, patch);
+      toast.success("Idea updated.");
+      onSaved(patch);
+    } catch {
+      toast.error("Couldn't save — try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", backdropFilter: "blur(4px)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} className="fglass-panel" style={{ width: "min(520px, 100%)", padding: "22px 24px", maxHeight: "90vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 600 }}>Edit idea</h2>
+          <button type="button" onClick={onClose} style={{ ...ghostBtnSm, border: "none", padding: 4 }}><X size={18} /></button>
+        </div>
+
+        <div style={{ display: "grid", gap: 14 }}>
+          <Field label="Format">
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {CONTENT_FORMATS.map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setFormat(format === f ? "" : f)}
+                  style={{
+                    ...datePillBase,
+                    cursor: "pointer",
+                    borderColor: format === f ? CONTENT_FORMAT_ACCENT[f] : "var(--f-line)",
+                    color: format === f ? "var(--f-ink)" : "var(--f-dim)",
+                  }}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
+          </Field>
+          <Field label="Idea name *"><input autoFocus value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="What's the idea?" className="fglass-input" style={modalInput} /></Field>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 150px", gap: 12 }}>
+            <Field label={yt ? "YouTube link" : "Comp / YouTube link"}>
+              <input value={refLink} onChange={(e) => setRefLink(e.target.value)} placeholder="Paste comp or YouTube link" className="fglass-input" style={modalInput} />
+            </Field>
+            <Field label="Timestamps"><input value={timestamps} onChange={(e) => setTimestamps(e.target.value)} placeholder="0:12, 1:45" className="fglass-input" style={modalInput} /></Field>
+          </div>
+
+          <Field label="Content type">
+            <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="fglass-input" style={{ ...modalInput, colorScheme: "dark" }}>
+              {["Reel", "Carousel"].map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </Field>
+
+          {pages.length > 1 ? (
+            <Field label={editingCarousel ? "Likes by page" : "Views by page"}>
+              <div style={{ display: "grid", gap: 8 }}>
+                {pages.map((p) => (
+                  <div key={p} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 12, color: "var(--f-dim)", width: 140, flexShrink: 0 }}>@{p}</span>
+                    <input
+                      type="text" inputMode="numeric"
+                      value={(editingCarousel ? pageLikes : pageViews)[p] || ""}
+                      onChange={(e) => (editingCarousel ? setPageLikes : setPageViews)((m) => ({ ...m, [p]: e.target.value }))}
+                      placeholder="0"
+                      className="fglass-input" style={modalInput}
+                    />
+                  </div>
+                ))}
+              </div>
+            </Field>
+          ) : (
+            <Field label={editingCarousel ? "Likes" : "Views"}>
+              <input
+                type="text" inputMode="numeric"
+                value={editingCarousel ? likes : views}
+                onChange={(e) => (editingCarousel ? setLikes : setViews)(e.target.value)}
+                placeholder="0"
+                className="fglass-input" style={modalInput}
+              />
+            </Field>
+          )}
+        </div>
+
+        <div style={{ display: "flex", gap: 8, marginTop: 22 }}>
+          <button type="button" disabled={busy} onClick={submit} style={primaryBtn}><Check size={14} strokeWidth={2} /> {busy ? "Saving…" : "Save changes"}</button>
           <button type="button" disabled={busy} onClick={onClose} style={{ ...ghostBtnSm, padding: "9px 14px" }}>Cancel</button>
         </div>
       </div>
@@ -705,16 +905,6 @@ function DatePill({ active, onClick, children }: { active: boolean; onClick: () 
   return (
     <button type="button" onClick={onClick} style={{ ...datePillBase, cursor: "pointer", background: active ? "#fff" : "transparent", color: active ? "#000" : "var(--f-dim)", borderColor: active ? "#fff" : "var(--f-line)", fontWeight: active ? 600 : 500 }}>
       {children}
-    </button>
-  );
-}
-
-function FilterPill({ active, onClick, count, dot, children }: { active: boolean; onClick: () => void; count?: number; dot?: string; children: React.ReactNode }) {
-  return (
-    <button type="button" onClick={onClick} style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "7px 13px", borderRadius: 999, fontSize: 12.5, fontWeight: active ? 600 : 500, cursor: "pointer", border: `1px solid ${active ? "rgba(255,255,255,.5)" : "var(--f-line)"}`, background: active ? "rgba(255,255,255,.08)" : "transparent", color: active ? "#fff" : "var(--f-dim)" }}>
-      {dot ? <span style={{ width: 7, height: 7, borderRadius: 99, background: dot }} /> : null}
-      {children}
-      {count != null ? <span style={{ fontSize: 11, color: "var(--f-faint)" }}>{count}</span> : null}
     </button>
   );
 }

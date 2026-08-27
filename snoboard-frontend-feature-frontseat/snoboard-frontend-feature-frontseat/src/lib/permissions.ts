@@ -66,7 +66,7 @@ const OPS_PLAYBOOK: Record<PlaybookId, Permission> = {
 };
 
 export function playbookIdFromPath(path: string): PlaybookId | null {
-  if (path.startsWith("/experiment-bpb") || path === "/experiment-x") return "bpb";
+  if (path.startsWith("/content-distribution") || path.startsWith("/production") || path.startsWith("/experiment-bpb") || path === "/experiment-x") return "bpb";
   if (path.startsWith("/experiment-xf")) return "xf";
   if (path.startsWith("/experiment-tech")) return "tech";
   return null;
@@ -98,20 +98,20 @@ export function isPlaybookViewOnly(role: string | null, playbookId: PlaybookId):
 
 // ── Per-role playbook view profile ─────────────────────────────────────────────
 // The daily loop splits a playbook across three roles. Each sees a different slice:
-//   VE (video editor) → see Content Distribution (view-only) + edit Production.
-//   CS               → edit Content Distribution, view everything else.
-//   CO (content ops) → edit everything, lands on Tracking.
+//   VE (video editor) → see Today's Board (view-only) + edit Production.
+//   CS               → edit Today's Board, view everything else.
+//   CO (content ops) → edit everything.
 //   admin/senior_cs  → edit everything.
 //   view-only        → see everything, edit nothing.
 export type PlaybookTabId = "frontseat" | "idea-bank" | "tracking" | "calendar" | "content-bank" | "working-ideas";
 export type PlaybookViewProfile = { tabs: PlaybookTabId[]; edit: PlaybookTabId[]; defaultTab: PlaybookTabId };
 
-// Calendar, Content Bank and Proven Ideas were retired from the playbook nav —
-// the Idea Engine now covers all of that. Tabs live on: Content Distribution
-// (frontseat), Production (idea-bank), Tracking.
-const ALL_PLAYBOOK_TABS: PlaybookTabId[] = ["frontseat", "idea-bank", "tracking"];
+// Calendar, Content Bank, Proven Ideas, and Tracking were retired from the playbook
+// nav — the Idea Engine covers ideas/views-editing across all of that now (any day,
+// not just today). Tabs live on: Today's Board (frontseat), Production (idea-bank).
+const ALL_PLAYBOOK_TABS: PlaybookTabId[] = ["frontseat", "idea-bank"];
 
-/** Hard rule: video editors never get edit on Content Distribution (frontseat). */
+/** Hard rule: video editors never get edit on Today's Board (frontseat). */
 function stripFrontseatEdit(profile: PlaybookViewProfile): PlaybookViewProfile {
   return { ...profile, edit: profile.edit.filter((t) => t !== "frontseat") };
 }
@@ -127,22 +127,22 @@ export function getPlaybookViewProfile(role: string | null, playbookId: Playbook
   if (has("admin") || has("senior_cs")) {
     profile = { tabs: ALL_PLAYBOOK_TABS, edit: ALL_PLAYBOOK_TABS, defaultTab: "idea-bank" };
   } else if (has("co")) {
-    profile = { tabs: ["tracking", "frontseat", "idea-bank"], edit: ALL_PLAYBOOK_TABS, defaultTab: "tracking" };
+    profile = { tabs: ALL_PLAYBOOK_TABS, edit: ALL_PLAYBOOK_TABS, defaultTab: "idea-bank" };
   } else if (has("cs")) {
     profile = { tabs: ALL_PLAYBOOK_TABS, edit: ["frontseat"], defaultTab: "frontseat" };
   } else if (has("ve")) {
-    // See Content Distribution (view-only) + edit Production only.
+    // See Today's Board (view-only) + edit Production only.
     profile = { tabs: ["frontseat", "idea-bank"], edit: ["idea-bank"], defaultTab: "frontseat" };
   } else {
     // Other roles fall back to the coarse access level.
     const access = getPlaybookAccess(role, playbookId);
     if (access === "none") return null;
     if (access === "edit") profile = { tabs: ALL_PLAYBOOK_TABS, edit: ALL_PLAYBOOK_TABS, defaultTab: "idea-bank" };
-    else if (access === "ops") profile = { tabs: ["tracking", "idea-bank", "frontseat"], edit: ["tracking"], defaultTab: "tracking" };
+    else if (access === "ops") profile = { tabs: ALL_PLAYBOOK_TABS, edit: [], defaultTab: "idea-bank" };
     else profile = { tabs: ALL_PLAYBOOK_TABS, edit: [], defaultTab: "idea-bank" }; // view-only
   }
 
-  // Belt-and-suspenders: VE / editors can never edit Content Distribution.
+  // Belt-and-suspenders: VE / editors can never edit Today's Board.
   if (profile && has("ve")) return stripFrontseatEdit(profile);
   return profile;
 }
@@ -227,8 +227,11 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
   ve: VE_PERMISSIONS,
   editors: VE_PERMISSIONS,
 
-  // Collaborators — only see ideas they are tagged on, restricted nav
-  carousel_designer: COLLABORATOR_PERMISSIONS,
+  // Carousel designers do Post Tracker tagging (COLLABORATOR_PERMISSIONS) AND now work
+  // Content Distribution's Production board (VE_PERMISSIONS) — accessModel.ts already
+  // canonicalizes this role to "ve" for tab/edit-gating; this keeps the route-level gate
+  // (isRouteAllowed → canAccessPlaybook) consistent with that instead of blocking it.
+  carousel_designer: [...COLLABORATOR_PERMISSIONS, ...VE_PERMISSIONS],
 
   // Design — reads everything site-wide, but in Post Tracker only sees tagged ideas
   design: ['view_all_ideas', 'post_tracker_assigned_only', 'comment_on_idea', 'attach_file_to_idea'],
@@ -350,7 +353,7 @@ export function getFallbackRouteForRole(role: string | null): string {
     '/fsi-canvas',
     '/content-tracker',
     '/post-tracker',
-    '/experiment-bpb',
+    '/content-distribution',
     '/experiment-xf',
     '/experiment-tech',
     '/six-day-tracker',

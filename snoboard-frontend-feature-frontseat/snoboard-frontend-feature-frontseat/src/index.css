@@ -60,15 +60,17 @@
     /* Grid pattern */
     --grid-color: rgba(255, 255, 255, 0.018);
 
-    /* Sidebar */
-    --sidebar-background: 0 0% 2.5%;
-    --sidebar-foreground: 0 0% 65%;
-    --sidebar-primary: 155 100% 50%;
-    --sidebar-primary-foreground: 0 0% 2%;
-    --sidebar-accent: 0 0% 7%;
-    --sidebar-accent-foreground: 0 0% 93%;
-    --sidebar-border: 0 0% 9%;
-    --sidebar-ring: 155 100% 50%;
+    /* Sidebar — matches the app's --f-* purple/glass palette (framer.css), not the
+       legacy green/blue tokens above. Light-mode override lives in framer.css
+       alongside every other light-mode override, since that file owns theming. */
+    --sidebar-background: 240 13% 5%;
+    --sidebar-foreground: 240 6% 58%;
+    --sidebar-primary: 258 90% 66%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 258 35% 18%;
+    --sidebar-accent-foreground: 258 60% 92%;
+    --sidebar-border: 240 8% 14%;
+    --sidebar-ring: 258 90% 66%;
   }
 }
 
