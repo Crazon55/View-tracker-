@@ -1,6 +1,5 @@
 {
   "mandar.patil@owledmedia.com": {
-    "ips": "view",
     "news": "none",
     "pintu": "view",
     "growth": "view",
@@ -9,6 +8,7 @@
     "fsi_canvas": "edit",
     "idea_engine": "none",
     "playbook_xf": "edit",
+    "production": "edit",
     "users_roles": "none",
     "playbook_bpb": "edit",
     "playbook_tech": "edit",
@@ -22,7 +22,6 @@
     "seeding_campaign_reports": "none"
   },
   "prathmesh.shirsat@owledmedia.com": {
-    "ips": "none",
     "news": "none",
     "pintu": "none",
     "growth": "none",
@@ -31,6 +30,7 @@
     "fsi_canvas": "none",
     "idea_engine": "none",
     "playbook_xf": "none",
+    "production": "none",
     "users_roles": "none",
     "playbook_bpb": "none",
     "playbook_tech": "none",
@@ -44,7 +44,6 @@
     "seeding_campaign_reports": "view"
   },
   "pranesh.sampath@owledmedia.com": {
-    "ips": "none",
     "news": "none",
     "pintu": "none",
     "growth": "none",
@@ -53,6 +52,7 @@
     "fsi_canvas": "none",
     "idea_engine": "none",
     "playbook_xf": "none",
+    "production": "none",
     "users_roles": "none",
     "playbook_bpb": "none",
     "playbook_tech": "none",
@@ -66,7 +66,6 @@
     "seeding_campaign_reports": "view"
   },
   "jawad.ahmed@owledmedia.com": {
-    "ips": "none",
     "news": "none",
     "pintu": "none",
     "growth": "none",
@@ -75,6 +74,7 @@
     "fsi_canvas": "none",
     "idea_engine": "none",
     "playbook_xf": "none",
+    "production": "none",
     "users_roles": "none",
     "playbook_bpb": "none",
     "playbook_tech": "none",
@@ -88,7 +88,6 @@
     "seeding_campaign_reports": "view"
   },
   "nikhil.jha@owledmedia.com": {
-    "ips": "none",
     "news": "none",
     "pintu": "none",
     "growth": "none",
@@ -97,6 +96,7 @@
     "fsi_canvas": "none",
     "idea_engine": "none",
     "playbook_xf": "none",
+    "production": "none",
     "users_roles": "none",
     "playbook_bpb": "none",
     "playbook_tech": "none",
@@ -110,7 +110,6 @@
     "seeding_campaign_reports": "view"
   },
   "armaan.choraria@owledmedia.com": {
-    "ips": "view",
     "news": "view",
     "pintu": "view",
     "growth": "view",
@@ -119,6 +118,7 @@
     "fsi_canvas": "edit",
     "idea_engine": "edit",
     "playbook_xf": "edit",
+    "production": "edit",
     "users_roles": "none",
     "playbook_bpb": "edit",
     "playbook_tech": "edit",
@@ -132,7 +132,6 @@
     "seeding_campaign_reports": "none"
   },
   "chitvan.pandey@owledmedia.com": {
-    "ips": "view",
     "news": "none",
     "pintu": "view",
     "growth": "view",
@@ -141,6 +140,7 @@
     "fsi_canvas": "edit",
     "idea_engine": "none",
     "playbook_xf": "none",
+    "production": "edit",
     "users_roles": "none",
     "playbook_bpb": "edit",
     "playbook_tech": "none",
@@ -154,7 +154,6 @@
     "seeding_campaign_reports": "none"
   },
   "harish.r@owledmedia.com": {
-    "ips": "view",
     "news": "view",
     "pintu": "edit",
     "growth": "view",
@@ -163,6 +162,7 @@
     "fsi_canvas": "edit",
     "idea_engine": "edit",
     "playbook_xf": "view",
+    "production": "view",
     "users_roles": "none",
     "playbook_bpb": "view",
     "playbook_tech": "view",
@@ -176,7 +176,6 @@
     "seeding_campaign_reports": "none"
   },
   "krishna.koushik@owledmedia.com": {
-    "ips": "edit",
     "news": "edit",
     "pintu": "edit",
     "growth": "edit",
@@ -185,6 +184,7 @@
     "fsi_canvas": "edit",
     "idea_engine": "edit",
     "playbook_xf": "edit",
+    "production": "edit",
     "users_roles": "edit",
     "playbook_bpb": "edit",
     "playbook_tech": "edit",
@@ -201,7 +201,6 @@
   "sandesh.deshmukh@owledmedia.com": {},
   "manu.kumar@owledmedia.com": {},
   "sudeep.nath@owledmedia.com": {
-    "ips": "view",
     "news": "none",
     "pintu": "view",
     "growth": "view",
@@ -210,6 +209,7 @@
     "fsi_canvas": "edit",
     "idea_engine": "none",
     "playbook_xf": "edit",
+    "production": "edit",
     "users_roles": "none",
     "playbook_bpb": "edit",
     "playbook_tech": "edit",

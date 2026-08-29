@@ -301,6 +301,12 @@ export const ROLE_NAV: Record<string, '*' | string[]> = {
 
 export function isRouteAllowed(role: string | null, path: string): boolean {
   if (!role) return false
+  // Production is its own permission now, so it must be checked before the playbook
+  // fallback below (which would otherwise grant it via Content Distribution's "bpb"
+  // access) — the preview guard and the sidebar have to agree on this route.
+  if (path === "/production" || path.startsWith("/production/")) {
+    return canView(role, "production")
+  }
   const playbookId = playbookIdFromPath(path)
   if (playbookId) return canAccessPlaybook(role, playbookId)
   if (path.startsWith("/fsi-canvas") || path === "/canvas") {
@@ -354,6 +360,7 @@ export function getFallbackRouteForRole(role: string | null): string {
     '/content-tracker',
     '/post-tracker',
     '/content-distribution',
+    '/production',
     '/experiment-xf',
     '/experiment-tech',
     '/six-day-tracker',

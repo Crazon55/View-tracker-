@@ -6,11 +6,11 @@ import { ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { getRoleAccess, setRoleAccess } from "@/services/api";
 import {
-  AREAS, ALL_ROLES, AREA_KEYS, resolveRoleAccess,
+  AREAS, AREA_GROUP_ORDER, ALL_ROLES, AREA_KEYS, resolveRoleAccess,
   type AreaKey, type AreaLevel, type AccessOverrides,
 } from "@/lib/accessModel";
 
-const GROUP_ORDER = ["Content", "Growth", "Canvas", "Seeding", "Admin"] as const;
+const GROUP_ORDER = AREA_GROUP_ORDER;
 const LEVELS: AreaLevel[] = ["none", "view", "edit"];
 const LEVEL_LABEL: Record<AreaLevel, string> = { none: "—", view: "View", edit: "Edit" };
 const LEVEL_ON: Record<AreaLevel, { bg: string; fg: string }> = {

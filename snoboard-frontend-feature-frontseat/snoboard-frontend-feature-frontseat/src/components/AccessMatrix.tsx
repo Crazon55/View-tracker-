@@ -1,8 +1,8 @@
 // Reusable View/Edit-per-tab access matrix (grouped areas with —/View/Edit toggles).
 // Controlled: pass the current matrix + an onChange(area, level).
-import { AREAS, type AreaKey, type AreaLevel } from "@/lib/accessModel";
+import { AREAS, AREA_GROUP_ORDER, type AreaKey, type AreaLevel } from "@/lib/accessModel";
 
-const GROUP_ORDER = ["Content", "Growth", "Canvas", "Seeding", "Admin"] as const;
+const GROUP_ORDER = AREA_GROUP_ORDER;
 const LEVELS: AreaLevel[] = ["none", "view", "edit"];
 const LEVEL_LABEL: Record<AreaLevel, string> = { none: "—", view: "View", edit: "Edit" };
 const LEVEL_ON: Record<AreaLevel, { bg: string; fg: string }> = {

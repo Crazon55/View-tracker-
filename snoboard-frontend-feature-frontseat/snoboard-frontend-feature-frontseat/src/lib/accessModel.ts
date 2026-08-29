@@ -11,11 +11,13 @@ export type AreaLevel = "none" | "view" | "edit";
 export type AreaKey =
   // Content
   | "idea_engine"
-  | "six_day"
-  | "playbook_bpb" | "playbook_xf" | "playbook_tech"
+  | "playbook_bpb" | "production"
+  | "playbook_xf" | "playbook_tech"
   | "news" | "tickets" | "pintu"
+  // Cops
+  | "six_day"
   // Growth
-  | "growth" | "ips"
+  | "growth"
   // Canvas
   | "fsi_canvas"
   // Seeding
@@ -24,23 +26,31 @@ export type AreaKey =
   // Admin
   | "users_roles";
 
-export type AreaGroup = "Content" | "Growth" | "Canvas" | "Seeding" | "Admin";
+export type AreaGroup = "Content" | "Cops" | "Growth" | "Canvas" | "Seeding" | "Admin";
+
+/** Display order for the Users & Roles matrix. Exported (rather than duplicated in each
+ * editor) so adding an AreaGroup can't silently render zero rows. */
+export const AREA_GROUP_ORDER: readonly AreaGroup[] = [
+  "Content", "Cops", "Growth", "Canvas", "Seeding", "Admin",
+];
 
 export type AreaDef = { key: AreaKey; label: string; group: AreaGroup; route: string };
 
-/** Every gate-able surface, in display order. `route` is the primary path it guards. */
+/** Every gate-able surface, in display order. `route` is the primary path it guards.
+ * Order and grouping mirror the sidebar so the matrix reads like the app. */
 export const AREAS: AreaDef[] = [
   { key: "idea_engine", label: "Idea Engine", group: "Content", route: "/idea-engine" },
-  { key: "six_day", label: "6-Day Tracker", group: "Content", route: "/six-day-tracker" },
   { key: "playbook_bpb", label: "Content Distribution", group: "Content", route: "/content-distribution" },
+  { key: "production", label: "Production", group: "Content", route: "/production" },
   { key: "playbook_xf", label: "Playbook · XF", group: "Content", route: "/experiment-xf" },
   { key: "playbook_tech", label: "Playbook · Tech", group: "Content", route: "/experiment-tech" },
   { key: "news", label: "News Feed", group: "Content", route: "/news" },
   { key: "tickets", label: "Tickets", group: "Content", route: "/tickets" },
   { key: "pintu", label: "Pintu", group: "Content", route: "http://16.112.125.207:5173/" },
 
+  { key: "six_day", label: "6-Day Tracker", group: "Cops", route: "/six-day-tracker" },
+
   { key: "growth", label: "Growth", group: "Growth", route: "/growth" },
-  { key: "ips", label: "IPs / Pages", group: "Growth", route: "/pages" },
 
   { key: "fsi_canvas", label: "FSI Canvas", group: "Canvas", route: "/fsi-canvas" },
 
@@ -153,36 +163,37 @@ export const ROLE_ACCESS_DEFAULTS: Record<string, Record<AreaKey, AreaLevel>> = 
   senior_cs: withOverrides("none", {
     idea_engine: "edit",
     six_day: "edit",
-    playbook_bpb: "view", playbook_xf: "view", playbook_tech: "view",
-    news: "view", tickets: "edit", pintu: "view", growth: "edit", ips: "edit", fsi_canvas: "edit",
+    playbook_bpb: "view", production: "view", playbook_xf: "view", playbook_tech: "view",
+    news: "view", tickets: "edit", pintu: "view", growth: "edit", fsi_canvas: "edit",
   }),
 
   // CS lands on the Idea Engine — it's their home base.
   cs: withOverrides("none", {
     idea_engine: "edit",
     six_day: "view",
-    playbook_bpb: "view", playbook_xf: "view", playbook_tech: "view",
-    news: "view", tickets: "view", pintu: "view", growth: "view", ips: "view", fsi_canvas: "edit",
+    playbook_bpb: "view", production: "view", playbook_xf: "view", playbook_tech: "view",
+    news: "view", tickets: "view", pintu: "view", growth: "view", fsi_canvas: "edit",
   }),
 
   cw: withOverrides("none", {
     idea_engine: "view",
     six_day: "view",
-    playbook_bpb: "view", playbook_xf: "view", playbook_tech: "view",
-    news: "view", tickets: "view", pintu: "view", growth: "view", ips: "view", fsi_canvas: "edit",
+    playbook_bpb: "view", production: "view", playbook_xf: "view", playbook_tech: "view",
+    news: "view", tickets: "view", pintu: "view", growth: "view", fsi_canvas: "edit",
   }),
 
   co: withOverrides("none", {
     idea_engine: "edit",
     six_day: "edit",
-    playbook_bpb: "edit", playbook_xf: "edit", playbook_tech: "edit",
-    news: "view", pintu: "view", growth: "view", ips: "view", fsi_canvas: "edit",
+    playbook_bpb: "edit", production: "edit", playbook_xf: "edit", playbook_tech: "edit",
+    news: "view", pintu: "view", growth: "view", fsi_canvas: "edit",
   }),
 
-  // VE: playbooks are their day-to-day surface (matches legacy VE_PERMISSIONS).
+  // VE: the Production board is their day-to-day surface (matches legacy VE_PERMISSIONS).
+  // `carousel_designer` and `design` alias to this role, so they inherit it.
   ve: withOverrides("none", {
-    playbook_bpb: "edit", playbook_xf: "edit", playbook_tech: "edit",
-    pintu: "view", growth: "view", ips: "view", fsi_canvas: "edit",
+    playbook_bpb: "edit", production: "edit", playbook_xf: "edit", playbook_tech: "edit",
+    pintu: "view", growth: "view", fsi_canvas: "edit",
   }),
 
   // BD: team dashboard (Overview) + Submit Brief + own deal detail (via overview).
@@ -199,7 +210,8 @@ export const ROLE_ACCESS_DEFAULTS: Record<string, Record<AreaKey, AreaLevel>> = 
   // Playbook-scoped roles — edit their own playbook, view shared context.
   bizz_playbook: withOverrides("none", {
     idea_engine: "edit",
-    playbook_bpb: "edit", six_day: "view", pintu: "view", growth: "view", news: "view", fsi_canvas: "edit",
+    playbook_bpb: "edit", production: "edit",
+    six_day: "view", pintu: "view", growth: "view", news: "view", fsi_canvas: "edit",
   }),
   xf_playbook: withOverrides("none", {
     idea_engine: "edit",
@@ -362,10 +374,11 @@ export function canViewMonthlyWrap(
 
 // Routes that share an AREAS entry's permission without being a literal alias of its
 // `route` (kept out of AREAS itself so the admin permission matrix shows one row per
-// permission, not one per route). /production is the Content Distribution page's
-// Production tab, promoted to its own sidebar entry/URL — same access as playbook_bpb.
+// permission, not one per route). `/experiment-bpb` is the pre-rename Content
+// Distribution URL, still linked from the legacy nav allow-list.
 const AREA_ROUTE_ALIASES: Record<string, AreaKey> = {
-  "/production": "playbook_bpb",
+  "/experiment-bpb": "playbook_bpb",
+  "/experiment-x": "playbook_bpb",
 };
 
 /** Map a nav route to its access area (exact, then prefix for sub-routes). */

@@ -374,8 +374,8 @@ function AppLayout() {
                   <Route path="/ideas" element={<IdeaEngine />} />
                   <Route path="/competitor-ideas" element={<CompetitorIdeas />} />
                   <Route path="/team-roles" element={<TeamRolesPage />} />
-                  <Route path="/content-distribution" element={<ExperimentX playbookId="bpb" />} />
-                  <Route path="/production" element={<ExperimentX playbookId="bpb" />} />
+                  <Route path="/content-distribution" element={<RequireArea area="playbook_bpb"><ExperimentX playbookId="bpb" /></RequireArea>} />
+                  <Route path="/production" element={<RequireArea area="production"><ExperimentX playbookId="bpb" /></RequireArea>} />
                   <Route path="/experiment-bpb" element={<Navigate to="/content-distribution" replace />} />
                   <Route path="/experiment-xf" element={<ExperimentX playbookId="xf" />} />
                   <Route path="/experiment-tech" element={<ExperimentX playbookId="tech" />} />
