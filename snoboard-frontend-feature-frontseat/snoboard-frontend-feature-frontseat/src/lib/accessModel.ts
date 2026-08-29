@@ -225,6 +225,27 @@ export const ROLE_ACCESS_DEFAULTS: Record<string, Record<AreaKey, AreaLevel>> = 
     news: "edit", pintu: "view", growth: "view", fsi_canvas: "edit",
   }),
 
+  // Legacy keys are independently editable in Users & Roles. Defaults match the
+  // unified role they alias to, plus Idea Engine — that's the new home for ideas
+  // and was missing from matrices saved before the gallery shipped.
+  smm: withOverrides("none", {
+    idea_engine: "edit",
+    six_day: "edit",
+    playbook_bpb: "edit", production: "edit", playbook_xf: "edit", playbook_tech: "edit",
+    news: "view", tickets: "edit", pintu: "view", growth: "view", fsi_canvas: "edit",
+  }),
+  experiment_x: withOverrides("none", {
+    idea_engine: "edit",
+    playbook_bpb: "edit", production: "edit", playbook_xf: "edit", playbook_tech: "edit",
+    news: "view", tickets: "edit", pintu: "view", growth: "view", fsi_canvas: "edit",
+  }),
+  content_ops_intern: withOverrides("none", {
+    idea_engine: "edit",
+    six_day: "edit",
+    playbook_bpb: "edit", production: "edit", playbook_xf: "edit", playbook_tech: "edit",
+    news: "view", pintu: "view", growth: "view", fsi_canvas: "edit",
+  }),
+
   // New joiners — no tabs until Admin assigns a real role.
   pending: all("none"),
 };
@@ -275,6 +296,25 @@ export type PersonAccess = Partial<Record<AreaKey, AreaLevel>>;
 
 const RANK: Record<AreaLevel, number> = { none: 0, view: 1, edit: 2 };
 
+// Areas added after the first Users & Roles saves. A frozen `none` on these is
+// almost always "wasn't in the form yet", not an intentional revoke — restore
+// the role default so we don't have to re-click every person after a nav split.
+const INHERIT_NONE_FROM_ROLE: readonly AreaKey[] = ["idea_engine", "production"];
+
+function applySavedAccess(
+  base: Record<AreaKey, AreaLevel>,
+  saved?: PersonAccess | null,
+): Record<AreaKey, AreaLevel> {
+  if (!saved || !Object.keys(saved).length) return base;
+  const merged: Record<AreaKey, AreaLevel> = { ...base, ...saved } as Record<AreaKey, AreaLevel>;
+  for (const k of INHERIT_NONE_FROM_ROLE) {
+    if ((saved[k] === undefined || saved[k] === "none") && base[k] !== "none") {
+      merged[k] = base[k];
+    }
+  }
+  return merged;
+}
+
 /** Effective matrix for a single role (defaults + persisted overrides).
  * Legacy roles have no default of their own, so they fall back to their canonical
  * unified role's default — but overrides are keyed by the EXACT role, so each role
@@ -304,9 +344,7 @@ export function resolvePersonAccess(
       }
     }
   }
-  return personAccess && Object.keys(personAccess).length
-    ? { ...base, ...personAccess }
-    : base;
+  return applySavedAccess(base, personAccess);
 }
 
 /** Effective access for a (possibly comma-joined multi-)role on one area — highest wins.
@@ -317,16 +355,7 @@ export function getAreaLevel(
   overrides?: AccessOverrides,
   personAccess?: PersonAccess | null,
 ): AreaLevel {
-  if (personAccess && personAccess[area] !== undefined) {
-    return personAccess[area]!;
-  }
-  if (!role) return "none";
-  let best: AreaLevel = "none";
-  for (const raw of String(role).split(",").map((s) => s.trim()).filter(Boolean)) {
-    const lvl = resolveRoleAccess(raw, overrides)[area] ?? "none";
-    if (RANK[lvl] > RANK[best]) best = lvl;
-  }
-  return best;
+  return resolvePersonAccess(role, personAccess, overrides)[area] ?? "none";
 }
 
 export const canView = (

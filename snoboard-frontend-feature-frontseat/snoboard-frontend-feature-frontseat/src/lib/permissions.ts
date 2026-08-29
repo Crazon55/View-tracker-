@@ -3,7 +3,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { PlaybookId } from "@/lib/playbookExperimentConfig";
-import { canView, canViewMonthlyWrap, canonicalRole } from "@/lib/accessModel";
+import { canView, canViewMonthlyWrap, canonicalRole, areaForRoute } from "@/lib/accessModel";
 
 export type Permission =
   | 'view_own_ideas'        // see only ideas you created
@@ -287,41 +287,32 @@ export const ROLE_NAV: Record<string, '*' | string[]> = {
 
   design: '*',
 
-  // Video editor — playbook Production board only, nothing else.
-  ve: ['/', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x'],
-  editors: ['/', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x'],
-  carousel_designer: ['/', '/post-tracker', '/growth'],
+  // Video editor — Today's Board + Production (new paths; old experiment-* still listed).
+  ve: ['/', '/content-distribution', '/production', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x'],
+  editors: ['/', '/content-distribution', '/production', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x'],
+  carousel_designer: ['/', '/content-distribution', '/production', '/post-tracker', '/growth'],
 
-  smm: ['/', '/content-tracker', '/post-tracker', '/growth', '/fsi-canvas'],
-  experiment_x: ['/', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x', '/fsi-canvas', '/tickets', '/news', '/growth'],
-  content_ops_intern: ['/', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x', '/fsi-canvas', '/six-day-tracker', '/growth'],
+  smm: ['/', '/idea-engine', '/content-distribution', '/production', '/experiment-xf', '/experiment-tech', '/content-tracker', '/post-tracker', '/growth', '/fsi-canvas', '/tickets'],
+  experiment_x: ['/', '/idea-engine', '/content-distribution', '/production', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x', '/fsi-canvas', '/tickets', '/news', '/growth'],
+  content_ops_intern: ['/', '/idea-engine', '/content-distribution', '/production', '/experiment-bpb', '/experiment-xf', '/experiment-tech', '/experiment-x', '/fsi-canvas', '/six-day-tracker', '/growth'],
   // legacy — migrated to cs in backend
   content_creators: '*',
 }
 
 export function isRouteAllowed(role: string | null, path: string): boolean {
   if (!role) return false
-  // Production is its own permission now, so it must be checked before the playbook
-  // fallback below (which would otherwise grant it via Content Distribution's "bpb"
-  // access) — the preview guard and the sidebar have to agree on this route.
-  if (path === "/production" || path.startsWith("/production/")) {
-    return canView(role, "production")
-  }
-  const playbookId = playbookIdFromPath(path)
-  if (playbookId) return canAccessPlaybook(role, playbookId)
   if (path.startsWith("/fsi-canvas") || path === "/canvas") {
     return !!role
   }
   if (path === "/wrap" || path.startsWith("/wrap?")) {
     return canViewMonthlyWrap(role)
   }
-  // Admin-only seeding surfaces — do not fall through to "unknown role = allow".
-  if (path === "/seeding/approvals" || path.startsWith("/seeding/approvals/")) {
-    return canView(role, "seeding_approvals")
-  }
-  if (path === "/seeding/users" || path.startsWith("/seeding/users/")) {
-    return canView(role, "users_roles")
-  }
+  // Matrix areas (Idea Engine, Production, playbooks, seeding, …) win over the
+  // legacy ROLE_NAV allow-lists, which still name pre-rename /experiment-* paths.
+  const area = areaForRoute(path)
+  if (area) return canView(role, area)
+  const playbookId = playbookIdFromPath(path)
+  if (playbookId) return canAccessPlaybook(role, playbookId)
   // Multi-role: allowed if ANY role permits the route
   return parseRoles(role).some((r) => {
     const allowed = ROLE_NAV[r]
@@ -356,6 +347,7 @@ export function getFallbackRouteForRole(role: string | null): string {
     '/seeding/submit',
     '/seeding/fulfillment',
     '/',
+    '/idea-engine',
     '/fsi-canvas',
     '/content-tracker',
     '/post-tracker',

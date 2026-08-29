@@ -370,15 +370,15 @@ function AppLayout() {
                 <Route path="/team-performance" element={<Navigate to="/" replace />} />
                 <Route path="/tickets" element={<Tickets />} />
                   <Route path="/news" element={<NewsFeed />} />
-                  <Route path="/idea-engine" element={<IdeaEngineGallery />} />
+                  <Route path="/idea-engine" element={<RequireArea area="idea_engine"><IdeaEngineGallery /></RequireArea>} />
                   <Route path="/ideas" element={<IdeaEngine />} />
                   <Route path="/competitor-ideas" element={<CompetitorIdeas />} />
                   <Route path="/team-roles" element={<TeamRolesPage />} />
                   <Route path="/content-distribution" element={<RequireArea area="playbook_bpb"><ExperimentX playbookId="bpb" /></RequireArea>} />
                   <Route path="/production" element={<RequireArea area="production"><ExperimentX playbookId="bpb" /></RequireArea>} />
                   <Route path="/experiment-bpb" element={<Navigate to="/content-distribution" replace />} />
-                  <Route path="/experiment-xf" element={<ExperimentX playbookId="xf" />} />
-                  <Route path="/experiment-tech" element={<ExperimentX playbookId="tech" />} />
+                  <Route path="/experiment-xf" element={<RequireArea area="playbook_xf"><ExperimentX playbookId="xf" /></RequireArea>} />
+                  <Route path="/experiment-tech" element={<RequireArea area="playbook_tech"><ExperimentX playbookId="tech" /></RequireArea>} />
                   <Route path="/experiment-x" element={<Navigate to="/content-distribution" replace />} />
                   <Route path="/fsi-canvas" element={<FsiCanvasHub />} />
                   <Route
