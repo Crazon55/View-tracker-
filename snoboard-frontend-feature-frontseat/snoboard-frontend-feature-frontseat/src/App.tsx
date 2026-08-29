@@ -59,6 +59,7 @@ import { MonthlyWrapRoot, MonthlyWrapOpenButton } from "./components/MonthlyWrap
 import { stashWrapMonthFromUrl } from "@/lib/monthlyWrap";
 import { RolePreviewBanner } from "./components/RolePreviewBanner";
 import { RolePreviewPicker } from "./components/RolePreviewPicker";
+import { AnchoredPanel } from "./components/AnchoredPanel";
 import { RolePreviewRouteGuard } from "./components/RolePreviewRouteGuard";
 import { RequireArea } from "./components/RequireArea";
 
@@ -98,7 +99,7 @@ function AnimalPicker({ userId }: { userId: string | undefined }) {
   const { role, user } = useAuth();
   const [showPanel, setShowPanel] = useState(false);
   const [panelTab, setPanelTab] = useState<"notifications" | "avatar">("notifications");
-  const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const { notifications, unreadCount, markAllRead } = useNotifications();
   const navigate = useNavigate();
 
@@ -147,14 +148,6 @@ function AnimalPicker({ userId }: { userId: string | undefined }) {
     if (!hasChosen) { setShowPanel(true); setPanelTab("avatar"); }
   }, [hasChosen]);
 
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setShowPanel(false);
-    }
-    if (showPanel) document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [showPanel]);
-
   const TYPE_ICON: Record<string, string> = {
     comment: "💬", blocker: "🔴", update: "🟡", review_request: "👁", assignment: "🏷️",
     seeding_brief_submitted: "📋", seeding_brief_approved: "✅", seeding_fulfillment_update: "🔧",
@@ -170,8 +163,9 @@ function AnimalPicker({ userId }: { userId: string | undefined }) {
   }
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative">
       <button
+        ref={buttonRef}
         onClick={() => { setShowPanel(!showPanel); setPanelTab("notifications"); if (showPanel === false) markAllRead(); }}
         className="text-xl hover:scale-110 transition-transform cursor-pointer relative"
         title="Notifications & Avatar"
@@ -183,80 +177,85 @@ function AnimalPicker({ userId }: { userId: string | undefined }) {
           </span>
         )}
       </button>
-      {showPanel && (
-        <div className="absolute top-full right-0 mt-2 bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl z-[100] w-80 overflow-hidden">
-          <div className="flex border-b border-zinc-800">
-            <button
-              onClick={() => { setPanelTab("notifications"); markAllRead(); }}
-              className={`flex-1 text-xs font-medium py-2.5 transition-colors ${panelTab === "notifications" ? "text-violet-400 border-b-2 border-violet-500" : "text-zinc-500 hover:text-zinc-300"}`}
-            >
-              Notifications {unreadCount > 0 && <span className="ml-1 px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 text-[9px] font-bold">{unreadCount}</span>}
-            </button>
-            <button
-              onClick={() => setPanelTab("avatar")}
-              className={`flex-1 text-xs font-medium py-2.5 transition-colors ${panelTab === "avatar" ? "text-violet-400 border-b-2 border-violet-500" : "text-zinc-500 hover:text-zinc-300"}`}
-            >
-              Avatar
-            </button>
-          </div>
-
-          {panelTab === "notifications" && (
-            <div className="max-h-72 overflow-y-auto">
-              {notifications.length === 0 ? (
-                <p className="text-xs text-zinc-600 text-center py-6">No notifications yet</p>
-              ) : (
-                <div className="p-2 space-y-1">
-                  {notifications.map((n) => {
-                    const hasLink = !!n.idea_id;
-                    const href = !hasLink
-                      ? null
-                      : n.tracker_type === "seeding"
-                        ? `/seeding/deals/${n.idea_id}`
-                        : `${n.tracker_type === "post" ? "/post-tracker" : "/content-tracker"}?idea=${n.idea_id}`;
-                    return (
-                      <div
-                        key={n.id}
-                        onClick={() => {
-                          if (href) { navigate(href); setShowPanel(false); }
-                        }}
-                        className={`rounded-lg px-3 py-2.5 transition-colors ${hasLink ? "cursor-pointer hover:bg-zinc-700/50" : ""} ${!n.read ? "bg-violet-500/8 border border-violet-500/20" : "bg-zinc-800/40"}`}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-start gap-2 min-w-0">
-                            <span className="text-sm mt-0.5 shrink-0">{TYPE_ICON[n.type] ?? "🔔"}</span>
-                            <p className="text-[11px] text-zinc-300 leading-snug">{n.message}</p>
-                          </div>
-                          <span className="text-[9px] text-zinc-600 shrink-0">{timeAgoShort(n.created_at)}</span>
-                        </div>
-                        {n.idea_title && (
-                          <p className="text-[10px] text-zinc-500 mt-1 truncate pl-6">📌 {n.idea_title} {hasLink && <span className="text-violet-500">→ open</span>}</p>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {panelTab === "avatar" && (
-            <div className="p-3">
-              <p className="text-xs text-zinc-400 mb-2">Pick your buddy</p>
-              <div className="grid grid-cols-6 gap-1">
-                {ANIMALS.map((a) => (
-                  <button
-                    key={a}
-                    onClick={() => { pickAnimal(a); setShowPanel(false); }}
-                    className={`text-xl p-1.5 rounded-lg hover:bg-zinc-800 transition-colors ${animal === a ? "bg-violet-500/20 ring-1 ring-violet-500" : ""}`}
-                  >
-                    {a}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+      <AnchoredPanel
+        open={showPanel}
+        onClose={() => setShowPanel(false)}
+        anchorRef={buttonRef}
+        width={320}
+        maxHeight={460}
+        className="bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl"
+      >
+        <div className="flex border-b border-zinc-800">
+          <button
+            onClick={() => { setPanelTab("notifications"); markAllRead(); }}
+            className={`flex-1 text-xs font-medium py-2.5 transition-colors ${panelTab === "notifications" ? "text-violet-400 border-b-2 border-violet-500" : "text-zinc-500 hover:text-zinc-300"}`}
+          >
+            Notifications {unreadCount > 0 && <span className="ml-1 px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 text-[9px] font-bold">{unreadCount}</span>}
+          </button>
+          <button
+            onClick={() => setPanelTab("avatar")}
+            className={`flex-1 text-xs font-medium py-2.5 transition-colors ${panelTab === "avatar" ? "text-violet-400 border-b-2 border-violet-500" : "text-zinc-500 hover:text-zinc-300"}`}
+          >
+            Avatar
+          </button>
         </div>
-      )}
+
+        {panelTab === "notifications" && (
+          <div className="max-h-72 overflow-y-auto">
+            {notifications.length === 0 ? (
+              <p className="text-xs text-zinc-600 text-center py-6">No notifications yet</p>
+            ) : (
+              <div className="p-2 space-y-1">
+                {notifications.map((n) => {
+                  const hasLink = !!n.idea_id;
+                  const href = !hasLink
+                    ? null
+                    : n.tracker_type === "seeding"
+                      ? `/seeding/deals/${n.idea_id}`
+                      : `${n.tracker_type === "post" ? "/post-tracker" : "/content-tracker"}?idea=${n.idea_id}`;
+                  return (
+                    <div
+                      key={n.id}
+                      onClick={() => {
+                        if (href) { navigate(href); setShowPanel(false); }
+                      }}
+                      className={`rounded-lg px-3 py-2.5 transition-colors ${hasLink ? "cursor-pointer hover:bg-zinc-700/50" : ""} ${!n.read ? "bg-violet-500/8 border border-violet-500/20" : "bg-zinc-800/40"}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2 min-w-0">
+                          <span className="text-sm mt-0.5 shrink-0">{TYPE_ICON[n.type] ?? "🔔"}</span>
+                          <p className="text-[11px] text-zinc-300 leading-snug">{n.message}</p>
+                        </div>
+                        <span className="text-[9px] text-zinc-600 shrink-0">{timeAgoShort(n.created_at)}</span>
+                      </div>
+                      {n.idea_title && (
+                        <p className="text-[10px] text-zinc-500 mt-1 truncate pl-6">📌 {n.idea_title} {hasLink && <span className="text-violet-500">→ open</span>}</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {panelTab === "avatar" && (
+          <div className="p-3">
+            <p className="text-xs text-zinc-400 mb-2">Pick your buddy</p>
+            <div className="grid grid-cols-6 gap-1">
+              {ANIMALS.map((a) => (
+                <button
+                  key={a}
+                  onClick={() => { pickAnimal(a); setShowPanel(false); }}
+                  className={`text-xl p-1.5 rounded-lg hover:bg-zinc-800 transition-colors ${animal === a ? "bg-violet-500/20 ring-1 ring-violet-500" : ""}`}
+                >
+                  {a}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </AnchoredPanel>
     </div>
   );
 }
