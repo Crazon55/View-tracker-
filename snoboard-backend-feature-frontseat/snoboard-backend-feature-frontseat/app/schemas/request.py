@@ -210,6 +210,7 @@ class ExpIdeaUpdate(BaseModel):
     page_test_results: dict | None = None
     changes_comment: str | None = None
     blocked_reason: str | None = None
+    posted_date: str | None = None
     day_date: str | None = None
     source: str | None = None
     hook_variations: str | None = None

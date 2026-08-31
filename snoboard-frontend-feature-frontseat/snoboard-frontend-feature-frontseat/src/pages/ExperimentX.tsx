@@ -2893,6 +2893,7 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
                       canMarkPosted={isOpsOrAdmin}
                       onOpen={() => setDetailGroup(g)}
                       onAdvance={(to) => advance(g, to)}
+                      onAssign={(copyId, name) => batchMut.mutate({ ids: [copyId], data: { assigned_to: name } })}
                     />
                   </div>
                 ))}
@@ -2928,6 +2929,7 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
           canMarkPosted={isOpsOrAdmin}
           onAdvance={(to) => advance(detailGroup, to)}
           onSaveGroup={(data) => batchMut.mutate({ ids: detailGroup.copies.map((c) => c.id), data })}
+          onAssign={(copyId, name) => batchMut.mutate({ ids: [copyId], data: { assigned_to: name } })}
           onClose={() => setDetailGroup(null)}
         />
       )}
@@ -2935,13 +2937,14 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
   );
 }
 
-function ProductionDetailModal({ group, pageColors, readOnly, canMarkPosted, onAdvance, onSaveGroup, onClose }: {
+function ProductionDetailModal({ group, pageColors, readOnly, canMarkPosted, onAdvance, onSaveGroup, onAssign, onClose }: {
   group: ProdGroup;
   pageColors: Record<string, string>;
   readOnly?: boolean;
   canMarkPosted?: boolean;
   onAdvance: (to: string) => void;
   onSaveGroup: (data: Record<string, unknown>) => void;
+  onAssign?: (copyId: string, name: string) => void;
   onClose: () => void;
 }) {
   const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "var(--pb-dim)", marginBottom: 8, letterSpacing: "0.04em", textTransform: "uppercase" };
@@ -2960,6 +2963,34 @@ function ProductionDetailModal({ group, pageColors, readOnly, canMarkPosted, onA
         </div>
         <button onClick={onClose} style={pbModalCloseBtn}>×</button>
       </div>
+
+      {!readOnly && canMarkPosted && onAssign && (
+        <div>
+          <label style={ls}>Assigned to{group.copies.length > 1 ? " (by page)" : ""}</label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {group.copies.map((c) => (
+              <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {group.copies.length > 1 && (
+                  <span style={{ fontSize: 11, fontWeight: 700, color: pageColors[(c.page_handle || "").trim()] || "var(--pb-dim2)", flexShrink: 0, minWidth: 90 }}>
+                    {(c.page_handle || "").trim()}
+                  </span>
+                )}
+                <select
+                  value={c.assigned_to || ""}
+                  onChange={(e) => onAssign(c.id, e.target.value)}
+                  className="fglass-input"
+                  style={{ padding: "7px 11px", borderRadius: 9, fontSize: 13, flex: 1 }}
+                >
+                  <option value="">Assign to…</option>
+                  {assigneeOptionsFor(group.content_type).map((a) => (
+                    <option key={a.name} value={a.name}>{a.name}</option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* One base edit, but each page has its own hook — the editor edits the base to each. */}
       <div>
@@ -3063,13 +3094,14 @@ function ProductionDetailModal({ group, pageColors, readOnly, canMarkPosted, onA
   );
 }
 
-function ProductionCard({ group, pageColors, readOnly, canMarkPosted, onOpen, onAdvance }: {
+function ProductionCard({ group, pageColors, readOnly, canMarkPosted, onOpen, onAdvance, onAssign }: {
   group: ProdGroup;
   pageColors: Record<string, string>;
   readOnly?: boolean;
   canMarkPosted?: boolean;
   onOpen: () => void;
   onAdvance: (to: string) => void;
+  onAssign?: (copyId: string, name: string) => void;
 }) {
   const next = getProductionNext(group.content_type, group.stage);
   // Per-page progress ticks — a page is "done for this stage" once its copy reached it.
@@ -3105,9 +3137,37 @@ function ProductionCard({ group, pageColors, readOnly, canMarkPosted, onOpen, on
         })}
         {group.created_by && <span className="fglass-muted" style={{ fontSize: 9.5 }}>· {group.created_by}</span>}
       </div>
-      {(() => {
-        // Who's actually working this idea — one name per page-copy, deduped. A group
-        // spanning multiple pages can have different people on different pages.
+      {!readOnly && canMarkPosted && onAssign ? (
+        // Editable directly from Stage View — one selector per page-copy (a group
+        // spanning multiple pages can have different people on different pages), so
+        // Ops/admin don't need to switch to "By person" view just to assign someone.
+        <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 5 }}>
+          {group.copies.map((c: any) => (
+            <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              {group.copies.length > 1 && (
+                <span style={{ fontSize: 9, color: pageColors[(c.page_handle || "").trim()] || "var(--pb-dim2)", fontWeight: 700, flexShrink: 0 }}>
+                  {(c.page_handle || "").trim()}
+                </span>
+              )}
+              <select
+                value={c.assigned_to || ""}
+                onChange={(e) => onAssign(c.id, e.target.value)}
+                style={{
+                  fontSize: 9.5, fontWeight: 600, color: c.assigned_to ? "#a78bfa" : "var(--pb-dim)",
+                  background: "var(--pb-card)", border: "1px solid var(--pb-border)", borderRadius: 99,
+                  padding: "1px 6px", cursor: "pointer", flex: 1, minWidth: 0,
+                }}
+              >
+                <option value="">Assign to…</option>
+                {assigneeOptionsFor(group.content_type).map((a) => (
+                  <option key={a.name} value={a.name}>{a.name}</option>
+                ))}
+              </select>
+            </div>
+          ))}
+        </div>
+      ) : (() => {
+        // Read-only fallback — one name per page-copy, deduped.
         const assignees = [...new Set(group.copies.map((c: any) => (c.assigned_to || "").trim()).filter(Boolean))];
         return assignees.length > 0 ? (
           <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 5, flexWrap: "wrap" }}>

@@ -5433,8 +5433,12 @@ async def exp_list_idea_bank(
         ).limit(100)
     elif pending_only in ("1", "true", "True"):
         # Production: anything not yet posted carries forward day to day until it is —
-        # plus today's posted copies, so they still show (briefly) in the Posted column
-        # before Tracking takes over from tomorrow. Floored at a FIXED start date (when
+        # plus copies posted TODAY, so they still show (briefly) in the Posted column
+        # before Tracking takes over from tomorrow. Keyed on posted_date (the real date it
+        # was marked posted, stamped server-side above), not day_date (when it was
+        # distributed) — a card can sit in production for days after being distributed, so
+        # checking day_date made it vanish from Posted the instant it was marked posted
+        # instead of staying until end of that day. Floored at a FIXED start date (when
         # this carry-forward behavior shipped), not a rolling window off "today" — a
         # rolling window would itself age old-but-still-open cards back out a few weeks
         # later, quietly breaking "carries forward until posted". The floor exists only
@@ -5451,7 +5455,7 @@ async def exp_list_idea_bank(
         q = (
             q.not_.is_("source_pool_id", "null")
             .gte("day_date", EXP_PENDING_CARRYOVER_START)
-            .or_(f"status.neq.posted,day_date.eq.{date.today()}")
+            .or_(f"status.neq.posted,posted_date.eq.{date.today()}")
             .or_(f"status.neq.blocked,blocked_at.gte.{blocked_cutoff},blocked_at.is.null")
         )
     elif day_date:
@@ -5658,6 +5662,13 @@ async def exp_update_idea(playbook: str, idea_id: str, req: ExpIdeaUpdate):
         # fix attempt) the 24h grace window before this card ages off Production.
         from datetime import datetime, timezone
         update_data["blocked_at"] = datetime.now(timezone.utc).isoformat()
+    if update_data.get("status") == "posted" and not update_data.get("posted_date"):
+        # Server-stamped with the REAL posting date, not client-supplied — this is what
+        # the pending_only filter below checks so a card stays in the Posted column until
+        # end of the day it was actually posted, not the (possibly much earlier) day it
+        # was created.
+        from datetime import date
+        update_data["posted_date"] = date.today().isoformat()
     if "day_date" in update_data:
         update_data["week_number"] = _exp_compute_week_number(client, pb, update_data["day_date"])
     client.table(tables.idea_bank).update(update_data).eq("id", idea_id).execute()
