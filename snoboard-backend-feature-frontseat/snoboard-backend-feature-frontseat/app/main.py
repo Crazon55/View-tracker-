@@ -5440,12 +5440,19 @@ async def exp_list_idea_bank(
         # later, quietly breaking "carries forward until posted". The floor exists only
         # to keep pre-existing backlog (1000+ rows going back months, never marked
         # posted/killed) from flooding in on day one and blowing past Supabase's row cap.
-        from datetime import date
+        # Blocked cards get a 24h grace window here too (for the team to notice/recheck),
+        # then age out to Idea Engine's "needs fixing" list (`stale_blocked` above) — a
+        # second, separate `.or_()` AND's with the one above rather than folding into it,
+        # since it's an independent condition (kept as blocked_at.is_.null too, so a row
+        # that somehow never got stamped isn't silently hidden).
+        from datetime import date, datetime, timedelta, timezone
         EXP_PENDING_CARRYOVER_START = "2026-08-27"
+        blocked_cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
         q = (
             q.not_.is_("source_pool_id", "null")
             .gte("day_date", EXP_PENDING_CARRYOVER_START)
             .or_(f"status.neq.posted,day_date.eq.{date.today()}")
+            .or_(f"status.neq.blocked,blocked_at.gte.{blocked_cutoff},blocked_at.is.null")
         )
     elif day_date:
         q = q.eq("day_date", day_date)
@@ -5646,6 +5653,11 @@ async def exp_update_idea(playbook: str, idea_id: str, req: ExpIdeaUpdate):
         raise HTTPException(status_code=400, detail="A comment is required when moving to Changes")
     if update_data.get("status") == "blocked" and not (update_data.get("blocked_reason") or "").strip():
         raise HTTPException(status_code=400, detail="A reason is required when moving to Blocked")
+    if update_data.get("status") == "blocked":
+        # Server-stamped, not client-supplied — starts (or restarts, if re-blocked after a
+        # fix attempt) the 24h grace window before this card ages off Production.
+        from datetime import datetime, timezone
+        update_data["blocked_at"] = datetime.now(timezone.utc).isoformat()
     if "day_date" in update_data:
         update_data["week_number"] = _exp_compute_week_number(client, pb, update_data["day_date"])
     client.table(tables.idea_bank).update(update_data).eq("id", idea_id).execute()

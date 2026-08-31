@@ -6,7 +6,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, ExternalLink, Eye, Search, X, Check, CalendarDays, Trophy, Heart } from "lucide-react";
+import { Plus, ExternalLink, Eye, Search, X, Check, CalendarDays, Trophy, Heart, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { FramerPage, PageHeader } from "@/components/framer/Framer";
 import { Calendar as DayCalendar } from "@/components/ui/calendar";
@@ -99,14 +99,18 @@ function mergeIdeasByTopic(list: any[]): any[] {
     const key = topic ? `${idea._playbook}::${topic.toLowerCase()}` : `${idea._playbook}::__${idea.id}`;
     let g = map.get(key);
     if (!g) {
-      g = { ...idea, page_views: {}, page_likes: {}, _deployed: new Set<string>() };
+      g = { ...idea, page_views: {}, page_likes: {}, _deployed: new Set<string>(), _ids: new Set<string>() };
       map.set(key, g);
     }
+    (g._ids as Set<string>).add(idea.id);
     const pv = g.page_views as Record<string, number>;
     for (const [p, v] of Object.entries(perPageViews(idea))) pv[p] = Math.max(pv[p] || 0, v);
     const pl = g.page_likes as Record<string, number>;
     for (const [p, v] of Object.entries(perPageLikes(idea))) pl[p] = Math.max(pl[p] || 0, v);
     if (!g.created_by && idea.created_by) g.created_by = idea.created_by;
+    // A "got blocked before" tag should survive the merge even if it's a different
+    // page-copy of the same topic that carries it, not necessarily the first one seen.
+    if (!g.blocked_reason && idea.blocked_reason) g.blocked_reason = idea.blocked_reason;
     // Links live on whichever row has them (e.g. the posted copy, not the empty pool
     // card) — fill from any row so the merged card actually surfaces them.
     for (const f of ["comp_link", "yt_url", "yt_timestamps", "frame_link", "drive_link", "kalakar_link"]) {
@@ -122,6 +126,7 @@ function mergeIdeasByTopic(list: any[]): any[] {
     views: Object.values(g.page_views as Record<string, number>).reduce((a, b) => a + b, 0),
     likes: Object.values(g.page_likes as Record<string, number>).reduce((a, b) => a + b, 0),
     deployed_to_playbooks: [...g._deployed],
+    _ids: [...(g._ids as Set<string>)],
   }));
 }
 function fmtViews(n: number): string {
@@ -260,6 +265,23 @@ export default function IdeaEngineGallery() {
     onError: (e: any) => toast.error(e?.message || "Couldn't send idea"),
   });
 
+  // A merged card can be more than one underlying row (same topic posted to several
+  // pages) — delete every constituent row, not just the one whose fields happened to
+  // win the merge, or the "deleted" card would just reappear with fewer pages.
+  const deleteMut = useMutation({
+    mutationFn: (idea: Idea) => {
+      const ids: string[] = idea._ids?.length ? idea._ids : [idea.id];
+      return Promise.all(ids.map((id) => PB_API[idea._playbook as PlaybookId].deleteIdea(id)));
+    },
+    onSuccess: (_d, idea) => {
+      const ids: string[] = idea._ids?.length ? idea._ids : [idea.id];
+      qc.setQueryData<Idea[]>(["idea-engine", dayDate], (old) => (old || []).filter((i) => !ids.includes(i.id)));
+      qc.invalidateQueries({ queryKey: ["idea-engine-top6"] });
+      toast.success("Idea deleted");
+    },
+    onError: (e: any) => toast.error(e?.message || "Couldn't delete idea"),
+  });
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return merged
@@ -343,6 +365,11 @@ export default function IdeaEngineGallery() {
                 onSend={(target) => sendMut.mutate({ idea, target })}
                 onOpen={() => (canEditIdeas ? setEditIdea(idea) : navigate(PLAYBOOK_CONFIGS[idea._playbook as PlaybookId].route))}
                 canEdit={canEditIdeas}
+                canDelete={canEditIdeas}
+                deleting={deleteMut.isPending && deleteMut.variables === idea}
+                onDelete={() => {
+                  if (window.confirm(`Delete "${idea.topic || "this idea"}"? This can't be undone.`)) deleteMut.mutate(idea);
+                }}
               />
             );
           })}
@@ -451,13 +478,16 @@ function Top6Card({ idea, rank, onOpen }: { idea: Idea; rank: number; onOpen: ()
   );
 }
 
-function IdeaCard({ idea, sentTo, sending, onSend, onOpen, canEdit }: {
+function IdeaCard({ idea, sentTo, sending, onSend, onOpen, canEdit, canDelete, deleting, onDelete }: {
   idea: Idea;
   sentTo: PlaybookId[];
   sending: boolean;
   onSend: (target: PlaybookId) => void;
   onOpen: () => void;
   canEdit?: boolean;
+  canDelete?: boolean;
+  deleting?: boolean;
+  onDelete?: () => void;
 }) {
   const pb = idea._playbook as PlaybookId;
   const pages = pagesOf(idea);
@@ -475,12 +505,23 @@ function IdeaCard({ idea, sentTo, sending, onSend, onOpen, canEdit }: {
           <span style={{ width: 6, height: 6, borderRadius: 99, background: PB_ACCENT[pb] }} />
           {PLAYBOOK_CONFIGS[pb].label}
         </span>
-        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: existing ? "var(--f-faint)" : "#4ade80", border: "1px solid var(--f-line)", borderRadius: 6, padding: "2px 7px" }}>
-          {existing ? "Existing" : "New"}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {idea.blocked_reason && (
+            <span title={idea.blocked_reason} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "#FF7070", border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.1)", borderRadius: 6, padding: "2px 7px" }}>
+              🚫 Blocked
+            </span>
+          )}
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: existing ? "var(--f-faint)" : "#4ade80", border: "1px solid var(--f-line)", borderRadius: 6, padding: "2px 7px" }}>
+            {existing ? "Existing" : "New"}
+          </span>
+        </div>
       </div>
 
       <h3 style={{ fontSize: 16, fontWeight: 600, lineHeight: 1.3 }}>{idea.topic || <em style={{ color: "var(--f-faint)", fontWeight: 400 }}>Untitled idea</em>}</h3>
+
+      {idea.blocked_reason && (
+        <p style={{ margin: 0, fontSize: 12, color: "#FF7070" }}>Blocked before: {idea.blocked_reason}</p>
+      )}
 
       {existing ? (
         <>
@@ -524,6 +565,22 @@ function IdeaCard({ idea, sentTo, sending, onSend, onOpen, canEdit }: {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: "auto", paddingTop: 6 }}>
         <span style={{ fontSize: 11.5, color: "var(--f-faint)" }}>{idea.created_by ? <>by <strong style={{ color: "var(--f-dim)", fontWeight: 600 }}>{idea.created_by}</strong></> : "—"}</span>
         <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 8 }}>
+          {canDelete && (
+            <button
+              type="button"
+              onClick={onDelete}
+              disabled={deleting}
+              title="Delete idea"
+              style={{
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                width: 28, height: 28, borderRadius: 8, border: "1px solid rgba(239,68,68,.35)",
+                background: "rgba(239,68,68,.12)", color: "#ef4444", cursor: deleting ? "default" : "pointer",
+                opacity: deleting ? 0.6 : 1, flexShrink: 0,
+              }}
+            >
+              <Trash2 size={13} strokeWidth={1.8} />
+            </button>
+          )}
           <button type="button" onClick={onOpen} style={ghostBtnSm}>
             {canEdit ? "Edit" : "Open"} <ExternalLink size={12} strokeWidth={1.6} />
           </button>

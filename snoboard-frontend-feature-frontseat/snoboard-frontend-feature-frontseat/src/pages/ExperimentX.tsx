@@ -2651,6 +2651,13 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
     queryFn: () => api.getIdeaBank({ pending_only: true }),
     staleTime: EXP_STALE_MS,
     refetchOnWindowFocus: false,
+    // Cache invalidation alone only reaches this browser tab — a teammate distributing an
+    // idea from Content Distribution on their own machine has no way to tell this session
+    // its data is stale. Poll so a card someone else just sent into production shows up
+    // here without anyone needing to reload. Pauses automatically while this tab isn't
+    // visible/focused (React Query's default), so it isn't hammering the backend when no
+    // one's actually looking at the board.
+    refetchInterval: 15_000,
   });
 
   // Batch status write across every copy in a group (single base edit → all pages).
@@ -4179,6 +4186,9 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
     queryKey: QK,
     queryFn: () => api.getIdeaBank({ day_date: todayStr, enrich_cross: false }),
     staleTime: EXP_STALE_MS,
+    // Same reasoning as Production's board query — a teammate's edit on another machine
+    // (e.g. Production marking something posted) only reaches this session by polling.
+    refetchInterval: 15_000,
   });
 
   const updateMut = useMutation(expIdeaUpdateMutationOpts(qc, playbookId, api, {
