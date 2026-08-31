@@ -13,6 +13,7 @@ import { Calendar as DayCalendar } from "@/components/ui/calendar";
 import { StatusBadge } from "@/components/seeding/StatusBadge";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useIdeaBankRealtime } from "@/hooks/useIdeaBankRealtime";
 import { canonicalRole } from "@/lib/accessModel";
 import { createExpApi, type ExpApi } from "@/services/api";
 import {
@@ -172,6 +173,13 @@ export default function IdeaEngineGallery() {
   // Editing an idea's info/views straight from Idea Engine (any day) is Ops/admin's
   // call — same tier that manages Production, not CS/VE.
   const canEditIdeas = (role || "").split(",").map((r) => canonicalRole(r.trim())).some((r) => r === "co" || r === "admin" || r === "senior_cs");
+
+  // One realtime connection per playbook (hooks can't be called in a loop) — a change
+  // made anywhere (Production, Content Distribution, another Idea Engine tab) shows up
+  // here without a reload, same as everywhere else this hook is used.
+  useIdeaBankRealtime("bpb");
+  useIdeaBankRealtime("xf");
+  useIdeaBankRealtime("tech");
 
   const [dayDate, setDayDate] = useState<string>(TODAY);
   const [pickerOpen, setPickerOpen] = useState(false);

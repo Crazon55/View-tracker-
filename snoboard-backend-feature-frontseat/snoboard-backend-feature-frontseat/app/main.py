@@ -14,7 +14,7 @@ from datetime import datetime, timezone, timedelta
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_BACKEND_ROOT / ".env")
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database.repositories.pages import get_page_repository
@@ -5405,6 +5405,51 @@ async def exp_update_settings_legacy(req: ExpSettingsUpdate):
     return await exp_update_settings(DEFAULT_PLAYBOOK, req)
 
 
+# ---------------------------------------------------------------------------
+# Idea bank real-time: one WebSocket connection per playbook, in-memory (single pm2
+# process, no Redis needed). Every idea_bank write calls .broadcast(pb) so an already-open
+# browser tab (Production, Content Distribution, Idea Engine) can invalidate its own React
+# Query cache and refetch immediately, instead of waiting for its next poll. Deliberately
+# a bare "something changed" signal, not a payload diff — the frontend already knows how
+# to refetch itself for every mutation it makes locally; this just triggers that same path
+# for changes made elsewhere.
+# ---------------------------------------------------------------------------
+class IdeaBankConnectionManager:
+    def __init__(self):
+        self.connections: dict[str, set] = {}
+
+    async def connect(self, playbook: str, ws: WebSocket):
+        await ws.accept()
+        self.connections.setdefault(playbook, set()).add(ws)
+
+    def disconnect(self, playbook: str, ws: WebSocket):
+        self.connections.get(playbook, set()).discard(ws)
+
+    async def broadcast(self, playbook: str):
+        dead = []
+        for ws in self.connections.get(playbook, set()):
+            try:
+                await ws.send_json({"type": "idea-bank-changed"})
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self.connections[playbook].discard(ws)
+
+
+idea_bank_ws = IdeaBankConnectionManager()
+
+
+@app.websocket("/api/v1/experiment/{playbook}/ws")
+async def exp_idea_bank_ws(websocket: WebSocket, playbook: str):
+    pb = validate_playbook(playbook)
+    await idea_bank_ws.connect(pb, websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        idea_bank_ws.disconnect(pb, websocket)
+
+
 @app.get("/api/v1/experiment/{playbook}/idea-bank")
 async def exp_list_idea_bank(
     playbook: str,
@@ -5530,6 +5575,7 @@ async def exp_create_idea(playbook: str, req: ExpIdeaCreate):
         goal = settings.get("view_goal", 100000)
         if req.views >= goal:
             _exp_flag_working_idea(client, pb, created, goal)
+    await idea_bank_ws.broadcast(pb)
     return {"success": True, "data": created}
 
 
@@ -5625,6 +5671,7 @@ async def exp_deploy_idea_to_playbook(target_playbook: str, source_playbook: str
     )
     created = verify[0] if verify else row
     enriched = exp_enrich_ideas_cross_playbook(client, target_pb, [created])
+    await idea_bank_ws.broadcast(target_pb)
     return {"success": True, "data": enriched[0]}
 
 
@@ -5679,6 +5726,7 @@ async def exp_update_idea(playbook: str, idea_id: str, req: ExpIdeaUpdate):
         goal = settings.get("view_goal", 100000)
         if exp_sum_views(updated) >= goal:
             _exp_flag_working_idea(client, pb, {**updated, "views": exp_sum_views(updated)}, goal)
+    await idea_bank_ws.broadcast(pb)
     return {"success": True, "data": updated}
 
 
@@ -5693,6 +5741,7 @@ async def exp_delete_idea(playbook: str, idea_id: str):
     client = get_supabase_client()
     tables = get_playbook_tables(pb)
     client.table(tables.idea_bank).delete().eq("id", idea_id).execute()
+    await idea_bank_ws.broadcast(pb)
     return {"success": True}
 
 
@@ -5709,6 +5758,7 @@ async def exp_migrate_posted_to_proven(playbook: str):
     existing = _exp_idea_query(client, pb).eq("status", "posted").execute().data or []
     if existing:
         client.table(tables.idea_bank).update({"status": "proven_ideas"}).eq("status", "posted").execute()
+        await idea_bank_ws.broadcast(pb)
     return {"success": True, "updated": len(existing)}
 
 
