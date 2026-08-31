@@ -27,7 +27,7 @@ export function useIdeaBankRealtime(playbookId: string | undefined) {
       if (stopped) return;
       const proto = location.protocol === "https:" ? "wss:" : "ws:";
       socket = new WebSocket(`${proto}//${location.host}/api/v1/experiment/${playbookId}/ws`);
-      socket.onmessage = () => qc.invalidateQueries({ queryKey: ["exp", playbookId, "idea-bank"] });
+      socket.onmessage = () => qc.invalidateQueries({ queryKey: ["exp", playbookId, "idea-bank"], refetchType: "all" });
       socket.onopen = () => { retryDelay = 1000; };
       socket.onclose = () => {
         if (stopped) return;

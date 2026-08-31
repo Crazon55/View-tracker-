@@ -269,6 +269,7 @@ export default function IdeaEngineGallery() {
       setSentLocal((m) => ({ ...m, [key]: [...new Set([...(m[key] || []), target])] }));
       toast.success(`Sent to ${PLAYBOOK_CONFIGS[target].label}`);
       qc.invalidateQueries({ queryKey: ["idea-engine"] });
+      qc.invalidateQueries({ queryKey: ["exp", target, "idea-bank"], refetchType: "all" });
     },
     onError: (e: any) => toast.error(e?.message || "Couldn't send idea"),
   });
@@ -389,7 +390,11 @@ export default function IdeaEngineGallery() {
           defaultDay={dayDate}
           author={user?.user_metadata?.full_name || user?.email?.split("@")[0] || ""}
           onClose={() => setShowAdd(false)}
-          onCreated={() => { setShowAdd(false); qc.invalidateQueries({ queryKey: ["idea-engine"] }); }}
+          onCreated={() => {
+            setShowAdd(false);
+            qc.invalidateQueries({ queryKey: ["idea-engine"] });
+            qc.invalidateQueries({ queryKey: ["exp", "bpb", "idea-bank"], refetchType: "all" });
+          }}
         />
       )}
 

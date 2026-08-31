@@ -42,6 +42,38 @@ function mergeExpIdeaInCaches(qc: QueryClient, playbookId: string, ideaId: strin
   });
 }
 
+/** Drop ideas from every exp list cache (Frontseat "today" AND Production "pending").
+ *  Passing a pool id also drops its page copies (`source_pool_id`). */
+function removeExpIdeasFromCaches(qc: QueryClient, playbookId: string, ids: Iterable<string>) {
+  const idSet = new Set(ids);
+  qc.setQueriesData<any[]>({ queryKey: ["exp", playbookId] }, (old) => {
+    if (!Array.isArray(old)) return old;
+    return old.filter((i) => !idSet.has(i.id) && !idSet.has(i.source_pool_id));
+  });
+}
+
+/** Insert or replace one idea in every exp list cache so assigning a page shows on
+ *  Production immediately, without waiting for the 8s poll. */
+function upsertExpIdeaInCaches(qc: QueryClient, playbookId: string, idea: Record<string, unknown> & { id: string }) {
+  qc.setQueriesData<any[]>({ queryKey: ["exp", playbookId] }, (old) => {
+    if (!Array.isArray(old)) return old;
+    const idx = old.findIndex((i) => i.id === idea.id);
+    if (idx >= 0) {
+      const next = old.slice();
+      next[idx] = { ...old[idx], ...idea };
+      return next;
+    }
+    return [...old, idea];
+  });
+}
+
+function invalidateExpIdeaBank(qc: QueryClient, playbookId: string) {
+  // refetchType "all" warms the other board while it's unmounted (Content Distribution
+  // vs Production are separate routes now). Default "active" left Production sitting
+  // on a 30s-fresh cache until the 8s poll fired.
+  return qc.invalidateQueries({ queryKey: ["exp", playbookId, "idea-bank"], refetchType: "all" });
+}
+
 function expIdeaUpdateMutationOpts(
   qc: QueryClient,
   playbookId: string,
@@ -2651,6 +2683,7 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
     queryKey: expQk(playbookId, "idea-bank", "pending"),
     queryFn: () => api.getIdeaBank({ pending_only: true }),
     staleTime: EXP_STALE_MS,
+    refetchOnMount: "always",
     // Cache invalidation alone only reaches this browser tab — a teammate distributing (or
     // removing) an idea from Content Distribution on their own machine has no way to tell
     // this session its data is stale. Poll so a change someone else just made shows up here
@@ -2676,7 +2709,7 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
       ctx?.snapshots?.forEach(([key, data]: [unknown, unknown]) => qc.setQueryData(key as any, data));
       toast.error(e?.message || "Couldn't update");
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: ["exp", playbookId] }),
+    onSettled: () => invalidateExpIdeaBank(qc, playbookId),
   });
 
   // Video editors / carousel designers (both canonicalize to "ve") are assignees, not
@@ -4248,6 +4281,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
     queryKey: QK,
     queryFn: () => api.getIdeaBank({ day_date: todayStr, enrich_cross: false }),
     staleTime: EXP_STALE_MS,
+    refetchOnMount: "always",
     // Same reasoning as Production's board query — a teammate's edit on another machine
     // (e.g. Production marking something posted) only reaches this session by polling.
     // refetchOnWindowFocus (default true here) covers switching back from Production.
@@ -4260,33 +4294,40 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
   const deleteMut = useMutation({
     mutationFn: api.deleteIdea,
     onMutate: async (id) => {
-      await qc.cancelQueries({ queryKey: QK });
-      const prev = qc.getQueryData(QK);
-      qc.setQueryData(QK, (old: any[] = []) => old.filter((i: any) => i.id !== id));
-      return { prev };
+      await qc.cancelQueries({ queryKey: ["exp", playbookId] });
+      const snapshots = qc.getQueriesData<any[]>({ queryKey: ["exp", playbookId] });
+      removeExpIdeasFromCaches(qc, playbookId, [id]);
+      return { snapshots };
     },
-    onError: (_e, _v, ctx: any) => { if (ctx?.prev) qc.setQueryData(QK, ctx.prev); },
-    onSettled: () => qc.invalidateQueries({ queryKey: expQk(playbookId, "idea-bank") }),
+    onError: (_e, _v, ctx: any) => {
+      ctx?.snapshots?.forEach(([key, data]: [unknown, unknown]) => qc.setQueryData(key as any, data));
+    },
+    onSettled: () => invalidateExpIdeaBank(qc, playbookId),
   });
   const createCopyMut = useMutation({
     mutationFn: api.createIdea,
     onMutate: async (newData) => {
-      await qc.cancelQueries({ queryKey: QK });
-      const prev = qc.getQueryData(QK);
+      await qc.cancelQueries({ queryKey: ["exp", playbookId] });
+      const snapshots = qc.getQueriesData<any[]>({ queryKey: ["exp", playbookId] });
+      const tempId = `temp-copy-${Date.now()}`;
       const optimistic = {
-        id: `temp-copy-${Date.now()}`, ...newData,
+        id: tempId, ...newData,
         frontseat_pool: false, week_number: currentWeek,
         created_at: new Date().toISOString(), views: 0,
         page_views: {}, page_test_results: {},
       };
-      qc.setQueryData(QK, (old: any[] = []) => [...old, optimistic]);
-      return { prev };
+      upsertExpIdeaInCaches(qc, playbookId, optimistic);
+      return { snapshots, tempId };
     },
     onError: (e: any, _v, ctx: any) => {
-      if (ctx?.prev) qc.setQueryData(QK, ctx.prev);
+      ctx?.snapshots?.forEach(([key, data]: [unknown, unknown]) => qc.setQueryData(key as any, data));
       toast.error(e?.message || "Failed to assign idea");
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: expQk(playbookId, "idea-bank") }),
+    onSuccess: (created: any, _vars, ctx) => {
+      if (ctx?.tempId) removeExpIdeasFromCaches(qc, playbookId, [ctx.tempId]);
+      if (created?.id) upsertExpIdeaInCaches(qc, playbookId, created);
+    },
+    onSettled: () => invalidateExpIdeaBank(qc, playbookId),
   });
 
   // Guards against stale optimistic entries carried over from a different day.
