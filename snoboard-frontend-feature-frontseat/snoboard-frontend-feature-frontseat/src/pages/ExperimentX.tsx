@@ -74,80 +74,67 @@ function expIdeaUpdateMutationOpts(
 // ---------------------------------------------------------------------------
 // Constants (shared across playbooks)
 // ---------------------------------------------------------------------------
-const STAGES = ["new","approved","base_edit","script_hook","designed","formatted","review","gtg","testing","proven_ideas","scheduled","posted","kill"] as const;
+const STAGES = ["new","approved","under_edit","changes","review","gtg","testing","proven_ideas","scheduled","posted","blocked","kill"] as const;
 type IdeaStage = (typeof STAGES)[number];
 
-// Single flat order works for both pipelines: each pipeline's own stages are still
-// monotonically increasing along this scale, even though the two never share every step.
+// Same 7-stage pipeline for both reels and carousels: Approved → Under edit → Changes →
+// Review → GTG → Posted → Blocked. Blocked is given the highest order (not a "next" step,
+// but still must be `in PRODUCTION_STAGE_ORDER` — that's what keeps a card on the board at
+// all, see ProductionTab's `copies` filter) so a blocked page never reads as "behind" the
+// rest of its group.
 const PRODUCTION_STAGE_ORDER: Record<string, number> = {
-  approved: 0, base_edit: 1, script_hook: 2, designed: 3, formatted: 4, review: 5, gtg: 6, posted: 7,
+  approved: 0, under_edit: 1, changes: 2, review: 3, gtg: 4, posted: 5, blocked: 6,
 };
 
-/** Carousel: Approved → Designed → Review → GTG → Posted. Reel (default): Approved →
- *  Base edit → Script/Hook → Formatted → Review → GTG → Posted. Posted is reached the
- *  same way for both, but is gated to Ops/admin regardless of content type (see
- *  ProductionTab's `advance`). */
+/** Approved → Under edit → Review → GTG → Posted is the "normal" forward path (the
+ *  single "next stage" button). Changes/Blocked are QC-triggered detours, not part of the
+ *  auto-suggested next step — reachable only via drag-and-drop or an explicit button (see
+ *  ProductionTab's `advance`), same treatment "kill" already gets elsewhere. Posted is
+ *  gated to Ops/admin regardless of content type. */
 function getProductionNext(contentType: string | null | undefined, stage: string): { to: string; label: string } | null {
-  const isCarousel = (contentType || "").trim().toLowerCase() === "carousel";
-  if (isCarousel) {
-    return (
-      {
-        approved: { to: "designed", label: "Mark designed" },
-        designed: { to: "review", label: "Send to review" },
-        review:   { to: "gtg", label: "Mark GTG" },
-        gtg:      { to: "posted", label: "Mark posted" },
-      } as Record<string, { to: string; label: string }>
-    )[stage] || null;
-  }
   return (
     {
-      approved:    { to: "base_edit", label: "Start base edit" },
-      base_edit:   { to: "script_hook", label: "Add script/hook" },
-      script_hook: { to: "formatted", label: "Mark formatted" },
-      formatted:   { to: "review", label: "Send to review" },
-      review:      { to: "gtg", label: "Mark GTG" },
-      gtg:         { to: "posted", label: "Mark posted" },
+      approved:   { to: "under_edit", label: "Start editing" },
+      under_edit: { to: "review", label: "Send to review" },
+      review:     { to: "gtg", label: "Mark GTG" },
+      gtg:        { to: "posted", label: "Mark posted" },
     } as Record<string, { to: string; label: string }>
   )[stage] || null;
 }
 
-/** Is `stage` actually part of this content type's pipeline? Used to stop a reel card
- *  being dropped on "Designed" (or a carousel card on "Base edit" etc.) via drag-and-drop. */
+/** Is `stage` actually part of the production pipeline? Used to stop a card being dropped
+ *  on a non-pipeline column via drag-and-drop. */
 function isStageInPipeline(contentType: string | null | undefined, stage: string): boolean {
-  const isCarousel = (contentType || "").trim().toLowerCase() === "carousel";
-  if (isCarousel) return ["approved", "designed", "review", "gtg", "posted"].includes(stage);
-  return ["approved", "base_edit", "script_hook", "formatted", "review", "gtg", "posted"].includes(stage);
+  return ["approved", "under_edit", "changes", "review", "gtg", "posted", "blocked"].includes(stage);
 }
 
 const STAGE_LABEL: Record<IdeaStage, string> = {
   new:          "New",
   approved:     "Approved",
-  base_edit:    "Base edit",
-  script_hook:  "Script/Hook",
-  designed:     "Designed",
-  formatted:    "Formatted",
+  under_edit:   "Under edit",
+  changes:      "Changes",
   review:       "Review",
   gtg:          "GTG",
   testing:      "Testing",
   proven_ideas: "Proven",
   scheduled:    "Scheduled",
   posted:       "Posted",
+  blocked:      "Blocked",
   kill:         "Killed",
 };
 
 const STATUS_STYLE: Record<string, { bg: string; text: string }> = {
   new:          { bg: "rgba(74,127,212,0.15)",   text: "#7BB0FF" },
   approved:     { bg: "rgba(45,158,95,0.15)",    text: "#5AE0A0" },
-  base_edit:    { bg: "rgba(123,97,196,0.15)",   text: "#B49EFF" },
-  script_hook:  { bg: "rgba(255,149,128,0.15)",  text: "#FF9580" },
-  designed:     { bg: "rgba(255,126,182,0.15)",  text: "#FF7EB6" },
-  formatted:    { bg: "rgba(56,189,248,0.15)",   text: "#5AD1FF" },
+  under_edit:   { bg: "rgba(123,97,196,0.15)",   text: "#B49EFF" },
+  changes:      { bg: "rgba(255,209,102,0.15)",  text: "#FFD166" },
   review:       { bg: "rgba(255,209,102,0.15)",  text: "#FFD166" },
   gtg:          { bg: "rgba(80,224,176,0.15)",   text: "#50E0B0" },
   testing:      { bg: "rgba(212,149,42,0.15)",   text: "#F0C060" },
   proven_ideas: { bg: "rgba(29,158,117,0.15)",   text: "#50E0B0" },
   scheduled:    { bg: "rgba(83,74,183,0.15)",    text: "#9B8FFF" },
   posted:       { bg: "rgba(45,158,95,0.15)",    text: "#5AE0A0" },
+  blocked:      { bg: "rgba(201,59,59,0.15)",    text: "#FF7070" },
   kill:         { bg: "rgba(201,59,59,0.15)",    text: "#FF7070" },
   // legacy fallbacks
   draft:        { bg: "rgba(74,127,212,0.15)",   text: "#7BB0FF" },
@@ -974,8 +961,8 @@ function PerPageViewInput({ value, pageColor, onSave }: { value: number; pageCol
 // Stage action buttons — same progression as Content Tracker
 const STAGE_ACTIONS: Record<string, { label: string; stage: string; bg: string; color: string }[]> = {
   new:          [{ label: "Approve", stage: "approved", bg: "#7c3aed", color: "#fff" }, { label: "Reject", stage: "kill", bg: "transparent", color: "#C93B3B" }],
-  approved:     [{ label: "Start base edit", stage: "base_edit", bg: "#7c3aed", color: "#fff" }],
-  base_edit:    [{ label: "Start testing", stage: "testing", bg: "#7c3aed", color: "#fff" }],
+  approved:     [{ label: "Start editing", stage: "under_edit", bg: "#7c3aed", color: "#fff" }],
+  under_edit:   [{ label: "Start testing", stage: "testing", bg: "#7c3aed", color: "#fff" }],
   testing:      [{ label: "Proven / Batch edit", stage: "proven_ideas", bg: "#1D9E75", color: "#fff" }, { label: "Kill it", stage: "kill", bg: "transparent", color: "#C93B3B" }],
   proven_ideas: [{ label: "Schedule", stage: "scheduled", bg: "#534AB7", color: "#fff" }],
   scheduled:    [{ label: "Mark posted", stage: "posted", bg: "#2D9E5F", color: "#fff" }],
@@ -2277,10 +2264,10 @@ function CalendarTab({ pageFilter, search, opsOnly, calendarViewOnly }: {
 
 // Stage column dot colors
 const STAGE_DOT: Record<string, string> = {
-  new: "#4A7FD4", approved: "#2D9E5F", base_edit: "#7B61C4", script_hook: "#FF9580",
-  designed: "#FF7EB6", formatted: "#38BDF8", review: "#FFD166", gtg: "#50E0B0",
+  new: "#4A7FD4", approved: "#2D9E5F", under_edit: "#7B61C4", changes: "#FFD166",
+  review: "#FFD166", gtg: "#50E0B0",
   testing: "#D4952A", proven_ideas: "#1D9E75", scheduled: "#534AB7",
-  posted: "#2D9E5F", kill: "#C93B3B",
+  posted: "#2D9E5F", blocked: "#C93B3B", kill: "#C93B3B",
 };
 
 // ---------------------------------------------------------------------------
@@ -2646,7 +2633,8 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
   const { role } = usePermissions();
   const qc = useQueryClient();
   const [detailGroup, setDetailGroup] = useState<ProdGroup | null>(null);
-  const [checklist, setChecklist] = useState<{ group: ProdGroup; to: "formatted" | "posted" } | null>(null);
+  const [checklist, setChecklist] = useState<{ group: ProdGroup; to: "posted" } | null>(null);
+  const [stageComment, setStageComment] = useState<{ group: ProdGroup; to: "changes" | "blocked" } | null>(null);
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
   const [dropStage, setDropStage] = useState<string | null>(null);
 
@@ -2695,9 +2683,9 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
   const isOpsOrAdmin = roleList.some((r) => r === "co" || r === "admin" || r === "senior_cs");
   // contentTypeFilter/viewBy/personFilter are owned by ExperimentXShell now (rendered
   // in the shared top filter bar, always visible without scrolling) and passed down.
-  const boardStages = contentTypeFilter === "carousel"
-    ? (["approved", "designed", "review", "gtg", "posted"] as const)
-    : (["approved", "base_edit", "script_hook", "formatted", "review", "gtg", "posted"] as const);
+  // Same 7-stage board for both content types now — Blocked sits at the end as an
+  // always-reachable side column, same treatment "kill" gets elsewhere.
+  const boardStages = ["approved", "under_edit", "changes", "review", "gtg", "posted", "blocked"] as const;
 
   // Pipeline copies (not pool ideas) sitting in a production stage. The backend already
   // scoped `allIdeas` to "not posted (any day) OR posted today" — a card that missed its
@@ -2751,36 +2739,44 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
     return map;
   }, [groups]);
 
-  // Formatted/Posted ask which pages (page checklist); Approved/Base edit apply to the
-  // whole group directly. Used by both the button and drag-and-drop between columns —
-  // gating Posted here (not just on the button) closes the drag-and-drop path too.
+  // Posted asks which pages (page checklist, and stamps each page's posting date);
+  // Changes/Blocked ask for a mandatory reason (StageCommentModal), restricted to
+  // Ops/admin; everything else applies to the whole group directly. Used by both the
+  // button and drag-and-drop between columns — gating here (not just on the button)
+  // closes the drag-and-drop path too.
   const advance = (group: ProdGroup, to: string) => {
     if (to === "posted" && !isOpsOrAdmin) return;
-    if (to === "formatted" || to === "posted") {
+    if ((to === "changes" || to === "blocked") && !isOpsOrAdmin) return;
+    if (to === "posted") {
       setChecklist({ group, to });
+    } else if (to === "changes" || to === "blocked") {
+      setStageComment({ group, to });
     } else {
       batchMut.mutate({ ids: group.copies.map((c) => c.id), data: { status: to } });
     }
   };
 
-  const applyChecklist = (group: ProdGroup, to: "formatted" | "posted", pickedPages: string[]) => {
+  const applyChecklist = (group: ProdGroup, to: "posted", pickedPages: string[]) => {
     const ids = group.copies
       .filter((c) => pickedPages.includes((c.page_handle || "").trim()))
       .map((c) => c.id);
     if (!ids.length) { setChecklist(null); return; }
-    const data: Record<string, unknown> = { status: to };
-    if (to === "posted") {
-      // Each copy is a single-page row → stamp that page's posting date to today.
-      group.copies
-        .filter((c) => ids.includes(c.id))
-        .forEach((c) => {
-          const page = (c.page_handle || "").trim();
-          batchMut.mutate({ ids: [c.id], data: { status: "posted", page_posting_dates: { ...(c.page_posting_dates || {}), [page]: todayStr } } });
-        });
-    } else {
-      batchMut.mutate({ ids, data });
-    }
+    // Each copy is a single-page row → stamp that page's posting date to today.
+    group.copies
+      .filter((c) => ids.includes(c.id))
+      .forEach((c) => {
+        const page = (c.page_handle || "").trim();
+        batchMut.mutate({ ids: [c.id], data: { status: "posted", page_posting_dates: { ...(c.page_posting_dates || {}), [page]: todayStr } } });
+      });
     setChecklist(null);
+  };
+
+  const applyStageComment = (group: ProdGroup, to: "changes" | "blocked", text: string) => {
+    batchMut.mutate({
+      ids: group.copies.map((c) => c.id),
+      data: { status: to, [to === "changes" ? "changes_comment" : "blocked_reason"]: text },
+    });
+    setStageComment(null);
   };
 
   if (isLoading) return <p style={{ color: "var(--pb-faint)", fontSize: 12, padding: "20px 0" }}>Loading…</p>;
@@ -2909,6 +2905,14 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
           onClose={() => setChecklist(null)}
         />
       )}
+      {stageComment && (
+        <StageCommentModal
+          group={stageComment.group}
+          to={stageComment.to}
+          onConfirm={(text) => applyStageComment(stageComment.group, stageComment.to, text)}
+          onClose={() => setStageComment(null)}
+        />
+      )}
       {detailGroup && (
         <ProductionDetailModal
           group={detailGroup}
@@ -3019,9 +3023,32 @@ function ProductionDetailModal({ group, pageColors, readOnly, canMarkPosted, onA
         {src.comp_link && <a href={src.comp_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block", marginTop: 4 }}>{src.comp_link}</a>}
       </div>
 
-      {!readOnly && next && (next.to !== "posted" || canMarkPosted) && (
-        <div style={{ display: "flex", gap: 8 }}>
-          <button type="button" onClick={() => { onAdvance(next.to); onClose(); }} style={btnPrimary}>{next.label}</button>
+      {/* Changes/Blocked notes — persist and stay visible here regardless of the group's
+          current stage, per how `advance` writes them (see ProductionCard's `note`). */}
+      {(src.changes_comment || src.blocked_reason) && (
+        <div>
+          <label style={ls}>{src.blocked_reason ? "Blocked reason" : "Changes requested"}</label>
+          <p style={{ margin: 0, fontSize: 13, color: src.blocked_reason ? "#FF7070" : "#FFD166", whiteSpace: "pre-wrap", lineHeight: 1.4 }}>
+            {src.blocked_reason || src.changes_comment}
+          </p>
+        </div>
+      )}
+
+      {!readOnly && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {next && (next.to !== "posted" || canMarkPosted) && (
+            <button type="button" onClick={() => { onAdvance(next.to); onClose(); }} style={btnPrimary}>{next.label}</button>
+          )}
+          {canMarkPosted && group.stage !== "changes" && (
+            <button type="button" onClick={() => onAdvance("changes")} style={{ padding: "8px 18px", borderRadius: 8, border: "1.5px solid #FFD166", background: "transparent", color: "#FFD166", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+              Send to Changes
+            </button>
+          )}
+          {canMarkPosted && group.stage !== "blocked" && (
+            <button type="button" onClick={() => onAdvance("blocked")} style={{ padding: "8px 18px", borderRadius: 8, border: "1.5px solid #FF7070", background: "transparent", color: "#FF7070", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+              Mark Blocked
+            </button>
+          )}
           <button type="button" onClick={onClose} style={btnSecondary}>Close</button>
         </div>
       )}
@@ -3043,6 +3070,11 @@ function ProductionCard({ group, pageColors, readOnly, canMarkPosted, onOpen, on
     const c = group.copies.find((x) => (x.page_handle || "").trim() === page);
     return prodStage(c?.status);
   };
+  // A Changes/Blocked note stays visible on the card even after it moves on to another
+  // stage — every copy in the group carries the same value (see `advance`), so any copy
+  // works as the read source.
+  const note = group.copies[0]?.changes_comment || group.copies[0]?.blocked_reason || "";
+  const noteIsBlocked = !!group.copies[0]?.blocked_reason;
   return (
     <PbKanbanCardShell isSelected={false} onClick={onOpen}>
       <p style={{
@@ -3081,6 +3113,14 @@ function ProductionCard({ group, pageColors, readOnly, canMarkPosted, onOpen, on
           </div>
         ) : null;
       })()}
+      {note && (
+        <p title={note} style={{
+          margin: "5px 0 0", fontSize: 10.5, lineHeight: 1.3, color: noteIsBlocked ? "#FF7070" : "#FFD166",
+          overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+        } as any}>
+          {noteIsBlocked ? "🚫 " : "✎ "}{note}
+        </p>
+      )}
       {!readOnly && next && (next.to !== "posted" || canMarkPosted) && (
         <button
           type="button"
@@ -3096,7 +3136,7 @@ function ProductionCard({ group, pageColors, readOnly, canMarkPosted, onOpen, on
 
 function PageChecklistModal({ group, to, pageColors, onConfirm, onClose }: {
   group: ProdGroup;
-  to: "formatted" | "posted";
+  to: "posted";
   pageColors: Record<string, string>;
   onConfirm: (pages: string[]) => void;
   onClose: () => void;
@@ -3105,7 +3145,7 @@ function PageChecklistModal({ group, to, pageColors, onConfirm, onClose }: {
   // moving forward to the stage, or backtracking a card into it.
   const allPages = [...new Set(group.copies.map((c) => (c.page_handle || "").trim()).filter(Boolean))];
   const [picked, setPicked] = useState<string[]>(allPages);
-  const verb = to === "formatted" ? "formatted" : "posted";
+  const verb = "posted";
   return (
     <PbGlassModalShell onClose={onClose}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -3129,6 +3169,55 @@ function PageChecklistModal({ group, to, pageColors, onConfirm, onClose }: {
       <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
         <button type="button" onClick={() => onConfirm(picked)} disabled={!picked.length} style={{ ...btnPrimary, opacity: picked.length ? 1 : 0.5 }}>
           Mark {verb}
+        </button>
+        <button type="button" onClick={onClose} style={btnSecondary}>Cancel</button>
+      </div>
+    </PbGlassModalShell>
+  );
+}
+
+// Mandatory reason capture for the two QC-gated stages — Changes (a specific change is
+// needed before this can move on) and Blocked (production is stuck on something). The
+// backend rejects the status write outright without this, so Confirm stays disabled
+// until there's real text, not just to be helpful.
+function StageCommentModal({ group, to, onConfirm, onClose }: {
+  group: ProdGroup;
+  to: "changes" | "blocked";
+  onConfirm: (text: string) => void;
+  onClose: () => void;
+}) {
+  const [text, setText] = useState("");
+  const isChanges = to === "changes";
+  const title = isChanges ? "Send to Changes" : "Mark Blocked";
+  const label = isChanges ? "What needs to change? (QC check + specific change required)" : "Why is this blocked?";
+  const placeholder = isChanges
+    ? "e.g. Hook doesn't match the comp, re-cut the first 3 seconds"
+    : "e.g. Waiting on Drive access from the CS";
+  const trimmed = text.trim();
+  return (
+    <PbGlassModalShell onClose={onClose}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "var(--pb-ink)" }}>{title}</h3>
+        <button onClick={onClose} style={pbModalCloseBtn}>×</button>
+      </div>
+      <p className="fglass-muted" style={{ margin: 0, fontSize: 12 }}>{group.topic || "Untitled idea"}</p>
+      <div>
+        <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--pb-dim)", marginBottom: 6, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+          {label}
+        </label>
+        <textarea
+          autoFocus
+          className="fglass-input"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={placeholder}
+          rows={4}
+          style={{ width: "100%", padding: "9px 13px", borderRadius: 9, fontSize: 13, outline: "none", boxSizing: "border-box", resize: "vertical", minHeight: 90 }}
+        />
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+        <button type="button" onClick={() => onConfirm(trimmed)} disabled={!trimmed} style={{ ...btnPrimary, opacity: trimmed ? 1 : 0.5 }}>
+          {title}
         </button>
         <button type="button" onClick={onClose} style={btnSecondary}>Cancel</button>
       </div>
@@ -4198,7 +4287,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
     createCopyMut.mutate({
       topic: idea.topic, source: idea.source, content_type: idea.content_type,
       video_format: idea.video_format || "", content_format: idea.content_format || "",
-      status: hasBaseEdit ? "base_edit" : "approved", page_handle: page,
+      status: hasBaseEdit ? "under_edit" : "approved", page_handle: page,
       hook_variations: idea.hook_variations || "",
       comp_link: idea.comp_link || "", yt_url: idea.yt_url || "",
       yt_timestamps: idea.yt_timestamps || "",
@@ -4213,7 +4302,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
     }
   };
 
-  const legendStages: IdeaStage[] = ["approved", "base_edit", "testing", "proven_ideas", "kill"];
+  const legendStages: IdeaStage[] = ["approved", "under_edit", "testing", "proven_ideas", "kill"];
 
   // Ideas Pool panel — identical in both the kanban and the page-accordion (table)
   // view, so it's built once here rather than duplicated.
@@ -4331,7 +4420,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
     createCopyMut.mutate({
       topic: pool.topic, source: pool.source, content_type: pool.content_type,
       video_format: pool.video_format || "", content_format: pool.content_format || "",
-      status: hasBaseEdit ? "base_edit" : "approved", page_handle: page,
+      status: hasBaseEdit ? "under_edit" : "approved", page_handle: page,
       hook_variations: pool.hook_variations || "",
       comp_link: pool.comp_link || "", yt_url: pool.yt_url || "",
       yt_timestamps: pool.yt_timestamps || "",

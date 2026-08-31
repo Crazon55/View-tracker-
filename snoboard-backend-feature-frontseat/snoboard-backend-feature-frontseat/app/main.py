@@ -5639,6 +5639,13 @@ async def exp_update_idea(playbook: str, idea_id: str, req: ExpIdeaUpdate):
     client = get_supabase_client()
     tables = get_playbook_tables(pb)
     update_data = {k: v for k, v in req.model_dump().items() if v is not None}
+    # Production's Changes/Blocked stages are a QC gate — moving into either without a
+    # reason defeats the point, so this is enforced here (not just in the UI) the same way
+    # every other real constraint on this endpoint is.
+    if update_data.get("status") == "changes" and not (update_data.get("changes_comment") or "").strip():
+        raise HTTPException(status_code=400, detail="A comment is required when moving to Changes")
+    if update_data.get("status") == "blocked" and not (update_data.get("blocked_reason") or "").strip():
+        raise HTTPException(status_code=400, detail="A reason is required when moving to Blocked")
     if "day_date" in update_data:
         update_data["week_number"] = _exp_compute_week_number(client, pb, update_data["day_date"])
     client.table(tables.idea_bank).update(update_data).eq("id", idea_id).execute()

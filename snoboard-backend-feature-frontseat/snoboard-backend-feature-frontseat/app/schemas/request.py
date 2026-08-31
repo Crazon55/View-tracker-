@@ -208,6 +208,8 @@ class ExpIdeaUpdate(BaseModel):
     likes: int | None = None
     page_likes: dict | None = None
     page_test_results: dict | None = None
+    changes_comment: str | None = None
+    blocked_reason: str | None = None
     day_date: str | None = None
     source: str | None = None
     hook_variations: str | None = None
