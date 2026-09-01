@@ -191,6 +191,31 @@ function canReviewEngineIdeas(email: string | undefined, role: string | null): b
   return (role || "").split(",").map((r) => canonicalRole(r.trim())).some((r) => r === "admin" || r === "co");
 }
 
+function identityKeys(user: { email?: string | null; user_metadata?: Record<string, unknown> } | null | undefined): string[] {
+  const keys = new Set<string>();
+  const add = (raw: unknown) => {
+    const s = String(raw || "").trim().toLowerCase();
+    if (!s) return;
+    keys.add(s);
+    keys.add(s.replace(/[._-]+/g, " ").replace(/\s+/g, " "));
+    if (s.includes("@")) keys.add(s.split("@")[0]);
+  };
+  add(user?.email);
+  add(user?.user_metadata?.full_name);
+  add(user?.user_metadata?.name);
+  return [...keys];
+}
+
+/** True when this Idea Engine card was created by the signed-in person (name or Gmail). */
+function isIdeaAuthor(idea: any, user: { email?: string | null; user_metadata?: Record<string, unknown> } | null | undefined): boolean {
+  const by = String(idea?.created_by || "").trim().toLowerCase();
+  if (!by) return false;
+  const keys = identityKeys(user);
+  if (keys.includes(by)) return true;
+  const byNorm = by.replace(/[._-]+/g, " ").replace(/\s+/g, " ");
+  return keys.includes(byNorm);
+}
+
 type Idea = any & { _playbook: PlaybookId };
 
 export default function IdeaEngineGallery() {
@@ -198,9 +223,11 @@ export default function IdeaEngineGallery() {
   const qc = useQueryClient();
   const { user } = useAuth();
   const { role } = usePermissions();
-  // Editing an idea's info/views straight from Idea Engine (any day) is Ops/admin's
-  // call — same tier that manages Production, not CS/VE.
-  const canEditIdeas = (role || "").split(",").map((r) => canonicalRole(r.trim())).some((r) => r === "co" || r === "admin" || r === "senior_cs");
+  const roleList = (role || "").split(",").map((r) => canonicalRole(r.trim())).filter(Boolean);
+  // Ops/admin can edit any Idea Engine card. CS can edit the ones they created.
+  const canManageAllIdeas = roleList.some((r) => r === "co" || r === "admin" || r === "senior_cs");
+  const isCs = roleList.includes("cs");
+  const canEditCard = (idea: Idea) => canManageAllIdeas || (isCs && isIdeaAuthor(idea, user));
   const canReviewIdeas = canReviewEngineIdeas(user?.email, role);
 
   // One realtime connection per playbook (hooks can't be called in a loop) — a change
@@ -399,7 +426,7 @@ export default function IdeaEngineGallery() {
                 key={`${idea._playbook}-${idea.id}`}
                 idea={idea}
                 rank={i + 1}
-                onOpen={() => (canEditIdeas ? setEditIdea(idea) : navigate(PLAYBOOK_CONFIGS[idea._playbook as PlaybookId].route))}
+                onOpen={() => (canEditCard(idea) ? setEditIdea(idea) : navigate(PLAYBOOK_CONFIGS[idea._playbook as PlaybookId].route))}
               />
             ))}
           </div>
@@ -465,9 +492,9 @@ export default function IdeaEngineGallery() {
                 sentTo={sentLocal[key] || []}
                 sending={sendMut.isPending && sendMut.variables?.idea === idea}
                 onSend={(target) => sendMut.mutate({ idea, target })}
-                onOpen={() => (canEditIdeas ? setEditIdea(idea) : navigate(PLAYBOOK_CONFIGS[idea._playbook as PlaybookId].route))}
-                canEdit={canEditIdeas}
-                canDelete={canEditIdeas}
+                onOpen={() => (canEditCard(idea) ? setEditIdea(idea) : navigate(PLAYBOOK_CONFIGS[idea._playbook as PlaybookId].route))}
+                canEdit={canEditCard(idea)}
+                canDelete={canManageAllIdeas}
                 deleting={deleteMut.isPending && deleteMut.variables === idea}
                 onDelete={() => {
                   if (window.confirm(`Delete "${idea.topic || "this idea"}"? This can't be undone.`)) deleteMut.mutate(idea);
