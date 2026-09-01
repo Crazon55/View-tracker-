@@ -245,6 +245,7 @@ export default function IdeaEngineGallery() {
 
   const [dayDate, setDayDate] = useState<string>(TODAY);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [scoreScope, setScoreScope] = useState<"day" | "all">("day");
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [editIdea, setEditIdea] = useState<Idea | null>(null);
@@ -290,6 +291,9 @@ export default function IdeaEngineGallery() {
   const allTally = useMemo(() => tallyReviews(allMerged), [allMerged]);
   const allType = useMemo(() => tallyByType(allMerged), [allMerged]);
   const allPeople = useMemo(() => tallyByPerson(allMerged), [allMerged]);
+  const scoreTally = scoreScope === "all" ? allTally : dayTally;
+  const scoreType = scoreScope === "all" ? allType : dayType;
+  const scorePeople = scoreScope === "all" ? allPeople : dayPeople;
 
   // "Top 6" — best-performing posted ideas across all playbooks, all-time (not scoped to
   // the day-picker below). Backend already filters to posted ideas crossing either
@@ -467,83 +471,14 @@ export default function IdeaEngineGallery() {
         </div>
       </div>
 
-      <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", fontSize: 12.5 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--f-faint)" }}>
-            Jaskaran's review
-          </span>
-          <span style={{ color: "var(--f-dim)" }}>
-            {prettyDate(dayDate)} ·{" "}
-            <strong style={{ color: "#86efac", fontWeight: 600 }}>{dayTally.approved} approved</strong>
-            {" · "}
-            <strong style={{ color: "#fca5a5", fontWeight: 600 }}>{dayTally.rejected} rejected</strong>
-            {" · "}
-            {dayTally.pending} pending
-          </span>
-          <span style={{ color: "var(--f-faint)" }}>
-            All time · {allTally.approved} approved · {allTally.rejected} rejected · {allTally.pending} pending
-          </span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", fontSize: 12.5 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--f-faint)" }}>
-            Format split
-          </span>
-          <span style={{ color: "var(--f-dim)" }}>
-            {prettyDate(dayDate)} · {dayType.reels} reels · {dayType.carousels} carousels
-          </span>
-          <span style={{ color: "var(--f-faint)" }}>
-            All time · {allType.reels} reels · {allType.carousels} carousels
-          </span>
-        </div>
-        {dayPeople.length > 0 && (
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--f-faint)", marginBottom: 7 }}>
-              Per person · {prettyDate(dayDate)}
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {dayPeople.map((p) => (
-                <span
-                  key={p.name}
-                  style={{
-                    display: "inline-flex", alignItems: "baseline", gap: 6, flexWrap: "wrap",
-                    fontSize: 12, color: "var(--f-dim)", padding: "6px 10px", borderRadius: 9,
-                    border: "1px solid var(--f-line)", background: "rgba(255,255,255,.03)",
-                  }}
-                >
-                  <strong style={{ color: "var(--f-ink)", fontWeight: 600 }}>{p.name}</strong>
-                  <span>{p.added} added</span>
-                  <span style={{ color: "#86efac" }}>{p.approved} approved</span>
-                  <span style={{ color: "#fca5a5" }}>{p.rejected} rejected</span>
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-        {allPeople.length > 0 && (
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--f-faint)", marginBottom: 7 }}>
-              Per person · all time
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {allPeople.map((p) => (
-                <span
-                  key={`all-${p.name}`}
-                  style={{
-                    display: "inline-flex", alignItems: "baseline", gap: 6, flexWrap: "wrap",
-                    fontSize: 12, color: "var(--f-faint)", padding: "6px 10px", borderRadius: 9,
-                    border: "1px solid var(--f-line)",
-                  }}
-                >
-                  <strong style={{ color: "var(--f-dim)", fontWeight: 600 }}>{p.name}</strong>
-                  <span>{p.added} added</span>
-                  <span style={{ color: "#86efac" }}>{p.approved} approved</span>
-                  <span style={{ color: "#fca5a5" }}>{p.rejected} rejected</span>
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+      <ReviewBoard
+        scope={scoreScope}
+        onScope={setScoreScope}
+        dayLabel={prettyDate(dayDate)}
+        tally={scoreTally}
+        typeTally={scoreType}
+        people={scorePeople}
+      />
 
       {/* Gallery */}
       {isLoading ? (
@@ -1257,6 +1192,81 @@ function DatePill({ active, onClick, children }: { active: boolean; onClick: () 
     <button type="button" onClick={onClick} style={{ ...datePillBase, cursor: "pointer", background: active ? "#fff" : "transparent", color: active ? "#000" : "var(--f-dim)", borderColor: active ? "#fff" : "var(--f-line)", fontWeight: active ? 600 : 500 }}>
       {children}
     </button>
+  );
+}
+
+function ReviewStat({ n, label, color }: { n: number; label: string; color?: string }) {
+  return (
+    <div>
+      <div style={{ fontSize: 22, fontWeight: 650, fontVariantNumeric: "tabular-nums", color: color || "var(--f-ink)", lineHeight: 1.15 }}>{n}</div>
+      <div style={{ fontSize: 12, color: "var(--f-faint)", marginTop: 2 }}>{label}</div>
+    </div>
+  );
+}
+
+function ReviewBoard({
+  scope, onScope, dayLabel, tally, typeTally, people,
+}: {
+  scope: "day" | "all";
+  onScope: (s: "day" | "all") => void;
+  dayLabel: string;
+  tally: { approved: number; rejected: number; pending: number };
+  typeTally: { reels: number; carousels: number };
+  people: PersonTally[];
+}) {
+  const th: React.CSSProperties = { fontWeight: 500, padding: "0 12px 8px 0", borderBottom: "1px solid var(--f-line)", color: "var(--f-faint)", fontSize: 12 };
+  const td: React.CSSProperties = { padding: "7px 12px 7px 0", borderBottom: "1px solid var(--f-line)", color: "var(--f-dim)" };
+  const seg = (active: boolean): React.CSSProperties => ({
+    padding: "5px 12px",
+    fontSize: 12.5,
+    fontWeight: active ? 600 : 500,
+    border: "none",
+    background: active ? "#fff" : "transparent",
+    color: active ? "#000" : "var(--f-dim)",
+    cursor: "pointer",
+    borderRadius: 7,
+  });
+  return (
+    <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--f-line)" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
+        <div style={{ fontSize: 13, color: "var(--f-dim)" }}>Review</div>
+        <div style={{ display: "inline-flex", padding: 3, borderRadius: 9, border: "1px solid var(--f-line)" }}>
+          <button type="button" style={seg(scope === "day")} onClick={() => onScope("day")}>{dayLabel}</button>
+          <button type="button" style={seg(scope === "all")} onClick={() => onScope("all")}>All time</button>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 28, flexWrap: "wrap", marginBottom: people.length ? 16 : 0 }}>
+        <ReviewStat n={tally.approved} label="approved" color="#86efac" />
+        <ReviewStat n={tally.rejected} label="rejected" color="#fca5a5" />
+        <ReviewStat n={tally.pending} label="pending" />
+        <ReviewStat n={typeTally.reels} label="reels" />
+        <ReviewStat n={typeTally.carousels} label="carousels" />
+      </div>
+      {people.length > 0 && (
+        <div style={{ maxHeight: 260, overflowY: "auto", maxWidth: 480 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr>
+                <th style={{ ...th, textAlign: "left" }}>Name</th>
+                <th style={{ ...th, textAlign: "right" }}>Added</th>
+                <th style={{ ...th, textAlign: "right" }}>Approved</th>
+                <th style={{ ...th, textAlign: "right" }}>Rejected</th>
+              </tr>
+            </thead>
+            <tbody>
+              {people.map((p) => (
+                <tr key={p.name}>
+                  <td style={{ ...td, color: "var(--f-ink)", fontWeight: 500 }}>{p.name}</td>
+                  <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{p.added}</td>
+                  <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums", color: p.approved ? "#86efac" : "var(--f-dim)" }}>{p.approved}</td>
+                  <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums", color: p.rejected ? "#fca5a5" : "var(--f-dim)" }}>{p.rejected}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
 
