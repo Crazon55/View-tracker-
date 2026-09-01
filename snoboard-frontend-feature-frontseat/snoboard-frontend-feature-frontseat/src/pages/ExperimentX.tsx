@@ -4840,11 +4840,17 @@ function ExperimentXShell() {
   const roleListProd = (role || "").split(",").map(r => canonicalRole(r.trim())).filter(Boolean);
   const soloViewProd = isEditorSoloView(role, user?.email);
   const isOpsOrAdminProd = roleListProd.some(r => r === "co" || r === "admin" || r === "senior_cs");
+  const myEmailLowerProd = (user?.email || "").trim().toLowerCase();
+  const onCarouselRoster = ASSIGNEE_OPTIONS.carousel.some(a => a.email.toLowerCase() === myEmailLowerProd);
+  const onReelRoster = ASSIGNEE_OPTIONS.reel.some(a => a.email.toLowerCase() === myEmailLowerProd);
+  const dualContentRoster = onCarouselRoster && onReelRoster;
   const isCarouselRoleProd =
     (role || "").split(",").map(r => r.trim().toLowerCase()).includes("carousel_designer")
-    || ASSIGNEE_OPTIONS.carousel.some(a => a.email.toLowerCase() === (user?.email || "").trim().toLowerCase());
+    || (onCarouselRoster && !onReelRoster);
   const [contentTypeFilterChoice, setContentTypeFilterChoice] = useState<"reel" | "carousel">("reel");
-  const contentTypeFilter = soloViewProd ? (isCarouselRoleProd ? "carousel" : "reel") : contentTypeFilterChoice;
+  const contentTypeFilter = soloViewProd && !dualContentRoster
+    ? (isCarouselRoleProd ? "carousel" : "reel")
+    : contentTypeFilterChoice;
   const [viewBy, setViewBy] = useState<"stage" | "person">("stage");
   const [personFilter, setPersonFilter] = useState<string>("all");
   const allAssigneeNames = useMemo(
@@ -4959,10 +4965,9 @@ function ExperimentXShell() {
         )}
         {tab === "idea-bank" && (
           <>
-            {/* A solo (VE) viewer only ever works one pipeline — their own — so there's
-                nothing to switch between; the toggle is Ops/admin's tool for looking at
-                either team's board. */}
-            {!soloViewProd && (
+            {/* Solo editors who only work one format stay on that board. People on both
+                rosters (and Ops/admin) can switch Reel / Carousel. */}
+            {(!soloViewProd || dualContentRoster) && (
               <div style={{ display: "flex", gap: 6 }}>
                 {(["reel", "carousel"] as const).map(ct => {
                   const on = contentTypeFilter === ct;

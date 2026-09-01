@@ -141,6 +141,7 @@ export const ASSIGNEE_OPTIONS: Record<"carousel" | "reel", AssigneeOption[]> = {
     { name: "Darshana", email: "darshana.jain@owledmedia.com" },
     { name: "Chitvan", email: "chitvan.pandey@owledmedia.com" },
     { name: "Rjoe", email: "arya.bera@owledmedia.com" },
+    { name: "Sudeep", email: "sudeep.nath@owledmedia.com" },
   ],
   reel: [
     { name: "Shikhar", email: "shikhar.kumar@owledmedia.com" },
