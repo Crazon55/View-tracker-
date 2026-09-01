@@ -195,6 +195,8 @@ class ExpIdeaCreate(BaseModel):
     origin_playbook: str | None = None
     origin_idea_id: str | None = None
     assigned_to: str | None = None
+    engine_review: str | None = None
+    engine_reviewed_by: str | None = None
 
 
 class ExpIdeaUpdate(BaseModel):
@@ -234,6 +236,8 @@ class ExpIdeaUpdate(BaseModel):
     page_captions: dict | None = None
     page_live_links: dict | None = None
     assigned_to: str | None = None
+    engine_review: str | None = None
+    engine_reviewed_by: str | None = None
 
 
 class ExpSettingsUpdate(BaseModel):

@@ -5360,6 +5360,43 @@ def _exp_idea_query(client, playbook: str):
     return client.table(tables.idea_bank).select("*")
 
 
+# Idea Engine approve/reject — not Production `status`. Stored on engine_review when
+# the column exists; otherwise tucked into page_live_links under a reserved key so
+# the score still works before the SQL migration is run.
+_ENGINE_REVIEW_FALLBACK_KEY = "__engine_review"
+_engine_review_col_cache: dict[str, bool] = {}
+
+
+def _idea_bank_has_engine_review_col(client, table: str) -> bool:
+    if table in _engine_review_col_cache:
+        return _engine_review_col_cache[table]
+    try:
+        client.table(table).select("engine_review").limit(1).execute()
+        _engine_review_col_cache[table] = True
+    except Exception:
+        _engine_review_col_cache[table] = False
+    return _engine_review_col_cache[table]
+
+
+def _engine_review_from_row(row: dict) -> str:
+    v = str(row.get("engine_review") or "").strip().lower()
+    if v in ("approved", "rejected"):
+        return v
+    pll = row.get("page_live_links") or {}
+    if isinstance(pll, dict):
+        v2 = str(pll.get(_ENGINE_REVIEW_FALLBACK_KEY) or "").strip().lower()
+        if v2 in ("approved", "rejected"):
+            return v2
+    return ""
+
+
+def _attach_engine_review(rows: list) -> list:
+    for row in rows:
+        if isinstance(row, dict):
+            row["engine_review"] = _engine_review_from_row(row)
+    return rows
+
+
 def _exp_content_query(client, playbook: str):
     tables = get_playbook_tables(playbook)
     return client.table(tables.content_bank).select("*")
@@ -5459,9 +5496,23 @@ async def exp_list_idea_bank(
     pending_only: str | None = None,
     top_performers: str | None = None,
     enrich_cross: str | None = None,
+    review_score: str | None = None,
 ):
     pb = validate_playbook(playbook)
     client = get_supabase_client()
+    if review_score in ("1", "true", "True"):
+        tables = get_playbook_tables(pb)
+        cols = (
+            "id,topic,engine_review"
+            if _idea_bank_has_engine_review_col(client, tables.idea_bank)
+            else "id,topic,page_live_links"
+        )
+        try:
+            data = client.table(tables.idea_bank).select(cols).execute().data or []
+        except Exception as e:
+            logger.warning("review_score query failed for %s: %s", pb, e)
+            data = []
+        return {"success": True, "data": _attach_engine_review(data)}
     q = _exp_idea_query(client, pb).order("day_date", desc=False).order("created_at", desc=False)
     if top_performers in ("1", "true", "True"):
         # Idea Engine's "Top 6": a reel with >=200k views, or a carousel with >=1k likes.
@@ -5516,7 +5567,7 @@ async def exp_list_idea_bank(
             data = exp_enrich_ideas_cross_playbook(client, pb, data)
         except Exception as e:
             logger.warning("Cross-playbook enrich failed for %s: %s", pb, e)
-    return {"success": True, "data": data}
+    return {"success": True, "data": _attach_engine_review(data)}
 
 
 @app.get("/api/v1/experiment/idea-bank")
@@ -5683,7 +5734,7 @@ async def exp_get_idea(playbook: str, idea_id: str):
     if not data:
         raise HTTPException(status_code=404, detail="Idea not found")
     enriched = exp_enrich_ideas_cross_playbook(client, pb, data)
-    return {"success": True, "data": enriched[0]}
+    return {"success": True, "data": _attach_engine_review(enriched)[0]}
 
 
 @app.get("/api/v1/experiment/idea-bank/{idea_id}")
@@ -5718,9 +5769,44 @@ async def exp_update_idea(playbook: str, idea_id: str, req: ExpIdeaUpdate):
         update_data["posted_date"] = date.today().isoformat()
     if "day_date" in update_data:
         update_data["week_number"] = _exp_compute_week_number(client, pb, update_data["day_date"])
+    if "engine_review" in update_data:
+        val = str(update_data.get("engine_review") or "").strip().lower()
+        if val not in ("", "approved", "rejected"):
+            raise HTTPException(status_code=400, detail="engine_review must be approved, rejected, or empty")
+        reviewed_by = str(update_data.get("engine_reviewed_by") or "")
+        if _idea_bank_has_engine_review_col(client, tables.idea_bank):
+            from datetime import datetime, timezone
+            update_data["engine_review"] = val
+            if val:
+                update_data["engine_reviewed_at"] = datetime.now(timezone.utc).isoformat()
+                if reviewed_by:
+                    update_data["engine_reviewed_by"] = reviewed_by
+            else:
+                update_data["engine_reviewed_at"] = None
+                update_data["engine_reviewed_by"] = ""
+        else:
+            existing = (
+                client.table(tables.idea_bank)
+                .select("page_live_links")
+                .eq("id", idea_id)
+                .limit(1)
+                .execute()
+                .data
+            )
+            pll = dict((existing[0].get("page_live_links") or {}) if existing else {})
+            if val:
+                pll[_ENGINE_REVIEW_FALLBACK_KEY] = val
+            else:
+                pll.pop(_ENGINE_REVIEW_FALLBACK_KEY, None)
+            update_data["page_live_links"] = pll
+            update_data.pop("engine_review", None)
+            update_data.pop("engine_reviewed_by", None)
+            update_data.pop("engine_reviewed_at", None)
     client.table(tables.idea_bank).update(update_data).eq("id", idea_id).execute()
     verify = _exp_idea_query(client, pb).eq("id", idea_id).limit(1).execute().data
-    updated = verify[0] if verify else {}
+    updated = (verify[0] if verify else {}) or {}
+    if updated:
+        _attach_engine_review([updated])
     if updated and ("views" in update_data or "page_views" in update_data):
         settings = _exp_settings_row(client, pb)
         goal = settings.get("view_goal", 100000)

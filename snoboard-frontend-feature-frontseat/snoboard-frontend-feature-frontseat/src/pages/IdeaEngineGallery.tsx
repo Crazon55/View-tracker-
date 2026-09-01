@@ -6,7 +6,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, ExternalLink, Eye, Search, X, Check, CalendarDays, Trophy, Heart, Trash2 } from "lucide-react";
+import { Plus, ExternalLink, Eye, Search, X, Check, CalendarDays, Trophy, Heart, Trash2, ThumbsUp, ThumbsDown } from "lucide-react";
 import { toast } from "sonner";
 import { FramerPage, PageHeader } from "@/components/framer/Framer";
 import { Calendar as DayCalendar } from "@/components/ui/calendar";
@@ -45,6 +45,8 @@ function todayYmd(): string {
 }
 const TODAY = todayYmd();
 const YESTERDAY = ymd(new Date(Date.now() - 86400000));
+const TOMORROW = ymd(new Date(Date.now() + 86400000));
+const JASKARAN_EMAIL = "jaskaran.sethi@owledmedia.com";
 
 function sumViews(idea: any): number {
   const pv = idea.page_views as Record<string, number> | undefined;
@@ -122,6 +124,7 @@ function mergeIdeasByTopic(list: any[]): any[] {
     }
     // Prefer a real production status over the pool card's "new".
     if ((!g.status || g.status === "new") && idea.status) g.status = idea.status;
+    if (!g.engine_review && idea.engine_review) g.engine_review = idea.engine_review;
     for (const d of (idea.deployed_to_playbooks || [])) g._deployed.add(d);
   }
   return [...map.values()].map((g) => ({
@@ -141,6 +144,7 @@ function fmtViews(n: number): string {
 function prettyDate(s: string): string {
   if (s === TODAY) return "Today";
   if (s === YESTERDAY) return "Yesterday";
+  if (s === TOMORROW) return "Tomorrow";
   const d = new Date(`${s}T00:00:00`);
   return d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
@@ -166,6 +170,27 @@ function isExistingIdea(idea: any): boolean {
   return ideaSignalCount(idea) >= 2;
 }
 
+type EngineReview = "approved" | "rejected" | "pending";
+function engineReviewOf(idea: any): EngineReview {
+  const v = String(idea.engine_review || "").trim().toLowerCase();
+  if (v === "approved" || v === "rejected") return v;
+  return "pending";
+}
+function tallyReviews(list: any[]): { approved: number; rejected: number; pending: number } {
+  let approved = 0, rejected = 0, pending = 0;
+  for (const idea of list) {
+    const r = engineReviewOf(idea);
+    if (r === "approved") approved += 1;
+    else if (r === "rejected") rejected += 1;
+    else pending += 1;
+  }
+  return { approved, rejected, pending };
+}
+function canReviewEngineIdeas(email: string | undefined, role: string | null): boolean {
+  if ((email || "").trim().toLowerCase() === JASKARAN_EMAIL) return true;
+  return (role || "").split(",").map((r) => canonicalRole(r.trim())).some((r) => r === "admin" || r === "co");
+}
+
 type Idea = any & { _playbook: PlaybookId };
 
 export default function IdeaEngineGallery() {
@@ -176,6 +201,7 @@ export default function IdeaEngineGallery() {
   // Editing an idea's info/views straight from Idea Engine (any day) is Ops/admin's
   // call — same tier that manages Production, not CS/VE.
   const canEditIdeas = (role || "").split(",").map((r) => canonicalRole(r.trim())).some((r) => r === "co" || r === "admin" || r === "senior_cs");
+  const canReviewIdeas = canReviewEngineIdeas(user?.email, role);
 
   // One realtime connection per playbook (hooks can't be called in a loop) — a change
   // made anywhere (Production, Content Distribution, another Idea Engine tab) shows up
@@ -208,6 +234,24 @@ export default function IdeaEngineGallery() {
 
   // Collapse duplicate postings of the same idea into one card.
   const merged = useMemo(() => mergeIdeasByTopic(ideas), [ideas]);
+  const dayTally = useMemo(() => tallyReviews(merged), [merged]);
+
+  const { data: reviewRows = [] } = useQuery<Idea[]>({
+    queryKey: ["idea-engine-review-score"],
+    queryFn: async () => {
+      const perPb = await Promise.all(
+        PLAYBOOKS.map((pb) =>
+          PB_API[pb]
+            .getIdeaBank({ review_score: true, enrich_cross: false })
+            .then((rows) => (rows || []).map((r: any) => ({ ...r, _playbook: pb })))
+            .catch(() => [] as Idea[]),
+        ),
+      );
+      return perPb.flat();
+    },
+    refetchOnWindowFocus: false,
+  });
+  const allTally = useMemo(() => tallyReviews(mergeIdeasByTopic(reviewRows)), [reviewRows]);
 
   // "Top 6" — best-performing posted ideas across all playbooks, all-time (not scoped to
   // the day-picker below). Backend already filters to posted ideas crossing either
@@ -288,10 +332,38 @@ export default function IdeaEngineGallery() {
     onSuccess: (_d, idea) => {
       const ids: string[] = idea._ids?.length ? idea._ids : [idea.id];
       qc.setQueryData<Idea[]>(["idea-engine", dayDate], (old) => (old || []).filter((i) => !ids.includes(i.id)));
+      qc.setQueryData<Idea[]>(["idea-engine-review-score"], (old) => (old || []).filter((i) => !ids.includes(i.id)));
       qc.invalidateQueries({ queryKey: ["idea-engine-top6"] });
       toast.success("Idea deleted");
     },
     onError: (e: any) => toast.error(e?.message || "Couldn't delete idea"),
+  });
+
+  const reviewMut = useMutation({
+    mutationFn: ({ idea, engine_review }: { idea: Idea; engine_review: "approved" | "rejected" | "" }) => {
+      const ids: string[] = idea._ids?.length ? idea._ids : [idea.id];
+      const payload = { engine_review, engine_reviewed_by: user?.email || "" };
+      return Promise.all(ids.map((id) => PB_API[idea._playbook as PlaybookId].updateIdea(id, payload)));
+    },
+    onSuccess: (_d, { idea, engine_review }) => {
+      const ids: string[] = idea._ids?.length ? idea._ids : [idea.id];
+      const patch = { engine_review };
+      qc.setQueryData<Idea[]>(["idea-engine", dayDate], (old) =>
+        (old || []).map((i) => (ids.includes(i.id) ? { ...i, ...patch } : i)),
+      );
+      qc.setQueryData<Idea[]>(["idea-engine-review-score"], (old) => {
+        const list = old || [];
+        let found = false;
+        const next = list.map((i) => {
+          if (ids.includes(i.id)) { found = true; return { ...i, ...patch }; }
+          return i;
+        });
+        if (!found) next.push({ ...idea, ...patch });
+        return next;
+      });
+      toast.success(engine_review === "approved" ? "Approved" : engine_review === "rejected" ? "Rejected" : "Review cleared");
+    },
+    onError: (e: any) => toast.error(e?.message || "Couldn't save review"),
   });
 
   const filtered = useMemo(() => {
@@ -342,6 +414,7 @@ export default function IdeaEngineGallery() {
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 22, flexWrap: "wrap" }}>
         <DatePill active={dayDate === YESTERDAY} onClick={() => setDayDate(YESTERDAY)}>Yesterday</DatePill>
         <DatePill active={dayDate === TODAY} onClick={() => setDayDate(TODAY)}>Today</DatePill>
+        <DatePill active={dayDate === TOMORROW} onClick={() => setDayDate(TOMORROW)}>Tomorrow</DatePill>
         <PickDayControl
           value={dayDate}
           open={pickerOpen}
@@ -354,6 +427,23 @@ export default function IdeaEngineGallery() {
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search topic or page…"
             className="fglass-input" style={{ width: "100%", borderRadius: 9, padding: "8px 10px 8px 32px", fontSize: 13 }} />
         </div>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 12, flexWrap: "wrap", fontSize: 12.5 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--f-faint)" }}>
+          Jaskaran's review
+        </span>
+        <span style={{ color: "var(--f-dim)" }}>
+          {prettyDate(dayDate)} ·{" "}
+          <strong style={{ color: "#86efac", fontWeight: 600 }}>{dayTally.approved} approved</strong>
+          {" · "}
+          <strong style={{ color: "#fca5a5", fontWeight: 600 }}>{dayTally.rejected} rejected</strong>
+          {" · "}
+          {dayTally.pending} pending
+        </span>
+        <span style={{ color: "var(--f-faint)" }}>
+          All time · {allTally.approved} approved · {allTally.rejected} rejected · {allTally.pending} pending
+        </span>
       </div>
 
       {/* Gallery */}
@@ -382,6 +472,9 @@ export default function IdeaEngineGallery() {
                 onDelete={() => {
                   if (window.confirm(`Delete "${idea.topic || "this idea"}"? This can't be undone.`)) deleteMut.mutate(idea);
                 }}
+                canReview={canReviewIdeas}
+                reviewing={reviewMut.isPending && reviewMut.variables?.idea === idea}
+                onReview={(engine_review) => reviewMut.mutate({ idea, engine_review })}
               />
             );
           })}
@@ -396,6 +489,7 @@ export default function IdeaEngineGallery() {
             setShowAdd(false);
             setDayDate(savedDay);
             qc.invalidateQueries({ queryKey: ["idea-engine"] });
+            qc.invalidateQueries({ queryKey: ["idea-engine-review-score"] });
             qc.invalidateQueries({ queryKey: ["exp", "bpb", "idea-bank"], refetchType: "all" });
           }}
         />
@@ -494,7 +588,7 @@ function Top6Card({ idea, rank, onOpen }: { idea: Idea; rank: number; onOpen: ()
   );
 }
 
-function IdeaCard({ idea, sentTo, sending, onSend, onOpen, canEdit, canDelete, deleting, onDelete }: {
+function IdeaCard({ idea, sentTo, sending, onSend, onOpen, canEdit, canDelete, deleting, onDelete, canReview, reviewing, onReview }: {
   idea: Idea;
   sentTo: PlaybookId[];
   sending: boolean;
@@ -504,6 +598,9 @@ function IdeaCard({ idea, sentTo, sending, onSend, onOpen, canEdit, canDelete, d
   canDelete?: boolean;
   deleting?: boolean;
   onDelete?: () => void;
+  canReview?: boolean;
+  reviewing?: boolean;
+  onReview?: (engine_review: "approved" | "rejected" | "") => void;
 }) {
   const pb = idea._playbook as PlaybookId;
   const pages = pagesOf(idea);
@@ -513,6 +610,7 @@ function IdeaCard({ idea, sentTo, sending, onSend, onOpen, canEdit, canDelete, d
   // Playbooks this idea is already in: backend-derived (deployed_to_playbooks) ∪ this session's sends.
   const sent = [...new Set([...(idea.deployed_to_playbooks || []), ...sentTo])] as PlaybookId[];
   const alreadySent = sent.includes("bpb");
+  const review = engineReviewOf(idea);
 
   return (
     <article className="fglass-panel fglass-purple-shadow" style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
@@ -530,6 +628,16 @@ function IdeaCard({ idea, sentTo, sending, onSend, onOpen, canEdit, canDelete, d
           <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: existing ? "var(--f-faint)" : "#4ade80", border: "1px solid var(--f-line)", borderRadius: 6, padding: "2px 7px" }}>
             {existing ? "Existing" : "New"}
           </span>
+          {review !== "pending" && (
+            <span style={{
+              fontSize: 10, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", borderRadius: 6, padding: "2px 7px",
+              color: review === "approved" ? "#86efac" : "#fca5a5",
+              border: review === "approved" ? "1px solid rgba(74,222,128,.35)" : "1px solid rgba(239,68,68,.35)",
+              background: review === "approved" ? "rgba(74,222,128,.12)" : "rgba(239,68,68,.1)",
+            }}>
+              {review === "approved" ? "Approved" : "Rejected"}
+            </span>
+          )}
         </div>
       </div>
 
@@ -575,6 +683,43 @@ function IdeaCard({ idea, sentTo, sending, onSend, onOpen, canEdit, canDelete, d
       {sent.length ? (
         <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#a78bfa", fontWeight: 500 }}>
           <Check size={12} strokeWidth={2} /> In Frontseat · {sent.map((d) => PB_SHORT[d] || d).join(", ")}
+        </div>
+      ) : null}
+
+      {canReview ? (
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            type="button"
+            disabled={reviewing}
+            onClick={() => onReview?.(review === "approved" ? "" : "approved")}
+            title={review === "approved" ? "Clear approval" : "Approve this idea"}
+            style={{
+              flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+              fontSize: 12, fontWeight: 600, padding: "7px 10px", borderRadius: 8, cursor: reviewing ? "default" : "pointer",
+              opacity: reviewing ? 0.55 : 1,
+              color: review === "approved" ? "#86efac" : "var(--f-dim)",
+              border: review === "approved" ? "1px solid rgba(74,222,128,.45)" : "1px solid var(--f-line)",
+              background: review === "approved" ? "rgba(74,222,128,.12)" : "transparent",
+            }}
+          >
+            <ThumbsUp size={13} strokeWidth={1.8} /> Approve
+          </button>
+          <button
+            type="button"
+            disabled={reviewing}
+            onClick={() => onReview?.(review === "rejected" ? "" : "rejected")}
+            title={review === "rejected" ? "Clear rejection" : "Reject this idea"}
+            style={{
+              flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+              fontSize: 12, fontWeight: 600, padding: "7px 10px", borderRadius: 8, cursor: reviewing ? "default" : "pointer",
+              opacity: reviewing ? 0.55 : 1,
+              color: review === "rejected" ? "#fca5a5" : "var(--f-dim)",
+              border: review === "rejected" ? "1px solid rgba(239,68,68,.45)" : "1px solid var(--f-line)",
+              background: review === "rejected" ? "rgba(239,68,68,.12)" : "transparent",
+            }}
+          >
+            <ThumbsDown size={13} strokeWidth={1.8} /> Reject
+          </button>
         </div>
       ) : null}
 
@@ -918,7 +1063,7 @@ function PickDayControl({
   onOpenChange: (open: boolean) => void;
   onChange: (ymd: string) => void;
 }) {
-  const custom = value !== TODAY && value !== YESTERDAY;
+  const custom = value !== TODAY && value !== YESTERDAY && value !== TOMORROW;
 
   return (
     <div style={{ position: "relative", display: "inline-flex" }}>
@@ -963,7 +1108,6 @@ function PickDayControl({
                 onChange(ymd(d));
                 onOpenChange(false);
               }}
-              disabled={{ after: new Date() }}
               initialFocus
               className="idea-engine-cal text-zinc-200"
               classNames={{
@@ -993,6 +1137,13 @@ function PickDayControl({
                 style={{ fontSize: 12, fontWeight: 500, color: "#a1a1aa", background: "none", border: "none", cursor: "pointer", padding: "6px 4px" }}
               >
                 Yesterday
+              </button>
+              <button
+                type="button"
+                onClick={() => { onChange(TOMORROW); onOpenChange(false); }}
+                style={{ fontSize: 12, fontWeight: 500, color: "#a1a1aa", background: "none", border: "none", cursor: "pointer", padding: "6px 4px" }}
+              >
+                Tomorrow
               </button>
             </div>
           </div>
