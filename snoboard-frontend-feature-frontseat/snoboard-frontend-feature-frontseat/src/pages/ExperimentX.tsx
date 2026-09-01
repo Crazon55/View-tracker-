@@ -4416,7 +4416,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
     }
   };
 
-  const legendStages: IdeaStage[] = ["approved", "under_edit", "testing", "proven_ideas", "kill"];
+  const legendStages: IdeaStage[] = ["approved", "under_edit", "changes", "review", "gtg", "posted", "blocked"];
 
   // Ideas Pool panel — identical in both the kanban and the page-accordion (table)
   // view, so it's built once here rather than duplicated.
@@ -4438,12 +4438,12 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
         {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · drag to assign
       </p>
 
-      {/* Colour legend — a quiet keyed list, single column. */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 9 }}>
+      {/* Colour legend — same stages as the Production board. */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "3px 8px", marginBottom: 9 }}>
         {legendStages.map(s => (
           <span key={s} style={{
-            display: "inline-flex", alignItems: "center", gap: 6,
-            fontSize: 9.5, fontWeight: 600, color: "var(--pb-dim2)",
+            display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0,
+            fontSize: 9.5, fontWeight: 600, color: STATUS_STYLE[s]?.text || "var(--pb-dim2)",
           }}>
             <span style={{
               width: 6, height: 6, borderRadius: 999, flexShrink: 0,
