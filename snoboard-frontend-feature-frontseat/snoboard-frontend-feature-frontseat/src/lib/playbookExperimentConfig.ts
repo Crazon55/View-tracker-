@@ -5,6 +5,7 @@
  *   TECH → tech_*      (101xtechnology, indiantechdaily)
  */
 import { createExpApi, type ExpApi } from "@/services/api";
+import { canonicalRole } from "@/lib/accessModel";
 
 export type PlaybookId = "bpb" | "xf" | "tech";
 
@@ -124,9 +125,9 @@ export const CONTENT_FORMAT_ACCENT: Record<ContentFormat, string> = {
 
 /**
  * Who a page-assigned idea can be assigned to, split by content type — Carousel has
- * a smaller pool than Reel. `assigned_to` on the idea stores the display name (matches
- * what shows on the card); `email` is the login this name resolves to, so a video
- * editor's "my tasks" view can match on account rather than a first-name string.
+ * a smaller pool than Reel. `assigned_to` stores the editor's Gmail (legacy rows may
+ * still hold a first name). Filtering is always by Gmail so each editor only sees
+ * their own assigned work.
  *
  * Satya (satyabrata.rana@owledmedia.com) hasn't joined yet — no account exists under that
  * email yet, so his "my tasks" filtering silently matches no one until he's onboarded as VE.
@@ -151,13 +152,70 @@ export function assigneeOptionsFor(contentType: string | null | undefined): Assi
   return (contentType || "").trim().toLowerCase() === "carousel" ? ASSIGNEE_OPTIONS.carousel : ASSIGNEE_OPTIONS.reel;
 }
 
-const ASSIGNEE_EMAIL_BY_NAME: Record<string, string> = Object.fromEntries(
-  [...ASSIGNEE_OPTIONS.carousel, ...ASSIGNEE_OPTIONS.reel].map((a) => [a.name, a.email.toLowerCase()]),
-);
+const ALL_ASSIGNEES: AssigneeOption[] = [...ASSIGNEE_OPTIONS.carousel, ...ASSIGNEE_OPTIONS.reel];
 
-/** True when `email` (the logged-in user) is the account behind an idea's `assigned_to` name. */
-export function isAssignee(assignedToName: string | null | undefined, email: string | null | undefined): boolean {
-  if (!assignedToName || !email) return false;
-  const mapped = ASSIGNEE_EMAIL_BY_NAME[assignedToName];
-  return !!mapped && mapped === email.trim().toLowerCase();
+function normEmail(s: string): string {
+  return s.trim().toLowerCase();
+}
+
+/** Resolve a stored `assigned_to` (display name or Gmail) to the roster email, if known. */
+export function assigneeEmailOf(assignedTo: string | null | undefined): string {
+  const got = String(assignedTo || "").trim();
+  if (!got) return "";
+  const lower = got.toLowerCase();
+  if (lower.includes("@")) {
+    const hit = ALL_ASSIGNEES.find((a) => a.email.toLowerCase() === lower);
+    return hit ? hit.email.toLowerCase() : lower;
+  }
+  const byName = ALL_ASSIGNEES.find((a) => a.name.toLowerCase() === lower);
+  return byName ? byName.email.toLowerCase() : "";
+}
+
+/** Pretty name for a stored `assigned_to` (email or name). Unknown values pass through. */
+export function assigneeDisplayName(assignedTo: string | null | undefined): string {
+  const got = String(assignedTo || "").trim();
+  if (!got) return "";
+  const lower = got.toLowerCase();
+  const byEmail = ALL_ASSIGNEES.find((a) => a.email.toLowerCase() === lower);
+  if (byEmail) return byEmail.name;
+  const byName = ALL_ASSIGNEES.find((a) => a.name.toLowerCase() === lower);
+  return byName ? byName.name : got;
+}
+
+/** True when the logged-in Gmail is the person `assigned_to` points at (name or email). */
+export function isAssignee(assignedTo: string | null | undefined, email: string | null | undefined): boolean {
+  if (!assignedTo || !email) return false;
+  const want = normEmail(email);
+  const stored = String(assignedTo).trim();
+  const storedLower = stored.toLowerCase();
+  if (storedLower === want) return true;
+  const mapped = assigneeEmailOf(stored);
+  if (mapped && mapped === want) return true;
+  const local = want.split("@")[0] || "";
+  if (local && storedLower === local) return true;
+  return false;
+}
+
+/** True when this Gmail is one of the Production editor roster accounts. */
+export function emailIsEditorRoster(email: string | null | undefined): boolean {
+  if (!email) return false;
+  const want = normEmail(email);
+  return ALL_ASSIGNEES.some((a) => a.email.toLowerCase() === want);
+}
+
+/**
+ * Editors (VE / carousel designer) only see ideas assigned to their Gmail.
+ * Managers (admin / ops / CS) still see the full board.
+ */
+export function isEditorSoloView(role: string | null | undefined, email?: string | null): boolean {
+  const rawParts = String(role || "").split(",").map((r) => r.trim()).filter(Boolean);
+  const parts = rawParts.map((r) => canonicalRole(r));
+  const isManager = parts.some((r) => r === "admin" || r === "co" || r === "senior_cs" || r === "cs");
+  if (isManager) return false;
+  if (parts.some((r) => r === "ve")) return true;
+  if (rawParts.some((r) => /editor|carousel[\s_-]*design/i.test(r))) return true;
+  // Role string can be messy ("editors,pending") — if they signed in with an
+  // editor Gmail, still scope the board to that person so they never see everyone else's cards.
+  if (emailIsEditorRoster(email)) return true;
+  return false;
 }

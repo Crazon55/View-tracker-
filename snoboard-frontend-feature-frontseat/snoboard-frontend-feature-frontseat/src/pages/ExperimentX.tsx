@@ -20,7 +20,10 @@ import {
   PLAYBOOK_CONFIGS,
   ASSIGNEE_OPTIONS,
   assigneeOptionsFor,
+  assigneeDisplayName,
+  assigneeEmailOf,
   isAssignee,
+  isEditorSoloView,
   type ContentFormat,
   type PlaybookId,
 } from "@/lib/playbookExperimentConfig";
@@ -2614,6 +2617,31 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
   );
 }
 
+function AssigneeSelect({
+  contentType, value, onChange, style, className,
+}: {
+  contentType?: string;
+  value?: string | null;
+  onChange: (email: string) => void;
+  style?: React.CSSProperties;
+  className?: string;
+}) {
+  const selected = assigneeEmailOf(value) || "";
+  return (
+    <select
+      className={className}
+      value={selected}
+      onChange={(e) => onChange(e.target.value)}
+      style={style}
+    >
+      <option value="">Assign to…</option>
+      {assigneeOptionsFor(contentType).map((a) => (
+        <option key={a.email} value={a.email}>{a.name}</option>
+      ))}
+    </select>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Production tab — the video editor's board. CS distributes an idea onto pages
 // in Frontseat, which creates one per-page pipeline copy (shared source_pool_id)
@@ -2717,7 +2745,7 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
   // everyone else's cards. CS/CO/admin/etc. still see everything.
   const myEmail = user?.email || null;
   const roleList = (role || "").split(",").map((r) => canonicalRole(r.trim())).filter(Boolean);
-  const soloView = roleList.length > 0 && roleList.every((r) => r === "ve");
+  const soloView = isEditorSoloView(role, myEmail);
 
   // Content Ops / admin manage across everyone — they get the choice of a per-person
   // workload view alongside the usual per-stage board (not CS/VE), and they're the
@@ -2762,7 +2790,7 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
     const filtered = q ? copies.filter((c: any) => (c.topic || "").toLowerCase().includes(q)) : copies;
     const buckets = new Map<string, any[]>();
     filtered.forEach((c: any) => {
-      const who = (c.assigned_to || "").trim() || "Unassigned";
+      const who = assigneeDisplayName(c.assigned_to).trim() || "Unassigned";
       if (!buckets.has(who)) buckets.set(who, []);
       buckets.get(who)!.push(c);
     });
@@ -2827,7 +2855,7 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
     <div>
       {soloView && (
         <p style={{ fontSize: 12, color: "#a78bfa", fontWeight: 600, marginBottom: 12 }}>
-          Showing only tasks assigned to you
+          Showing only ideas assigned to you — nothing else until Ops assigns it
         </p>
       )}
       {viewBy === "person" && isOpsOrAdmin ? (
@@ -2864,20 +2892,16 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
                       </p>
                       {isOpsOrAdmin && !readOnly && (
                         <div onClick={e => e.stopPropagation()} style={{ marginTop: 8 }}>
-                          <select
-                            value={c.assigned_to || ""}
-                            onChange={e => batchMut.mutate({ ids: [c.id], data: { assigned_to: e.target.value } })}
+                          <AssigneeSelect
+                            contentType={c.content_type}
+                            value={c.assigned_to}
+                            onChange={(email) => batchMut.mutate({ ids: [c.id], data: { assigned_to: email } })}
                             style={{
                               fontSize: 10, fontWeight: 600, color: c.assigned_to ? "#a78bfa" : "var(--pb-dim)",
                               background: "var(--pb-card)", border: "1px solid var(--pb-border)", borderRadius: 5,
                               padding: "3px 6px", cursor: "pointer", width: "100%",
                             }}
-                          >
-                            <option value="">Assign to…</option>
-                            {assigneeOptionsFor(c.content_type).map(a => (
-                              <option key={a.name} value={a.name}>{a.name}</option>
-                            ))}
-                          </select>
+                          />
                         </div>
                       )}
                     </div>
@@ -3010,17 +3034,13 @@ function ProductionDetailModal({ group, pageColors, readOnly, canMarkPosted, onA
                     {(c.page_handle || "").trim()}
                   </span>
                 )}
-                <select
-                  value={c.assigned_to || ""}
-                  onChange={(e) => onAssign(c.id, e.target.value)}
+                <AssigneeSelect
+                  contentType={group.content_type}
+                  value={c.assigned_to}
+                  onChange={(email) => onAssign(c.id, email)}
                   className="fglass-input"
                   style={{ padding: "7px 11px", borderRadius: 9, fontSize: 13, flex: 1 }}
-                >
-                  <option value="">Assign to…</option>
-                  {assigneeOptionsFor(group.content_type).map((a) => (
-                    <option key={a.name} value={a.name}>{a.name}</option>
-                  ))}
-                </select>
+                />
               </div>
             ))}
           </div>
@@ -3184,26 +3204,22 @@ function ProductionCard({ group, pageColors, readOnly, canMarkPosted, onOpen, on
                   {(c.page_handle || "").trim()}
                 </span>
               )}
-              <select
-                value={c.assigned_to || ""}
-                onChange={(e) => onAssign(c.id, e.target.value)}
+              <AssigneeSelect
+                contentType={group.content_type}
+                value={c.assigned_to}
+                onChange={(email) => onAssign(c.id, email)}
                 style={{
                   fontSize: 9.5, fontWeight: 600, color: c.assigned_to ? "#a78bfa" : "var(--pb-dim)",
                   background: "var(--pb-card)", border: "1px solid var(--pb-border)", borderRadius: 99,
                   padding: "1px 6px", cursor: "pointer", flex: 1, minWidth: 0,
                 }}
-              >
-                <option value="">Assign to…</option>
-                {assigneeOptionsFor(group.content_type).map((a) => (
-                  <option key={a.name} value={a.name}>{a.name}</option>
-                ))}
-              </select>
+              />
             </div>
           ))}
         </div>
       ) : (() => {
         // Read-only fallback — one name per page-copy, deduped.
-        const assignees = [...new Set(group.copies.map((c: any) => (c.assigned_to || "").trim()).filter(Boolean))];
+        const assignees = [...new Set(group.copies.map((c: any) => assigneeDisplayName(c.assigned_to).trim()).filter(Boolean))];
         return assignees.length > 0 ? (
           <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 5, flexWrap: "wrap" }}>
             <span style={{ fontSize: 9.5, color: "var(--pb-faint)" }}>Assigned:</span>
@@ -4058,24 +4074,20 @@ function FrontseatPageCard({ idea, letter, onClick, onRemoveFromPage, onAssign, 
         {readOnly || !onAssign ? (
           idea.assigned_to ? (
             <span style={{ fontSize: 10, fontWeight: 600, color: "#a78bfa", background: "#7c3aed22", borderRadius: 5, padding: "2px 7px" }}>
-              {idea.assigned_to}
+              {assigneeDisplayName(idea.assigned_to)}
             </span>
           ) : null
         ) : (
-          <select
-            value={idea.assigned_to || ""}
-            onChange={e => onAssign(e.target.value)}
+          <AssigneeSelect
+            contentType={idea.content_type}
+            value={idea.assigned_to}
+            onChange={onAssign}
             style={{
               fontSize: 10, fontWeight: 600, color: idea.assigned_to ? "#a78bfa" : "var(--pb-dim)",
               background: "var(--pb-card)", border: "1px solid var(--pb-border)", borderRadius: 5,
               padding: "3px 6px", cursor: "pointer",
             }}
-          >
-            <option value="">Assign to…</option>
-            {assigneeOptionsFor(idea.content_type).map(a => (
-              <option key={a.name} value={a.name}>{a.name}</option>
-            ))}
-          </select>
+          />
         )}
       </div>
       <CrossPlaybookViewsBlock idea={idea} />
@@ -4172,7 +4184,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
   const canAssign = roleList.some(r => r === "co" || r === "admin" || r === "senior_cs");
   // Video editors / carousel designers are assignees, not managers — once something's
   // assigned to them, Today's Board narrows to just their tasks (same as Production).
-  const soloView = roleList.length > 0 && roleList.every(r => r === "ve");
+  const soloView = isEditorSoloView(role, user?.email);
   const myEmail = user?.email || null;
 
   // Edge auto-scroll while dragging pool ideas onto page columns (horizontal pages
@@ -4553,7 +4565,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
       <>
         {soloView && (
           <p style={{ fontSize: 12, color: "#a78bfa", fontWeight: 600, marginBottom: 12 }}>
-            Showing only tasks assigned to you
+            Showing only ideas assigned to you — nothing else until Ops assigns it
           </p>
         )}
         <div style={{ display: "flex", gap: 16, alignItems: "flex-start", minHeight: "calc(100vh - 220px)" }}>
@@ -4666,7 +4678,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
     <>
       {soloView && (
         <p style={{ fontSize: 12, color: "#a78bfa", fontWeight: 600, marginBottom: 12 }}>
-          Showing only tasks assigned to you
+          Showing only ideas assigned to you — nothing else until Ops assigns it
         </p>
       )}
     <div style={{ display: "flex", gap: 16, alignItems: "flex-start", minHeight: "calc(100vh - 220px)" }}>
@@ -4781,6 +4793,7 @@ export default function PlaybookExperimentPage({ playbookId }: { playbookId: Pla
 function ExperimentXShell() {
   const { pages: playbookPages, pageShort, id: playbookId, label, emoji } = usePlaybook();
   const { role } = usePermissions();
+  const { user } = useAuth();
   useIdeaBankRealtime(playbookId);
   // Role decides which tabs show and which are editable (VE → Production only,
   // CS → Frontseat edit + rest view, CO → edit all).
@@ -4825,9 +4838,11 @@ function ExperimentXShell() {
   // the tab switcher and are always visible without scrolling, instead of living further
   // down inside the tab's own (previously easy-to-scroll-past) toolbar.
   const roleListProd = (role || "").split(",").map(r => canonicalRole(r.trim())).filter(Boolean);
-  const soloViewProd = roleListProd.length > 0 && roleListProd.every(r => r === "ve");
+  const soloViewProd = isEditorSoloView(role, user?.email);
   const isOpsOrAdminProd = roleListProd.some(r => r === "co" || r === "admin" || r === "senior_cs");
-  const isCarouselRoleProd = (role || "").split(",").map(r => r.trim().toLowerCase()).includes("carousel_designer");
+  const isCarouselRoleProd =
+    (role || "").split(",").map(r => r.trim().toLowerCase()).includes("carousel_designer")
+    || ASSIGNEE_OPTIONS.carousel.some(a => a.email.toLowerCase() === (user?.email || "").trim().toLowerCase());
   const [contentTypeFilterChoice, setContentTypeFilterChoice] = useState<"reel" | "carousel">("reel");
   const contentTypeFilter = soloViewProd ? (isCarouselRoleProd ? "carousel" : "reel") : contentTypeFilterChoice;
   const [viewBy, setViewBy] = useState<"stage" | "person">("stage");
