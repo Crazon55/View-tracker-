@@ -384,7 +384,6 @@ export default function Dashboard() {
   /** TECH Playbook + 6-day tech roster — must appear on Dashboard like other team IPs. */
   const TECH_PLAYBOOK_HANDLES = [
     "101xtechnology",
-    "indiantechdaily",
     "ai.cracked",
   ];
 

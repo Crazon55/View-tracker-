@@ -10,7 +10,7 @@ export const TEAM_ROSTERS: TeamRoster[] = [
   {
     id: "tech",
     label: "Tech playbook",
-    handles: ["indiantechdaily", "101xtechnology", "ai.cracked"],
+    handles: ["101xtechnology", "ai.cracked"],
   },
   {
     id: "bizz_playbook",

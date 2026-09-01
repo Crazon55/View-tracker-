@@ -31,7 +31,7 @@ const normHandle = (h: string) => String(h || "").replace(/^@/, "").trim().toLow
 
 /** Active IP groups (replaces Garfields / Goofies / Sherus). */
 /** Tech playbook (Chaithanya). */
-const TECH_ACTIVE_HANDLES = ["indiantechdaily", "101xtechnology", "ai.cracked"] as const;
+const TECH_ACTIVE_HANDLES = ["101xtechnology", "ai.cracked"] as const;
 /** Bizz playbook (Pulkit). */
 const BIZZ_PLAYBOOK_HANDLES = [
   "indiabusinesscom",

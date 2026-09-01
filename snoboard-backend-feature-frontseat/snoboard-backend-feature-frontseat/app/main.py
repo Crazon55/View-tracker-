@@ -2214,7 +2214,6 @@ SHERUS_HANDLES: list[str] = [
 ]
 
 TECH_NICHE_HANDLES: list[str] = [
-    "indiantechdaily",
     "ai.cracked",
 ]
 
