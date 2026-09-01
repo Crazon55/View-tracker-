@@ -40,7 +40,10 @@ const PB_API: Record<PlaybookId, ExpApi> = {
 function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-const TODAY = ymd(new Date());
+function todayYmd(): string {
+  return ymd(new Date());
+}
+const TODAY = todayYmd();
 const YESTERDAY = ymd(new Date(Date.now() - 86400000));
 
 function sumViews(idea: any): number {
@@ -249,7 +252,7 @@ export default function IdeaEngineGallery() {
         topic: idea.topic || "",
         status: "new",
         frontseat_pool: true,
-        day_date: TODAY,
+        day_date: String(idea.day_date || "").slice(0, 10) || todayYmd(),
         source: "idea_engine",
         created_by: idea.created_by || "",
         // Carry the idea's links so the target playbook keeps them — the base-edit
@@ -387,11 +390,11 @@ export default function IdeaEngineGallery() {
 
       {showAdd && (
         <AddIdeaModal
-          defaultDay={dayDate}
           author={user?.user_metadata?.full_name || user?.email?.split("@")[0] || ""}
           onClose={() => setShowAdd(false)}
-          onCreated={() => {
+          onCreated={(savedDay) => {
             setShowAdd(false);
+            setDayDate(savedDay);
             qc.invalidateQueries({ queryKey: ["idea-engine"] });
             qc.invalidateQueries({ queryKey: ["exp", "bpb", "idea-bank"], refetchType: "all" });
           }}
@@ -404,9 +407,9 @@ export default function IdeaEngineGallery() {
           onClose={() => setEditIdea(null)}
           onSaved={(patch) => {
             setEditIdea(null);
-            qc.setQueryData<Idea[]>(["idea-engine", dayDate], (old) =>
-              (old || []).map((i) => (i.id === editIdea.id && i._playbook === editIdea._playbook ? { ...i, ...patch } : i)),
-            );
+            const moved = typeof patch.day_date === "string" && patch.day_date !== dayDate;
+            if (moved) setDayDate(patch.day_date as string);
+            qc.invalidateQueries({ queryKey: ["idea-engine"] });
             qc.invalidateQueries({ queryKey: ["idea-engine-top6"] });
           }}
         />
@@ -611,15 +614,15 @@ function IdeaCard({ idea, sentTo, sending, onSend, onOpen, canEdit, canDelete, d
   );
 }
 
-function AddIdeaModal({ defaultDay, author, onClose, onCreated }: {
-  defaultDay: string; author: string; onClose: () => void; onCreated: () => void;
+function AddIdeaModal({ author, onClose, onCreated }: {
+  author: string; onClose: () => void; onCreated: (savedDay: string) => void;
 }) {
   const [topic, setTopic] = useState("");
   const [refLink, setRefLink] = useState("");
   const [timestamps, setTimestamps] = useState("");
   const [contentType, setContentType] = useState("Reel");
   const [format, setFormat] = useState<ContentFormat | "">("");
-  const [day, setDay] = useState(defaultDay);
+  const [day, setDay] = useState(todayYmd());
   const [busy, setBusy] = useState(false);
 
   const yt = isYouTube(refLink);
@@ -630,21 +633,23 @@ function AddIdeaModal({ defaultDay, author, onClose, onCreated }: {
     try {
       const link = refLink.trim();
       const ytLink = isYouTube(link);
-      // "New idea" only — a fresh idea carries just its reference link (comp / YouTube).
+      const savedDay = day || todayYmd();
+      // Blank date → the day they write it. A picked date (including future) is
+      // the day the idea should appear in Idea Engine / Content Distribution.
       await PB_API.bpb.createIdea({
         page_handle: "",
         topic: topic.trim(),
         content_type: contentType,
         content_format: format || undefined,
         views: 0,
-        day_date: day,
+        day_date: savedDay,
         created_by: author || undefined,
         comp_link: link && !ytLink ? link : undefined,
         yt_url: ytLink ? link : undefined,
         yt_timestamps: timestamps.trim() || undefined,
       });
-      toast.success("Idea added.");
-      onCreated();
+      toast.success(savedDay === todayYmd() ? "Idea added." : `Idea added for ${prettyDate(savedDay)}.`);
+      onCreated(savedDay);
     } catch {
       toast.error("Couldn't add the idea — try again.");
     } finally {
@@ -698,7 +703,19 @@ function AddIdeaModal({ defaultDay, author, onClose, onCreated }: {
                 {["Reel", "Carousel"].map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </Field>
-            <Field label="Date"><input type="date" value={day} max={TODAY} onChange={(e) => setDay(e.target.value)} onClick={(e) => (e.target as HTMLInputElement).showPicker?.()} className="fglass-input" style={{ ...modalInput, colorScheme: "dark", cursor: "pointer" }} /></Field>
+            <Field label="Date">
+              <input
+                type="date"
+                value={day}
+                onChange={(e) => setDay(e.target.value)}
+                onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
+                className="fglass-input"
+                style={{ ...modalInput, colorScheme: "dark", cursor: "pointer" }}
+              />
+              <span style={{ display: "block", marginTop: 6, fontSize: 11, color: "var(--f-faint)", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
+                Leave as today, or pick the day this idea should show (e.g. 3 Sep).
+              </span>
+            </Field>
           </div>
         </div>
 
@@ -721,6 +738,7 @@ function EditIdeaModal({ idea, onClose, onSaved }: {
   const [timestamps, setTimestamps] = useState(idea.yt_timestamps || "");
   const [contentType, setContentType] = useState(idea.content_type || "Reel");
   const [format, setFormat] = useState<ContentFormat | "">((idea.content_format as ContentFormat) || "");
+  const [day, setDay] = useState(String(idea.day_date || "").slice(0, 10) || todayYmd());
   const [views, setViews] = useState(String(idea.views ?? 0));
   const [likes, setLikes] = useState(String(idea.likes ?? 0));
   const pages = pagesOf(idea);
@@ -753,6 +771,7 @@ function EditIdeaModal({ idea, onClose, onSaved }: {
         topic: topic.trim(),
         content_type: contentType,
         content_format: format || "",
+        day_date: day || todayYmd(),
         comp_link: link && !ytLink ? link : "",
         yt_url: ytLink ? link : "",
         yt_timestamps: timestamps.trim(),
@@ -821,11 +840,23 @@ function EditIdeaModal({ idea, onClose, onSaved }: {
             <Field label="Timestamps"><input value={timestamps} onChange={(e) => setTimestamps(e.target.value)} placeholder="0:12, 1:45" className="fglass-input" style={modalInput} /></Field>
           </div>
 
-          <Field label="Content type">
-            <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="fglass-input" style={{ ...modalInput, colorScheme: "dark" }}>
-              {["Reel", "Carousel"].map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </Field>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Field label="Content type">
+              <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="fglass-input" style={{ ...modalInput, colorScheme: "dark" }}>
+                {["Reel", "Carousel"].map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </Field>
+            <Field label="Date">
+              <input
+                type="date"
+                value={day}
+                onChange={(e) => setDay(e.target.value)}
+                onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
+                className="fglass-input"
+                style={{ ...modalInput, colorScheme: "dark", cursor: "pointer" }}
+              />
+            </Field>
+          </div>
 
           {pages.length > 1 ? (
             <Field label={editingCarousel ? "Likes by page" : "Views by page"}>
