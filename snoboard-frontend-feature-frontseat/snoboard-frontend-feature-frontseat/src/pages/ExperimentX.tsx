@@ -160,13 +160,13 @@ const STATUS_STYLE: Record<string, { bg: string; text: string }> = {
   new:          { bg: "rgba(74,127,212,0.15)",   text: "#7BB0FF" },
   approved:     { bg: "rgba(45,158,95,0.15)",    text: "#5AE0A0" },
   under_edit:   { bg: "rgba(123,97,196,0.15)",   text: "#B49EFF" },
-  changes:      { bg: "rgba(255,209,102,0.15)",  text: "#FFD166" },
-  review:       { bg: "rgba(255,209,102,0.15)",  text: "#FFD166" },
-  gtg:          { bg: "rgba(80,224,176,0.15)",   text: "#50E0B0" },
+  changes:      { bg: "rgba(251,146,60,0.18)",   text: "#FB923C" },
+  review:       { bg: "rgba(56,189,248,0.16)",   text: "#38BDF8" },
+  gtg:          { bg: "rgba(45,212,191,0.16)",   text: "#2DD4BF" },
   testing:      { bg: "rgba(212,149,42,0.15)",   text: "#F0C060" },
   proven_ideas: { bg: "rgba(29,158,117,0.15)",   text: "#50E0B0" },
   scheduled:    { bg: "rgba(83,74,183,0.15)",    text: "#9B8FFF" },
-  posted:       { bg: "rgba(45,158,95,0.15)",    text: "#5AE0A0" },
+  posted:       { bg: "rgba(129,140,248,0.18)",  text: "#818CF8" },
   blocked:      { bg: "rgba(201,59,59,0.15)",    text: "#FF7070" },
   kill:         { bg: "rgba(201,59,59,0.15)",    text: "#FF7070" },
   // legacy fallbacks
@@ -2297,10 +2297,10 @@ function CalendarTab({ pageFilter, search, opsOnly, calendarViewOnly }: {
 
 // Stage column dot colors
 const STAGE_DOT: Record<string, string> = {
-  new: "#4A7FD4", approved: "#2D9E5F", under_edit: "#7B61C4", changes: "#FFD166",
-  review: "#FFD166", gtg: "#50E0B0",
+  new: "#4A7FD4", approved: "#5AE0A0", under_edit: "#B49EFF", changes: "#FB923C",
+  review: "#38BDF8", gtg: "#2DD4BF",
   testing: "#D4952A", proven_ideas: "#1D9E75", scheduled: "#534AB7",
-  posted: "#2D9E5F", blocked: "#C93B3B", kill: "#C93B3B",
+  posted: "#818CF8", blocked: "#FF7070", kill: "#C93B3B",
 };
 
 // ---------------------------------------------------------------------------
