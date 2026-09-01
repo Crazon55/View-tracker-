@@ -5502,9 +5502,9 @@ async def exp_list_idea_bank(
     if review_score in ("1", "true", "True"):
         tables = get_playbook_tables(pb)
         cols = (
-            "id,topic,engine_review"
+            "id,topic,engine_review,created_by,content_type"
             if _idea_bank_has_engine_review_col(client, tables.idea_bank)
-            else "id,topic,page_live_links"
+            else "id,topic,page_live_links,created_by,content_type"
         )
         try:
             data = client.table(tables.idea_bank).select(cols).execute().data or []

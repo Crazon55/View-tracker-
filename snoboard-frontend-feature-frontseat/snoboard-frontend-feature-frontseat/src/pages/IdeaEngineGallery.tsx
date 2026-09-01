@@ -114,6 +114,7 @@ function mergeIdeasByTopic(list: any[]): any[] {
     const pl = g.page_likes as Record<string, number>;
     for (const [p, v] of Object.entries(perPageLikes(idea))) pl[p] = Math.max(pl[p] || 0, v);
     if (!g.created_by && idea.created_by) g.created_by = idea.created_by;
+    if (!g.content_type && idea.content_type) g.content_type = idea.content_type;
     // A "got blocked before" tag should survive the merge even if it's a different
     // page-copy of the same topic that carries it, not necessarily the first one seen.
     if (!g.blocked_reason && idea.blocked_reason) g.blocked_reason = idea.blocked_reason;
@@ -186,6 +187,36 @@ function tallyReviews(list: any[]): { approved: number; rejected: number; pendin
   }
   return { approved, rejected, pending };
 }
+function tallyByType(list: any[]): { reels: number; carousels: number } {
+  let reels = 0, carousels = 0;
+  for (const idea of list) {
+    if (isCarousel(idea)) carousels += 1;
+    else reels += 1;
+  }
+  return { reels, carousels };
+}
+type PersonTally = { name: string; added: number; approved: number; rejected: number; pending: number };
+function tallyByPerson(list: any[]): PersonTally[] {
+  const map = new Map<string, PersonTally>();
+  for (const idea of list) {
+    const name = String(idea.created_by || "").trim() || "Unassigned";
+    let row = map.get(name);
+    if (!row) {
+      row = { name, added: 0, approved: 0, rejected: 0, pending: 0 };
+      map.set(name, row);
+    }
+    row.added += 1;
+    const r = engineReviewOf(idea);
+    if (r === "approved") row.approved += 1;
+    else if (r === "rejected") row.rejected += 1;
+    else row.pending += 1;
+  }
+  return [...map.values()].sort((a, b) => {
+    if (a.name === "Unassigned") return 1;
+    if (b.name === "Unassigned") return -1;
+    return b.added - a.added || a.name.localeCompare(b.name);
+  });
+}
 function canReviewEngineIdeas(email: string | undefined, role: string | null): boolean {
   if ((email || "").trim().toLowerCase() === JASKARAN_EMAIL) return true;
   return (role || "").split(",").map((r) => canonicalRole(r.trim())).some((r) => r === "admin" || r === "co");
@@ -237,6 +268,8 @@ export default function IdeaEngineGallery() {
   // Collapse duplicate postings of the same idea into one card.
   const merged = useMemo(() => mergeIdeasByTopic(ideas), [ideas]);
   const dayTally = useMemo(() => tallyReviews(merged), [merged]);
+  const dayType = useMemo(() => tallyByType(merged), [merged]);
+  const dayPeople = useMemo(() => tallyByPerson(merged), [merged]);
 
   const { data: reviewRows = [] } = useQuery<Idea[]>({
     queryKey: ["idea-engine-review-score"],
@@ -253,7 +286,10 @@ export default function IdeaEngineGallery() {
     },
     refetchOnWindowFocus: false,
   });
-  const allTally = useMemo(() => tallyReviews(mergeIdeasByTopic(reviewRows)), [reviewRows]);
+  const allMerged = useMemo(() => mergeIdeasByTopic(reviewRows), [reviewRows]);
+  const allTally = useMemo(() => tallyReviews(allMerged), [allMerged]);
+  const allType = useMemo(() => tallyByType(allMerged), [allMerged]);
+  const allPeople = useMemo(() => tallyByPerson(allMerged), [allMerged]);
 
   // "Top 6" — best-performing posted ideas across all playbooks, all-time (not scoped to
   // the day-picker below). Backend already filters to posted ideas crossing either
@@ -431,21 +467,82 @@ export default function IdeaEngineGallery() {
         </div>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 12, flexWrap: "wrap", fontSize: 12.5 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--f-faint)" }}>
-          Jaskaran's review
-        </span>
-        <span style={{ color: "var(--f-dim)" }}>
-          {prettyDate(dayDate)} ·{" "}
-          <strong style={{ color: "#86efac", fontWeight: 600 }}>{dayTally.approved} approved</strong>
-          {" · "}
-          <strong style={{ color: "#fca5a5", fontWeight: 600 }}>{dayTally.rejected} rejected</strong>
-          {" · "}
-          {dayTally.pending} pending
-        </span>
-        <span style={{ color: "var(--f-faint)" }}>
-          All time · {allTally.approved} approved · {allTally.rejected} rejected · {allTally.pending} pending
-        </span>
+      <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", fontSize: 12.5 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--f-faint)" }}>
+            Jaskaran's review
+          </span>
+          <span style={{ color: "var(--f-dim)" }}>
+            {prettyDate(dayDate)} ·{" "}
+            <strong style={{ color: "#86efac", fontWeight: 600 }}>{dayTally.approved} approved</strong>
+            {" · "}
+            <strong style={{ color: "#fca5a5", fontWeight: 600 }}>{dayTally.rejected} rejected</strong>
+            {" · "}
+            {dayTally.pending} pending
+          </span>
+          <span style={{ color: "var(--f-faint)" }}>
+            All time · {allTally.approved} approved · {allTally.rejected} rejected · {allTally.pending} pending
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", fontSize: 12.5 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--f-faint)" }}>
+            Format split
+          </span>
+          <span style={{ color: "var(--f-dim)" }}>
+            {prettyDate(dayDate)} · {dayType.reels} reels · {dayType.carousels} carousels
+          </span>
+          <span style={{ color: "var(--f-faint)" }}>
+            All time · {allType.reels} reels · {allType.carousels} carousels
+          </span>
+        </div>
+        {dayPeople.length > 0 && (
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--f-faint)", marginBottom: 7 }}>
+              Per person · {prettyDate(dayDate)}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {dayPeople.map((p) => (
+                <span
+                  key={p.name}
+                  style={{
+                    display: "inline-flex", alignItems: "baseline", gap: 6, flexWrap: "wrap",
+                    fontSize: 12, color: "var(--f-dim)", padding: "6px 10px", borderRadius: 9,
+                    border: "1px solid var(--f-line)", background: "rgba(255,255,255,.03)",
+                  }}
+                >
+                  <strong style={{ color: "var(--f-ink)", fontWeight: 600 }}>{p.name}</strong>
+                  <span>{p.added} added</span>
+                  <span style={{ color: "#86efac" }}>{p.approved} approved</span>
+                  <span style={{ color: "#fca5a5" }}>{p.rejected} rejected</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        {allPeople.length > 0 && (
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--f-faint)", marginBottom: 7 }}>
+              Per person · all time
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {allPeople.map((p) => (
+                <span
+                  key={`all-${p.name}`}
+                  style={{
+                    display: "inline-flex", alignItems: "baseline", gap: 6, flexWrap: "wrap",
+                    fontSize: 12, color: "var(--f-faint)", padding: "6px 10px", borderRadius: 9,
+                    border: "1px solid var(--f-line)",
+                  }}
+                >
+                  <strong style={{ color: "var(--f-dim)", fontWeight: 600 }}>{p.name}</strong>
+                  <span>{p.added} added</span>
+                  <span style={{ color: "#86efac" }}>{p.approved} approved</span>
+                  <span style={{ color: "#fca5a5" }}>{p.rejected} rejected</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Gallery */}
