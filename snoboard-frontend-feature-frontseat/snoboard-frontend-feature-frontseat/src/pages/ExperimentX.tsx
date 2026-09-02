@@ -4008,6 +4008,9 @@ function FrontseatPoolCard({ idea, letter, onDragStart, onClick, onDelete, readO
         overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
         {idea.topic || <em style={{ color: "var(--pb-faint)" }}>Untitled</em>}
       </p>
+      {idea.created_by ? (
+        <p style={{ margin: "5px 0 0", fontSize: 10, color: "var(--pb-faint)" }}>by {idea.created_by}</p>
+      ) : null}
       <div style={{ display: "flex", gap: 5, marginTop: 7, flexWrap: "wrap", alignItems: "center" }}>
         <DeployedFromBadge idea={idea} />
       </div>
@@ -4159,11 +4162,22 @@ function matchesContentFormat(idea: any, filter: string): boolean {
   return (idea.content_format || "") === filter;
 }
 
+const CS_WRITTEN_BY_KEY = "fsos-cd-written-by";
+
+/** Match `created_by` against a typed CS name ("harish" hits "Harish R"). */
+function matchesWrittenBy(idea: any, q: string): boolean {
+  const needle = q.toLowerCase().trim();
+  if (!needle) return true;
+  const author = String(idea.created_by || "").trim().toLowerCase();
+  if (!author) return false;
+  return author.includes(needle) || needle.includes(author);
+}
+
 // ---------------------------------------------------------------------------
 // Frontseat tab — current-week ideas organised by page (view layer over Idea Bank)
 // ---------------------------------------------------------------------------
-function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", search = "", view = "kanban" }: {
-  readOnly?: boolean; formatFilter?: string; pageFilter?: string; search?: string; view?: "kanban" | "table";
+function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", search = "", writtenBy = "", view = "kanban" }: {
+  readOnly?: boolean; formatFilter?: string; pageFilter?: string; search?: string; writtenBy?: string; view?: "kanban" | "table";
 }) {
   const { pages: allPlaybookPages, pageColors, pageShort, api, id: playbookId } = usePlaybook();
   const playbookPages = isAllPages(pageFilter)
@@ -4353,7 +4367,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
 
   // Pool = permanent ideas added via Frontseat "+ New".
   // After migration: frontseat_pool === true. Before migration runs (column is null): fall back to status === "new".
-  const poolIdeas = useMemo(() =>
+  const allPoolIdeas = useMemo(() =>
     todayIdeas
       .filter((i: any) =>
         i.frontseat_pool === true ||
@@ -4361,7 +4375,11 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
       )
       .filter((i: any) => matchesContentFormat(i, formatFilter) && matchesSearch(i))
       .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
-    [todayIdeas, formatFilter, searchQ]
+    [todayIdeas, formatFilter, searchQ],
+  );
+  const poolIdeas = useMemo(
+    () => allPoolIdeas.filter((i: any) => matchesWrittenBy(i, writtenBy)),
+    [allPoolIdeas, writtenBy],
   );
 
   // Letters a, b, c… in creation order — stable for the whole day
@@ -4382,7 +4400,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
     const result: Record<string, any[]> = {};
     playbookPages.forEach(p => { result[p] = []; });
     todayIdeas
-      .filter((i: any) => !i.frontseat_pool && matchesContentFormat(i, formatFilter) && matchesSearch(i))
+      .filter((i: any) => !i.frontseat_pool && matchesContentFormat(i, formatFilter) && matchesSearch(i) && matchesWrittenBy(i, writtenBy))
       .filter((i: any) => !soloView || isAssignee(i.assigned_to, myEmail))
       .forEach((idea: any) => {
       const pages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
@@ -4392,7 +4410,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
       result[p].sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
     });
     return result;
-  }, [todayIdeas, playbookPages, formatFilter, soloView, myEmail, searchQ]);
+  }, [todayIdeas, playbookPages, formatFilter, soloView, myEmail, searchQ, writtenBy]);
 
   const handleDrop = (page: string, e: React.DragEvent) => {
     if (readOnly) return;
@@ -4470,8 +4488,9 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
         <p style={{ color: "var(--pb-faint)", fontSize: 12 }}>Loading…</p>
       ) : poolIdeas.length === 0 ? (
         <div style={{ padding: "24px 10px", textAlign: "center", color: "var(--pb-border)", fontSize: 11, border: "1.5px dashed var(--pb-chip)", borderRadius: 12 }}>
-          No ideas today<br />
-          <span style={{ fontSize: 10 }}>New ideas are added from Idea Engine</span>
+          {writtenBy.trim() ? <>No ideas by {writtenBy.trim()}</> : <>No ideas today</>}
+          <br />
+          <span style={{ fontSize: 10 }}>{writtenBy.trim() ? "Clear the CS filter to see everyone" : "New ideas are added from Idea Engine"}</span>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -4644,7 +4663,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
                           onAssign={readOnly || !canAssign ? undefined : (name) => updateMut.mutate({ id: idea.id, data: { assigned_to: name } })}
                           onRemoveFromPage={readOnly ? undefined : () => {
                             deleteMut.mutate(idea.id);
-                            const poolIdea = poolIdeas.find((pi: any) => pi.id === idea.source_pool_id);
+                            const poolIdea = allPoolIdeas.find((pi: any) => pi.id === idea.source_pool_id);
                             if (poolIdea) {
                               const remaining = (poolIdea.page_handle || "")
                                 .split(",").map((s: string) => s.trim()).filter((p: string) => p && p !== page);
@@ -4749,7 +4768,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
                       // Delete the copy
                       deleteMut.mutate(idea.id);
                       // Remove page from pool idea's chip tracking
-                      const poolIdea = poolIdeas.find((pi: any) => pi.id === idea.source_pool_id);
+                      const poolIdea = allPoolIdeas.find((pi: any) => pi.id === idea.source_pool_id);
                       if (poolIdea) {
                         const remaining = (poolIdea.page_handle || "")
                           .split(",").map((s: string) => s.trim()).filter((p: string) => p && p !== page);
@@ -4829,6 +4848,27 @@ function ExperimentXShell() {
   // but renders on the frontseat tab alone.
   const [formatFilter, setFormatFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [csFilter, setCsFilter] = useState(() => {
+    try { return localStorage.getItem(CS_WRITTEN_BY_KEY) ?? ""; }
+    catch { return ""; }
+  });
+  const persistCsFilter = (v: string) => {
+    setCsFilter(v);
+    try { localStorage.setItem(CS_WRITTEN_BY_KEY, v); } catch { /* ignore quota / private mode */ }
+  };
+  // First visit for a CS/CW: pin the board to their own name so the pool isn't everyone else's ideas.
+  // Clearing the field saves "" so we don't overwrite that choice next time.
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(CS_WRITTEN_BY_KEY) !== null) return;
+    } catch { return; }
+    const roles = (role || "").split(",").map((r) => canonicalRole(r.trim()));
+    if (roles.some((r) => r === "admin" || r === "co" || r === "senior_cs")) return;
+    if (!roles.some((r) => r === "cs" || r === "cw")) return;
+    const name = String(user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split("@")[0] || "").trim();
+    if (!name) return;
+    persistCsFilter(name);
+  }, [role, user]);
   // Today's Board: kanban (drag-and-drop) vs. table (flat, sortable) — same filters,
   // just two different ways to look at and act on the same pool ideas.
   const [todaysBoardView, setTodaysBoardView] = useState<"kanban" | "table">("kanban");
@@ -4919,6 +4959,29 @@ function ExperimentXShell() {
           onChange={e => setSearch(e.target.value)}
           style={{ ...inp, width: 220, flex: "0 0 220px" }}
         />
+        {tab === "frontseat" && (
+          <div style={{ position: "relative", width: 180, flex: "0 0 180px" }}>
+            <input
+              placeholder="Written by CS…"
+              value={csFilter}
+              onChange={e => persistCsFilter(e.target.value)}
+              style={{ ...inp, width: "100%", paddingRight: csFilter ? 26 : 10 }}
+            />
+            {csFilter ? (
+              <button
+                type="button"
+                onClick={() => persistCsFilter("")}
+                title="Show all CS"
+                style={{
+                  position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
+                  width: 16, height: 16, border: "none", borderRadius: 999, cursor: "pointer",
+                  background: "var(--pb-chip)", color: "var(--pb-dim2)", fontSize: 10, fontWeight: 700,
+                  display: "flex", alignItems: "center", justifyContent: "center", padding: 0,
+                }}
+              >✕</button>
+            ) : null}
+          </div>
+        )}
         {tab === "frontseat" && (
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             {(["all", ...CONTENT_FORMATS] as const).map(f => {
@@ -5020,7 +5083,7 @@ function ExperimentXShell() {
 
       {/* Tab content — per-tab edit rights come from the role's view profile. */}
       <div>
-        {tab === "frontseat"     && <FrontseatTab readOnly={!canEditTab("frontseat")} formatFilter={formatFilter} pageFilter={pageFilter} search={search} view={todaysBoardView} />}
+        {tab === "frontseat"     && <FrontseatTab readOnly={!canEditTab("frontseat")} formatFilter={formatFilter} pageFilter={pageFilter} search={search} writtenBy={csFilter} view={todaysBoardView} />}
         {/* Idea Bank IS the video-editor Production board (Approved → Base edit → Formatted → Posted). */}
         {tab === "idea-bank"     && (
           <ProductionTab
