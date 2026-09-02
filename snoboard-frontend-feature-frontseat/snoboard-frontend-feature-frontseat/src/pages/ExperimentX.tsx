@@ -28,7 +28,7 @@ import {
   type PlaybookId,
 } from "@/lib/playbookExperimentConfig";
 import { PlaybookExperimentContext, usePlaybook } from "@/lib/playbookExperimentContext";
-import { PEOPLE_SEED, lookupPerson } from "@/lib/peopleSeed";
+import { lookupPerson } from "@/lib/peopleSeed";
 
 /** React Query keys scoped per playbook — prevents stale data when switching playbooks. */
 function expQk(playbookId: string, ...parts: unknown[]) {
@@ -4163,18 +4163,31 @@ function matchesContentFormat(idea: any, filter: string): boolean {
 }
 
 const CS_WRITTEN_BY_KEY = "fsos-cd-written-by";
-const CS_WRITERS = PEOPLE_SEED
-  .filter((p) => p.role === "cs" || p.role === "cw" || p.role === "senior_cs")
-  .slice()
-  .sort((a, b) => a.name.localeCompare(b.name));
 
-/** Map a stored Google name / alias onto the roster label used in the dropdown. */
-function canonicalWriter(saved: string): string {
-  const got = saved.trim();
+function isFrontseatPoolIdea(idea: any): boolean {
+  return idea.frontseat_pool === true || (idea.frontseat_pool == null && idea.status === "new");
+}
+
+function displayWriterName(raw: string): string {
+  const got = String(raw || "").trim();
   if (!got) return "";
-  const person = lookupPerson(got);
-  if (person && CS_WRITERS.some((p) => p.name === person.name)) return person.name;
-  return got;
+  return lookupPerson(got)?.name || got;
+}
+
+/** Unique people who actually added pool ideas today (canonical names when we know them). */
+function writerNamesFromIdeas(ideas: any[]): string[] {
+  const names = new Set<string>();
+  for (const idea of ideas) {
+    if (!isFrontseatPoolIdea(idea)) continue;
+    const name = displayWriterName(idea.created_by);
+    if (name) names.add(name);
+  }
+  return [...names].sort((a, b) => a.localeCompare(b));
+}
+
+/** Map a stored Google name / alias onto the label used in the dropdown. */
+function canonicalWriter(saved: string): string {
+  return displayWriterName(saved);
 }
 
 /** Match `created_by` to the selected CS (aliases + first name, e.g. Harish → Harish R). */
@@ -4828,7 +4841,7 @@ export default function PlaybookExperimentPage({ playbookId }: { playbookId: Pla
 }
 
 function ExperimentXShell() {
-  const { pages: playbookPages, pageShort, id: playbookId, label, emoji } = usePlaybook();
+  const { pages: playbookPages, pageShort, id: playbookId, label, emoji, api } = usePlaybook();
   const { role } = usePermissions();
   const { user } = useAuth();
   useIdeaBankRealtime(playbookId);
@@ -4916,6 +4929,21 @@ function ExperimentXShell() {
     [],
   );
 
+  const todayStrShell = toLocalISO(new Date());
+  const { data: todayIdeaRows = [] } = useQuery({
+    queryKey: expQk(playbookId, "idea-bank", "today", todayStrShell),
+    queryFn: () => api.getIdeaBank({ day_date: todayStrShell, enrich_cross: false }),
+    staleTime: EXP_STALE_MS,
+    enabled: tab === "frontseat",
+  });
+  const todayWriters = useMemo(() => writerNamesFromIdeas(todayIdeaRows as any[]), [todayIdeaRows]);
+  const csSelectValue = canonicalWriter(csFilter);
+  const writerOptions = useMemo(() => {
+    const names = new Set(todayWriters);
+    if (csSelectValue) names.add(csSelectValue);
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [todayWriters, csSelectValue]);
+
   if (!profile) {
     return (
       <div style={{ minHeight: "100vh", background: "var(--pb-bg)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
@@ -4935,8 +4963,6 @@ function ExperimentXShell() {
     "content-bank":  "Content Bank",
     "working-ideas": "Proven Ideas",
   };
-  const csSelectValue = canonicalWriter(csFilter);
-  const csSelectKnown = CS_WRITERS.some((p) => p.name === csSelectValue);
 
   return (
     <div className="fglass-page pb-page" style={{ padding: "16px 20px 40px 64px" }}>
@@ -4987,12 +5013,9 @@ function ExperimentXShell() {
             title="Filter ideas by who wrote them"
           >
             <option value="">All CS</option>
-            {CS_WRITERS.map((p) => (
-              <option key={p.name} value={p.name}>{p.name}</option>
+            {writerOptions.map((name) => (
+              <option key={name} value={name}>{name}</option>
             ))}
-            {csSelectValue && !csSelectKnown && (
-              <option value={csSelectValue}>{csSelectValue}</option>
-            )}
           </select>
         )}
         {tab === "frontseat" && (
