@@ -28,7 +28,7 @@ import {
   type PlaybookId,
 } from "@/lib/playbookExperimentConfig";
 import { PlaybookExperimentContext, usePlaybook } from "@/lib/playbookExperimentContext";
-import { deployExpIdeaToPlaybook } from "@/services/api";
+import { PEOPLE_SEED, lookupPerson } from "@/lib/peopleSeed";
 
 /** React Query keys scoped per playbook — prevents stale data when switching playbooks. */
 function expQk(playbookId: string, ...parts: unknown[]) {
@@ -4163,14 +4163,32 @@ function matchesContentFormat(idea: any, filter: string): boolean {
 }
 
 const CS_WRITTEN_BY_KEY = "fsos-cd-written-by";
+const CS_WRITERS = PEOPLE_SEED
+  .filter((p) => p.role === "cs" || p.role === "cw" || p.role === "senior_cs")
+  .slice()
+  .sort((a, b) => a.name.localeCompare(b.name));
 
-/** Match `created_by` against a typed CS name ("harish" hits "Harish R"). */
+/** Map a stored Google name / alias onto the roster label used in the dropdown. */
+function canonicalWriter(saved: string): string {
+  const got = saved.trim();
+  if (!got) return "";
+  const person = lookupPerson(got);
+  if (person && CS_WRITERS.some((p) => p.name === person.name)) return person.name;
+  return got;
+}
+
+/** Match `created_by` to the selected CS (aliases + first name, e.g. Harish → Harish R). */
 function matchesWrittenBy(idea: any, q: string): boolean {
-  const needle = q.toLowerCase().trim();
-  if (!needle) return true;
-  const author = String(idea.created_by || "").trim().toLowerCase();
+  const selected = canonicalWriter(q);
+  if (!selected) return true;
+  const author = String(idea.created_by || "").trim();
   if (!author) return false;
-  return author.includes(needle) || needle.includes(author);
+  const selectedPerson = lookupPerson(selected);
+  const authorPerson = lookupPerson(author);
+  if (selectedPerson && authorPerson) return selectedPerson.name === authorPerson.name;
+  const a = author.toLowerCase();
+  const s = selected.toLowerCase();
+  return a === s || a.startsWith(s + " ") || s.startsWith(a + " ");
 }
 
 // ---------------------------------------------------------------------------
@@ -4867,7 +4885,7 @@ function ExperimentXShell() {
     if (!roles.some((r) => r === "cs" || r === "cw")) return;
     const name = String(user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split("@")[0] || "").trim();
     if (!name) return;
-    persistCsFilter(name);
+    persistCsFilter(canonicalWriter(name) || name);
   }, [role, user]);
   // Today's Board: kanban (drag-and-drop) vs. table (flat, sortable) — same filters,
   // just two different ways to look at and act on the same pool ideas.
@@ -4917,6 +4935,8 @@ function ExperimentXShell() {
     "content-bank":  "Content Bank",
     "working-ideas": "Proven Ideas",
   };
+  const csSelectValue = canonicalWriter(csFilter);
+  const csSelectKnown = CS_WRITERS.some((p) => p.name === csSelectValue);
 
   return (
     <div className="fglass-page pb-page" style={{ padding: "16px 20px 40px 64px" }}>
@@ -4960,27 +4980,20 @@ function ExperimentXShell() {
           style={{ ...inp, width: 220, flex: "0 0 220px" }}
         />
         {tab === "frontseat" && (
-          <div style={{ position: "relative", width: 180, flex: "0 0 180px" }}>
-            <input
-              placeholder="Written by CS…"
-              value={csFilter}
-              onChange={e => persistCsFilter(e.target.value)}
-              style={{ ...inp, width: "100%", paddingRight: csFilter ? 26 : 10 }}
-            />
-            {csFilter ? (
-              <button
-                type="button"
-                onClick={() => persistCsFilter("")}
-                title="Show all CS"
-                style={{
-                  position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
-                  width: 16, height: 16, border: "none", borderRadius: 999, cursor: "pointer",
-                  background: "var(--pb-chip)", color: "var(--pb-dim2)", fontSize: 10, fontWeight: 700,
-                  display: "flex", alignItems: "center", justifyContent: "center", padding: 0,
-                }}
-              >✕</button>
-            ) : null}
-          </div>
+          <select
+            value={csSelectValue}
+            onChange={e => persistCsFilter(e.target.value)}
+            style={{ ...sel, fontFamily: "inherit", minWidth: 160, height: 34, padding: "7px 10px" }}
+            title="Filter ideas by who wrote them"
+          >
+            <option value="">All CS</option>
+            {CS_WRITERS.map((p) => (
+              <option key={p.name} value={p.name}>{p.name}</option>
+            ))}
+            {csSelectValue && !csSelectKnown && (
+              <option value={csSelectValue}>{csSelectValue}</option>
+            )}
+          </select>
         )}
         {tab === "frontseat" && (
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
