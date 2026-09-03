@@ -1031,11 +1031,27 @@ function SafeField({ value, onSave, placeholder, style, readOnly, bare }: { valu
 }
 
 const SUBMISSION_LINK_COLOR = "#FF2E93";
+const SUBMISSION_LINK_GRADIENT = "linear-gradient(90deg, #FF9DE8 0%, #FF2E93 50%, #FF6B4A 100%)";
 
 function submissionHref(raw: string | undefined | null): string {
   const s = String(raw || "").trim();
   if (!s) return "";
   return /^https?:\/\//i.test(s) ? s : `https://${s}`;
+}
+
+function submissionLinkTextStyle(size = 13): React.CSSProperties {
+  return {
+    fontSize: size,
+    fontWeight: 800,
+    wordBreak: "break-all",
+    display: "inline",
+    backgroundImage: SUBMISSION_LINK_GRADIENT,
+    WebkitBackgroundClip: "text",
+    backgroundClip: "text",
+    WebkitTextFillColor: "transparent",
+    color: "transparent",
+    filter: "drop-shadow(0 0 10px rgba(255,46,147,0.75))",
+  };
 }
 
 function SubmissionLinkField({ value, onSave, readOnly, ls }: {
@@ -1050,7 +1066,7 @@ function SubmissionLinkField({ value, onSave, readOnly, ls }: {
       <label style={ls}>Submission link</label>
       {readOnly ? (
         link ? (
-          <a href={submissionHref(link)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: SUBMISSION_LINK_COLOR, fontWeight: 700, wordBreak: "break-all" }}>{link}</a>
+          <a href={submissionHref(link)} target="_blank" rel="noopener noreferrer" style={{ ...submissionLinkTextStyle(14), display: "block" }}>{link}</a>
         ) : (
           <span style={{ fontSize: 13, color: "var(--pb-faint)" }}>—</span>
         )
@@ -1069,7 +1085,7 @@ function SubmissionLinkField({ value, onSave, readOnly, ls }: {
             }}
           />
           {link ? (
-            <a href={submissionHref(link)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: SUBMISSION_LINK_COLOR, fontWeight: 700, wordBreak: "break-all", display: "block", marginTop: 4 }}>{link}</a>
+            <a href={submissionHref(link)} target="_blank" rel="noopener noreferrer" style={{ ...submissionLinkTextStyle(14), display: "block", marginTop: 6 }}>{link}</a>
           ) : null}
         </>
       )}
@@ -1090,10 +1106,11 @@ function SubmissionChip({ href }: { href?: string | null }) {
       style={{
         display: "inline-flex", alignItems: "center",
         fontSize: 10, fontWeight: 800, letterSpacing: "0.02em",
-        color: SUBMISSION_LINK_COLOR,
-        background: "rgba(255,46,147,0.16)",
-        border: `1px solid ${SUBMISSION_LINK_COLOR}`,
+        color: "#fff",
+        backgroundImage: SUBMISSION_LINK_GRADIENT,
+        border: "none",
         borderRadius: 99, padding: "2px 8px",
+        boxShadow: "0 0 10px rgba(255,46,147,0.55)",
       }}
     >
       Submission ↗
