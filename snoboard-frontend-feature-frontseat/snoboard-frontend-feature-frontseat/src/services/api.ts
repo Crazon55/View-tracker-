@@ -470,7 +470,10 @@ export function createExpApi(playbook: string) {
       else if (params?.day_date) q.set("day_date", params.day_date);
       else if (params?.week != null) q.set("week", String(params.week));
       if (params?.page) q.set("page", params.page);
-      if (params?.enrich_cross === false) q.set("enrich_cross", "0");
+      // Backend defaults enrich OFF (cross-playbook joins are expensive). Send an
+      // explicit 1/0 so a missing query param can never silently re-enable it.
+      if (params?.enrich_cross === true) q.set("enrich_cross", "1");
+      else if (params?.enrich_cross === false) q.set("enrich_cross", "0");
       const qs = q.toString();
       return fetchApi<any[]>(`${base}/idea-bank${qs ? `?${qs}` : ""}`);
     },

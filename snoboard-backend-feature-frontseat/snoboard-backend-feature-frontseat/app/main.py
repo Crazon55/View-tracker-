@@ -5481,8 +5481,17 @@ async def exp_idea_bank_ws(websocket: WebSocket, playbook: str):
     await idea_bank_ws.connect(pb, websocket)
     try:
         while True:
-            await websocket.receive_text()
+            try:
+                await asyncio.wait_for(websocket.receive_text(), timeout=25)
+            except asyncio.TimeoutError:
+                # Keep proxies from killing idle sockets (which used to look like a
+                # handshake failure on the next reconnect and stampede GET /idea-bank).
+                await websocket.send_json({"type": "ping"})
     except WebSocketDisconnect:
+        pass
+    except Exception:
+        logger.debug("idea-bank ws dropped for %s", pb, exc_info=True)
+    finally:
         idea_bank_ws.disconnect(pb, websocket)
 
 
@@ -5560,7 +5569,10 @@ async def exp_list_idea_bank(
     if page:
         q = q.eq("page_handle", page)
     data = q.execute().data or []
-    do_enrich = enrich_cross not in ("0", "false", "False")
+    # Cross-playbook enrich is extra Supabase round-trips per list. Default OFF —
+    # callers that need deployed_to / cross views (Idea Engine, some week views)
+    # pass enrich_cross=1. Production/Frontseat polls must not pay this on every tick.
+    do_enrich = str(enrich_cross or "").strip().lower() in ("1", "true")
     if do_enrich:
         try:
             data = exp_enrich_ideas_cross_playbook(client, pb, data)

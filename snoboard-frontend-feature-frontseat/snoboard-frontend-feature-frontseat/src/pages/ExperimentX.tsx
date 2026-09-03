@@ -7,7 +7,7 @@ import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tansta
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
-import { useIdeaBankRealtime } from "@/hooks/useIdeaBankRealtime";
+import { isIdeaBankSocketLive, useIdeaBankRealtime } from "@/hooks/useIdeaBankRealtime";
 import { canonicalRole } from "@/lib/accessModel";
 import {
   canEditExperimentX,
@@ -2815,18 +2815,14 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
   // the two now hold different-shaped data and must not collide.
   const { data: allIdeas = [], isLoading } = useQuery({
     queryKey: expQk(playbookId, "idea-bank", "pending"),
-    queryFn: () => api.getIdeaBank({ pending_only: true }),
+    queryFn: () => api.getIdeaBank({ pending_only: true, enrich_cross: false }),
     staleTime: EXP_STALE_MS,
     refetchOnMount: "always",
-    // Cache invalidation alone only reaches this browser tab — a teammate distributing (or
-    // removing) an idea from Content Distribution on their own machine has no way to tell
-    // this session its data is stale. Poll so a change someone else just made shows up here
-    // without anyone needing to reload. Pauses automatically while this tab isn't
-    // visible/focused (React Query's default), so it isn't hammering the backend when no
-    // one's actually looking at the board. refetchOnWindowFocus (left at its default, true)
-    // covers the common case of switching back to this tab from Content Distribution —
-    // that's instant, not bounded by the poll interval.
-    refetchInterval: 8_000,
+    // WS is the live path. Poll is the fallback when the socket isn't up (proxy not
+    // upgrading, handshake still in flight). Don't stack 8s GETs on top of a live socket
+    // — that was a big part of "the API is too slow" while Idea Engine also had 3 sockets
+    // invalidating every board cache.
+    refetchInterval: () => (isIdeaBankSocketLive(playbookId) ? 45_000 : 20_000),
   });
 
   // Batch status write across every copy in a group (single base edit → all pages).
@@ -3527,7 +3523,7 @@ function TrackingTab({ pageFilter, search, viewOnly }: { pageFilter: string; sea
   // Fetch just the selected day's rows (fetching the whole bank hits the DB row cap).
   const { data: allIdeas = [], isLoading } = useQuery({
     queryKey: expQk(playbookId, "idea-bank", "today", targetDay),
-    queryFn: () => api.getIdeaBank({ day_date: targetDay }),
+    queryFn: () => api.getIdeaBank({ day_date: targetDay, enrich_cross: false }),
     staleTime: EXP_STALE_MS,
     refetchOnWindowFocus: false,
   });
@@ -4507,10 +4503,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
     queryFn: () => api.getIdeaBank({ day_date: todayStr, enrich_cross: false }),
     staleTime: EXP_STALE_MS,
     refetchOnMount: "always",
-    // Same reasoning as Production's board query — a teammate's edit on another machine
-    // (e.g. Production marking something posted) only reaches this session by polling.
-    // refetchOnWindowFocus (default true here) covers switching back from Production.
-    refetchInterval: 8_000,
+    refetchInterval: () => (isIdeaBankSocketLive(playbookId) ? 45_000 : 20_000),
   });
 
   const updateMut = useMutation(expIdeaUpdateMutationOpts(qc, playbookId, api, {
