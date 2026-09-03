@@ -1060,6 +1060,13 @@ function SubmissionLinkField({ value, onSave, readOnly, ls }: {
             value={value || ""}
             onSave={(v) => onSave?.(v)}
             placeholder="Paste Drive / Canva / export link"
+            style={{
+              color: SUBMISSION_LINK_COLOR,
+              caretColor: SUBMISSION_LINK_COLOR,
+              background: "rgba(255,46,147,0.08)",
+              border: "1px solid rgba(255,46,147,0.45)",
+              fontWeight: 600,
+            }}
           />
           {link ? (
             <a href={submissionHref(link)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: SUBMISSION_LINK_COLOR, fontWeight: 700, wordBreak: "break-all", display: "block", marginTop: 4 }}>{link}</a>
@@ -3204,13 +3211,6 @@ function ProductionDetailModal({ group, pageColors, readOnly, canMarkPosted, csR
         {src.frame_link && <a href={src.frame_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block", marginTop: 4 }}>{src.frame_link}</a>}
       </div>
 
-      <SubmissionLinkField
-        value={src.submission_link}
-        readOnly={readOnly}
-        ls={ls}
-        onSave={(v) => onSaveGroup({ submission_link: v })}
-      />
-
       {/* YT link + timestamps */}
       <div style={{ display: "flex", gap: 10 }}>
         <div style={{ flex: 1 }}>
@@ -3230,6 +3230,13 @@ function ProductionDetailModal({ group, pageColors, readOnly, canMarkPosted, csR
         <SafeField readOnly={readOnly} value={src.comp_link} onSave={(v) => onSaveGroup({ comp_link: v })} placeholder="Competitor reel / post URL" />
         {src.comp_link && <a href={src.comp_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block", marginTop: 4 }}>{src.comp_link}</a>}
       </div>
+
+      <SubmissionLinkField
+        value={src.submission_link}
+        readOnly={readOnly}
+        ls={ls}
+        onSave={(v) => onSaveGroup({ submission_link: v })}
+      />
 
       {/* Changes/Blocked notes — persist and stay visible here regardless of the group's
           current stage, per how `advance` writes them (see ProductionCard's `note`). */}
