@@ -198,6 +198,7 @@ class ExpIdeaCreate(BaseModel):
     assigned_to: str | None = None
     engine_review: str | None = None
     engine_reviewed_by: str | None = None
+    page_views: dict = {}
 
 
 class ExpIdeaUpdate(BaseModel):

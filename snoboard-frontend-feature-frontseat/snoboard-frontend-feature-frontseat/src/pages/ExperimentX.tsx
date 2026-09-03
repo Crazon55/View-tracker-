@@ -4129,6 +4129,8 @@ function QuickAddModal({ open, onAdd, onClose }: {
 function FrontseatPoolCard({ idea, letter, onDragStart, onClick, onDelete, readOnly }: {
   idea: any; letter: string; onDragStart: () => void; onClick: () => void; onDelete?: () => void; readOnly?: boolean;
 }) {
+  const { pageColors, pageShort } = usePlaybook();
+  const posted = previouslyPostedPages(idea);
   return (
     <div
       draggable={!readOnly}
@@ -4170,6 +4172,26 @@ function FrontseatPoolCard({ idea, letter, onDragStart, onClick, onDelete, readO
       </p>
       {idea.created_by ? (
         <p style={{ margin: "5px 0 0", fontSize: 10, color: "var(--pb-faint)" }}>by {idea.created_by}</p>
+      ) : null}
+      {posted.length > 0 ? (
+        <div style={{ marginTop: 7 }}>
+          <div style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--pb-faint)", marginBottom: 4 }}>
+            Already posted · {posted.length}
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+            {posted.map((p) => {
+              const c = pageColors[p] || "var(--pb-dim2)";
+              return (
+                <span key={p} title={`Already posted on @${p}`} style={{
+                  fontSize: 9, fontWeight: 700, color: c, background: c + "18",
+                  border: `1px solid ${c}55`, borderRadius: 4, padding: "1px 5px",
+                }}>
+                  @{pageShort[p] || p}
+                </span>
+              );
+            })}
+          </div>
+        </div>
       ) : null}
       <div style={{ display: "flex", gap: 5, marginTop: 7, flexWrap: "wrap", alignItems: "center" }}>
         <DeployedFromBadge idea={idea} />
@@ -4267,11 +4289,12 @@ function FrontseatPageCard({ idea, letter, onClick, onRemoveFromPage, onAssign, 
 // the kanban and table/page-accordion views) to assign a page without dragging.
 // ---------------------------------------------------------------------------
 /** "+" chip opening a popover to assign the idea to one more page. */
-function AddPageChip({ pages, pageColors, pageShort, onAdd }: {
-  pages: string[]; pageColors: Record<string, string>; pageShort: Record<string, string>;
+function AddPageChip({ pages, postedPages, pageColors, pageShort, onAdd }: {
+  pages: string[]; postedPages?: string[]; pageColors: Record<string, string>; pageShort: Record<string, string>;
   onAdd: (page: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const posted = new Set(postedPages || []);
   if (pages.length === 0) return null;
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -4295,21 +4318,28 @@ function AddPageChip({ pages, pageColors, pageShort, onAdd }: {
         onClick={e => e.stopPropagation()}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 220, overflowY: "auto", minWidth: 150 }}>
-          {pages.map(p => (
+          {pages.map(p => {
+            const already = posted.has(p);
+            return (
             <button
               key={p}
               type="button"
               onClick={() => { onAdd(p); setOpen(false); }}
+              title={already ? "Already posted here before" : "Assign to this page"}
               style={{
                 display: "flex", alignItems: "center", gap: 6, textAlign: "left",
                 padding: "5px 8px", borderRadius: 5, border: "none", background: "transparent",
-                fontSize: 11.5, fontWeight: 600, color: pageColors[p] || "var(--pb-dim2)", cursor: "pointer",
+                fontSize: 11.5, fontWeight: 600,
+                color: already ? "var(--pb-faint)" : (pageColors[p] || "var(--pb-dim2)"),
+                cursor: "pointer",
               }}
             >
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: pageColors[p] || "var(--pb-dim2)", flexShrink: 0 }} />
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: pageColors[p] || "var(--pb-dim2)", flexShrink: 0, opacity: already ? 0.45 : 1 }} />
               {pageShort[p] || p}
+              {already ? <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase" }}>posted</span> : null}
             </button>
-          ))}
+            );
+          })}
         </div>
       </PopoverContent>
     </Popover>
@@ -4327,6 +4357,23 @@ function matchesContentFormat(idea: any, filter: string): boolean {
 }
 
 const CS_WRITTEN_BY_KEY = "fsos-cd-written-by";
+
+function previouslyPostedPages(idea: any): string[] {
+  const fromApi = idea.previously_posted_pages;
+  if (Array.isArray(fromApi) && fromApi.length) {
+    return [...new Set(fromApi.map((p: string) => String(p).trim().replace(/^@/, "")).filter(Boolean))];
+  }
+  const pages = new Set<string>();
+  for (const m of [idea.page_live_links, idea.page_posting_dates, idea.page_views]) {
+    if (m && typeof m === "object") {
+      for (const p of Object.keys(m)) {
+        const t = p.trim().replace(/^@/, "");
+        if (t) pages.add(t);
+      }
+    }
+  }
+  return [...pages];
+}
 
 function isFrontseatPoolIdea(idea: any): boolean {
   return idea.frontseat_pool === true || (idea.frontseat_pool == null && idea.status === "new");
@@ -4618,6 +4665,9 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
     // Prevent duplicate copies for the same pool idea + page combo
     const alreadyAssigned = (ideasByPage[page] || []).some((c: any) => c.source_pool_id === ideaId);
     if (alreadyAssigned) return;
+    if (previouslyPostedPages(idea).includes(page)) {
+      toast.message(`Already posted on @${page} — assigning for today anyway`);
+    }
     // Create a pipeline copy for this page. An idea that already has a base-edit link
     // (drive/frame) is an EXISTING idea — the base edit is done, so it skips straight
     // to the editor's Base edit column; a fresh idea starts at Approved for base editing.
@@ -4733,7 +4783,13 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
                       );
                     })}
                     {!readOnly && (
-                      <AddPageChip pages={unassignedPages} pageColors={pageColors} pageShort={pageShort} onAdd={page => assignToPage(idea, page)} />
+                      <AddPageChip
+                        pages={unassignedPages}
+                        postedPages={previouslyPostedPages(idea)}
+                        pageColors={pageColors}
+                        pageShort={pageShort}
+                        onAdd={page => assignToPage(idea, page)}
+                      />
                     )}
                   </div>
                 )}
@@ -4762,6 +4818,9 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
     if (readOnly) return;
     const alreadyAssigned = (copiesBySourceId[pool.id] || []).some((c: any) => (c.page_handle || "").trim() === page);
     if (alreadyAssigned) return;
+    if (previouslyPostedPages(pool).includes(page)) {
+      toast.message(`Already posted on @${page} — assigning for today anyway`);
+    }
     const hasBaseEdit = !!(pool.drive_link || pool.frame_link);
     createCopyMut.mutate({
       topic: pool.topic, source: pool.source, content_type: pool.content_type,

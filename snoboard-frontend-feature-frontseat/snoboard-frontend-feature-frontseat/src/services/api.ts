@@ -487,6 +487,9 @@ export function createExpApi(playbook: string) {
       yt_url?: string; yt_timestamps?: string; frame_link?: string;
       kalakar_link?: string; drive_link?: string; submission_link?: string; created_by?: string;
       origin_playbook?: string; origin_idea_id?: string; assigned_to?: string;
+      page_live_links?: Record<string, string>;
+      page_posting_dates?: Record<string, string>;
+      page_views?: Record<string, number>;
     }) => fetchApi<any>(`${base}/idea-bank`, { method: "POST", body: JSON.stringify(data) }),
     updateIdea: (id: string, data: Record<string, unknown>) =>
       fetchApi<any>(`${base}/idea-bank/${id}`, { method: "PATCH", body: JSON.stringify(data) }),

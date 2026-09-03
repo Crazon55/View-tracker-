@@ -108,7 +108,7 @@ function mergeIdeasByTopic(list: any[]): any[] {
     const key = topic ? `${idea._playbook}::${topic.toLowerCase()}` : `${idea._playbook}::__${idea.id}`;
     let g = map.get(key);
     if (!g) {
-      g = { ...idea, page_views: {}, page_likes: {}, _deployed: new Set<string>(), _ids: new Set<string>() };
+      g = { ...idea, page_views: {}, page_likes: {}, page_live_links: {}, page_posting_dates: {}, _deployed: new Set<string>(), _ids: new Set<string>() };
       map.set(key, g);
     }
     (g._ids as Set<string>).add(idea.id);
@@ -126,6 +126,14 @@ function mergeIdeasByTopic(list: any[]): any[] {
     for (const f of ["comp_link", "yt_url", "yt_timestamps", "frame_link", "drive_link", "kalakar_link"]) {
       if (!g[f] && idea[f]) g[f] = idea[f];
     }
+    const live = g.page_live_links as Record<string, string> || (g.page_live_links = {});
+    for (const [p, url] of Object.entries((idea.page_live_links || {}) as Record<string, string>)) {
+      if (p.trim() && !live[p]) live[p.trim()] = url;
+    }
+    const dates = g.page_posting_dates as Record<string, string> || (g.page_posting_dates = {});
+    for (const [p, d] of Object.entries((idea.page_posting_dates || {}) as Record<string, string>)) {
+      if (p.trim() && !dates[p]) dates[p.trim()] = d;
+    }
     // Prefer a real production status over the pool card's "new".
     if ((!g.status || g.status === "new") && idea.status) g.status = idea.status;
     if (!g.engine_review && idea.engine_review) g.engine_review = idea.engine_review;
@@ -133,7 +141,7 @@ function mergeIdeasByTopic(list: any[]): any[] {
   }
   return [...map.values()].map((g) => ({
     ...g,
-    page_handle: Object.keys(g.page_views).join(","),
+    page_handle: Object.keys(g.page_views).join(",") || Object.keys(g.page_live_links || {}).join(","),
     views: Object.values(g.page_views as Record<string, number>).reduce((a, b) => a + b, 0),
     likes: Object.values(g.page_likes as Record<string, number>).reduce((a, b) => a + b, 0),
     deployed_to_playbooks: [...g._deployed],
@@ -334,6 +342,14 @@ export default function IdeaEngineGallery() {
     mutationFn: ({ idea, target }: { idea: Idea; target: PlaybookId }) => {
       const rootPb = (idea.origin_playbook || idea._playbook) as PlaybookId;
       const rootId = String(idea.origin_idea_id || idea.id);
+      const postedPages = pagesOf(idea);
+      const page_live_links: Record<string, string> = { ...(idea.page_live_links || {}) };
+      const page_posting_dates: Record<string, string> = { ...(idea.page_posting_dates || {}) };
+      const page_views: Record<string, number> = { ...(idea.page_views || {}) };
+      for (const p of postedPages) {
+        if (!(p in page_live_links)) page_live_links[p] = "";
+        if (!(p in page_views)) page_views[p] = 0;
+      }
       return PB_API[target].createIdea({
         page_handle: "",
         content_type: idea.content_type || "reel",
@@ -357,6 +373,11 @@ export default function IdeaEngineGallery() {
         kalakar_link: idea.kalakar_link || "",
         origin_playbook: rootPb,
         origin_idea_id: rootId,
+        // History maps (not page_handle) so the pool can show "already posted on"
+        // without treating those pages as today's assignments.
+        page_live_links,
+        page_posting_dates,
+        page_views,
       });
     },
     onSuccess: (_d, { idea, target }) => {

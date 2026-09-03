@@ -49,6 +49,7 @@ from app.experiment_playbooks import (
     exp_find_deployments,
     exp_enrich_ideas_cross_playbook,
     exp_sum_views,
+    exp_attach_previously_posted,
 )
 from app.routers.fsi import router as fsi_router
 from app.seeding.routes import (
@@ -5605,6 +5606,11 @@ async def exp_list_idea_bank(
             data = exp_enrich_ideas_cross_playbook(client, pb, data)
         except Exception as e:
             logger.warning("Cross-playbook enrich failed for %s: %s", pb, e)
+    if any(isinstance(r, dict) and r.get("frontseat_pool") for r in data):
+        try:
+            data = exp_attach_previously_posted(client, pb, data)
+        except Exception as e:
+            logger.warning("previously_posted attach failed for %s: %s", pb, e)
     return {"success": True, "data": _attach_engine_review(data)}
 
 
@@ -5658,6 +5664,7 @@ async def exp_create_idea(playbook: str, req: ExpIdeaCreate):
         "page_posting_times": req.page_posting_times or {},
         "page_captions": req.page_captions or {},
         "page_live_links": req.page_live_links or {},
+        "page_views": req.page_views or {},
         "assigned_to": req.assigned_to,
     }
     if req.origin_playbook and req.origin_idea_id:

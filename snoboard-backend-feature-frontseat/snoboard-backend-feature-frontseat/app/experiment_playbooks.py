@@ -170,3 +170,109 @@ def exp_enrich_ideas_cross_playbook(client, playbook: str, ideas: list[dict]) ->
         enriched.append(item)
     return enriched
 
+
+def _pages_from_idea_maps(row: dict, include_handle: bool = False) -> list[str]:
+    """Pages this idea has already run on, from history maps (not today's pool assignment)."""
+    pages: set[str] = set()
+    for key in ("page_live_links", "page_posting_dates", "page_views"):
+        m = row.get(key) or {}
+        if isinstance(m, dict):
+            for p in m:
+                t = str(p).strip().lstrip("@")
+                if t:
+                    pages.add(t)
+    if include_handle:
+        for p in str(row.get("page_handle") or "").split(","):
+            t = p.strip().lstrip("@")
+            if t:
+                pages.add(t)
+    return sorted(pages)
+
+
+def exp_attach_previously_posted(client, playbook: str, ideas: list[dict]) -> list[dict]:
+    """Stamp previously_posted_pages on Ideas Pool cards so Content Distribution can
+    warn before re-posting. Uses maps already on the row; if a Send happened before
+    those were copied, look up the origin idea (+ same-topic siblings) once."""
+    if not ideas:
+        return ideas
+
+    need: list[dict] = []
+    for idea in ideas:
+        maps = _pages_from_idea_maps(idea, include_handle=False)
+        if maps:
+            idea["previously_posted_pages"] = maps
+            continue
+        if idea.get("frontseat_pool") and idea.get("origin_idea_id"):
+            need.append(idea)
+        else:
+            idea["previously_posted_pages"] = []
+
+    if not need:
+        return ideas
+
+    by_pb: dict[str, list[str]] = {}
+    for idea in need:
+        op = str(idea.get("origin_playbook") or playbook).strip().lower()
+        if op not in VALID_PLAYBOOKS:
+            op = playbook
+        by_pb.setdefault(op, []).append(str(idea["origin_idea_id"]))
+
+    pages_by_origin: dict[tuple[str, str], list[str]] = {}
+    pages_by_topic: dict[tuple[str, str], list[str]] = {}
+    origin_topic: dict[tuple[str, str], str] = {}
+
+    for pb, ids in by_pb.items():
+        uniq = list(dict.fromkeys(ids))
+        tables = get_playbook_tables(pb)
+        origins = (
+            client.table(tables.idea_bank)
+            .select("id,topic,page_handle,page_views,page_live_links,page_posting_dates")
+            .in_("id", uniq)
+            .execute()
+            .data
+            or []
+        )
+        topics: list[str] = []
+        for row in origins:
+            oid = str(row.get("id") or "")
+            pages_by_origin[(pb, oid)] = _pages_from_idea_maps(row, include_handle=True)
+            topic = str(row.get("topic") or "").strip()
+            if topic:
+                origin_topic[(pb, oid)] = topic
+                topics.append(topic)
+        topics = list(dict.fromkeys(topics))
+        if not topics:
+            continue
+        siblings = (
+            client.table(tables.idea_bank)
+            .select("topic,status,page_handle,page_views,page_live_links,page_posting_dates")
+            .in_("topic", topics)
+            .limit(200)
+            .execute()
+            .data
+            or []
+        )
+        bucket: dict[str, set[str]] = {}
+        for row in siblings:
+            topic = str(row.get("topic") or "").strip()
+            if not topic:
+                continue
+            posted = str(row.get("status") or "").strip().lower() == "posted"
+            pages = _pages_from_idea_maps(row, include_handle=posted)
+            if not pages:
+                continue
+            bucket.setdefault(topic.lower(), set()).update(pages)
+        for topic_key, pages in bucket.items():
+            pages_by_topic[(pb, topic_key)] = sorted(pages)
+
+    for idea in need:
+        op = str(idea.get("origin_playbook") or playbook).strip().lower()
+        oid = str(idea.get("origin_idea_id") or "")
+        topic = origin_topic.get((op, oid), "")
+        idea["previously_posted_pages"] = (
+            pages_by_topic.get((op, topic.lower()))
+            or pages_by_origin.get((op, oid))
+            or []
+        )
+    return ideas
+
