@@ -4917,7 +4917,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
       <div
         ref={pagesScrollRef}
         className="pb-thin-scroll"
-        style={{ flex: 1, minWidth: 0, overflowX: "auto", overflowY: "hidden", display: "flex", gap: 10, alignItems: "stretch" }}
+        style={{ flex: 1, minWidth: 0, overflowX: "auto", overflowY: "hidden", display: "flex", gap: 10, alignItems: "flex-start", alignSelf: "stretch" }}
       >
         {playbookPages.map(page => {
           const short    = pageShort[page] || page;
