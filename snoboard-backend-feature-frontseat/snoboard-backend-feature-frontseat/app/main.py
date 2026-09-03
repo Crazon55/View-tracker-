@@ -5601,6 +5601,7 @@ async def exp_create_idea(playbook: str, req: ExpIdeaCreate):
         "comp_link": req.comp_link,
         "kalakar_link": req.kalakar_link,
         "drive_link": req.drive_link,
+        "submission_link": req.submission_link,
         "created_by": req.created_by,
         "edited_by": req.edited_by,
         "test_result": req.test_result,
@@ -5692,6 +5693,9 @@ async def exp_deploy_idea_to_playbook(target_playbook: str, source_playbook: str
         "yt_url": "",
         "yt_timestamps": "",
         "comp_link": source.get("comp_link") or "",
+        "kalakar_link": source.get("kalakar_link") or "",
+        "drive_link": source.get("drive_link") or "",
+        "submission_link": source.get("submission_link") or "",
         "created_by": source.get("created_by") or "",
         "edited_by": "",
         "test_result": "",
@@ -5801,7 +5805,18 @@ async def exp_update_idea(playbook: str, idea_id: str, req: ExpIdeaUpdate):
             update_data.pop("engine_review", None)
             update_data.pop("engine_reviewed_by", None)
             update_data.pop("engine_reviewed_at", None)
-    client.table(tables.idea_bank).update(update_data).eq("id", idea_id).execute()
+    try:
+        client.table(tables.idea_bank).update(update_data).eq("id", idea_id).execute()
+    except Exception as e:
+        msg = str(e).lower()
+        if "submission_link" in msg and ("schema cache" in msg or "could not find" in msg or "column" in msg):
+            update_data.pop("submission_link", None)
+            if update_data:
+                client.table(tables.idea_bank).update(update_data).eq("id", idea_id).execute()
+            else:
+                raise
+        else:
+            raise
     verify = _exp_idea_query(client, pb).eq("id", idea_id).limit(1).execute().data
     updated = (verify[0] if verify else {}) or {}
     if updated:
@@ -5897,6 +5912,9 @@ async def exp_archive_week(playbook: str, request: Request):
             "yt_url": i.get("yt_url", ""),
             "yt_timestamps": i.get("yt_timestamps", ""),
             "comp_link": i.get("comp_link", ""),
+            "kalakar_link": i.get("kalakar_link", ""),
+            "drive_link": i.get("drive_link", ""),
+            "submission_link": i.get("submission_link", ""),
             "content_format": i.get("content_format", ""),
             "created_by": i.get("created_by", ""),
             "page_views": i.get("page_views", {}),
@@ -5923,7 +5941,7 @@ async def exp_update_content_bank_item(playbook: str, item_id: str, request: Req
     body = await request.json()
     allowed = {"topic", "script", "views", "status", "content_type", "source", "hook_variations",
                 "music_ref", "frame_link", "yt_url", "yt_timestamps", "comp_link", "kalakar_link",
-                "drive_link", "page_views",
+                "drive_link", "submission_link", "page_views",
                 "created_by", "edited_by", "test_result", "video_format", "content_format", "page_handle",
                 "page_posting_dates", "page_posting_times", "page_captions", "page_live_links"}
     update_data = {k: v for k, v in body.items() if k in allowed}

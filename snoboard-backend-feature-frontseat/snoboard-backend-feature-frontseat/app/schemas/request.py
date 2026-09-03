@@ -181,6 +181,7 @@ class ExpIdeaCreate(BaseModel):
     comp_link: str = ""
     kalakar_link: str = ""
     drive_link: str = ""
+    submission_link: str = ""
     created_by: str = ""
     edited_by: str = ""
     test_result: str = ""
@@ -223,6 +224,7 @@ class ExpIdeaUpdate(BaseModel):
     comp_link: str | None = None
     kalakar_link: str | None = None
     drive_link: str | None = None
+    submission_link: str | None = None
     created_by: str | None = None
     currently_editing_by: str | None = None
     edited_by: str | None = None

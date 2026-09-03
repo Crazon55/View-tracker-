@@ -481,7 +481,7 @@ export function createExpApi(playbook: string) {
       frontseat_pool?: boolean; source_pool_id?: string;
       source?: string; video_format?: string; content_format?: string; comp_link?: string;
       yt_url?: string; yt_timestamps?: string; frame_link?: string;
-      kalakar_link?: string; drive_link?: string; created_by?: string;
+      kalakar_link?: string; drive_link?: string; submission_link?: string; created_by?: string;
       origin_playbook?: string; origin_idea_id?: string; assigned_to?: string;
     }) => fetchApi<any>(`${base}/idea-bank`, { method: "POST", body: JSON.stringify(data) }),
     updateIdea: (id: string, data: Record<string, unknown>) =>

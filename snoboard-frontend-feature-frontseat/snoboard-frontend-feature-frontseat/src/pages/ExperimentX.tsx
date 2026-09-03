@@ -1025,6 +1025,85 @@ function SafeField({ value, onSave, placeholder, style, readOnly, bare }: { valu
   );
 }
 
+const SUBMISSION_LINK_COLOR = "#FF2E93";
+
+function submissionHref(raw: string | undefined | null): string {
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  return /^https?:\/\//i.test(s) ? s : `https://${s}`;
+}
+
+function SubmissionLinkField({ value, onSave, readOnly, ls }: {
+  value?: string | null;
+  onSave?: (v: string) => void;
+  readOnly?: boolean;
+  ls: React.CSSProperties;
+}) {
+  const link = String(value || "").trim();
+  return (
+    <div style={{
+      padding: "12px 14px",
+      borderRadius: 10,
+      border: `1.5px solid ${SUBMISSION_LINK_COLOR}`,
+      background: "rgba(255,46,147,0.12)",
+    }}>
+      <label style={{ ...ls, color: SUBMISSION_LINK_COLOR, marginBottom: 6 }}>
+        Submission link <span style={{ fontWeight: 500, opacity: 0.75, letterSpacing: 0, textTransform: "none" }}>(optional)</span>
+      </label>
+      {readOnly ? (
+        link ? (
+          <a href={submissionHref(link)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: SUBMISSION_LINK_COLOR, fontWeight: 700, wordBreak: "break-all" }}>{link}</a>
+        ) : (
+          <span style={{ fontSize: 13, color: "rgba(255,46,147,0.45)" }}>—</span>
+        )
+      ) : (
+        <>
+          <SafeField
+            value={value || ""}
+            onSave={(v) => onSave?.(v)}
+            placeholder="Paste Drive / Canva / export link"
+            style={{
+              border: `1.5px solid ${SUBMISSION_LINK_COLOR}`,
+              color: "#FFB3D9",
+              background: "rgba(255,46,147,0.08)",
+              fontWeight: 600,
+            }}
+          />
+          {link ? (
+            <a href={submissionHref(link)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: SUBMISSION_LINK_COLOR, fontWeight: 700, wordBreak: "break-all", display: "block", marginTop: 6 }}>{link}</a>
+          ) : (
+            <p style={{ margin: "6px 0 0", fontSize: 11, color: "rgba(255,46,147,0.7)" }}>Not required — paste when the edit is ready to review.</p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function SubmissionChip({ href }: { href?: string | null }) {
+  const link = String(href || "").trim();
+  if (!link) return null;
+  return (
+    <a
+      href={submissionHref(link)}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      title={link}
+      style={{
+        display: "inline-flex", alignItems: "center",
+        fontSize: 10, fontWeight: 800, letterSpacing: "0.02em",
+        color: SUBMISSION_LINK_COLOR,
+        background: "rgba(255,46,147,0.16)",
+        border: `1px solid ${SUBMISSION_LINK_COLOR}`,
+        borderRadius: 99, padding: "2px 8px",
+      }}
+    >
+      Submission ↗
+    </a>
+  );
+}
+
 function SafeArea({ value, onSave, placeholder, rows, readOnly }: { value: string; onSave: (v: string) => void; placeholder?: string; rows?: number; readOnly?: boolean }) {
   const [local, setLocal] = useState(value || "");
   const dirty = useRef(false);
@@ -2885,6 +2964,7 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
                           {STAGE_LABEL[prodStage(c.status) as IdeaStage] || c.status}
                         </span>
                         <span style={{ fontSize: 10, color: pageColors[(c.page_handle || "").trim()] || "var(--pb-dim2)" }}>{(c.page_handle || "").trim()}</span>
+                        <SubmissionChip href={c.submission_link} />
                       </div>
                       <p style={{ margin: 0, fontSize: 12.5, fontWeight: 500, color: "var(--pb-ink)", lineHeight: 1.35,
                         overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
@@ -3096,6 +3176,13 @@ function ProductionDetailModal({ group, pageColors, readOnly, canMarkPosted, onA
         {src.frame_link && <a href={src.frame_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4A7FD4", wordBreak: "break-all", display: "block", marginTop: 4 }}>{src.frame_link}</a>}
       </div>
 
+      <SubmissionLinkField
+        value={src.submission_link}
+        readOnly={readOnly}
+        ls={ls}
+        onSave={(v) => onSaveGroup({ submission_link: v })}
+      />
+
       {/* YT link + timestamps */}
       <div style={{ display: "flex", gap: 10 }}>
         <div style={{ flex: 1 }}>
@@ -3191,6 +3278,7 @@ function ProductionCard({ group, pageColors, readOnly, canMarkPosted, onOpen, on
           );
         })}
         {group.created_by && <span className="fglass-muted" style={{ fontSize: 9.5 }}>· {group.created_by}</span>}
+        <SubmissionChip href={group.copies.find((c: any) => c.submission_link)?.submission_link} />
       </div>
       {!readOnly && canMarkPosted && onAssign ? (
         // Editable directly from Stage View — one selector per page-copy (a group
@@ -4467,6 +4555,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
       comp_link: idea.comp_link || "", yt_url: idea.yt_url || "",
       yt_timestamps: idea.yt_timestamps || "",
       frame_link: idea.frame_link || "", drive_link: idea.drive_link || "", kalakar_link: idea.kalakar_link || "",
+      submission_link: idea.submission_link || "",
       created_by: idea.created_by || "",
       day_date: todayStr, frontseat_pool: false, source_pool_id: ideaId,
     });
@@ -4601,6 +4690,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
       comp_link: pool.comp_link || "", yt_url: pool.yt_url || "",
       yt_timestamps: pool.yt_timestamps || "",
       frame_link: pool.frame_link || "", drive_link: pool.drive_link || "", kalakar_link: pool.kalakar_link || "",
+      submission_link: pool.submission_link || "",
       created_by: pool.created_by || "",
       day_date: todayStr, frontseat_pool: false, source_pool_id: pool.id,
     });
