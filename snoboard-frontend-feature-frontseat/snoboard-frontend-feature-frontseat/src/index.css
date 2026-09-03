@@ -79,6 +79,11 @@
     @apply border-border;
   }
 
+  html, body, #root {
+    height: 100%;
+    overflow: hidden;
+  }
+
   body {
     @apply text-foreground antialiased;
     font-family: 'Outfit', system-ui, sans-serif;
@@ -89,7 +94,6 @@
   #root {
     position: relative;
     z-index: 1;
-    min-height: 100vh;
     background: transparent;
   }
 

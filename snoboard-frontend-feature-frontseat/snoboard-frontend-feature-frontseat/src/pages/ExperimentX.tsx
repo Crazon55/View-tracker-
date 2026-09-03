@@ -2583,22 +2583,22 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
 
   if (opsOnly) {
     return (
-      <div>
-        <p style={{ fontSize: 12, color: "var(--pb-dim)", marginBottom: 14 }}>
+      <div className="pb-fill">
+        <p style={{ fontSize: 12, color: "var(--pb-dim)", marginBottom: 10, flexShrink: 0 }}>
           Week {currentWeek} · {opsFiltered.length} idea{opsFiltered.length !== 1 ? "s" : ""} · tap to edit posting date, views & baseline
         </p>
-        <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 20, minHeight: "calc(100vh - 260px)" }}>
+        <div className="pb-board-row pb-thin-scroll">
           {OPS_KANBAN_STAGES.map(stage => {
             const stageIdeas = opsFiltered.filter((i: any) => (i.status || "") === stage);
             const dot = STAGE_DOT[stage] || "var(--pb-dim)";
             return (
-              <div key={stage} style={{ minWidth: 220, maxWidth: 280, flex: "1 0 220px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, padding: "0 2px" }}>
+              <div key={stage} className="pb-board-col" style={{ minWidth: 200, maxWidth: 260, flex: "1 1 200px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, padding: "0 2px", flexShrink: 0 }}>
                   <span style={{ width: 8, height: 8, borderRadius: "50%", background: dot, flexShrink: 0 }} />
                   <span style={{ fontSize: 13, fontWeight: 600, color: "var(--pb-ink)" }}>{STAGE_LABEL[stage as IdeaStage] || stage}</span>
                   <span style={{ fontSize: 12, color: "var(--pb-faint)" }}>{opsStageCounts[stage] ?? stageIdeas.length}</span>
                 </div>
-                <div className="fglass-lane" style={{ minHeight: 120 }}>
+                <div className="fglass-lane pb-board-col-body pb-thin-scroll">
                   {stageIdeas.length === 0 ? (
                     <p style={{ fontSize: 11, color: "var(--pb-border)", textAlign: "center", padding: "24px 8px", border: "1.5px dashed var(--pb-chip)", borderRadius: 8 }}>Empty</p>
                   ) : stageIdeas.map((idea: any) => (
@@ -2621,9 +2621,9 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
   }
 
   return (
-    <div>
+    <div className="pb-fill">
       {/* Toolbar */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap", flexShrink: 0 }}>
         <span className="fglass-muted" style={{ fontSize: 12 }}>
           Week {displayWeek}{displayWeek !== currentWeek ? ` (calendar week ${currentWeek})` : ""} · {filtered.length} idea{filtered.length !== 1 ? "s" : ""}
         </span>
@@ -2641,11 +2641,12 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
       />
 
       {/* Kanban board */}
-      <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 20, minHeight: "calc(100vh - 260px)" }}>
+      <div className="pb-board-row pb-thin-scroll">
         {STAGES.filter(s => s !== "kill" && s !== "scheduled" && s !== "posted").concat(["kill"] as IdeaStage[]).map(stage => (
           <div
             key={stage}
-            style={{ minWidth: 200, maxWidth: 240, flex: "1 0 200px" }}
+            className="pb-board-col"
+            style={{ minWidth: 180, maxWidth: 230, flex: "1 1 180px" }}
             onDragOver={readOnly ? undefined : e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropStage(stage); }}
             onDragLeave={readOnly ? undefined : () => setDropStage(null)}
             onDrop={readOnly ? undefined : e => {
@@ -2656,14 +2657,14 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
             }}
           >
             {/* Column header — label only, not interactive */}
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, padding: "0 2px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, padding: "0 2px", flexShrink: 0 }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: STAGE_DOT[stage] || "var(--pb-faint)", flexShrink: 0 }} />
               <span style={{ fontSize: 11, fontWeight: 600, color: STATUS_STYLE[stage]?.text || "var(--pb-dim2)" }}>{STAGE_LABEL[stage]}</span>
               <span className="fglass-muted" style={{ fontSize: 10, fontWeight: 500 }}>{stageCounts[stage] ?? 0}</span>
             </div>
 
             {/* Drop zone */}
-            <div className={`fglass-lane${dropStage === stage ? " is-drop-target" : ""}`}>
+            <div className={`fglass-lane pb-board-col-body pb-thin-scroll${dropStage === stage ? " is-drop-target" : ""}`}>
               {filtered
                 .filter((i: any) => (i.status || "new") === stage)
                 .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -2969,14 +2970,14 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
   if (isLoading) return <p style={{ color: "var(--pb-faint)", fontSize: 12, padding: "20px 0" }}>Loading…</p>;
 
   return (
-    <div>
+    <div className="pb-fill">
       {soloView && (
-        <p style={{ fontSize: 12, color: "#a78bfa", fontWeight: 600, marginBottom: 12 }}>
+        <p style={{ fontSize: 12, color: "#a78bfa", fontWeight: 600, marginBottom: 8, flexShrink: 0 }}>
           Showing only ideas assigned to you — nothing else until Ops assigns it
         </p>
       )}
       {viewBy === "person" && isOpsOrAdmin ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 22, paddingBottom: 20 }}>
+        <div className="pb-thin-scroll" style={{ display: "flex", flexDirection: "column", gap: 22, flex: 1, minHeight: 0, overflowY: "auto" }}>
           {byPerson.length === 0 ? (
             <div style={{ padding: "20px 10px", textAlign: "center", color: "var(--pb-border)", fontSize: 11, border: "1.5px dashed var(--pb-chip)", borderRadius: 9 }}>Nothing in production</div>
           ) : byPerson.map(([who, items]) => (
@@ -3030,13 +3031,14 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
           ))}
         </div>
       ) : (
-      <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 20, minHeight: "calc(100vh - 260px)" }}>
+      <div className="pb-board-row pb-thin-scroll">
         {boardStages.map((stage) => {
           const colGroups = groups.filter((g) => g.stage === stage);
           return (
             <div
               key={stage}
-              style={{ minWidth: 205, maxWidth: 250, flex: "1 0 205px" }}
+              className="pb-board-col"
+              style={{ minWidth: 190, maxWidth: 240, flex: "1 1 190px" }}
               onDragOver={
                 (readOnly && !csReviewOnly) || (csReviewOnly && stage !== "changes" && stage !== "gtg")
                   ? undefined
@@ -3055,12 +3057,12 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
                 advance(g, stage);
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, padding: "0 2px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, padding: "0 2px", flexShrink: 0 }}>
                 <span style={{ width: 7, height: 7, borderRadius: "50%", background: STAGE_DOT[stage] || "var(--pb-faint)", flexShrink: 0 }} />
                 <span style={{ fontSize: 11, fontWeight: 600, color: STATUS_STYLE[stage]?.text || "var(--pb-dim2)" }}>{STAGE_LABEL[stage]}</span>
                 <span className="fglass-muted" style={{ fontSize: 10, fontWeight: 500 }}>{colGroups.length}</span>
               </div>
-              <div className={`fglass-lane${dropStage === stage ? " is-drop-target" : ""}`}>
+              <div className={`fglass-lane pb-board-col-body pb-thin-scroll${dropStage === stage ? " is-drop-target" : ""}`}>
                 {colGroups.length === 0 ? (
                   <div style={{ padding: "20px 10px", textAlign: "center", color: "var(--pb-border)", fontSize: 11, border: "1.5px dashed var(--pb-chip)", borderRadius: 9 }}>Empty</div>
                 ) : colGroups.map((g) => {
@@ -4654,11 +4656,12 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
   // Ideas Pool panel — identical in both the kanban and the page-accordion (table)
   // view, so it's built once here rather than duplicated.
   const poolPanel = !soloView && (
-    <div style={{
-      width: 240, flexShrink: 0, display: "flex", flexDirection: "column",
+    <div className="pb-board-col" style={{
+      width: 220, flexShrink: 0,
       background: "var(--pb-panel)", border: "1px solid var(--pb-chip)", borderRadius: 12,
-      padding: 10, alignSelf: "flex-start",
+      padding: 10,
     }}>
+      <div style={{ flexShrink: 0 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
         <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: "var(--pb-ink)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
           Ideas Pool
@@ -4686,6 +4689,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
           </span>
         ))}
       </div>
+      </div>
 
       {isLoading ? (
         <p style={{ color: "var(--pb-faint)", fontSize: 12 }}>Loading…</p>
@@ -4696,7 +4700,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
           <span style={{ fontSize: 10 }}>{writtenBy.trim() ? "Clear the CS filter to see everyone" : "New ideas are added from Idea Engine"}</span>
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div className="pb-board-col-body pb-thin-scroll" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {poolIdeas.map((idea: any) => {
             const assignedPages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
             const unassignedPages = allPlaybookPages.filter(p => !assignedPages.includes(p));
@@ -4786,18 +4790,19 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
   if (view === "table") {
     return (
       <>
+        <div className="pb-fill">
         {soloView && (
-          <p style={{ fontSize: 12, color: "#a78bfa", fontWeight: 600, marginBottom: 12 }}>
+          <p style={{ fontSize: 12, color: "#a78bfa", fontWeight: 600, marginBottom: 8, flexShrink: 0 }}>
             Showing only ideas assigned to you — nothing else until Ops assigns it
           </p>
         )}
-        <div style={{ display: "flex", gap: 16, alignItems: "flex-start", minHeight: "calc(100vh - 220px)" }}>
+        <div style={{ display: "flex", gap: 12, flex: 1, minHeight: 0, overflow: "hidden" }}>
           {poolPanel}
 
           {/* ── Right panel: one collapsible card per page instead of a wide
               horizontal-scrolling row — click a page to open it and see/drag/assign
               its ideas; a collapsed card is still a valid drop target. ── */}
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+          <div className="pb-thin-scroll" style={{ flex: 1, minWidth: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
             {playbookPages.map(page => {
               const short    = pageShort[page] || page;
               const color    = pageColors[page] || "var(--pb-dim2)";
@@ -4883,6 +4888,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
             })}
           </div>
         </div>
+        </div>
 
         {detailIdea && (
           <IdeaDetailModal
@@ -4899,19 +4905,21 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
 
   return (
     <>
+    <div className="pb-fill">
       {soloView && (
-        <p style={{ fontSize: 12, color: "#a78bfa", fontWeight: 600, marginBottom: 12 }}>
+        <p style={{ fontSize: 12, color: "#a78bfa", fontWeight: 600, marginBottom: 8, flexShrink: 0 }}>
           Showing only ideas assigned to you — nothing else until Ops assigns it
         </p>
       )}
-    <div style={{ display: "flex", gap: 16, alignItems: "flex-start", minHeight: "calc(100vh - 220px)" }}>
+    <div style={{ display: "flex", gap: 12, flex: 1, minHeight: 0, overflow: "hidden" }}>
 
       {poolPanel}
 
       {/* ── Right panel: page columns ── */}
       <div
         ref={pagesScrollRef}
-        style={{ flex: 1, overflowX: "auto", display: "flex", gap: 10, paddingBottom: 20, alignItems: "flex-start" }}
+        className="pb-thin-scroll"
+        style={{ flex: 1, minWidth: 0, overflowX: "auto", overflowY: "hidden", display: "flex", gap: 10, alignItems: "stretch" }}
       >
         {playbookPages.map(page => {
           const short    = pageShort[page] || page;
@@ -4922,8 +4930,9 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
           return (
             <div
               key={page}
+              className="pb-board-col"
               style={{
-                minWidth: 195, flex: "1 0 195px", maxWidth: 250,
+                minWidth: 175, flex: "1 1 175px", maxWidth: 230,
                 background: `color-mix(in srgb, ${color} 4%, var(--pb-panel))`,
                 border: `1px solid ${isDrop ? color : "var(--pb-chip)"}`,
                 borderRadius: 12, padding: "8px 8px 10px",
@@ -4936,7 +4945,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
               {/* Column header */}
               <div style={{
                 display: "flex", alignItems: "center", gap: 6,
-                padding: "2px 2px 8px", marginBottom: 4,
+                padding: "2px 2px 8px", marginBottom: 4, flexShrink: 0,
                 borderBottom: `1px solid color-mix(in srgb, ${color} 22%, var(--pb-chip))`,
               }}>
                 <span style={{ width: 7, height: 7, borderRadius: "50%", background: color, flexShrink: 0 }} />
@@ -4949,8 +4958,8 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
               </div>
 
               {/* Drop zone + cards */}
-              <div style={{
-                minHeight: 120, borderRadius: 9,
+              <div className="pb-board-col-body pb-thin-scroll" style={{
+                minHeight: 0, borderRadius: 9,
                 border: isDrop ? `2px dashed ${color}` : "2px dashed transparent",
                 background: isDrop ? `${color}0D` : "transparent",
                 transition: "all 0.12s",
@@ -4986,6 +4995,8 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
           );
         })}
       </div>
+    </div>
+    </div>
 
       {detailIdea && (
         <IdeaDetailModal
@@ -4996,7 +5007,6 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
           hideStageActions={detailIdea.frontseat_pool === true}
         />
       )}
-    </div>
     </>
   );
 }
@@ -5014,7 +5024,7 @@ export default function PlaybookExperimentPage({ playbookId }: { playbookId: Pla
 }
 
 function ExperimentXShell() {
-  const { pages: playbookPages, pageShort, id: playbookId, label, emoji, api } = usePlaybook();
+  const { pages: playbookPages, pageShort, id: playbookId, label, api } = usePlaybook();
   const { role } = usePermissions();
   const { user } = useAuth();
   useIdeaBankRealtime(playbookId);
@@ -5046,7 +5056,10 @@ function ExperimentXShell() {
   }, [location.pathname]);
   // /production is its own sidebar destination now — it shouldn't carry the Content
   // Distribution page's name in its own heading.
-  const pageTitle = location.pathname === "/production" ? "Production" : label;
+  const pageTitle =
+    location.pathname === "/production" ? "Production"
+    : location.pathname === "/content-distribution" ? "Content Distribution"
+    : label;
   const [pageFilter, setPageFilter] = useState("all");
   // News / A-roll filter — Today's Board only, so it sits beside the page filter
   // but renders on the frontseat tab alone.
@@ -5138,21 +5151,14 @@ function ExperimentXShell() {
   };
 
   return (
-    <div className="fglass-page pb-page" style={{ padding: "16px 20px 40px 64px" }}>
+    <div className="fglass-page pb-page pb-page--fill" style={{ padding: "10px 16px 8px" }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
-
-      {/* Header */}
-      <div className="fglass-divider" style={{ marginBottom: 14, paddingBottom: 12, borderBottomWidth: 1, borderBottomStyle: "solid" }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: "var(--pb-ink)", margin: 0, letterSpacing: "-0.02em" }}>
-          {pageTitle} <span style={{ fontSize: 15 }}>{emoji}</span>
-        </h1>
-      </div>
 
       {/* Tab switcher — single glass seg, no outer bar. Hidden on the dedicated
           /content-distribution and /production routes, which each show exactly
           one fixed tab now that Production has its own sidebar entry. */}
       {!isSingleTabRoute && (
-        <div className="six-day-seg" style={{ marginBottom: 10 }}>
+        <div className="six-day-seg" style={{ marginBottom: 8, flexShrink: 0 }}>
           {visibleTabs.map(t => (
             <button
               key={t}
@@ -5165,7 +5171,10 @@ function ExperimentXShell() {
           ))}
         </div>
       )}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 22, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap", flexShrink: 0 }}>
+        <h1 style={{ fontSize: 15, fontWeight: 700, color: "var(--pb-ink)", margin: 0, letterSpacing: "-0.02em", marginRight: 4 }}>
+          {pageTitle}
+        </h1>
         <PageMultiSelect
           pages={playbookPages}
           labels={pageShort}
@@ -5202,7 +5211,7 @@ function ExperimentXShell() {
                   type="button"
                   onClick={() => setFormatFilter(f)}
                   style={{
-                    padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                    padding: "5px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
                     border: on ? `2px solid ${accent}` : "1.5px solid var(--pb-border)",
                     background: on ? `${accent}22` : "var(--pb-card)",
                     color: on ? accent : "var(--pb-dim)",
@@ -5225,7 +5234,7 @@ function ExperimentXShell() {
                   type="button"
                   onClick={() => setTodaysBoardView(v)}
                   style={{
-                    padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                    padding: "5px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
                     border: on ? "2px solid #7c3aed" : "1.5px solid var(--pb-border)",
                     background: on ? "rgba(124,58,237,0.15)" : "var(--pb-card)",
                     color: on ? "#a78bfa" : "var(--pb-dim)",
@@ -5249,7 +5258,7 @@ function ExperimentXShell() {
                       type="button"
                       onClick={() => setContentTypeFilterChoice(ct)}
                       style={{
-                        padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                        padding: "5px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
                         border: on ? "2px solid #7c3aed" : "1.5px solid var(--pb-border)",
                         background: on ? "rgba(124,58,237,0.15)" : "var(--pb-card)",
                         color: on ? "#a78bfa" : "var(--pb-dim)",
@@ -5269,7 +5278,7 @@ function ExperimentXShell() {
                       type="button"
                       onClick={() => setViewBy(v)}
                       style={{
-                        padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                        padding: "5px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
                         border: on ? "2px solid #7c3aed" : "1.5px solid var(--pb-border)",
                         background: on ? "rgba(124,58,237,0.15)" : "var(--pb-card)",
                         color: on ? "#a78bfa" : "var(--pb-dim)",
@@ -5290,8 +5299,13 @@ function ExperimentXShell() {
         )}
       </div>
 
-      {/* Tab content — per-tab edit rights come from the role's view profile. */}
-      <div>
+      {/* Tab content — per-tab edit rights come from the role's view profile.
+          Board tabs lock to the remaining viewport (they scroll internally);
+          list tabs scroll in this one region. */}
+      <div style={{
+        flex: 1, minHeight: 0,
+        overflow: (tab === "frontseat" || tab === "idea-bank" || tab === "tracking") ? "hidden" : "auto",
+      }}>
         {tab === "frontseat"     && <FrontseatTab readOnly={!canEditTab("frontseat")} formatFilter={formatFilter} pageFilter={pageFilter} search={search} writtenBy={csFilter} view={todaysBoardView} />}
         {/* Idea Bank IS the video-editor Production board (Approved → Base edit → Formatted → Posted). */}
         {tab === "idea-bank"     && (

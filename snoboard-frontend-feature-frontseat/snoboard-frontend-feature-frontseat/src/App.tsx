@@ -320,12 +320,17 @@ function AppLayout() {
   const isCanvasWorkspace = /^\/fsi-canvas\/[^/]+/.test(location.pathname);
   const isCanvasRoute = location.pathname.startsWith("/fsi-canvas");
   const showFsiCanvasFab = !isCanvasRoute && isRouteAllowed(layoutRole, "/fsi-canvas");
+  const isPlaybookBoard =
+    location.pathname === "/content-distribution" ||
+    location.pathname === "/production" ||
+    location.pathname.startsWith("/experiment-");
 
   return (
     <>
       <RolePreviewRouteGuard />
+      <div className="flex h-svh flex-col overflow-hidden">
       <RolePreviewBanner />
-      <SidebarProvider>
+      <SidebarProvider className="min-h-0 flex-1 overflow-hidden">
         {!isCanvasWorkspace && (
           <AppSidebar
             roles={seedingRoles}
@@ -337,11 +342,11 @@ function AppLayout() {
             animalPicker={<AnimalPicker userId={user?.id} />}
           />
         )}
-        <SidebarInset className="bg-transparent">
+        <SidebarInset className="bg-transparent h-full min-h-0 overflow-hidden">
           {showFsiCanvasFab && <FsiCanvasFab />}
           <DebugBoundary>
             {isSeeding ? (
-              <div>
+              <div className="h-full min-h-0 flex-1 overflow-y-auto">
                 <SeedingPreviewBanner />
                 <Routes>
                   <Route path="/seeding" element={<RequireArea area="seeding_overview"><SeedingHome /></RequireArea>} />
@@ -358,7 +363,7 @@ function AppLayout() {
                 </Routes>
               </div>
             ) : isFullScreen ? (
-              <div className="relative">
+              <div className={`relative flex h-full min-h-0 flex-1 flex-col ${isPlaybookBoard ? "overflow-hidden" : "overflow-y-auto"}`}>
                 <Routes>
                   <Route path="/" element={<Home />} />
                   <Route path="/dashboard-old" element={<Dashboard />} />
@@ -394,7 +399,7 @@ function AppLayout() {
                 </Routes>
               </div>
             ) : (
-              <div className="min-h-screen">
+              <div className="h-full min-h-0 flex-1 overflow-y-auto">
                 <main>
                   <Routes>
                     <Route path="/posts" element={<PostsView />} />
@@ -408,6 +413,7 @@ function AppLayout() {
           </DebugBoundary>
         </SidebarInset>
       </SidebarProvider>
+      </div>
     </>
   );
 }
