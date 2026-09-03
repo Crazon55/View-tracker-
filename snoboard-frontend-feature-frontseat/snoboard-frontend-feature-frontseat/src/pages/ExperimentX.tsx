@@ -2592,7 +2592,7 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
             const stageIdeas = opsFiltered.filter((i: any) => (i.status || "") === stage);
             const dot = STAGE_DOT[stage] || "var(--pb-dim)";
             return (
-              <div key={stage} className="pb-board-col" style={{ minWidth: 200, maxWidth: 260, flex: "1 1 200px" }}>
+              <div key={stage} className="pb-board-col">
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, padding: "0 2px", flexShrink: 0 }}>
                   <span style={{ width: 8, height: 8, borderRadius: "50%", background: dot, flexShrink: 0 }} />
                   <span style={{ fontSize: 13, fontWeight: 600, color: "var(--pb-ink)" }}>{STAGE_LABEL[stage as IdeaStage] || stage}</span>
@@ -2646,7 +2646,6 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
           <div
             key={stage}
             className="pb-board-col"
-            style={{ minWidth: 180, maxWidth: 230, flex: "1 1 180px" }}
             onDragOver={readOnly ? undefined : e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropStage(stage); }}
             onDragLeave={readOnly ? undefined : () => setDropStage(null)}
             onDrop={readOnly ? undefined : e => {
@@ -3038,7 +3037,6 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
             <div
               key={stage}
               className="pb-board-col"
-              style={{ minWidth: 190, maxWidth: 240, flex: "1 1 190px" }}
               onDragOver={
                 (readOnly && !csReviewOnly) || (csReviewOnly && stage !== "changes" && stage !== "gtg")
                   ? undefined
@@ -4932,7 +4930,6 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
               key={page}
               className="pb-board-col"
               style={{
-                minWidth: 175, flex: "1 1 175px", maxWidth: 230,
                 background: `color-mix(in srgb, ${color} 4%, var(--pb-panel))`,
                 border: `1px solid ${isDrop ? color : "var(--pb-chip)"}`,
                 borderRadius: 12, padding: "8px 8px 10px",
@@ -4959,7 +4956,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
 
               {/* Drop zone + cards */}
               <div className="pb-board-col-body pb-thin-scroll" style={{
-                minHeight: 0, borderRadius: 9,
+                borderRadius: 9,
                 border: isDrop ? `2px dashed ${color}` : "2px dashed transparent",
                 background: isDrop ? `${color}0D` : "transparent",
                 transition: "all 0.12s",
