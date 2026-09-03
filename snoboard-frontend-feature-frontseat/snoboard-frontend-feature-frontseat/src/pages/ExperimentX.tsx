@@ -1041,20 +1041,13 @@ function SubmissionLinkField({ value, onSave, readOnly, ls }: {
 }) {
   const link = String(value || "").trim();
   return (
-    <div style={{
-      padding: "12px 14px",
-      borderRadius: 10,
-      border: `1.5px solid ${SUBMISSION_LINK_COLOR}`,
-      background: "rgba(255,46,147,0.12)",
-    }}>
-      <label style={{ ...ls, color: SUBMISSION_LINK_COLOR, marginBottom: 6 }}>
-        Submission link <span style={{ fontWeight: 500, opacity: 0.75, letterSpacing: 0, textTransform: "none" }}>(optional)</span>
-      </label>
+    <div>
+      <label style={ls}>Submission link</label>
       {readOnly ? (
         link ? (
           <a href={submissionHref(link)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: SUBMISSION_LINK_COLOR, fontWeight: 700, wordBreak: "break-all" }}>{link}</a>
         ) : (
-          <span style={{ fontSize: 13, color: "rgba(255,46,147,0.45)" }}>—</span>
+          <span style={{ fontSize: 13, color: "var(--pb-faint)" }}>—</span>
         )
       ) : (
         <>
@@ -1062,18 +1055,10 @@ function SubmissionLinkField({ value, onSave, readOnly, ls }: {
             value={value || ""}
             onSave={(v) => onSave?.(v)}
             placeholder="Paste Drive / Canva / export link"
-            style={{
-              border: `1.5px solid ${SUBMISSION_LINK_COLOR}`,
-              color: "#FFB3D9",
-              background: "rgba(255,46,147,0.08)",
-              fontWeight: 600,
-            }}
           />
           {link ? (
-            <a href={submissionHref(link)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: SUBMISSION_LINK_COLOR, fontWeight: 700, wordBreak: "break-all", display: "block", marginTop: 6 }}>{link}</a>
-          ) : (
-            <p style={{ margin: "6px 0 0", fontSize: 11, color: "rgba(255,46,147,0.7)" }}>Not required — paste when the edit is ready to review.</p>
-          )}
+            <a href={submissionHref(link)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: SUBMISSION_LINK_COLOR, fontWeight: 700, wordBreak: "break-all", display: "block", marginTop: 4 }}>{link}</a>
+          ) : null}
         </>
       )}
     </div>
@@ -2696,6 +2681,24 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
   );
 }
 
+function ideaHasHook(idea: any): boolean {
+  return String(idea?.hook_variations || "").trim().length > 0;
+}
+
+function MissingHookMark() {
+  return (
+    <span
+      title="No hook yet — CS hasn't added hook variations"
+      style={{
+        display: "inline-flex", alignItems: "center", justifyContent: "center",
+        width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+        fontSize: 11, fontWeight: 800, lineHeight: 1,
+        color: "#fff", background: "#E11D48",
+      }}
+    >!</span>
+  );
+}
+
 function AssigneeSelect({
   contentType, value, onChange, style, className,
 }: {
@@ -4091,6 +4094,7 @@ function FrontseatPoolCard({ idea, letter, onDragStart, onClick, onDelete, readO
             {idea.content_format}
           </span>
         )}
+        {!ideaHasHook(idea) && <MissingHookMark />}
       </div>
       <p style={{ margin: 0, fontSize: 12, fontWeight: 500, color: "var(--pb-ink)", lineHeight: 1.4,
         overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
@@ -4150,6 +4154,7 @@ function FrontseatPageCard({ idea, letter, onClick, onRemoveFromPage, onAssign, 
             {idea.content_format}
           </span>
         )}
+        {!ideaHasHook(idea) && <MissingHookMark />}
       </div>
       <p style={{ margin: 0, fontSize: 12.5, fontWeight: 500, color: "var(--pb-ink)", lineHeight: 1.45,
         overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
@@ -4161,7 +4166,7 @@ function FrontseatPageCard({ idea, letter, onClick, onRemoveFromPage, onAssign, 
       <div style={{ display: "flex", gap: 5, marginTop: 7, flexWrap: "wrap", alignItems: "center" }}>
         <DeployedFromBadge idea={idea} />
       </div>
-      <div onClick={e => e.stopPropagation()} style={{ marginTop: 7 }}>
+      <div onClick={e => e.stopPropagation()} style={{ marginTop: 7, display: "flex", alignItems: "center", gap: 6 }}>
         {readOnly || !onAssign ? (
           idea.assigned_to ? (
             <span style={{ fontSize: 10, fontWeight: 600, color: "#a78bfa", background: "#7c3aed22", borderRadius: 5, padding: "2px 7px" }}>
@@ -4180,6 +4185,7 @@ function FrontseatPageCard({ idea, letter, onClick, onRemoveFromPage, onAssign, 
             }}
           />
         )}
+        {!ideaHasHook(idea) && <MissingHookMark />}
       </div>
       <CrossPlaybookViewsBlock idea={idea} />
     </div>
