@@ -462,7 +462,7 @@ export function createExpApi(playbook: string) {
     getSettings: () => fetchApi<any>(`${base}/settings`),
     updateSettings: (data: { view_goal?: number; experiment_start_date?: string }) =>
       fetchApi<any>(`${base}/settings`, { method: "PATCH", body: JSON.stringify(data) }),
-    getIdeaBank: (params?: { week?: number; page?: string; day_date?: string; pending_only?: boolean; top_performers?: boolean; enrich_cross?: boolean; review_score?: boolean }) => {
+    getIdeaBank: (params?: { week?: number; page?: string; day_date?: string; pending_only?: boolean; top_performers?: boolean; enrich_cross?: boolean; review_score?: boolean; include_open_pool?: boolean }) => {
       const q = new URLSearchParams();
       if (params?.top_performers) q.set("top_performers", "1");
       else if (params?.pending_only) q.set("pending_only", "1");
@@ -470,6 +470,7 @@ export function createExpApi(playbook: string) {
       else if (params?.day_date) q.set("day_date", params.day_date);
       else if (params?.week != null) q.set("week", String(params.week));
       if (params?.page) q.set("page", params.page);
+      if (params?.include_open_pool) q.set("include_open_pool", "1");
       // Backend defaults enrich OFF (cross-playbook joins are expensive). Send an
       // explicit 1/0 so a missing query param can never silently re-enable it.
       if (params?.enrich_cross === true) q.set("enrich_cross", "1");

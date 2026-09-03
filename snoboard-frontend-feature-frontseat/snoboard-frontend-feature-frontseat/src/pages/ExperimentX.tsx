@@ -4500,7 +4500,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
   // data almost no row ever displays; IdeaDetailModal fetches its own data anyway.
   const { data: ideas = [], isLoading } = useQuery({
     queryKey: QK,
-    queryFn: () => api.getIdeaBank({ day_date: todayStr, enrich_cross: false }),
+    queryFn: () => api.getIdeaBank({ day_date: todayStr, enrich_cross: false, include_open_pool: true }),
     staleTime: EXP_STALE_MS,
     refetchOnMount: "always",
     refetchInterval: () => (isIdeaBankSocketLive(playbookId) ? 45_000 : 20_000),
@@ -4548,7 +4548,11 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
     onSettled: () => invalidateExpIdeaBank(qc, playbookId),
   });
 
-  // Guards against stale optimistic entries carried over from a different day.
+  // Page columns stay today-only. Ideas Pool also keeps unassigned pool cards from
+  // earlier days (Send from Idea Engine used to stamp yesterday, so those rows exist
+  // but would never show if we filtered the pool to todayStr).
+  const isPoolIdea = (i: any) =>
+    i.frontseat_pool === true || (i.frontseat_pool == null && i.status === "new");
   const todayIdeas = useMemo(() =>
     (ideas as any[]).filter((i: any) => (i.day_date || "").slice(0, 10) === todayStr),
     [ideas, todayStr],
@@ -4557,17 +4561,19 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
   const searchQ = search.toLowerCase().trim();
   const matchesSearch = (idea: any) => !searchQ || (idea.topic || "").toLowerCase().includes(searchQ);
 
-  // Pool = permanent ideas added via Frontseat "+ New".
+  // Pool = permanent ideas added via Frontseat "+ New" or Idea Engine Send.
   // After migration: frontseat_pool === true. Before migration runs (column is null): fall back to status === "new".
   const allPoolIdeas = useMemo(() =>
-    todayIdeas
-      .filter((i: any) =>
-        i.frontseat_pool === true ||
-        (i.frontseat_pool == null && i.status === "new")
-      )
+    (ideas as any[])
+      .filter((i: any) => {
+        if (!isPoolIdea(i)) return false;
+        const d = (i.day_date || "").slice(0, 10);
+        if (d === todayStr) return true;
+        return !String(i.page_handle || "").trim();
+      })
       .filter((i: any) => matchesContentFormat(i, formatFilter) && matchesSearch(i))
       .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
-    [todayIdeas, formatFilter, searchQ],
+    [ideas, todayStr, formatFilter, searchQ],
   );
   const poolIdeas = useMemo(
     () => allPoolIdeas.filter((i: any) => matchesWrittenBy(i, writtenBy)),
@@ -4577,14 +4583,11 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
   // Letters a, b, c… in creation order — stable for the whole day
   const ideaLetterMap = useMemo(() => {
     const map: Record<string, string> = {};
-    todayIdeas
-      .filter((i: any) => i.frontseat_pool === true || (i.frontseat_pool == null && i.status === "new"))
-      .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-      .forEach((idea: any, i: number) => {
-        map[idea.id] = String.fromCharCode(97 + (i % 26));
-      });
+    allPoolIdeas.forEach((idea: any, i: number) => {
+      map[idea.id] = String.fromCharCode(97 + (i % 26));
+    });
     return map;
-  }, [todayIdeas]);
+  }, [allPoolIdeas]);
 
   // Page columns: copies only (frontseat_pool === false or null before migration).
   // !i.frontseat_pool covers both false and null, so old pre-migration ideas still appear.
@@ -4635,7 +4638,10 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
     // Track assigned pages on pool idea (for chip display)
     const existingPages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
     if (!existingPages.includes(page)) {
-      updateMut.mutate({ id: ideaId, data: { page_handle: [...existingPages, page].join(",") } });
+      updateMut.mutate({
+        id: ideaId,
+        data: { page_handle: [...existingPages, page].join(","), day_date: todayStr },
+      });
     }
   };
 

@@ -341,7 +341,10 @@ export default function IdeaEngineGallery() {
         topic: idea.topic || "",
         status: "new",
         frontseat_pool: true,
-        day_date: String(idea.day_date || "").slice(0, 10) || todayYmd(),
+        // Ideas Pool is today's board. Copying the source idea's day_date (e.g. yesterday)
+        // wrote a pool card that Content Distribution never fetched, so Send looked like
+        // a no-op. The original stays on its own day in Idea Engine.
+        day_date: todayYmd(),
         source: "idea_engine",
         created_by: idea.created_by || "",
         // Carry the idea's links so the target playbook keeps them — the base-edit

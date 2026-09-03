@@ -5505,6 +5505,7 @@ async def exp_list_idea_bank(
     top_performers: str | None = None,
     enrich_cross: str | None = None,
     review_score: str | None = None,
+    include_open_pool: str | None = None,
 ):
     pb = validate_playbook(playbook)
     client = get_supabase_client()
@@ -5563,12 +5564,38 @@ async def exp_list_idea_bank(
             .or_(f"status.neq.blocked,blocked_at.gte.{blocked_cutoff},blocked_at.is.null")
         )
     elif day_date:
-        q = q.eq("day_date", day_date)
+        if include_open_pool in ("1", "true", "True"):
+            # Content Distribution's Ideas Pool is a today-board. Sends from Idea Engine
+            # used to stamp the source idea's date, so a yesterday send wrote a pool card
+            # that this query never returned. Pull unassigned pool cards from the last
+            # 14 days onto today's board so those sends actually show up.
+            from datetime import date as date_cls, timedelta
+            try:
+                d = date_cls.fromisoformat(str(day_date)[:10])
+            except ValueError:
+                d = date_cls.today()
+            floor = (d - timedelta(days=14)).isoformat()
+            q = q.or_(
+                f"day_date.eq.{day_date},"
+                f"and(frontseat_pool.eq.true,day_date.gte.{floor},day_date.lt.{day_date},or(page_handle.eq.,page_handle.is.null))"
+            )
+        else:
+            q = q.eq("day_date", day_date)
     elif week is not None:
         q = q.eq("week_number", week)
     if page:
         q = q.eq("page_handle", page)
     data = q.execute().data or []
+    if include_open_pool in ("1", "true", "True") and day_date:
+        want = str(day_date)[:10]
+        data = [
+            r for r in data
+            if str(r.get("day_date") or "")[:10] == want
+            or (
+                r.get("frontseat_pool") is True
+                and not str(r.get("page_handle") or "").strip()
+            )
+        ]
     # Cross-playbook enrich is extra Supabase round-trips per list. Default OFF —
     # callers that need deployed_to / cross views (Idea Engine, some week views)
     # pass enrich_cross=1. Production/Frontseat polls must not pay this on every tick.
@@ -5593,6 +5620,12 @@ async def exp_create_idea(playbook: str, req: ExpIdeaCreate):
     client = get_supabase_client()
     tables = get_playbook_tables(pb)
     day_str = req.day_date or str(date.today())
+    # Ideas Pool is the live Content Distribution board. A past day_date (Send from
+    # yesterday in Idea Engine) made the row exist but never appear in today's pool.
+    if req.frontseat_pool:
+        today_str = str(date.today())
+        if not day_str or day_str < today_str:
+            day_str = today_str
     week_num = _exp_compute_week_number(client, pb, day_str)
     row = {
         "page_handle": req.page_handle,
