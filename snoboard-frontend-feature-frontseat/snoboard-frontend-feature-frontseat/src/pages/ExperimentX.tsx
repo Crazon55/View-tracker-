@@ -1063,7 +1063,11 @@ function SubmissionLinkField({ value, onSave, readOnly, ls }: {
   const link = String(value || "").trim();
   return (
     <div>
-      <label style={ls}>Submission link</label>
+      <label style={{
+        ...ls,
+        color: SUBMISSION_LINK_COLOR,
+        textShadow: "0 0 10px rgba(255,46,147,0.65)",
+      }}>Submission link</label>
       {readOnly ? (
         link ? (
           <a href={submissionHref(link)} target="_blank" rel="noopener noreferrer" style={{ ...submissionLinkTextStyle(14), display: "block" }}>{link}</a>
@@ -1072,18 +1076,13 @@ function SubmissionLinkField({ value, onSave, readOnly, ls }: {
         )
       ) : (
         <>
-          <SafeField
-            value={value || ""}
-            onSave={(v) => onSave?.(v)}
-            placeholder="Paste Drive / Canva / export link"
-            style={{
-              color: SUBMISSION_LINK_COLOR,
-              caretColor: SUBMISSION_LINK_COLOR,
-              background: "rgba(255,46,147,0.08)",
-              border: "1px solid rgba(255,46,147,0.45)",
-              fontWeight: 600,
-            }}
-          />
+          <div className="pb-submission-field">
+            <SafeField
+              value={value || ""}
+              onSave={(v) => onSave?.(v)}
+              placeholder="Paste Drive / Canva / export link"
+            />
+          </div>
           {link ? (
             <a href={submissionHref(link)} target="_blank" rel="noopener noreferrer" style={{ ...submissionLinkTextStyle(14), display: "block", marginTop: 6 }}>{link}</a>
           ) : null}
@@ -2714,10 +2713,14 @@ function ideaHasHook(idea: any): boolean {
   return String(idea?.hook_variations || "").trim().length > 0;
 }
 
-function MissingHookMark() {
+function ideaIsAssigned(idea: any): boolean {
+  return String(idea?.assigned_to || "").trim().length > 0;
+}
+
+function MissingHookMark({ title }: { title?: string }) {
   return (
     <span
-      title="No hook yet — CS hasn't added hook variations"
+      title={title || "No hook yet — CS hasn't added hook variations"}
       style={{
         display: "inline-flex", alignItems: "center", justifyContent: "center",
         width: 16, height: 16, borderRadius: 4, flexShrink: 0,
@@ -4262,7 +4265,9 @@ function FrontseatPageCard({ idea, letter, onClick, onRemoveFromPage, onAssign, 
             }}
           />
         )}
-        {!ideaHasHook(idea) && <MissingHookMark />}
+        {ideaHasHook(idea) && !ideaIsAssigned(idea) && (
+          <MissingHookMark title="Hook is ready — assign someone" />
+        )}
       </div>
       <CrossPlaybookViewsBlock idea={idea} />
     </div>
