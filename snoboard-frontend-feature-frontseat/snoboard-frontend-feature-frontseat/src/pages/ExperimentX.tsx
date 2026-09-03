@@ -118,6 +118,11 @@ type IdeaStage = (typeof STAGES)[number];
 // but still must be `in PRODUCTION_STAGE_ORDER` — that's what keeps a card on the board at
 // all, see ProductionTab's `copies` filter) so a blocked page never reads as "behind" the
 // rest of its group.
+/** CS may only move Production cards Review → Changes or Review → GTG. */
+function isCsReviewMove(from: string, to: string): boolean {
+  return from === "review" && (to === "changes" || to === "gtg");
+}
+
 const PRODUCTION_STAGE_ORDER: Record<string, number> = {
   approved: 0, under_edit: 1, changes: 2, review: 3, gtg: 4, posted: 5, blocked: 6,
 };
@@ -2833,6 +2838,8 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
   // workload view alongside the usual per-stage board (not CS/VE), and they're the
   // only ones who can move a card into Posted.
   const isOpsOrAdmin = roleList.some((r) => r === "co" || r === "admin" || r === "senior_cs");
+  // CS can see Production as view-only, except Review → Changes / Review → GTG.
+  const csReviewOnly = roleList.some((r) => r === "cs") && !isOpsOrAdmin;
   // contentTypeFilter/viewBy/personFilter are owned by ExperimentXShell now (rendered
   // in the shared top filter bar, always visible without scrolling) and passed down.
   // Same 7-stage board for both content types now — Blocked sits at the end as an
@@ -2897,8 +2904,12 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
   // button and drag-and-drop between columns — gating here (not just on the button)
   // closes the drag-and-drop path too.
   const advance = (group: ProdGroup, to: string) => {
-    if (to === "posted" && !isOpsOrAdmin) return;
-    if ((to === "changes" || to === "blocked") && !isOpsOrAdmin) return;
+    if (csReviewOnly) {
+      if (!isCsReviewMove(group.stage, to)) return;
+    } else {
+      if (to === "posted" && !isOpsOrAdmin) return;
+      if ((to === "changes" || to === "blocked") && !isOpsOrAdmin) return;
+    }
     if (to === "posted") {
       setChecklist({ group, to });
     } else if (to === "changes" || to === "blocked") {
@@ -3002,14 +3013,22 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
             <div
               key={stage}
               style={{ minWidth: 205, maxWidth: 250, flex: "1 0 205px" }}
-              onDragOver={readOnly ? undefined : (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropStage(stage); }}
-              onDragLeave={readOnly ? undefined : () => setDropStage(null)}
-              onDrop={readOnly ? undefined : (e) => {
+              onDragOver={
+                (readOnly && !csReviewOnly) || (csReviewOnly && stage !== "changes" && stage !== "gtg")
+                  ? undefined
+                  : (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropStage(stage); }
+              }
+              onDragLeave={(readOnly && !csReviewOnly) ? undefined : () => setDropStage(null)}
+              onDrop={(readOnly && !csReviewOnly) ? undefined : (e) => {
                 e.preventDefault();
                 const key = e.dataTransfer.getData("text/plain");
                 setDraggingKey(null); setDropStage(null);
                 const g = groups.find((x) => x.key === key);
-                if (g && g.stage !== stage && isStageInPipeline(g.content_type, stage)) advance(g, stage);
+                if (!g || g.stage === stage) return;
+                if (csReviewOnly) {
+                  if (!isCsReviewMove(g.stage, stage)) return;
+                } else if (!isStageInPipeline(g.content_type, stage)) return;
+                advance(g, stage);
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, padding: "0 2px" }}>
@@ -3020,12 +3039,14 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
               <div className={`fglass-lane${dropStage === stage ? " is-drop-target" : ""}`}>
                 {colGroups.length === 0 ? (
                   <div style={{ padding: "20px 10px", textAlign: "center", color: "var(--pb-border)", fontSize: 11, border: "1.5px dashed var(--pb-chip)", borderRadius: 9 }}>Empty</div>
-                ) : colGroups.map((g) => (
+                ) : colGroups.map((g) => {
+                  const canDrag = !readOnly || (csReviewOnly && g.stage === "review");
+                  return (
                   <div
                     key={g.key}
-                    draggable={!readOnly}
-                    onDragStart={readOnly ? undefined : (e) => { setDraggingKey(g.key); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", g.key); }}
-                    onDragEnd={readOnly ? undefined : () => { setDraggingKey(null); setDropStage(null); }}
+                    draggable={canDrag}
+                    onDragStart={!canDrag ? undefined : (e) => { setDraggingKey(g.key); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", g.key); }}
+                    onDragEnd={!canDrag ? undefined : () => { setDraggingKey(null); setDropStage(null); }}
                     style={{ opacity: draggingKey === g.key ? 0.4 : 1, transition: "opacity 0.12s" }}
                   >
                     <ProductionCard
@@ -3033,12 +3054,14 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
                       pageColors={pageColors}
                       readOnly={readOnly}
                       canMarkPosted={isOpsOrAdmin}
+                      csReviewActions={csReviewOnly}
                       onOpen={() => setDetailGroup(g)}
                       onAdvance={(to) => advance(g, to)}
                       onAssign={(copyId, name) => batchMut.mutate({ ids: [copyId], data: { assigned_to: name } })}
                     />
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           );
@@ -3069,6 +3092,7 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
           pageColors={pageColors}
           readOnly={readOnly}
           canMarkPosted={isOpsOrAdmin}
+          csReviewActions={csReviewOnly}
           onAdvance={(to) => advance(detailGroup, to)}
           onSaveGroup={(data) => batchMut.mutate({ ids: detailGroup.copies.map((c) => c.id), data })}
           onAssign={(copyId, name) => batchMut.mutate({ ids: [copyId], data: { assigned_to: name } })}
@@ -3079,11 +3103,12 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
   );
 }
 
-function ProductionDetailModal({ group, pageColors, readOnly, canMarkPosted, onAdvance, onSaveGroup, onAssign, onClose }: {
+function ProductionDetailModal({ group, pageColors, readOnly, canMarkPosted, csReviewActions, onAdvance, onSaveGroup, onAssign, onClose }: {
   group: ProdGroup;
   pageColors: Record<string, string>;
   readOnly?: boolean;
   canMarkPosted?: boolean;
+  csReviewActions?: boolean;
   onAdvance: (to: string) => void;
   onSaveGroup: (data: Record<string, unknown>) => void;
   onAssign?: (copyId: string, name: string) => void;
@@ -3217,20 +3242,31 @@ function ProductionDetailModal({ group, pageColors, readOnly, canMarkPosted, onA
         </div>
       )}
 
-      {!readOnly && (
+      {(!readOnly || (csReviewActions && group.stage === "review")) && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {next && (next.to !== "posted" || canMarkPosted) && (
-            <button type="button" onClick={() => { onAdvance(next.to); onClose(); }} style={btnPrimary}>{next.label}</button>
-          )}
-          {canMarkPosted && group.stage !== "changes" && (
-            <button type="button" onClick={() => onAdvance("changes")} style={{ padding: "8px 18px", borderRadius: 8, border: "1.5px solid #FFD166", background: "transparent", color: "#FFD166", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-              Send to Changes
-            </button>
-          )}
-          {canMarkPosted && group.stage !== "blocked" && (
-            <button type="button" onClick={() => onAdvance("blocked")} style={{ padding: "8px 18px", borderRadius: 8, border: "1.5px solid #FF7070", background: "transparent", color: "#FF7070", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-              Mark Blocked
-            </button>
+          {csReviewActions && group.stage === "review" ? (
+            <>
+              <button type="button" onClick={() => { onAdvance("gtg"); onClose(); }} style={btnPrimary}>Mark GTG</button>
+              <button type="button" onClick={() => onAdvance("changes")} style={{ padding: "8px 18px", borderRadius: 8, border: "1.5px solid #FFD166", background: "transparent", color: "#FFD166", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                Send to Changes
+              </button>
+            </>
+          ) : (
+            <>
+              {next && (next.to !== "posted" || canMarkPosted) && (
+                <button type="button" onClick={() => { onAdvance(next.to); onClose(); }} style={btnPrimary}>{next.label}</button>
+              )}
+              {canMarkPosted && group.stage !== "changes" && (
+                <button type="button" onClick={() => onAdvance("changes")} style={{ padding: "8px 18px", borderRadius: 8, border: "1.5px solid #FFD166", background: "transparent", color: "#FFD166", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                  Send to Changes
+                </button>
+              )}
+              {canMarkPosted && group.stage !== "blocked" && (
+                <button type="button" onClick={() => onAdvance("blocked")} style={{ padding: "8px 18px", borderRadius: 8, border: "1.5px solid #FF7070", background: "transparent", color: "#FF7070", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                  Mark Blocked
+                </button>
+              )}
+            </>
           )}
           <button type="button" onClick={onClose} style={btnSecondary}>Close</button>
         </div>
@@ -3239,11 +3275,12 @@ function ProductionDetailModal({ group, pageColors, readOnly, canMarkPosted, onA
   );
 }
 
-function ProductionCard({ group, pageColors, readOnly, canMarkPosted, onOpen, onAdvance, onAssign }: {
+function ProductionCard({ group, pageColors, readOnly, canMarkPosted, csReviewActions, onOpen, onAdvance, onAssign }: {
   group: ProdGroup;
   pageColors: Record<string, string>;
   readOnly?: boolean;
   canMarkPosted?: boolean;
+  csReviewActions?: boolean;
   onOpen: () => void;
   onAdvance: (to: string) => void;
   onAssign?: (copyId: string, name: string) => void;
@@ -3330,7 +3367,24 @@ function ProductionCard({ group, pageColors, readOnly, canMarkPosted, onOpen, on
           {noteIsBlocked ? "🚫 " : "✎ "}{note}
         </p>
       )}
-      {!readOnly && next && (next.to !== "posted" || canMarkPosted) && (
+      {csReviewActions && group.stage === "review" ? (
+        <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+          <button
+            type="button"
+            onClick={() => onAdvance("gtg")}
+            style={{ ...btnPrimary, width: "100%", padding: "3px 10px", fontSize: 11, borderRadius: 6 }}
+          >
+            Mark GTG
+          </button>
+          <button
+            type="button"
+            onClick={() => onAdvance("changes")}
+            style={{ padding: "3px 10px", borderRadius: 6, border: "1.5px solid #FFD166", background: "transparent", color: "#FFD166", fontSize: 11, fontWeight: 600, cursor: "pointer", width: "100%" }}
+          >
+            Send to Changes
+          </button>
+        </div>
+      ) : !readOnly && next && (next.to !== "posted" || canMarkPosted) ? (
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onAdvance(next.to); }}
@@ -3338,7 +3392,7 @@ function ProductionCard({ group, pageColors, readOnly, canMarkPosted, onOpen, on
         >
           {next.label}
         </button>
-      )}
+      ) : null}
     </PbKanbanCardShell>
   );
 }
@@ -4094,7 +4148,6 @@ function FrontseatPoolCard({ idea, letter, onDragStart, onClick, onDelete, readO
             {idea.content_format}
           </span>
         )}
-        {!ideaHasHook(idea) && <MissingHookMark />}
       </div>
       <p style={{ margin: 0, fontSize: 12, fontWeight: 500, color: "var(--pb-ink)", lineHeight: 1.4,
         overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
