@@ -33,10 +33,10 @@ import {
   type DuplicateCorner,
 } from "./components/FsiNodeDuplicateCorners";
 import type { FsiGraph, FsiNodeRecord } from "./lib/fsiNodeSchemas";
-import { appendGraphNode } from "./lib/fsiNodeSchemas";
+import { appendGraphNode, upsertGraphNode } from "./lib/fsiNodeSchemas";
 import { isCanvasNode, migrateLegacyFieldNodes } from "./lib/fsiLegacyMigrate";
 import { isNoteNode } from "./lib/fsiHierarchy";
-import { screenshotNodePayload } from "./lib/fsiScreenshotNode";
+import { isTempScreenshotId, screenshotNodePayload, TEMP_SCREENSHOT_ID_PREFIX } from "./lib/fsiScreenshotNode";
 import { clearSavedViewport } from "./lib/fsiViewportStorage";
 import {
   loadCanvasTheme,
@@ -369,26 +369,37 @@ export default function FsiCanvasWorkspace() {
       x: number;
       y: number;
     }) => {
-      // Parallel per-file pipeline: create → upload (compressed) → persist URL.
-      return Promise.all(
-        files.map(async (file, i) => {
-          const node = (await fsiApi.createNode(studyId!, {
-            node_type: "Visual",
-            display_title: "Visual",
-            canvas_x: x + i * 28,
-            canvas_y: y + i * 28,
-            structured_payload: screenshotNodePayload(""),
-          })) as FsiNodeRecord;
-          const urls = await fsiApi.uploadNodeScreenshotFiles(studyId!, node.id, [file]);
-          return (await fsiApi.updateNode(node.id, {
-            structured_payload: screenshotNodePayload(urls[0]!),
-          })) as FsiNodeRecord;
-        }),
-      );
+      const createdIds: string[] = [];
+      try {
+        return await Promise.all(
+          files.map(async (file, i) => {
+            const node = (await fsiApi.createNode(studyId!, {
+              node_type: "Visual",
+              display_title: "Visual",
+              canvas_x: x + i * 28,
+              canvas_y: y + i * 28,
+              structured_payload: screenshotNodePayload(""),
+            })) as FsiNodeRecord;
+            createdIds.push(node.id);
+            const urls = await fsiApi.uploadNodeScreenshotFiles(studyId!, node.id, [file]);
+            const imageUrl = urls[0];
+            if (!imageUrl) throw new Error("Screenshot upload returned no URL");
+            const payload = screenshotNodePayload(imageUrl);
+            const updated = (await fsiApi.updateNode(node.id, {
+              structured_payload: payload,
+            })) as FsiNodeRecord;
+            return { ...node, ...updated, structured_payload: payload };
+          }),
+        );
+      } catch (err) {
+        await Promise.all(createdIds.map((id) => fsiApi.deleteNode(id, studyId!).catch(() => undefined)));
+        throw err;
+      }
     },
-    onMutate: ({ files, x, y }) => {
+    onMutate: async ({ files, x, y }) => {
+      await queryClient.cancelQueries({ queryKey: ["fsi-graph", studyId] });
       const blobUrls = files.map((f) => URL.createObjectURL(f));
-      const tempIds = files.map(() => `temp-ss-${crypto.randomUUID()}`);
+      const tempIds = files.map(() => `${TEMP_SCREENSHOT_ID_PREFIX}${crypto.randomUUID()}`);
       const g = graphRef.current;
       if (g) {
         let next = g;
@@ -421,25 +432,29 @@ export default function FsiCanvasWorkspace() {
     },
     onSuccess: (nodes, _vars, ctx) => {
       const tempIds = new Set(ctx?.tempIds ?? []);
-      for (const url of ctx?.blobUrls ?? []) URL.revokeObjectURL(url);
-
       const g = graphRef.current;
-      if (g && tempIds.size > 0) {
-        let next: FsiGraph = {
-          ...g,
-          nodes: g.nodes.filter((n) => !tempIds.has(n.id)),
-        };
+      if (g && (tempIds.size > 0 || nodes.length > 0)) {
+        const uploaded = new Map(nodes.map((n) => [n.id, n]));
+        let nextNodes = g.nodes.filter((n) => !tempIds.has(n.id));
+        nextNodes = nextNodes.map((n) => uploaded.get(n.id) ?? n);
+        let next = { ...g, nodes: nextNodes };
         for (const node of nodes) {
           if (!history.isApplying.current) {
             history.pushEntry({ type: "node_add", node });
           }
-          next = appendGraphNode(next, node);
+          next = upsertGraphNode(next, node);
         }
         setGraph(next);
         if (nodes.length) setSelectedNode(nodes[nodes.length - 1]!);
       } else {
         for (const node of nodes) appendCreatedNode(node);
       }
+      // Revoke after React paints the Cloudinary <img>, or the preview blob
+      // dies while still on screen and Chrome shows alt text "Canvas screenshot".
+      const blobUrls = ctx?.blobUrls ?? [];
+      requestAnimationFrame(() => {
+        for (const url of blobUrls) URL.revokeObjectURL(url);
+      });
       toast.success(`Added ${nodes.length} screenshot${nodes.length === 1 ? "" : "s"}`);
     },
     onError: (e: Error, _vars, ctx) => {
@@ -485,7 +500,10 @@ export default function FsiCanvasWorkspace() {
 
   const deleteNodeMutation = useMutation({
     // fsiApi.deleteNode unparents children in DB before delete (CASCADE-safe).
-    mutationFn: (id: string) => fsiApi.deleteNode(id, studyId!),
+    mutationFn: (id: string) => {
+      if (isTempScreenshotId(id)) return Promise.resolve({ id });
+      return fsiApi.deleteNode(id, studyId!);
+    },
     onMutate: (id) => {
       const g = graphRef.current;
       if (!g) return;
@@ -530,7 +548,8 @@ export default function FsiCanvasWorkspace() {
 
   const deleteNodesBulkMutation = useMutation({
     mutationFn: async (ids: string[]) => {
-      await Promise.all(ids.map((id) => fsiApi.deleteNode(id, studyId!)));
+      const persistIds = ids.filter((id) => !isTempScreenshotId(id));
+      await Promise.all(persistIds.map((id) => fsiApi.deleteNode(id, studyId!)));
       return ids;
     },
     onMutate: (ids) => {
@@ -783,7 +802,11 @@ export default function FsiCanvasWorkspace() {
 
   const handleScreenshotDrop = useCallback(
     (files: File[], x: number, y: number) => {
-      if (!canEdit || files.length === 0 || createScreenshotMutation.isPending) return;
+      if (!canEdit || files.length === 0) return;
+      if (createScreenshotMutation.isPending) {
+        toast.message("Still adding the last screenshot…");
+        return;
+      }
       createScreenshotMutation.mutate({ files, x, y });
     },
     [canEdit, createScreenshotMutation],

@@ -264,6 +264,20 @@ export function appendGraphNode(graph: FsiGraph, node: FsiNodeRecord): FsiGraph 
   return { ...graph, nodes: [...graph.nodes, node] };
 }
 
+/** Insert or replace by id so a later upload URL overwrites an empty create. */
+export function upsertGraphNode(graph: FsiGraph, node: FsiNodeRecord): FsiGraph {
+  const idx = graph.nodes.findIndex((n) => n.id === node.id);
+  if (idx < 0) return { ...graph, nodes: [...graph.nodes, node] };
+  const prev = graph.nodes[idx]!;
+  const next = graph.nodes.slice();
+  next[idx] = {
+    ...prev,
+    ...node,
+    structured_payload: { ...(prev.structured_payload ?? {}), ...(node.structured_payload ?? {}) },
+  };
+  return { ...graph, nodes: next };
+}
+
 export const SUMMARY_SECTION_LABELS: Record<string, string> = {
   core_strategy_synthesis: "Core Strategy Synthesis",
   quantified_performance_multipliers: "Quantified Performance Multipliers",

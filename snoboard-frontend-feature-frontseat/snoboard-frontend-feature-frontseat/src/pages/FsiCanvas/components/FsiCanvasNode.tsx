@@ -191,6 +191,11 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
   const isScreenshot = isScreenshotNode(fsiNode);
   const screenshotUrl = getScreenshotImageUrl(fsiNode);
   const [replacingScreenshot, setReplacingScreenshot] = useState(false);
+  const [screenshotFailed, setScreenshotFailed] = useState(false);
+
+  useEffect(() => {
+    setScreenshotFailed(false);
+  }, [screenshotUrl]);
 
   useEffect(() => {
     const el = rootRef.current;
@@ -406,18 +411,24 @@ function FsiCanvasNodeComponent({ id, data, selected }: NodeProps) {
           void replaceScreenshot(files);
         }}
       >
-        {screenshotUrl ? (
+        {screenshotUrl && !screenshotFailed ? (
           <img
             src={screenshotUrl}
-            alt="Canvas screenshot"
+            alt=""
             className="pointer-events-none block max-h-80 max-w-[280px] rounded-sm object-contain"
             draggable={false}
             onLoad={() => updateNodeInternals(id)}
+            onError={() => {
+              setScreenshotFailed(true);
+              updateNodeInternals(id);
+            }}
           />
         ) : (
           <div className="flex h-[160px] w-[120px] items-center justify-center rounded-sm border border-dashed border-zinc-600 bg-zinc-900/60 px-2 text-center text-[11px] text-zinc-400">
             {replacingScreenshot ? (
               <Loader2 className="h-4 w-4 animate-spin text-zinc-300" />
+            ) : screenshotFailed ? (
+              "Couldn't load — delete or paste again"
             ) : (
               "Paste image"
             )}
