@@ -1377,36 +1377,33 @@ select option{ background-color:#18181b !important; color:rgba(244,244,247,.95) 
   outline:none;
 }
 
-/* Production "Submission link" — full-field pink glow so it doesn't look like Comp/YT. */
+/* Production "Submission link" — matte pink, readable white type (no neon glow). */
 .pb-submission-field{
-  border-radius:11px;
-  padding:2px;
-  background:linear-gradient(90deg, #FF9DE8 0%, #FF2E93 50%, #FF6B4A 100%);
-  box-shadow:
-    0 0 16px rgba(255,46,147,.75),
-    0 0 36px rgba(255,46,147,.4),
-    0 4px 18px rgba(255,46,147,.25);
+  border-radius:10px;
+  padding:1px;
+  background:#c45a8a;
+  box-shadow:0 1px 6px rgba(196,90,138,.28);
 }
 .pb-submission-field .fglass-input,
 :root[data-theme="light"] .pb-submission-field .fglass-input{
-  background:linear-gradient(135deg, rgba(255,157,232,.28) 0%, rgba(40,8,24,.96) 48%, rgba(255,107,74,.2) 100%) !important;
+  background:#3a1a2c !important;
   border:none !important;
-  color:#FFB7EC !important;
-  caret-color:#FF2E93 !important;
+  color:#fff !important;
+  caret-color:#fff !important;
   font-weight:600 !important;
-  box-shadow:inset 0 0 18px rgba(255,46,147,.18) !important;
+  box-shadow:none !important;
   border-radius:9px;
 }
 .pb-submission-field .fglass-input::placeholder,
 :root[data-theme="light"] .pb-submission-field .fglass-input::placeholder{
-  color:rgba(255,157,232,.55) !important;
+  color:rgba(255,255,255,.55) !important;
 }
 .pb-submission-field .fglass-input:focus,
 .pb-submission-field .fglass-input:focus-visible,
 :root[data-theme="light"] .pb-submission-field .fglass-input:focus,
 :root[data-theme="light"] .pb-submission-field .fglass-input:focus-visible{
-  background:linear-gradient(135deg, rgba(255,157,232,.34) 0%, rgba(48,10,28,.96) 50%, rgba(255,107,74,.26) 100%) !important;
-  box-shadow:inset 0 0 20px rgba(255,46,147,.28), 0 0 0 1px rgba(255,46,147,.5) !important;
+  background:#422033 !important;
+  box-shadow:none !important;
   outline:none;
 }
 

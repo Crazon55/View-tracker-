@@ -1030,8 +1030,7 @@ function SafeField({ value, onSave, placeholder, style, readOnly, bare }: { valu
   );
 }
 
-const SUBMISSION_LINK_COLOR = "#FF2E93";
-const SUBMISSION_LINK_GRADIENT = "linear-gradient(90deg, #FF9DE8 0%, #FF2E93 50%, #FF6B4A 100%)";
+const SUBMISSION_LINK_COLOR = "#d478a4";
 
 function submissionHref(raw: string | undefined | null): string {
   const s = String(raw || "").trim();
@@ -1042,15 +1041,13 @@ function submissionHref(raw: string | undefined | null): string {
 function submissionLinkTextStyle(size = 13): React.CSSProperties {
   return {
     fontSize: size,
-    fontWeight: 800,
+    fontWeight: 600,
     wordBreak: "break-all",
     display: "inline",
-    backgroundImage: SUBMISSION_LINK_GRADIENT,
-    WebkitBackgroundClip: "text",
-    backgroundClip: "text",
-    WebkitTextFillColor: "transparent",
-    color: "transparent",
-    filter: "drop-shadow(0 0 10px rgba(255,46,147,0.75))",
+    color: "#fff",
+    textDecoration: "underline",
+    textDecorationColor: "rgba(212,120,164,0.7)",
+    textUnderlineOffset: 2,
   };
 }
 
@@ -1063,11 +1060,7 @@ function SubmissionLinkField({ value, onSave, readOnly, ls }: {
   const link = String(value || "").trim();
   return (
     <div>
-      <label style={{
-        ...ls,
-        color: SUBMISSION_LINK_COLOR,
-        textShadow: "0 0 10px rgba(255,46,147,0.65)",
-      }}>Submission link</label>
+      <label style={{ ...ls, color: SUBMISSION_LINK_COLOR }}>Submission link</label>
       {readOnly ? (
         link ? (
           <a href={submissionHref(link)} target="_blank" rel="noopener noreferrer" style={{ ...submissionLinkTextStyle(14), display: "block" }}>{link}</a>
@@ -1104,12 +1097,11 @@ function SubmissionChip({ href }: { href?: string | null }) {
       title={link}
       style={{
         display: "inline-flex", alignItems: "center",
-        fontSize: 10, fontWeight: 800, letterSpacing: "0.02em",
+        fontSize: 10, fontWeight: 700, letterSpacing: "0.02em",
         color: "#fff",
-        backgroundImage: SUBMISSION_LINK_GRADIENT,
+        background: "#c45a8a",
         border: "none",
         borderRadius: 99, padding: "2px 8px",
-        boxShadow: "0 0 10px rgba(255,46,147,0.55)",
       }}
     >
       Submission ↗
