@@ -46,7 +46,10 @@ function todayYmd(): string {
 const TODAY = todayYmd();
 const YESTERDAY = ymd(new Date(Date.now() - 86400000));
 const TOMORROW = ymd(new Date(Date.now() + 86400000));
-const JASKARAN_EMAIL = "jaskaran.sethi@owledmedia.com";
+const ENGINE_REVIEWER_EMAILS = new Set([
+  "jaskaran.sethi@owledmedia.com",
+  "om.verma@owledmedia.com",
+]);
 
 function sumViews(idea: any): number {
   const pv = idea.page_views as Record<string, number> | undefined;
@@ -218,7 +221,7 @@ function tallyByPerson(list: any[]): PersonTally[] {
   });
 }
 function canReviewEngineIdeas(email: string | undefined, role: string | null): boolean {
-  if ((email || "").trim().toLowerCase() === JASKARAN_EMAIL) return true;
+  if (ENGINE_REVIEWER_EMAILS.has((email || "").trim().toLowerCase())) return true;
   return (role || "").split(",").map((r) => canonicalRole(r.trim())).some((r) => r === "admin" || r === "co");
 }
 
