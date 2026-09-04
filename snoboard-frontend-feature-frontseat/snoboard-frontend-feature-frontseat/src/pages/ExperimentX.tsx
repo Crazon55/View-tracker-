@@ -248,6 +248,13 @@ function fmtShortDate(iso: string) {
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
+function ideaCreatedLabel(idea: any): string {
+  const raw = String(idea?.created_at || idea?.day_date || "").trim();
+  const day = raw.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return "";
+  return fmtShortDate(day);
+}
+
 function fmtTimeLabel(t: string) {
   if (!t) return "";
   const [h, m] = t.split(":");
@@ -4138,6 +4145,7 @@ function FrontseatPoolCard({ idea, letter, onDragStart, onClick, onDelete, readO
 }) {
   const { pageColors, pageShort } = usePlaybook();
   const posted = previouslyPostedPages(idea);
+  const created = ideaCreatedLabel(idea);
   return (
     <div
       draggable={!readOnly}
@@ -4179,6 +4187,9 @@ function FrontseatPoolCard({ idea, letter, onDragStart, onClick, onDelete, readO
       </p>
       {idea.created_by ? (
         <p style={{ margin: "5px 0 0", fontSize: 10, color: "var(--pb-faint)" }}>by {idea.created_by}</p>
+      ) : null}
+      {created ? (
+        <p style={{ margin: "3px 0 0", fontSize: 9.5, color: "var(--pb-faint)" }}>{created}</p>
       ) : null}
       {posted.length > 0 ? (
         <div style={{ marginTop: 7 }}>
@@ -4257,6 +4268,9 @@ function FrontseatPageCard({ idea, letter, onClick, onRemoveFromPage, onAssign, 
         overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
         {idea.topic || <em style={{ color: "var(--pb-faint)" }}>Untitled</em>}
       </p>
+      {created ? (
+        <p style={{ margin: "4px 0 0", fontSize: 9.5, color: "var(--pb-faint)" }}>{created}</p>
+      ) : null}
       {idea.video_format && (
         <p style={{ margin: "5px 0 0", fontSize: 10, color: "#50E0B0", fontWeight: 600 }}>{idea.video_format}</p>
       )}
