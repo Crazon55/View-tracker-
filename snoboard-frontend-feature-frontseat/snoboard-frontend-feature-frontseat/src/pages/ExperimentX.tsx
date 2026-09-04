@@ -4169,7 +4169,7 @@ function FrontseatPoolCard({ idea, letter, onDragStart, onClick, onDelete, readO
       )}
       <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 5, marginBottom: 6, paddingRight: 18 }}>
         <span style={{ fontSize: 9.5, fontWeight: 800, color: "#a78bfa", background: "#7c3aed22", borderRadius: 5, padding: "2px 6px" }}>{letter}</span>
-        <span style={{ fontSize: 9.5, color: "var(--pb-faint)", background: "var(--pb-chip)", borderRadius: 5, padding: "2px 6px" }}>{idea.content_type}</span>
+        <ContentTypeBadge idea={idea} />
         {idea.source === "competitor"
           ? <span style={{ fontSize: 9, color: "#7BB0FF", background: "#7BB0FF22", borderRadius: 5, padding: "2px 6px" }}>IG</span>
           : <span style={{ fontSize: 9, color: "#FF9580", background: "#FF958022", borderRadius: 5, padding: "2px 6px" }}>YT</span>
@@ -4254,9 +4254,7 @@ function FrontseatPageCard({ idea, letter, onClick, onRemoveFromPage, onAssign, 
         <span style={{ fontSize: 10, fontWeight: 600, color: ss.text, background: ss.bg, borderRadius: 5, padding: "2px 7px" }}>
           {STAGE_LABEL[stage as IdeaStage] || stage}
         </span>
-        {idea.content_type && (
-          <span style={{ fontSize: 10, color: "var(--pb-faint)", background: "var(--pb-chip)", borderRadius: 5, padding: "2px 6px" }}>{idea.content_type}</span>
-        )}
+        <ContentTypeBadge idea={idea} />
         {idea.content_format && (
           <span style={{ fontSize: 9, fontWeight: 700, color: CONTENT_FORMAT_ACCENT[idea.content_format as ContentFormat] ?? "var(--pb-dim)",
             background: `${CONTENT_FORMAT_ACCENT[idea.content_format as ContentFormat] ?? "var(--pb-dim)"}22`, borderRadius: 5, padding: "2px 6px" }}>
@@ -4378,6 +4376,28 @@ function matchesContentFormat(idea: any, filter: string): boolean {
   return (idea.content_format || "") === filter;
 }
 
+function ideaIsCarousel(idea: any): boolean {
+  return String(idea?.content_type || "").trim().toLowerCase() === "carousel";
+}
+
+function matchesKindFilter(idea: any, kinds: { reel: boolean; carousel: boolean }): boolean {
+  if (kinds.reel && kinds.carousel) return true;
+  if (!kinds.reel && !kinds.carousel) return true;
+  return ideaIsCarousel(idea) ? kinds.carousel : kinds.reel;
+}
+
+function ContentTypeBadge({ idea }: { idea: any }) {
+  const carousel = ideaIsCarousel(idea);
+  return (
+    <span style={{
+      fontSize: 9.5, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase",
+      color: carousel ? "#f9a8d4" : "#93c5fd",
+      background: carousel ? "#f9a8d422" : "#93c5fd22",
+      borderRadius: 5, padding: "2px 6px",
+    }}>{carousel ? "Carousel" : "Reel"}</span>
+  );
+}
+
 const CS_WRITTEN_BY_KEY = "fsos-cd-written-by";
 
 function previouslyPostedPages(idea: any): string[] {
@@ -4440,9 +4460,10 @@ function matchesWrittenBy(idea: any, q: string): boolean {
 // ---------------------------------------------------------------------------
 // Frontseat tab — current-week ideas organised by page (view layer over Idea Bank)
 // ---------------------------------------------------------------------------
-function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", search = "", writtenBy = "", view = "kanban", boardDay }: {
+function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", search = "", writtenBy = "", view = "kanban", boardDay, kindFilter }: {
   readOnly?: boolean; formatFilter?: string; pageFilter?: string; search?: string; writtenBy?: string; view?: "kanban" | "table";
   boardDay: string;
+  kindFilter: { reel: boolean; carousel: boolean };
 }) {
   const { pages: allPlaybookPages, pageColors, pageShort, api, id: playbookId } = usePlaybook();
   const playbookPages = isAllPages(pageFilter)
@@ -4658,9 +4679,9 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
         if (d === todayStr || d === boardDay) return true;
         return !String(i.page_handle || "").trim();
       })
-      .filter((i: any) => matchesContentFormat(i, formatFilter) && matchesSearch(i))
+      .filter((i: any) => matchesContentFormat(i, formatFilter) && matchesKindFilter(i, kindFilter) && matchesSearch(i))
       .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
-    [ideas, todayStr, boardDay, formatFilter, searchQ],
+    [ideas, todayStr, boardDay, formatFilter, kindFilter, searchQ],
   );
   const poolIdeas = useMemo(
     () => allPoolIdeas.filter((i: any) => matchesWrittenBy(i, writtenBy)),
@@ -4682,7 +4703,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
     const result: Record<string, any[]> = {};
     playbookPages.forEach(p => { result[p] = []; });
     boardIdeas
-      .filter((i: any) => !i.frontseat_pool && matchesContentFormat(i, formatFilter) && matchesSearch(i) && matchesWrittenBy(i, writtenBy))
+      .filter((i: any) => !i.frontseat_pool && matchesContentFormat(i, formatFilter) && matchesKindFilter(i, kindFilter) && matchesSearch(i) && matchesWrittenBy(i, writtenBy))
       .filter((i: any) => !soloView || isAssignee(i.assigned_to, myEmail))
       .forEach((idea: any) => {
       const pages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
@@ -4692,7 +4713,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
       result[p].sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
     });
     return result;
-  }, [boardIdeas, playbookPages, formatFilter, soloView, myEmail, searchQ, writtenBy]);
+  }, [boardIdeas, playbookPages, formatFilter, kindFilter, soloView, myEmail, searchQ, writtenBy]);
 
   const copiesBySourceId = useMemo(() => {
     const map: Record<string, any[]> = {};
@@ -5156,6 +5177,7 @@ function ExperimentXShell() {
   // News / A-roll filter — Today's Board only, so it sits beside the page filter
   // but renders on the frontseat tab alone.
   const [formatFilter, setFormatFilter] = useState<string>("all");
+  const [kindFilter, setKindFilter] = useState({ reel: true, carousel: true });
   const [search, setSearch] = useState("");
   const [csFilter, setCsFilter] = useState(() => {
     try { return localStorage.getItem(CS_WRITTEN_BY_KEY) ?? ""; }
@@ -5363,6 +5385,26 @@ function ExperimentXShell() {
           </div>
         )}
         {tab === "frontseat" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {([["reel", "Reel"], ["carousel", "Carousel"]] as const).map(([key, label]) => {
+              const on = kindFilter[key];
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setKindFilter((f) => ({ ...f, [key]: !f[key] }))}
+                  style={{
+                    padding: "5px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                    border: on ? "2px solid #7c3aed" : "1.5px solid var(--pb-border)",
+                    background: on ? "rgba(124,58,237,0.15)" : "var(--pb-card)",
+                    color: on ? "#a78bfa" : "var(--pb-dim)",
+                  }}
+                >{label}</button>
+              );
+            })}
+          </div>
+        )}
+        {tab === "frontseat" && (
           <div aria-hidden style={{ width: 1, alignSelf: "stretch", minHeight: 28, background: "var(--pb-border)", margin: "0 4px" }} />
         )}
         {tab === "frontseat" && (
@@ -5447,7 +5489,7 @@ function ExperimentXShell() {
         flex: 1, minHeight: 0,
         overflow: (tab === "frontseat" || tab === "idea-bank" || tab === "tracking") ? "hidden" : "auto",
       }}>
-        {tab === "frontseat"     && <FrontseatTab readOnly={!canEditTab("frontseat")} formatFilter={formatFilter} pageFilter={pageFilter} search={search} writtenBy={csFilter} view={todaysBoardView} boardDay={boardDay} />}
+        {tab === "frontseat"     && <FrontseatTab readOnly={!canEditTab("frontseat")} formatFilter={formatFilter} pageFilter={pageFilter} search={search} writtenBy={csFilter} view={todaysBoardView} boardDay={boardDay} kindFilter={kindFilter} />}
         {/* Idea Bank IS the video-editor Production board (Approved → Base edit → Formatted → Posted). */}
         {tab === "idea-bank"     && (
           <ProductionTab

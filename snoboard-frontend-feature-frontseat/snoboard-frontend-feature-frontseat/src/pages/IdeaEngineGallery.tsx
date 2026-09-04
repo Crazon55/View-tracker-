@@ -64,6 +64,11 @@ function sumLikes(idea: any): number {
 function isCarousel(idea: any): boolean {
   return String(idea.content_type || "").trim().toLowerCase() === "carousel";
 }
+function matchesKindFilter(idea: any, kinds: { reel: boolean; carousel: boolean }): boolean {
+  if (kinds.reel && kinds.carousel) return true;
+  if (!kinds.reel && !kinds.carousel) return true;
+  return isCarousel(idea) ? kinds.carousel : kinds.reel;
+}
 function pagesOf(idea: any): string[] {
   return String(idea.page_handle || "").split(",").map((s) => s.trim()).filter(Boolean);
 }
@@ -258,6 +263,7 @@ export default function IdeaEngineGallery() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [scoreScope, setScoreScope] = useState<"day" | "all">("day");
   const [search, setSearch] = useState("");
+  const [kindFilter, setKindFilter] = useState({ reel: true, carousel: true });
   const [showAdd, setShowAdd] = useState(false);
   const [editIdea, setEditIdea] = useState<Idea | null>(null);
 
@@ -441,9 +447,10 @@ export default function IdeaEngineGallery() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return merged
+      .filter((i) => matchesKindFilter(i, kindFilter))
       .filter((i) => (q ? String(i.topic || "").toLowerCase().includes(q) || pagesOf(i).some((p) => p.toLowerCase().includes(q)) : true))
       .sort((a, b) => sumViews(b) - sumViews(a));
-  }, [merged, search]);
+  }, [merged, search, kindFilter]);
 
   return (
     <FramerPage>
@@ -493,6 +500,16 @@ export default function IdeaEngineGallery() {
           onOpenChange={setPickerOpen}
           onChange={setDayDate}
         />
+        {([["reel", "Reel"], ["carousel", "Carousel"]] as const).map(([key, label]) => {
+          const on = kindFilter[key];
+          return (
+            <DatePill
+              key={key}
+              active={on}
+              onClick={() => setKindFilter((f) => ({ ...f, [key]: !f[key] }))}
+            >{label}</DatePill>
+          );
+        })}
         <div style={{ flex: 1 }} />
         <div style={{ position: "relative", minWidth: 220 }}>
           <Search size={14} strokeWidth={1.6} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: "var(--f-faint)" }} />
@@ -696,6 +713,14 @@ function IdeaCard({ idea, sentTo, sending, onSend, onOpen, canEdit, canDelete, d
           )}
           <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: existing ? "var(--f-faint)" : "#4ade80", border: "1px solid var(--f-line)", borderRadius: 6, padding: "2px 7px" }}>
             {existing ? "Existing" : "New"}
+          </span>
+          <span style={{
+            fontSize: 10, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", borderRadius: 6, padding: "2px 7px",
+            color: isCarousel(idea) ? "#f9a8d4" : "#93c5fd",
+            border: isCarousel(idea) ? "1px solid rgba(249,168,212,.4)" : "1px solid rgba(147,197,253,.4)",
+            background: isCarousel(idea) ? "rgba(249,168,212,.12)" : "rgba(147,197,253,.12)",
+          }}>
+            {isCarousel(idea) ? "Carousel" : "Reel"}
           </span>
           {review !== "pending" && (
             <span style={{
