@@ -340,6 +340,9 @@ export default function IdeaEngineGallery() {
   const [sentLocal, setSentLocal] = useState<Record<string, PlaybookId[]>>({});
   const sendMut = useMutation({
     mutationFn: ({ idea, target }: { idea: Idea; target: PlaybookId }) => {
+      if (engineReviewOf(idea) === "rejected") {
+        return Promise.reject(new Error("Rejected ideas can't go to Content Distribution"));
+      }
       const rootPb = (idea.origin_playbook || idea._playbook) as PlaybookId;
       const rootId = String(idea.origin_idea_id || idea.id);
       const postedPages = pagesOf(idea);
@@ -525,7 +528,10 @@ export default function IdeaEngineGallery() {
                 idea={idea}
                 sentTo={sentLocal[key] || []}
                 sending={sendMut.isPending && sendMut.variables?.idea === idea}
-                onSend={(target) => sendMut.mutate({ idea, target })}
+                onSend={(target) => {
+                  if (engineReviewOf(idea) === "rejected") return;
+                  sendMut.mutate({ idea, target });
+                }}
                 onOpen={() => (canEditIdeas ? setEditIdea(idea) : navigate(PLAYBOOK_CONFIGS[idea._playbook as PlaybookId].route))}
                 canEdit={canEditIdeas}
                 canDelete={canManageAllIdeas}
@@ -672,6 +678,8 @@ function IdeaCard({ idea, sentTo, sending, onSend, onOpen, canEdit, canDelete, d
   const sent = [...new Set([...(idea.deployed_to_playbooks || []), ...sentTo])] as PlaybookId[];
   const alreadySent = sent.includes("bpb");
   const review = engineReviewOf(idea);
+  const rejected = review === "rejected";
+  const sendLocked = sending || alreadySent || rejected;
 
   return (
     <article className="fglass-panel fglass-purple-shadow" style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
@@ -808,11 +816,12 @@ function IdeaCard({ idea, sentTo, sending, onSend, onOpen, canEdit, canDelete, d
           </button>
           <button
             type="button"
-            disabled={sending || alreadySent}
-            onClick={() => onSend("bpb")}
-            style={{ ...sendBtn, opacity: sending || alreadySent ? 0.6 : 1 }}
+            disabled={sendLocked}
+            title={rejected ? "Rejected ideas can't go to Content Distribution" : alreadySent ? "Already sent" : "Send to Content Distribution"}
+            onClick={() => { if (!rejected && !alreadySent) onSend("bpb"); }}
+            style={{ ...sendBtn, opacity: sendLocked ? 0.55 : 1, cursor: sendLocked ? "default" : "pointer" }}
           >
-            {sending ? "Sending…" : alreadySent ? <>Sent <Check size={13} strokeWidth={2} /></> : "Send to Content Distribution"}
+            {sending ? "Sending…" : alreadySent ? <>Sent <Check size={13} strokeWidth={2} /></> : rejected ? "Rejected" : "Send to Content Distribution"}
           </button>
         </div>
       </div>
