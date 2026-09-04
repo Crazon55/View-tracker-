@@ -2709,17 +2709,24 @@ function ideaIsAssigned(idea: any): boolean {
   return String(idea?.assigned_to || "").trim().length > 0;
 }
 
-function MissingHookMark({ title }: { title?: string }) {
+function MissingHookMark({ label }: { label: string }) {
   return (
     <span
-      title={title || "No hook yet — CS hasn't added hook variations"}
+      title={label}
       style={{
+        display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0,
+      }}
+    >
+      <span style={{
         display: "inline-flex", alignItems: "center", justifyContent: "center",
         width: 16, height: 16, borderRadius: 4, flexShrink: 0,
         fontSize: 11, fontWeight: 800, lineHeight: 1,
         color: "#fff", background: "#E11D48",
-      }}
-    >!</span>
+      }}>!</span>
+      <span style={{ fontSize: 9.5, fontWeight: 700, color: "#E11D48", lineHeight: 1.2 }}>
+        {label}
+      </span>
+    </span>
   );
 }
 
@@ -4244,7 +4251,7 @@ function FrontseatPageCard({ idea, letter, onClick, onRemoveFromPage, onAssign, 
             {idea.content_format}
           </span>
         )}
-        {!ideaHasHook(idea) && <MissingHookMark />}
+        {!ideaHasHook(idea) && <MissingHookMark label="Hook isn't written" />}
       </div>
       <p style={{ margin: 0, fontSize: 12.5, fontWeight: 500, color: "var(--pb-ink)", lineHeight: 1.45,
         overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
@@ -4275,8 +4282,8 @@ function FrontseatPageCard({ idea, letter, onClick, onRemoveFromPage, onAssign, 
             }}
           />
         )}
-        {ideaHasHook(idea) && !ideaIsAssigned(idea) && (
-          <MissingHookMark title="Hook is ready — assign someone" />
+        {!ideaIsAssigned(idea) && (
+          <MissingHookMark label="Not assigned" />
         )}
       </div>
       <CrossPlaybookViewsBlock idea={idea} />
