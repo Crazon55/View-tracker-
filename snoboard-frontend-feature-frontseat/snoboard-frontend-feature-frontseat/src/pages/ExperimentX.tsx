@@ -5177,7 +5177,7 @@ function ExperimentXShell() {
   // News / A-roll filter — Today's Board only, so it sits beside the page filter
   // but renders on the frontseat tab alone.
   const [formatFilter, setFormatFilter] = useState<string>("all");
-  const [kindFilter, setKindFilter] = useState({ reel: true, carousel: true });
+  const [kindFilter, setKindFilter] = useState({ reel: false, carousel: false });
   const [search, setSearch] = useState("");
   const [csFilter, setCsFilter] = useState(() => {
     try { return localStorage.getItem(CS_WRITTEN_BY_KEY) ?? ""; }

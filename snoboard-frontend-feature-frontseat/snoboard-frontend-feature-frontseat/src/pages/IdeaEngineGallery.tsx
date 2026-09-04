@@ -264,7 +264,7 @@ export default function IdeaEngineGallery() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [scoreScope, setScoreScope] = useState<"day" | "all">("day");
   const [search, setSearch] = useState("");
-  const [kindFilter, setKindFilter] = useState({ reel: true, carousel: true });
+  const [kindFilter, setKindFilter] = useState({ reel: false, carousel: false });
   const [showAdd, setShowAdd] = useState(false);
   const [editIdea, setEditIdea] = useState<Idea | null>(null);
 
@@ -861,7 +861,7 @@ function AddIdeaModal({ author, onClose, onCreated }: {
   const [topic, setTopic] = useState("");
   const [refLink, setRefLink] = useState("");
   const [timestamps, setTimestamps] = useState("");
-  const [kinds, setKinds] = useState({ reel: true, carousel: false });
+  const [kinds, setKinds] = useState({ reel: false, carousel: false });
   const [format, setFormat] = useState<ContentFormat | "">("");
   const [day, setDay] = useState(todayYmd());
   const [busy, setBusy] = useState(false);
