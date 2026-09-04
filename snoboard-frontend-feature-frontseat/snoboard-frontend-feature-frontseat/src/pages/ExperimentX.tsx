@@ -4228,6 +4228,7 @@ function FrontseatPageCard({ idea, letter, onClick, onRemoveFromPage, onAssign, 
 }) {
   const stage = idea.status || "new";
   const ss = STATUS_STYLE[stage] || STATUS_STYLE.new;
+  const created = ideaCreatedLabel(idea);
   return (
     <div
       onClick={onClick}
