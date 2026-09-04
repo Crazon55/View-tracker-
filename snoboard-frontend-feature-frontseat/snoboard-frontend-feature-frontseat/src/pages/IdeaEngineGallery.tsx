@@ -110,7 +110,8 @@ function mergeIdeasByTopic(list: any[]): any[] {
   for (const idea of list) {
     const topic = String(idea.topic || "").trim();
     // Untitled ideas stay separate (keyed by id) so they don't all collapse together.
-    const key = topic ? `${idea._playbook}::${topic.toLowerCase()}` : `${idea._playbook}::__${idea.id}`;
+    const kind = isCarousel(idea) ? "carousel" : "reel";
+    const key = topic ? `${idea._playbook}::${topic.toLowerCase()}::${kind}` : `${idea._playbook}::__${idea.id}`;
     let g = map.get(key);
     if (!g) {
       g = { ...idea, page_views: {}, page_likes: {}, page_live_links: {}, page_posting_dates: {}, _deployed: new Set<string>(), _ids: new Set<string>() };
@@ -860,7 +861,7 @@ function AddIdeaModal({ author, onClose, onCreated }: {
   const [topic, setTopic] = useState("");
   const [refLink, setRefLink] = useState("");
   const [timestamps, setTimestamps] = useState("");
-  const [contentType, setContentType] = useState("Reel");
+  const [kinds, setKinds] = useState({ reel: true, carousel: false });
   const [format, setFormat] = useState<ContentFormat | "">("");
   const [day, setDay] = useState(todayYmd());
   const [busy, setBusy] = useState(false);
@@ -869,17 +870,18 @@ function AddIdeaModal({ author, onClose, onCreated }: {
 
   const submit = async () => {
     if (!topic.trim()) { toast.error("Give the idea a name."); return; }
+    const types = [kinds.reel && "Reel", kinds.carousel && "Carousel"].filter(Boolean) as string[];
+    if (!types.length) { toast.error("Pick Reel, Carousel, or both."); return; }
     setBusy(true);
     try {
       const link = refLink.trim();
       const ytLink = isYouTube(link);
       const savedDay = day || todayYmd();
-      // Blank date → the day they write it. A picked date (including future) is
-      // the day the idea should appear in Idea Engine / Content Distribution.
-      await PB_API.bpb.createIdea({
+      // One row per type so Content Distribution can treat reel vs carousel separately.
+      await Promise.all(types.map((content_type) => PB_API.bpb.createIdea({
         page_handle: "",
         topic: topic.trim(),
-        content_type: contentType,
+        content_type,
         content_format: format || undefined,
         views: 0,
         day_date: savedDay,
@@ -887,8 +889,13 @@ function AddIdeaModal({ author, onClose, onCreated }: {
         comp_link: link && !ytLink ? link : undefined,
         yt_url: ytLink ? link : undefined,
         yt_timestamps: timestamps.trim() || undefined,
-      });
-      toast.success(savedDay === todayYmd() ? "Idea added." : `Idea added for ${prettyDate(savedDay)}.`);
+      })));
+      const both = types.length > 1;
+      toast.success(
+        both
+          ? (savedDay === todayYmd() ? "Reel and Carousel added." : `Reel and Carousel added for ${prettyDate(savedDay)}.`)
+          : (savedDay === todayYmd() ? "Idea added." : `Idea added for ${prettyDate(savedDay)}.`),
+      );
       onCreated(savedDay);
     } catch {
       toast.error("Couldn't add the idea — try again.");
@@ -939,9 +946,31 @@ function AddIdeaModal({ author, onClose, onCreated }: {
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <Field label="Content type">
-              <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="fglass-input" style={{ ...modalInput, colorScheme: "dark" }}>
-                {["Reel", "Carousel"].map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {([["reel", "Reel"], ["carousel", "Carousel"]] as const).map(([key, label]) => {
+                  const on = kinds[key];
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setKinds((k) => ({ ...k, [key]: !k[key] }))}
+                      style={{
+                        ...datePillBase,
+                        cursor: "pointer",
+                        borderColor: on ? "#fff" : "var(--f-line)",
+                        background: on ? "#fff" : "transparent",
+                        color: on ? "#000" : "var(--f-dim)",
+                        fontWeight: on ? 600 : 500,
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+              <span style={{ display: "block", marginTop: 6, fontSize: 11, color: "var(--f-faint)", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
+                Pick one or both.
+              </span>
             </Field>
             <Field label="Date">
               <input
@@ -960,7 +989,14 @@ function AddIdeaModal({ author, onClose, onCreated }: {
         </div>
 
         <div style={{ display: "flex", gap: 8, marginTop: 22 }}>
-          <button type="button" disabled={busy} onClick={submit} style={primaryBtn}><Check size={14} strokeWidth={2} /> {busy ? "Adding…" : "Add idea"}</button>
+          <button
+            type="button"
+            disabled={busy || (!kinds.reel && !kinds.carousel)}
+            onClick={submit}
+            style={{ ...primaryBtn, opacity: busy || (!kinds.reel && !kinds.carousel) ? 0.5 : 1 }}
+          >
+            <Check size={14} strokeWidth={2} /> {busy ? "Adding…" : kinds.reel && kinds.carousel ? "Add both" : "Add idea"}
+          </button>
           <button type="button" disabled={busy} onClick={onClose} style={{ ...ghostBtnSm, padding: "9px 14px" }}>Cancel</button>
         </div>
       </div>
