@@ -4425,8 +4425,9 @@ function matchesWrittenBy(idea: any, q: string): boolean {
 // ---------------------------------------------------------------------------
 // Frontseat tab — current-week ideas organised by page (view layer over Idea Bank)
 // ---------------------------------------------------------------------------
-function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", search = "", writtenBy = "", view = "kanban" }: {
+function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", search = "", writtenBy = "", view = "kanban", boardDay }: {
   readOnly?: boolean; formatFilter?: string; pageFilter?: string; search?: string; writtenBy?: string; view?: "kanban" | "table";
+  boardDay: string;
 }) {
   const { pages: allPlaybookPages, pageColors, pageShort, api, id: playbookId } = usePlaybook();
   const playbookPages = isAllPages(pageFilter)
@@ -4548,17 +4549,37 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
   }, [settings]);
 
   const todayStr = toLocalISO(new Date());
-  const QK = expQk(playbookId, "idea-bank", "today", todayStr);
-  // enrich_cross: false — the cross-playbook views block is a pre-consolidation
-  // relic (this is one system now) and doubles the payload at 200+ ideas/day for
-  // data almost no row ever displays; IdeaDetailModal fetches its own data anyway.
-  const { data: ideas = [], isLoading } = useQuery({
-    queryKey: QK,
-    queryFn: () => api.getIdeaBank({ day_date: todayStr, enrich_cross: false, include_open_pool: true }),
+  const schedulingOffToday = boardDay !== todayStr;
+  const { data: dayRows = [], isLoading: loadingDay } = useQuery({
+    queryKey: expQk(playbookId, "idea-bank", "board", boardDay),
+    queryFn: () => api.getIdeaBank({
+      day_date: boardDay,
+      enrich_cross: false,
+      include_open_pool: !schedulingOffToday,
+    }),
     staleTime: EXP_STALE_MS,
     refetchOnMount: "always",
     refetchInterval: () => (isIdeaBankSocketLive(playbookId) ? 45_000 : 20_000),
   });
+  // Tomorrow (or any other day) still needs today's Ideas Pool so you can drag
+  // those cards onto that day's page columns.
+  const { data: livePoolRows = [], isLoading: loadingPool } = useQuery({
+    queryKey: expQk(playbookId, "idea-bank", "today", todayStr),
+    queryFn: () => api.getIdeaBank({ day_date: todayStr, enrich_cross: false, include_open_pool: true }),
+    enabled: schedulingOffToday,
+    staleTime: EXP_STALE_MS,
+    refetchOnMount: "always",
+    refetchInterval: () => (isIdeaBankSocketLive(playbookId) ? 45_000 : 20_000),
+  });
+  const ideas = useMemo(() => {
+    if (!schedulingOffToday) return dayRows as any[];
+    const byId = new Map<string, any>();
+    for (const row of [...(dayRows as any[]), ...(livePoolRows as any[])]) {
+      if (row?.id) byId.set(row.id, row);
+    }
+    return [...byId.values()];
+  }, [schedulingOffToday, dayRows, livePoolRows]);
+  const isLoading = loadingDay || (schedulingOffToday && loadingPool);
 
   const updateMut = useMutation(expIdeaUpdateMutationOpts(qc, playbookId, api, {
     onDetail: (id, patch) => setDetailIdea((p: any) => p?.id === id ? { ...p, ...patch } : p),
@@ -4602,32 +4623,29 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
     onSettled: () => invalidateExpIdeaBank(qc, playbookId),
   });
 
-  // Page columns stay today-only. Ideas Pool also keeps unassigned pool cards from
-  // earlier days (Send from Idea Engine used to stamp yesterday, so those rows exist
-  // but would never show if we filtered the pool to todayStr).
   const isPoolIdea = (i: any) =>
     i.frontseat_pool === true || (i.frontseat_pool == null && i.status === "new");
-  const todayIdeas = useMemo(() =>
-    (ideas as any[]).filter((i: any) => (i.day_date || "").slice(0, 10) === todayStr),
-    [ideas, todayStr],
+  const boardIdeas = useMemo(() =>
+    (ideas as any[]).filter((i: any) => (i.day_date || "").slice(0, 10) === boardDay),
+    [ideas, boardDay],
   );
 
   const searchQ = search.toLowerCase().trim();
   const matchesSearch = (idea: any) => !searchQ || (idea.topic || "").toLowerCase().includes(searchQ);
 
-  // Pool = permanent ideas added via Frontseat "+ New" or Idea Engine Send.
-  // After migration: frontseat_pool === true. Before migration runs (column is null): fall back to status === "new".
+  // Pool is the live queue (today + leftover unassigned), not the selected board day —
+  // so you can still drag today's ideas onto Tomorrow's columns.
   const allPoolIdeas = useMemo(() =>
     (ideas as any[])
       .filter((i: any) => {
         if (!isPoolIdea(i)) return false;
         const d = (i.day_date || "").slice(0, 10);
-        if (d === todayStr) return true;
+        if (d === todayStr || d === boardDay) return true;
         return !String(i.page_handle || "").trim();
       })
       .filter((i: any) => matchesContentFormat(i, formatFilter) && matchesSearch(i))
       .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
-    [ideas, todayStr, formatFilter, searchQ],
+    [ideas, todayStr, boardDay, formatFilter, searchQ],
   );
   const poolIdeas = useMemo(
     () => allPoolIdeas.filter((i: any) => matchesWrittenBy(i, writtenBy)),
@@ -4648,7 +4666,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
   const ideasByPage = useMemo(() => {
     const result: Record<string, any[]> = {};
     playbookPages.forEach(p => { result[p] = []; });
-    todayIdeas
+    boardIdeas
       .filter((i: any) => !i.frontseat_pool && matchesContentFormat(i, formatFilter) && matchesSearch(i) && matchesWrittenBy(i, writtenBy))
       .filter((i: any) => !soloView || isAssignee(i.assigned_to, myEmail))
       .forEach((idea: any) => {
@@ -4659,7 +4677,17 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
       result[p].sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
     });
     return result;
-  }, [todayIdeas, playbookPages, formatFilter, soloView, myEmail, searchQ, writtenBy]);
+  }, [boardIdeas, playbookPages, formatFilter, soloView, myEmail, searchQ, writtenBy]);
+
+  const copiesBySourceId = useMemo(() => {
+    const map: Record<string, any[]> = {};
+    boardIdeas.filter((i: any) => !i.frontseat_pool).forEach((copy: any) => {
+      const key = copy.source_pool_id;
+      if (!key) return;
+      (map[key] ||= []).push(copy);
+    });
+    return map;
+  }, [boardIdeas]);
 
   const handleDrop = (page: string, e: React.DragEvent) => {
     if (readOnly) return;
@@ -4673,7 +4701,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
     const alreadyAssigned = (ideasByPage[page] || []).some((c: any) => c.source_pool_id === ideaId);
     if (alreadyAssigned) return;
     if (previouslyPostedPages(idea).includes(page)) {
-      toast.message(`Already posted on @${page} — assigning for today anyway`);
+      toast.message(`Already posted on @${page} — assigning for ${fmtShortDate(boardDay)} anyway`);
     }
     // Create a pipeline copy for this page. An idea that already has a base-edit link
     // (drive/frame) is an EXISTING idea — the base edit is done, so it skips straight
@@ -4690,14 +4718,14 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
       frame_link: idea.frame_link || "", drive_link: idea.drive_link || "", kalakar_link: idea.kalakar_link || "",
       submission_link: idea.submission_link || "",
       created_by: idea.created_by || "",
-      day_date: todayStr, frontseat_pool: false, source_pool_id: ideaId,
+      day_date: boardDay, frontseat_pool: false, source_pool_id: ideaId,
     });
     // Track assigned pages on pool idea (for chip display)
     const existingPages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
     if (!existingPages.includes(page)) {
       updateMut.mutate({
         id: ideaId,
-        data: { page_handle: [...existingPages, page].join(","), day_date: todayStr },
+        data: { page_handle: [...existingPages, page].join(",") },
       });
     }
   };
@@ -4722,7 +4750,8 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
         </span>
       </div>
       <p style={{ margin: "0 0 8px", fontSize: 9.5, color: "var(--pb-faint)" }}>
-        {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · drag to assign
+      {new Date(`${boardDay}T00:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · drag to assign
+      {schedulingOffToday ? " · scheduling" : ""}
       </p>
 
       {/* Colour legend — same stages as the Production board. */}
@@ -4753,7 +4782,9 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
       ) : (
         <div className="pb-board-col-body pb-thin-scroll" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {poolIdeas.map((idea: any) => {
-            const assignedPages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+            const assignedPages = [...new Set(
+              (copiesBySourceId[idea.id] || []).map((c: any) => (c.page_handle || "").trim()).filter(Boolean),
+            )];
             const unassignedPages = allPlaybookPages.filter(p => !assignedPages.includes(p));
             return (
               <div
@@ -4808,25 +4839,12 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
     </div>
   );
 
-  // Page copies indexed by the pool idea they belong to — lets assignToPage guard
-  // against a duplicate copy for the same pool-idea+page pair (used by the pool
-  // panel's "+" add-page button, shared by both the kanban and table views).
-  const copiesBySourceId = useMemo(() => {
-    const map: Record<string, any[]> = {};
-    todayIdeas.filter((i: any) => !i.frontseat_pool).forEach((copy: any) => {
-      const key = copy.source_pool_id;
-      if (!key) return;
-      (map[key] ||= []).push(copy);
-    });
-    return map;
-  }, [todayIdeas]);
-
   const assignToPage = (pool: any, page: string) => {
     if (readOnly) return;
     const alreadyAssigned = (copiesBySourceId[pool.id] || []).some((c: any) => (c.page_handle || "").trim() === page);
     if (alreadyAssigned) return;
     if (previouslyPostedPages(pool).includes(page)) {
-      toast.message(`Already posted on @${page} — assigning for today anyway`);
+      toast.message(`Already posted on @${page} — assigning for ${fmtShortDate(boardDay)} anyway`);
     }
     const hasBaseEdit = !!(pool.drive_link || pool.frame_link);
     createCopyMut.mutate({
@@ -4839,7 +4857,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
       frame_link: pool.frame_link || "", drive_link: pool.drive_link || "", kalakar_link: pool.kalakar_link || "",
       submission_link: pool.submission_link || "",
       created_by: pool.created_by || "",
-      day_date: todayStr, frontseat_pool: false, source_pool_id: pool.id,
+      day_date: boardDay, frontseat_pool: false, source_pool_id: pool.id,
     });
     const existingPages = (pool.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
     if (!existingPages.includes(page)) {
@@ -5175,6 +5193,10 @@ function ExperimentXShell() {
   );
 
   const todayStrShell = toLocalISO(new Date());
+  const tomorrowStrShell = addDays(todayStrShell, 1);
+  const [boardDay, setBoardDay] = useState(todayStrShell);
+  const [boardDayPickerOpen, setBoardDayPickerOpen] = useState(false);
+  const boardDayIsCustom = boardDay !== todayStrShell && boardDay !== tomorrowStrShell;
   const { data: todayIdeaRows = [] } = useQuery({
     queryKey: expQk(playbookId, "idea-bank", "today", todayStrShell),
     queryFn: () => api.getIdeaBank({ day_date: todayStrShell, enrich_cross: false }),
@@ -5234,6 +5256,51 @@ function ExperimentXShell() {
         <h1 style={{ fontSize: 15, fontWeight: 700, color: "var(--pb-ink)", margin: 0, letterSpacing: "-0.02em", marginRight: 4 }}>
           {pageTitle}
         </h1>
+        {tab === "frontseat" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            {([["Today", todayStrShell], ["Tomorrow", tomorrowStrShell]] as const).map(([label, iso]) => {
+              const on = boardDay === iso;
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => setBoardDay(iso)}
+                  style={{
+                    padding: "5px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                    border: on ? "2px solid #7c3aed" : "1.5px solid var(--pb-border)",
+                    background: on ? "rgba(124,58,237,0.15)" : "var(--pb-card)",
+                    color: on ? "#a78bfa" : "var(--pb-dim)",
+                  }}
+                >{label}</button>
+              );
+            })}
+            <Popover open={boardDayPickerOpen} onOpenChange={setBoardDayPickerOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 6,
+                    padding: "5px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                    border: boardDayIsCustom ? "2px solid #7c3aed" : "1.5px solid var(--pb-border)",
+                    background: boardDayIsCustom ? "rgba(124,58,237,0.15)" : "var(--pb-card)",
+                    color: boardDayIsCustom ? "#a78bfa" : "var(--pb-dim)",
+                  }}
+                >
+                  <Calendar size={13} strokeWidth={1.8} />
+                  {boardDayIsCustom ? fmtShortDate(boardDay) : "Pick a day"}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-auto p-0 border-white/10 text-zinc-200" style={{ background: "#0a0a0d" }}>
+                <DayCalendar
+                  mode="single"
+                  selected={new Date(`${boardDay}T00:00:00`)}
+                  onSelect={(d) => { if (d) { setBoardDay(toLocalISO(d)); setBoardDayPickerOpen(false); } }}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+        )}
         <PageMultiSelect
           pages={playbookPages}
           labels={pageShort}
@@ -5365,7 +5432,7 @@ function ExperimentXShell() {
         flex: 1, minHeight: 0,
         overflow: (tab === "frontseat" || tab === "idea-bank" || tab === "tracking") ? "hidden" : "auto",
       }}>
-        {tab === "frontseat"     && <FrontseatTab readOnly={!canEditTab("frontseat")} formatFilter={formatFilter} pageFilter={pageFilter} search={search} writtenBy={csFilter} view={todaysBoardView} />}
+        {tab === "frontseat"     && <FrontseatTab readOnly={!canEditTab("frontseat")} formatFilter={formatFilter} pageFilter={pageFilter} search={search} writtenBy={csFilter} view={todaysBoardView} boardDay={boardDay} />}
         {/* Idea Bank IS the video-editor Production board (Approved → Base edit → Formatted → Posted). */}
         {tab === "idea-bank"     && (
           <ProductionTab
