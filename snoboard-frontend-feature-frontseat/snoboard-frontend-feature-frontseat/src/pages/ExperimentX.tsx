@@ -4669,20 +4669,36 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
   const searchQ = search.toLowerCase().trim();
   const matchesSearch = (idea: any) => !searchQ || (idea.topic || "").toLowerCase().includes(searchQ);
 
-  // Pool is the live queue (today + leftover unassigned), not the selected board day —
-  // so you can still drag today's ideas onto Tomorrow's columns.
-  const allPoolIdeas = useMemo(() =>
-    (ideas as any[])
-      .filter((i: any) => {
-        if (!isPoolIdea(i)) return false;
-        const d = (i.day_date || "").slice(0, 10);
-        if (d === todayStr || d === boardDay) return true;
-        return !String(i.page_handle || "").trim();
-      })
-      .filter((i: any) => matchesContentFormat(i, formatFilter) && matchesKindFilter(i, kindFilter) && matchesSearch(i))
-      .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
-    [ideas, todayStr, boardDay, formatFilter, kindFilter, searchQ],
-  );
+  // Pool stays put after a page assign — distributing creates a copy on that page,
+  // it must not consume the pool card (existing / leftover ideas used to vanish
+  // because page_handle was treated as "left the pool").
+  const allPoolIdeas = useMemo(() => {
+    const matches = (i: any) =>
+      matchesContentFormat(i, formatFilter) && matchesKindFilter(i, kindFilter) && matchesSearch(i);
+    const real = (ideas as any[]).filter((i: any) => isPoolIdea(i) && matches(i));
+    const realIds = new Set(real.map((i: any) => i.id));
+    const extra: any[] = [];
+    const seen = new Set<string>();
+    for (const copy of boardIdeas) {
+      if (copy.frontseat_pool) continue;
+      const pid = copy.source_pool_id;
+      if (!pid || realIds.has(pid) || seen.has(pid)) continue;
+      seen.add(pid);
+      const standIn = {
+        ...copy,
+        id: pid,
+        frontseat_pool: true,
+        page_handle: "",
+        source_pool_id: null,
+        status: "new",
+        assigned_to: "",
+      };
+      if (matches(standIn)) extra.push(standIn);
+    }
+    return [...real, ...extra].sort(
+      (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    );
+  }, [ideas, boardIdeas, formatFilter, kindFilter, searchQ]);
   const poolIdeas = useMemo(
     () => allPoolIdeas.filter((i: any) => matchesWrittenBy(i, writtenBy)),
     [allPoolIdeas, writtenBy],
@@ -4725,45 +4741,56 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
     return map;
   }, [boardIdeas]);
 
+  const distributePoolToPage = (pool: any, page: string) => {
+    if (readOnly || !pool?.id) return;
+    const alreadyAssigned =
+      (copiesBySourceId[pool.id] || []).some((c: any) => (c.page_handle || "").trim() === page)
+      || (ideasByPage[page] || []).some((c: any) => c.source_pool_id === pool.id);
+    if (alreadyAssigned) return;
+    if (previouslyPostedPages(pool).includes(page)) {
+      toast.message(`Already posted on @${page} — assigning for ${fmtShortDate(boardDay)} anyway`);
+    }
+    // Create a pipeline copy for this page. An idea that already has a base-edit link
+    // (drive/frame) is an EXISTING idea — the base edit is done, so it skips straight
+    // to the editor's Base edit column; a fresh idea starts at Approved for base editing.
+    const hasBaseEdit = !!(pool.drive_link || pool.frame_link);
+    createCopyMut.mutate({
+      topic: pool.topic, source: pool.source, content_type: pool.content_type,
+      video_format: pool.video_format || "", content_format: pool.content_format || "",
+      status: hasBaseEdit ? "under_edit" : "approved", page_handle: page,
+      hook_variations: pool.hook_variations || "",
+      comp_link: pool.comp_link || "", yt_url: pool.yt_url || "",
+      yt_timestamps: pool.yt_timestamps || "",
+      frame_link: pool.frame_link || "", drive_link: pool.drive_link || "", kalakar_link: pool.kalakar_link || "",
+      submission_link: pool.submission_link || "",
+      created_by: pool.created_by || "",
+      day_date: boardDay, frontseat_pool: false, source_pool_id: pool.id,
+    });
+    // Keep the pool card on today's board after assign. Leftover / existing ideas
+    // used to get page_handle stamped and then dropped from the leftover query.
+    const existingPages = (pool.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+    const poolPatch: Record<string, unknown> = {};
+    if (!existingPages.includes(page)) {
+      poolPatch.page_handle = [...existingPages, page].join(",");
+    }
+    const poolDay = String(pool.day_date || "").slice(0, 10);
+    if (!poolDay || poolDay < todayStr) poolPatch.day_date = todayStr;
+    if (Object.keys(poolPatch).length) {
+      updateMut.mutate({ id: pool.id, data: poolPatch });
+    }
+  };
+
   const handleDrop = (page: string, e: React.DragEvent) => {
     if (readOnly) return;
     e.preventDefault();
     const ideaId = e.dataTransfer.getData("text/plain");
     setDropTarget(null); setDraggingId(null);
     if (!ideaId || ideaId.startsWith("temp-")) return; // wait for real DB id
-    const idea = (ideas as any[]).find((i: any) => i.id === ideaId);
-    if (!idea || !idea.frontseat_pool) return;
-    // Prevent duplicate copies for the same pool idea + page combo
-    const alreadyAssigned = (ideasByPage[page] || []).some((c: any) => c.source_pool_id === ideaId);
-    if (alreadyAssigned) return;
-    if (previouslyPostedPages(idea).includes(page)) {
-      toast.message(`Already posted on @${page} — assigning for ${fmtShortDate(boardDay)} anyway`);
-    }
-    // Create a pipeline copy for this page. An idea that already has a base-edit link
-    // (drive/frame) is an EXISTING idea — the base edit is done, so it skips straight
-    // to the editor's Base edit column; a fresh idea starts at Approved for base editing.
-    // Carry the links so the editor sees the existing edit.
-    const hasBaseEdit = !!(idea.drive_link || idea.frame_link);
-    createCopyMut.mutate({
-      topic: idea.topic, source: idea.source, content_type: idea.content_type,
-      video_format: idea.video_format || "", content_format: idea.content_format || "",
-      status: hasBaseEdit ? "under_edit" : "approved", page_handle: page,
-      hook_variations: idea.hook_variations || "",
-      comp_link: idea.comp_link || "", yt_url: idea.yt_url || "",
-      yt_timestamps: idea.yt_timestamps || "",
-      frame_link: idea.frame_link || "", drive_link: idea.drive_link || "", kalakar_link: idea.kalakar_link || "",
-      submission_link: idea.submission_link || "",
-      created_by: idea.created_by || "",
-      day_date: boardDay, frontseat_pool: false, source_pool_id: ideaId,
-    });
-    // Track assigned pages on pool idea (for chip display)
-    const existingPages = (idea.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
-    if (!existingPages.includes(page)) {
-      updateMut.mutate({
-        id: ideaId,
-        data: { page_handle: [...existingPages, page].join(",") },
-      });
-    }
+    const idea =
+      (ideas as any[]).find((i: any) => i.id === ideaId && isPoolIdea(i))
+      || allPoolIdeas.find((i: any) => i.id === ideaId);
+    if (!idea) return;
+    distributePoolToPage(idea, page);
   };
 
   const legendStages: IdeaStage[] = ["approved", "under_edit", "changes", "review", "gtg", "posted", "blocked"];
@@ -4875,31 +4902,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
     </div>
   );
 
-  const assignToPage = (pool: any, page: string) => {
-    if (readOnly) return;
-    const alreadyAssigned = (copiesBySourceId[pool.id] || []).some((c: any) => (c.page_handle || "").trim() === page);
-    if (alreadyAssigned) return;
-    if (previouslyPostedPages(pool).includes(page)) {
-      toast.message(`Already posted on @${page} — assigning for ${fmtShortDate(boardDay)} anyway`);
-    }
-    const hasBaseEdit = !!(pool.drive_link || pool.frame_link);
-    createCopyMut.mutate({
-      topic: pool.topic, source: pool.source, content_type: pool.content_type,
-      video_format: pool.video_format || "", content_format: pool.content_format || "",
-      status: hasBaseEdit ? "under_edit" : "approved", page_handle: page,
-      hook_variations: pool.hook_variations || "",
-      comp_link: pool.comp_link || "", yt_url: pool.yt_url || "",
-      yt_timestamps: pool.yt_timestamps || "",
-      frame_link: pool.frame_link || "", drive_link: pool.drive_link || "", kalakar_link: pool.kalakar_link || "",
-      submission_link: pool.submission_link || "",
-      created_by: pool.created_by || "",
-      day_date: boardDay, frontseat_pool: false, source_pool_id: pool.id,
-    });
-    const existingPages = (pool.page_handle || "").split(",").map((s: string) => s.trim()).filter(Boolean);
-    if (!existingPages.includes(page)) {
-      updateMut.mutate({ id: pool.id, data: { page_handle: [...existingPages, page].join(",") } });
-    }
-  };
+  const assignToPage = (pool: any, page: string) => distributePoolToPage(pool, page);
 
   if (view === "table") {
     return (
