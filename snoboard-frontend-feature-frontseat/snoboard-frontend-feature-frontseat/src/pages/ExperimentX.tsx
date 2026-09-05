@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from "react";
 import { useSearchParams, useLocation } from "react-router-dom";
-import { Calendar, ChevronDown } from "lucide-react";
+import { Calendar, ChevronDown, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as DayCalendar } from "@/components/ui/calendar";
 import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
@@ -4137,6 +4137,41 @@ function QuickAddModal({ open, onAdd, onClose }: {
   );
 }
 
+/** Bigger hit target than the old 18px corner ✕ — card onClick/drag used to steal most of the press. */
+function CardCloseButton({ title, onClick }: { title: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      draggable={false}
+      title={title}
+      aria-label={title}
+      onPointerDown={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => { e.stopPropagation(); e.preventDefault(); onClick(); }}
+      style={{
+        position: "absolute",
+        top: 4,
+        right: 4,
+        width: 28,
+        height: 28,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "rgba(255,255,255,0.12)",
+        color: "#f4f4f5",
+        border: "1px solid rgba(255,255,255,0.22)",
+        borderRadius: 8,
+        cursor: "pointer",
+        zIndex: 8,
+        padding: 0,
+        lineHeight: 1,
+      }}
+    >
+      <X size={14} strokeWidth={2.4} />
+    </button>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Frontseat — pool card (left panel, draggable)
 // ---------------------------------------------------------------------------
@@ -4155,19 +4190,9 @@ function FrontseatPoolCard({ idea, letter, onDragStart, onClick, onDelete, readO
       style={{ ...pbKanbanCardStyle, padding: "9px 10px", marginBottom: 0, position: "relative" }}
     >
       {!readOnly && onDelete && (
-      <button
-        onClick={e => { e.stopPropagation(); e.preventDefault(); onDelete(); }}
-        title="Delete idea"
-        style={{
-          position: "absolute", top: 6, right: 6,
-          width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 9, fontWeight: 700,
-          background: "var(--pb-chip)", color: "var(--pb-dim2)", border: "none", borderRadius: 999, cursor: "pointer",
-          zIndex: 2,
-        }}
-      >✕</button>
+        <CardCloseButton title="Delete idea" onClick={onDelete} />
       )}
-      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 5, marginBottom: 6, paddingRight: 18 }}>
+      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 5, marginBottom: 6, paddingRight: 34 }}>
         <span style={{ fontSize: 9.5, fontWeight: 800, color: "#a78bfa", background: "#7c3aed22", borderRadius: 5, padding: "2px 6px" }}>{letter}</span>
         <ContentTypeBadge idea={idea} />
         {idea.source === "competitor"
@@ -4235,21 +4260,10 @@ function FrontseatPageCard({ idea, letter, onClick, onRemoveFromPage, onAssign, 
       className={pbKanbanCardClass()}
       style={{ ...pbKanbanCardStyle, position: "relative", borderLeft: `3px solid ${ss.text}` }}
     >
-      {/* ✕ positioned absolute so it never triggers the card's onClick */}
       {onRemoveFromPage && (
-        <button
-          onClick={e => { e.stopPropagation(); e.preventDefault(); onRemoveFromPage(); }}
-          title="Remove from this page"
-          style={{
-            position: "absolute", top: 7, right: 7,
-            width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 9, fontWeight: 700,
-            background: "var(--pb-chip)", color: "var(--pb-dim2)", border: "none", borderRadius: 999, cursor: "pointer",
-            zIndex: 2,
-          }}
-        >✕</button>
+        <CardCloseButton title="Remove from this page" onClick={onRemoveFromPage} />
       )}
-      <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 6, paddingRight: 20, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 6, paddingRight: 34, flexWrap: "wrap" }}>
         <span style={{ fontSize: 10, fontWeight: 800, color: "#a78bfa", background: "#7c3aed22", borderRadius: 5, padding: "2px 7px" }}>{letter}</span>
         <span style={{ fontSize: 10, fontWeight: 600, color: ss.text, background: ss.bg, borderRadius: 5, padding: "2px 7px" }}>
           {STAGE_LABEL[stage as IdeaStage] || stage}
