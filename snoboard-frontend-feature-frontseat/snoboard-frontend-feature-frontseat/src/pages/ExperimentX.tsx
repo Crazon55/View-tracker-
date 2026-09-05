@@ -4710,7 +4710,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
       if (matches(standIn)) extra.push(standIn);
     }
     return [...real, ...extra].sort(
-      (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     );
   }, [ideas, boardIdeas, formatFilter, kindFilter, searchQ]);
   const poolIdeas = useMemo(
@@ -4718,7 +4718,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
     [allPoolIdeas, writtenBy],
   );
 
-  // Letters a, b, c… in creation order — stable for the whole day
+  // Letters a, b, c… follow pool order (newest at the top).
   const ideaLetterMap = useMemo(() => {
     const map: Record<string, string> = {};
     allPoolIdeas.forEach((idea: any, i: number) => {
