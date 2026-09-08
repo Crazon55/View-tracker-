@@ -864,6 +864,8 @@ function AddIdeaModal({ author, onClose, onCreated }: {
   const [kinds, setKinds] = useState({ reel: false, carousel: false });
   const [format, setFormat] = useState<ContentFormat | "">("");
   const [day, setDay] = useState(todayYmd());
+  const [hook, setHook] = useState("");
+  const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
 
   const yt = isYouTube(refLink);
@@ -889,6 +891,8 @@ function AddIdeaModal({ author, onClose, onCreated }: {
         comp_link: link && !ytLink ? link : undefined,
         yt_url: ytLink ? link : undefined,
         yt_timestamps: timestamps.trim() || undefined,
+        hook_variations: hook.trim() || undefined,
+        script: content_type === "Carousel" ? (body.trim() || undefined) : undefined,
       })));
       const both = types.length > 1;
       toast.success(
@@ -986,6 +990,32 @@ function AddIdeaModal({ author, onClose, onCreated }: {
               </span>
             </Field>
           </div>
+
+          {/* Hook — shared across Reel and Carousel. Carousel also gets a body/slides box. */}
+          {(kinds.reel || kinds.carousel) && (
+            <Field label="Hook">
+              <textarea
+                value={hook}
+                onChange={(e) => setHook(e.target.value)}
+                placeholder="What's the opening line / hook?"
+                className="fglass-input"
+                rows={2}
+                style={{ ...modalInput, resize: "vertical", minHeight: 44 }}
+              />
+            </Field>
+          )}
+          {kinds.carousel && (
+            <Field label="Body">
+              <textarea
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                placeholder="Carousel body / slide text"
+                className="fglass-input"
+                rows={4}
+                style={{ ...modalInput, resize: "vertical", minHeight: 88 }}
+              />
+            </Field>
+          )}
         </div>
 
         <div style={{ display: "flex", gap: 8, marginTop: 22 }}>
