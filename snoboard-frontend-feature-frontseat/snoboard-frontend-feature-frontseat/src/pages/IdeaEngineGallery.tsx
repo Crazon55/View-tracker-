@@ -864,7 +864,8 @@ function AddIdeaModal({ author, onClose, onCreated }: {
   const [kinds, setKinds] = useState({ reel: false, carousel: false });
   const [format, setFormat] = useState<ContentFormat | "">("");
   const [day, setDay] = useState(todayYmd());
-  const [hook, setHook] = useState("");
+  const [reelHook, setReelHook] = useState("");
+  const [carouselHook, setCarouselHook] = useState("");
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -891,7 +892,7 @@ function AddIdeaModal({ author, onClose, onCreated }: {
         comp_link: link && !ytLink ? link : undefined,
         yt_url: ytLink ? link : undefined,
         yt_timestamps: timestamps.trim() || undefined,
-        hook_variations: hook.trim() || undefined,
+        hook_variations: (content_type === "Carousel" ? carouselHook : reelHook).trim() || undefined,
         script: content_type === "Carousel" ? (body.trim() || undefined) : undefined,
       })));
       const both = types.length > 1;
@@ -991,19 +992,54 @@ function AddIdeaModal({ author, onClose, onCreated }: {
             </Field>
           </div>
 
-          {/* Hook — shared across Reel and Carousel. Carousel also gets a body/slides box. */}
-          {(kinds.reel || kinds.carousel) && (
+          {/* Hook — separate per type when both are picked, since a reel and a carousel
+              rarely open the same way. Carousel also gets a body/slides box. */}
+          {kinds.reel && kinds.carousel ? (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <Field label="Hook (Reel)">
+                <textarea
+                  value={reelHook}
+                  onChange={(e) => setReelHook(e.target.value)}
+                  placeholder="What's the reel's opening line?"
+                  className="fglass-input"
+                  rows={2}
+                  style={{ ...modalInput, resize: "vertical", minHeight: 44 }}
+                />
+              </Field>
+              <Field label="Hook (Carousel)">
+                <textarea
+                  value={carouselHook}
+                  onChange={(e) => setCarouselHook(e.target.value)}
+                  placeholder="What's the carousel's opening line?"
+                  className="fglass-input"
+                  rows={2}
+                  style={{ ...modalInput, resize: "vertical", minHeight: 44 }}
+                />
+              </Field>
+            </div>
+          ) : kinds.reel ? (
             <Field label="Hook">
               <textarea
-                value={hook}
-                onChange={(e) => setHook(e.target.value)}
+                value={reelHook}
+                onChange={(e) => setReelHook(e.target.value)}
                 placeholder="What's the opening line / hook?"
                 className="fglass-input"
                 rows={2}
                 style={{ ...modalInput, resize: "vertical", minHeight: 44 }}
               />
             </Field>
-          )}
+          ) : kinds.carousel ? (
+            <Field label="Hook">
+              <textarea
+                value={carouselHook}
+                onChange={(e) => setCarouselHook(e.target.value)}
+                placeholder="What's the opening line / hook?"
+                className="fglass-input"
+                rows={2}
+                style={{ ...modalInput, resize: "vertical", minHeight: 44 }}
+              />
+            </Field>
+          ) : null}
           {kinds.carousel && (
             <Field label="Body">
               <textarea
