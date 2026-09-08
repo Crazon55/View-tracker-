@@ -1083,6 +1083,8 @@ function EditIdeaModal({ idea, onClose, onSaved }: {
   const [day, setDay] = useState(String(idea.day_date || "").slice(0, 10) || todayYmd());
   const [views, setViews] = useState(String(idea.views ?? 0));
   const [likes, setLikes] = useState(String(idea.likes ?? 0));
+  const [hook, setHook] = useState(idea.hook_variations || "");
+  const [body, setBody] = useState(idea.script || "");
   const pages = pagesOf(idea);
   const [pageViews, setPageViews] = useState<Record<string, string>>(() => {
     const pv = (idea.page_views || {}) as Record<string, number>;
@@ -1117,8 +1119,10 @@ function EditIdeaModal({ idea, onClose, onSaved }: {
         comp_link: link && !ytLink ? link : "",
         yt_url: ytLink ? link : "",
         yt_timestamps: timestamps.trim(),
+        hook_variations: hook.trim(),
       };
       if (editingCarousel) {
+        patch.script = body.trim();
         if (pages.length > 1) {
           const pl: Record<string, number> = {};
           pages.forEach((p) => { pl[p] = parseInt(pageLikes[p]?.replace(/[^0-9]/g, "") || "0", 10) || 0; });
@@ -1199,6 +1203,29 @@ function EditIdeaModal({ idea, onClose, onSaved }: {
               />
             </Field>
           </div>
+
+          <Field label="Hook">
+            <textarea
+              value={hook}
+              onChange={(e) => setHook(e.target.value)}
+              placeholder="What's the opening line / hook?"
+              className="fglass-input"
+              rows={2}
+              style={{ ...modalInput, resize: "vertical", minHeight: 44 }}
+            />
+          </Field>
+          {editingCarousel && (
+            <Field label="Body">
+              <textarea
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                placeholder="Carousel body / slide text"
+                className="fglass-input"
+                rows={4}
+                style={{ ...modalInput, resize: "vertical", minHeight: 88 }}
+              />
+            </Field>
+          )}
 
           {pages.length > 1 ? (
             <Field label={editingCarousel ? "Likes by page" : "Views by page"}>
