@@ -4175,12 +4175,14 @@ function CardCloseButton({ title, onClick }: { title: string; onClick: () => voi
 // ---------------------------------------------------------------------------
 // Frontseat — pool card (left panel, draggable)
 // ---------------------------------------------------------------------------
-function FrontseatPoolCard({ idea, letter, onDragStart, onClick, onDelete, readOnly }: {
+function FrontseatPoolCard({ idea, letter, onDragStart, onClick, onDelete, readOnly, priorDist = [] }: {
   idea: any; letter: string; onDragStart: () => void; onClick: () => void; onDelete?: () => void; readOnly?: boolean;
+  priorDist?: PageDist[];
 }) {
   const { pageColors, pageShort } = usePlaybook();
   const posted = previouslyPostedPages(idea);
   const created = ideaCreatedLabel(idea);
+  const openDist = priorDist.filter((d) => String(d.status || "").toLowerCase() !== "posted");
   return (
     <div
       draggable={!readOnly}
@@ -4219,13 +4221,13 @@ function FrontseatPoolCard({ idea, letter, onDragStart, onClick, onDelete, readO
       {posted.length > 0 ? (
         <div style={{ marginTop: 7 }}>
           <div style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--pb-faint)", marginBottom: 4 }}>
-            Already posted · {posted.length}
+            Posted on
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
             {posted.map((p) => {
               const c = pageColors[p] || "var(--pb-dim2)";
               return (
-                <span key={p} title={`Already posted on @${p}`} style={{
+                <span key={p} title={`Posted on @${p}`} style={{
                   fontSize: 9, fontWeight: 700, color: c, background: c + "18",
                   border: `1px solid ${c}55`, borderRadius: 4, padding: "1px 5px",
                 }}>
@@ -4233,6 +4235,18 @@ function FrontseatPoolCard({ idea, letter, onDragStart, onClick, onDelete, readO
                 </span>
               );
             })}
+          </div>
+        </div>
+      ) : null}
+      {openDist.length > 0 ? (
+        <div style={{ marginTop: 7 }}>
+          <div style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--pb-faint)", marginBottom: 4 }}>
+            Distributed to
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+            {openDist.map((d) => (
+              <DistPageChip key={`${d.page}-${d.day}-${d.status}`} page={d.page} status={d.status} day={d.day} showDay />
+            ))}
           </div>
         </div>
       ) : null}
@@ -4413,6 +4427,50 @@ function ContentTypeBadge({ idea }: { idea: any }) {
 }
 
 const CS_WRITTEN_BY_KEY = "fsos-cd-written-by";
+
+type PageDist = { page: string; status: string; day: string };
+
+function collectCopyDists(rows: any[]): (PageDist & { sourceId: string })[] {
+  const out: (PageDist & { sourceId: string })[] = [];
+  for (const row of rows) {
+    if (row?.frontseat_pool || !row?.source_pool_id) continue;
+    const page = String(row.page_handle || "").trim().replace(/^@/, "");
+    if (!page) continue;
+    out.push({
+      sourceId: String(row.source_pool_id),
+      page,
+      status: String(row.status || "approved"),
+      day: String(row.day_date || "").slice(0, 10),
+    });
+  }
+  return out;
+}
+
+function DistPageChip({ page, status, day, showDay }: {
+  page: string; status: string; day?: string; showDay?: boolean;
+}) {
+  const { pageColors, pageShort } = usePlaybook();
+  const c = pageColors[page] || "var(--pb-dim2)";
+  const ss = STATUS_STYLE[status] || STATUS_STYLE.approved;
+  const label = STAGE_LABEL[status as IdeaStage] || status;
+  const today = toLocalISO(new Date());
+  const yesterday = addDays(today, -1);
+  const dayHint = !showDay || !day ? ""
+    : day === today ? "Today"
+    : day === yesterday ? "Yesterday"
+    : fmtShortDate(day);
+  return (
+    <span title={`@${page} · ${label}${dayHint ? ` · ${dayHint}` : ""}`} style={{
+      fontSize: 9, fontWeight: 700, color: c, background: c + "18",
+      border: `1px solid ${c}55`, borderRadius: 4, padding: "1px 5px",
+      display: "inline-flex", alignItems: "center", gap: 3, flexWrap: "wrap",
+    }}>
+      @{pageShort[page] || page}
+      <span style={{ color: ss.text, fontWeight: 600 }}>· {label}</span>
+      {dayHint ? <span style={{ color: "var(--pb-faint)", fontWeight: 500 }}>· {dayHint}</span> : null}
+    </span>
+  );
+}
 
 function previouslyPostedPages(idea: any): string[] {
   const fromApi = idea.previously_posted_pages;
@@ -4599,6 +4657,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
   }, [settings]);
 
   const todayStr = toLocalISO(new Date());
+  const yesterdayStr = addDays(todayStr, -1);
   const schedulingOffToday = boardDay !== todayStr;
   const { data: dayRows = [], isLoading: loadingDay } = useQuery({
     queryKey: expQk(playbookId, "idea-bank", "board", boardDay),
@@ -4617,6 +4676,20 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
     queryKey: expQk(playbookId, "idea-bank", "today", todayStr),
     queryFn: () => api.getIdeaBank({ day_date: todayStr, enrich_cross: false, include_open_pool: true }),
     enabled: schedulingOffToday,
+    staleTime: EXP_STALE_MS,
+    refetchOnMount: "always",
+    refetchInterval: () => (isIdeaBankSocketLive(playbookId) ? 45_000 : 20_000),
+  });
+  const { data: yesterdayRows = [] } = useQuery({
+    queryKey: expQk(playbookId, "idea-bank", "board", yesterdayStr),
+    queryFn: () => api.getIdeaBank({ day_date: yesterdayStr, enrich_cross: false }),
+    staleTime: EXP_STALE_MS,
+    refetchOnMount: "always",
+    refetchInterval: () => (isIdeaBankSocketLive(playbookId) ? 45_000 : 20_000),
+  });
+  const { data: pendingRows = [] } = useQuery({
+    queryKey: expQk(playbookId, "idea-bank", "pending"),
+    queryFn: () => api.getIdeaBank({ pending_only: true, enrich_cross: false }),
     staleTime: EXP_STALE_MS,
     refetchOnMount: "always",
     refetchInterval: () => (isIdeaBankSocketLive(playbookId) ? 45_000 : 20_000),
@@ -4755,6 +4828,23 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
     return map;
   }, [boardIdeas]);
 
+  const priorDistByPool = useMemo(() => {
+    const map: Record<string, PageDist[]> = {};
+    const seen = new Set<string>();
+    const rows = [...(pendingRows as any[]), ...(yesterdayRows as any[]), ...(ideas as any[])];
+    for (const d of collectCopyDists(rows)) {
+      if (d.day === boardDay) continue;
+      const key = `${d.sourceId}|${d.page}|${d.day}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      (map[d.sourceId] ||= []).push({ page: d.page, status: d.status, day: d.day });
+    }
+    for (const list of Object.values(map)) {
+      list.sort((a, b) => b.day.localeCompare(a.day) || a.page.localeCompare(b.page));
+    }
+    return map;
+  }, [pendingRows, yesterdayRows, ideas, boardDay]);
+
   const distributePoolToPage = (pool: any, page: string) => {
     if (readOnly || !pool?.id) return;
     const alreadyAssigned =
@@ -4778,6 +4868,8 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
       frame_link: pool.frame_link || "", drive_link: pool.drive_link || "", kalakar_link: pool.kalakar_link || "",
       submission_link: pool.submission_link || "",
       created_by: pool.created_by || "",
+      origin_playbook: pool.origin_playbook || undefined,
+      origin_idea_id: pool.origin_idea_id || pool.id,
       day_date: boardDay, frontseat_pool: false, source_pool_id: pool.id,
     });
     // Keep the pool card on today's board after assign. Leftover / existing ideas
@@ -4873,6 +4965,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
                   idea={idea}
                   letter={ideaLetterMap[idea.id] || "?"}
                   readOnly={readOnly}
+                  priorDist={priorDistByPool[idea.id] || []}
                   onDragStart={() => setDraggingId(idea.id)}
                   onClick={() => setDetailIdea(idea)}
                   onDelete={readOnly ? undefined : () => {
@@ -4882,20 +4975,21 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
                     deleteMut.mutate(idea.id);
                   }}
                 />
-                {/* Assigned page chips + a "+" to assign without dragging */}
+                {/* Today's (this board day's) distributed pages sit under the card. */}
                 {(assignedPages.length > 0 || (!readOnly && unassignedPages.length > 0)) && (
                   <div
                     onClick={e => e.stopPropagation()}
                     style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center", marginTop: 4, paddingLeft: 3 }}
                   >
-                    {assignedPages.map((p: string) => {
-                      const c = pageColors[p] || "var(--pb-dim2)";
-                      const short = pageShort[p] || p;
-                      return (
-                        <span key={p} style={{ fontSize: 9, fontWeight: 700, color: c, background: c + "22", borderRadius: 4, padding: "1px 6px" }}>
-                          {short}
-                        </span>
-                      );
+                    {(copiesBySourceId[idea.id] || []).length > 0 && (
+                      <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--pb-faint)", width: "100%" }}>
+                        {boardDay === todayStr ? "Today" : fmtShortDate(boardDay)}
+                      </span>
+                    )}
+                    {(copiesBySourceId[idea.id] || []).map((c: any) => {
+                      const p = String(c.page_handle || "").trim();
+                      if (!p) return null;
+                      return <DistPageChip key={c.id || p} page={p} status={c.status || "approved"} />;
                     })}
                     {!readOnly && (
                       <AddPageChip

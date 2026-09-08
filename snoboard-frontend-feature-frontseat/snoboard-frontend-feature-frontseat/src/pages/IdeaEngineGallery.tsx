@@ -109,6 +109,66 @@ function isContentDistributionCopy(idea: any): boolean {
   return Boolean(idea?.source_pool_id);
 }
 
+const ENGINE_STAGE: Record<string, string> = {
+  new: "New",
+  approved: "Approved",
+  under_edit: "Under edit",
+  changes: "Changes",
+  review: "Review",
+  gtg: "GTG",
+  posted: "Posted",
+  blocked: "Blocked",
+};
+
+function copiesMatchingIdea(idea: any, copies: any[]): any[] {
+  const ids = new Set((idea._ids?.length ? idea._ids : [idea.id]).map(String));
+  const topic = String(idea.topic || "").trim().toLowerCase();
+  const pb = idea._playbook;
+  const carousel = isCarousel(idea);
+  return copies.filter((r) => {
+    if (r._playbook !== pb) return false;
+    if (ids.has(String(r.source_pool_id)) || (r.origin_idea_id && ids.has(String(r.origin_idea_id)))) return true;
+    return !!topic && String(r.topic || "").trim().toLowerCase() === topic && isCarousel(r) === carousel;
+  });
+}
+
+function splitDists(idea: any, copies: any[], boardDay: string) {
+  const today: { page: string; status: string }[] = [];
+  const prior: { page: string; status: string; day: string }[] = [];
+  const seenT = new Set<string>();
+  const seenP = new Set<string>();
+  for (const r of copiesMatchingIdea(idea, copies)) {
+    const page = String(r.page_handle || "").trim().replace(/^@/, "");
+    if (!page) continue;
+    const day = String(r.day_date || "").slice(0, 10);
+    const status = String(r.status || "approved");
+    if (day === boardDay) {
+      if (seenT.has(page)) continue;
+      seenT.add(page);
+      today.push({ page, status });
+    } else if (status.toLowerCase() !== "posted") {
+      const k = `${page}|${day}`;
+      if (seenP.has(k)) continue;
+      seenP.add(k);
+      prior.push({ page, status, day });
+    }
+  }
+  prior.sort((a, b) => b.day.localeCompare(a.day) || a.page.localeCompare(b.page));
+  return { today, prior };
+}
+
+function EngineDistChip({ page, status, day }: { page: string; status: string; day?: string }) {
+  const label = ENGINE_STAGE[status] || status;
+  const dayHint = !day ? "" : prettyDate(day);
+  return (
+    <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, color: "var(--f-dim)", display: "inline-flex", gap: 5, alignItems: "center", border: "1px solid var(--f-line)" }}>
+      @{page}
+      <span style={{ color: "var(--f-faint)" }}>· {label}</span>
+      {dayHint ? <span style={{ color: "var(--f-faint)" }}>· {dayHint}</span> : null}
+    </span>
+  );
+}
+
 // The backend stores each posting as its own row (same topic, different pages). Collapse
 // same-topic rows within a playbook into one card that unions their pages + views.
 function mergeIdeasByTopic(list: any[]): any[] {
@@ -301,6 +361,30 @@ export default function IdeaEngineGallery() {
   const dayType = useMemo(() => tallyByType(merged), [merged]);
   const dayPeople = useMemo(() => tallyByPerson(merged), [merged]);
 
+  const { data: pipelineRows = [] } = useQuery<Idea[]>({
+    queryKey: ["idea-engine-pipeline", YESTERDAY, TOMORROW],
+    queryFn: async () => {
+      const perPb = await Promise.all(
+        PLAYBOOKS.map(async (pb) => {
+          const groups = await Promise.all([
+            PB_API[pb].getIdeaBank({ pending_only: true, enrich_cross: false }).catch(() => [] as Idea[]),
+            PB_API[pb].getIdeaBank({ day_date: YESTERDAY, enrich_cross: false }).catch(() => [] as Idea[]),
+            PB_API[pb].getIdeaBank({ day_date: TOMORROW, enrich_cross: false }).catch(() => [] as Idea[]),
+          ]);
+          return groups.flat().map((r: any) => ({ ...r, _playbook: pb }));
+        }),
+      );
+      return perPb.flat();
+    },
+    refetchOnWindowFocus: false,
+  });
+  const pipelineCopies = useMemo(() => {
+    const byId = new Map<string, Idea>();
+    for (const r of [...ideas, ...pipelineRows]) {
+      if (r?.id && r.source_pool_id) byId.set(r.id, r);
+    }
+    return [...byId.values()];
+  }, [ideas, pipelineRows]);
   const { data: reviewRows = [] } = useQuery<Idea[]>({
     queryKey: ["idea-engine-review-score"],
     queryFn: async () => {
@@ -555,6 +639,7 @@ export default function IdeaEngineGallery() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16, marginTop: 24 }}>
           {filtered.map((idea) => {
             const key = `${idea._playbook}-${idea.id}`;
+            const dists = splitDists(idea, pipelineCopies, dayDate);
             return (
               <IdeaCard
                 key={key}
@@ -575,6 +660,9 @@ export default function IdeaEngineGallery() {
                 canReview={canReviewIdeas}
                 reviewing={reviewMut.isPending && reviewMut.variables?.idea === idea}
                 onReview={(engine_review) => reviewMut.mutate({ idea, engine_review })}
+                priorDist={dists.prior}
+                todayDist={dists.today}
+                boardLabel={prettyDate(dayDate)}
               />
             );
           })}
@@ -688,7 +776,7 @@ function Top6Card({ idea, rank, onOpen }: { idea: Idea; rank: number; onOpen: ()
   );
 }
 
-function IdeaCard({ idea, sentTo, sending, onSend, onOpen, canEdit, canDelete, deleting, onDelete, canReview, reviewing, onReview }: {
+function IdeaCard({ idea, sentTo, sending, onSend, onOpen, canEdit, canDelete, deleting, onDelete, canReview, reviewing, onReview, priorDist = [], todayDist = [], boardLabel = "Today" }: {
   idea: Idea;
   sentTo: PlaybookId[];
   sending: boolean;
@@ -701,6 +789,9 @@ function IdeaCard({ idea, sentTo, sending, onSend, onOpen, canEdit, canDelete, d
   canReview?: boolean;
   reviewing?: boolean;
   onReview?: (engine_review: "approved" | "rejected" | "") => void;
+  priorDist?: { page: string; status: string; day: string }[];
+  todayDist?: { page: string; status: string }[];
+  boardLabel?: string;
 }) {
   const pb = idea._playbook as PlaybookId;
   const pages = pagesOf(idea);
@@ -770,7 +861,7 @@ function IdeaCard({ idea, sentTo, sending, onSend, onOpen, canEdit, canDelete, d
 
           {pages.length ? (
             <div>
-              <div style={{ fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--f-faint)", marginBottom: 6 }}>Posted on {pages.length} page{pages.length > 1 ? "s" : ""}</div>
+              <div style={{ fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--f-faint)", marginBottom: 6 }}>Posted on</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {pages.map((p) => (
                   <span key={p} className="seeding-surface-nested" style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, color: "var(--f-dim)", display: "inline-flex", gap: 5, alignItems: "center" }}>
@@ -783,12 +874,48 @@ function IdeaCard({ idea, sentTo, sending, onSend, onOpen, canEdit, canDelete, d
             <div style={{ fontSize: 12, color: "var(--f-faint)" }}>Not yet posted — free to use.</div>
           )}
 
+          {priorDist.length > 0 ? (
+            <div>
+              <div style={{ fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--f-faint)", marginBottom: 6 }}>Distributed to</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {priorDist.map((d) => (
+                  <EngineDistChip key={`${d.page}-${d.day}`} page={d.page} status={d.status} day={d.day} />
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           <IdeaLinks idea={idea} full />
         </>
       ) : (
         // New idea — just the reference link (comp / YouTube + timestamps).
-        <IdeaLinks idea={idea} full={false} />
+        <>
+          {priorDist.length > 0 ? (
+            <div>
+              <div style={{ fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--f-faint)", marginBottom: 6 }}>Distributed to</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {priorDist.map((d) => (
+                  <EngineDistChip key={`${d.page}-${d.day}`} page={d.page} status={d.status} day={d.day} />
+                ))}
+              </div>
+            </div>
+          ) : null}
+          <IdeaLinks idea={idea} full={false} />
+        </>
       )}
+
+      {todayDist.length > 0 ? (
+        <div>
+          <div style={{ fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--f-faint)", marginBottom: 6 }}>
+            {boardLabel === "Today" ? "Today’s pages" : `${boardLabel} pages`}
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {todayDist.map((d) => (
+              <EngineDistChip key={d.page} page={d.page} status={d.status} />
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {sent.length ? (
         <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#a78bfa", fontWeight: 500 }}>
