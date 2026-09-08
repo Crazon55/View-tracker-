@@ -2798,9 +2798,11 @@ function AssigneeSelect({
 // Production tab — the video editor's board. CS distributes an idea onto pages
 // in Frontseat, which creates one per-page pipeline copy (shared source_pool_id)
 // in the "approved" stage. Here those copies are GROUPED into one card so the
-// editor edits one idea (one base edit) rather than N page-copies. Advancing
-// Base edit → Formatted → Posted rewrites the underlying copies' status, which
-// is exactly what the Frontseat page cards read — so CS sees progress live.
+// editor edits one idea (one base edit) rather than N page-copies. One person
+// is assigned to the whole idea (all page copies). Ops/admin assign from the
+// Unassigned queue. Advancing Base edit → Formatted → Posted rewrites the
+// underlying copies' status, which is exactly what the Frontseat page cards
+// read — so CS sees progress live.
 // ---------------------------------------------------------------------------
 
 /** A distributed copy enters production at "approved"; treat any legacy "new" copy as approved. */
@@ -2835,6 +2837,65 @@ function groupBySourcePool(copies: ProdCopy[]): ProdGroup[] {
     });
   }
   return groups;
+}
+
+/** One person owns the whole idea (every page copy). First non-empty assigned_to wins. */
+function groupAssignee(group: ProdGroup): string {
+  for (const c of group.copies) {
+    const v = String(c.assigned_to || "").trim();
+    if (v) return v;
+  }
+  return "";
+}
+
+function groupIsUnassigned(group: ProdGroup): boolean {
+  return !groupAssignee(group);
+}
+
+function UnassignedAssignCard({ group, pageColors, onAssign, onOpen }: {
+  group: ProdGroup;
+  pageColors: Record<string, string>;
+  onAssign: (email: string) => void;
+  onOpen: () => void;
+}) {
+  return (
+    <div
+      onClick={onOpen}
+      style={{
+        width: 240, flex: "0 0 240px", padding: "10px 12px", borderRadius: 10, cursor: "pointer",
+        border: "1px solid var(--pb-chip)", background: "var(--pb-panel-2)",
+      }}
+    >
+      <p style={{
+        margin: 0, fontSize: 12.5, fontWeight: 600, color: "var(--pb-ink)", lineHeight: 1.35,
+        overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+      } as any}>
+        {group.topic || <em style={{ color: "var(--pb-faint)", fontWeight: 400 }}>Untitled</em>}
+      </p>
+      <div style={{ display: "flex", gap: 4, marginTop: 6, flexWrap: "wrap", alignItems: "center" }}>
+        <span style={{ fontSize: 9.5, color: "var(--pb-dim2)", background: "var(--pb-chip)", borderRadius: 99, padding: "1px 6px" }}>{group.content_type}</span>
+        {group.pages.map((pg) => {
+          const c = pageColors[pg] || "var(--pb-dim2)";
+          return (
+            <span key={pg} style={{ fontSize: 9.5, fontWeight: 700, color: c, background: c + "22", borderRadius: 99, padding: "1px 6px" }}>{pg}</span>
+          );
+        })}
+        {group.created_by && <span className="fglass-muted" style={{ fontSize: 9.5 }}>· {group.created_by}</span>}
+      </div>
+      <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 8 }}>
+        <AssigneeSelect
+          contentType={group.content_type}
+          value=""
+          onChange={onAssign}
+          style={{
+            fontSize: 11, fontWeight: 600, color: "var(--pb-dim)",
+            background: "var(--pb-card)", border: "1px solid var(--pb-border)", borderRadius: 8,
+            padding: "6px 8px", cursor: "pointer", width: "100%",
+          }}
+        />
+      </div>
+    </div>
+  );
 }
 
 function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy, personFilter }: {
@@ -2932,31 +2993,28 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
     return gs;
   }, [copies, search]);
 
-  // Same copies, bucketed by who's actually doing the work — lets Ops/admin see
-  // per-person workload instead of digging through every stage column.
-  const byPerson = useMemo(() => {
-    const q = search.toLowerCase().trim();
-    const filtered = q ? copies.filter((c: any) => (c.topic || "").toLowerCase().includes(q)) : copies;
-    const buckets = new Map<string, any[]>();
-    filtered.forEach((c: any) => {
-      const who = assigneeDisplayName(c.assigned_to).trim() || "Unassigned";
+  const unassignedGroups = useMemo(() => groups.filter(groupIsUnassigned), [groups]);
+
+  // Same ideas, bucketed by the one person on the whole group — Unassigned first so
+  // Ops/admin can assign from this view the same way they do from the stage queue.
+  const byPersonGroups = useMemo(() => {
+    const buckets = new Map<string, ProdGroup[]>();
+    groups.forEach((g) => {
+      const who = assigneeDisplayName(groupAssignee(g)).trim() || "Unassigned";
       if (!buckets.has(who)) buckets.set(who, []);
-      buckets.get(who)!.push(c);
+      buckets.get(who)!.push(g);
     });
     const entries = [...buckets.entries()].sort(([a], [b]) => {
-      if (a === "Unassigned") return 1;
-      if (b === "Unassigned") return -1;
+      if (a === "Unassigned") return -1;
+      if (b === "Unassigned") return 1;
       return a.localeCompare(b);
     });
     return personFilter === "all" ? entries : entries.filter(([who]) => who === personFilter);
-  }, [copies, search, personFilter]);
+  }, [groups, personFilter]);
 
-  // Lets a person-view card open the same detail modal as the stage board.
-  const groupByCopyId = useMemo(() => {
-    const map = new Map<string, ProdGroup>();
-    groups.forEach((g) => g.copies.forEach((c: any) => map.set(c.id, g)));
-    return map;
-  }, [groups]);
+  const assignGroup = (group: ProdGroup, email: string) => {
+    batchMut.mutate({ ids: group.copies.map((c) => c.id), data: { assigned_to: email } });
+  };
 
   // Posted asks which pages (page checklist, and stamps each page's posting date);
   // Changes/Blocked ask for a mandatory reason (StageCommentModal), restricted to
@@ -3004,6 +3062,10 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
 
   if (isLoading) return <p style={{ color: "var(--pb-faint)", fontSize: 12, padding: "20px 0" }}>Loading…</p>;
 
+  const liveDetail = detailGroup
+    ? (groups.find((g) => g.key === detailGroup.key) || detailGroup)
+    : null;
+
   return (
     <div className="pb-fill">
       {soloView && (
@@ -3011,56 +3073,68 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
           Showing only ideas assigned to you — nothing else until Ops assigns it
         </p>
       )}
+      {isOpsOrAdmin && !readOnly && viewBy !== "person" && (
+        <div style={{
+          flexShrink: 0, marginBottom: 12, padding: "10px 12px",
+          border: "1px solid var(--pb-chip)", borderRadius: 12, background: "var(--pb-panel)",
+        }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: unassignedGroups.length ? 10 : 0 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--pb-ink)" }}>Unassigned</span>
+            <span className="fglass-muted" style={{ fontSize: 11 }}>
+              {unassignedGroups.length === 0
+                ? "Every idea has someone on it"
+                : `${unassignedGroups.length} idea${unassignedGroups.length === 1 ? "" : "s"} · one person per idea`}
+            </span>
+          </div>
+          {unassignedGroups.length > 0 && (
+            <div className="pb-thin-scroll" style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4 }}>
+              {unassignedGroups.map((g) => (
+                <UnassignedAssignCard
+                  key={g.key}
+                  group={g}
+                  pageColors={pageColors}
+                  onAssign={(email) => assignGroup(g, email)}
+                  onOpen={() => setDetailGroup(g)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       {viewBy === "person" && isOpsOrAdmin ? (
         <div className="pb-thin-scroll" style={{ display: "flex", flexDirection: "column", gap: 22, flex: 1, minHeight: 0, overflowY: "auto" }}>
-          {byPerson.length === 0 ? (
+          {byPersonGroups.length === 0 ? (
             <div style={{ padding: "20px 10px", textAlign: "center", color: "var(--pb-border)", fontSize: 11, border: "1.5px dashed var(--pb-chip)", borderRadius: 9 }}>Nothing in production</div>
-          ) : byPerson.map(([who, items]) => (
+          ) : byPersonGroups.map(([who, items]) => (
             <div key={who}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: who === "Unassigned" ? "var(--pb-dim)" : "#a78bfa" }}>{who}</span>
                 <span className="fglass-muted" style={{ fontSize: 10.5 }}>{items.length} idea{items.length !== 1 ? "s" : ""}</span>
               </div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                {items.map((c: any) => {
-                  const ss = STATUS_STYLE[prodStage(c.status)] || STATUS_STYLE.approved;
-                  return (
-                    <div
-                      key={c.id}
-                      onClick={() => { const g = groupByCopyId.get(c.id); if (g) setDetailGroup(g); }}
-                      style={{
-                        width: 220, padding: "10px 12px", borderRadius: 9, cursor: "pointer",
-                        border: "1px solid var(--pb-chip)", background: "var(--pb-panel-2)", borderLeft: `3px solid ${ss.text}`,
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                        <span style={{ fontSize: 10, fontWeight: 600, color: ss.text, background: ss.bg, borderRadius: 4, padding: "1px 6px" }}>
-                          {STAGE_LABEL[prodStage(c.status) as IdeaStage] || c.status}
-                        </span>
-                        <span style={{ fontSize: 10, color: pageColors[(c.page_handle || "").trim()] || "var(--pb-dim2)" }}>{(c.page_handle || "").trim()}</span>
-                        <SubmissionChip href={c.submission_link} />
+                {who === "Unassigned" && !readOnly
+                  ? items.map((g) => (
+                      <UnassignedAssignCard
+                        key={g.key}
+                        group={g}
+                        pageColors={pageColors}
+                        onAssign={(email) => assignGroup(g, email)}
+                        onOpen={() => setDetailGroup(g)}
+                      />
+                    ))
+                  : items.map((g) => (
+                      <div key={g.key} style={{ width: 210 }}>
+                        <ProductionCard
+                          group={g}
+                          pageColors={pageColors}
+                          readOnly={readOnly}
+                          canMarkPosted={isOpsOrAdmin}
+                          csReviewActions={csReviewOnly}
+                          onOpen={() => setDetailGroup(g)}
+                          onAdvance={(to) => advance(g, to)}
+                        />
                       </div>
-                      <p style={{ margin: 0, fontSize: 12.5, fontWeight: 500, color: "var(--pb-ink)", lineHeight: 1.35,
-                        overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
-                        {c.topic || <em style={{ color: "var(--pb-faint)" }}>Untitled</em>}
-                      </p>
-                      {isOpsOrAdmin && !readOnly && (
-                        <div onClick={e => e.stopPropagation()} style={{ marginTop: 8 }}>
-                          <AssigneeSelect
-                            contentType={c.content_type}
-                            value={c.assigned_to}
-                            onChange={(email) => batchMut.mutate({ ids: [c.id], data: { assigned_to: email } })}
-                            style={{
-                              fontSize: 10, fontWeight: 600, color: c.assigned_to ? "#a78bfa" : "var(--pb-dim)",
-                              background: "var(--pb-card)", border: "1px solid var(--pb-border)", borderRadius: 5,
-                              padding: "3px 6px", cursor: "pointer", width: "100%",
-                            }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                    ))}
               </div>
             </div>
           ))}
@@ -3117,7 +3191,6 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
                       csReviewActions={csReviewOnly}
                       onOpen={() => setDetailGroup(g)}
                       onAdvance={(to) => advance(g, to)}
-                      onAssign={(copyId, name) => batchMut.mutate({ ids: [copyId], data: { assigned_to: name } })}
                     />
                   </div>
                   );
@@ -3146,16 +3219,16 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
           onClose={() => setStageComment(null)}
         />
       )}
-      {detailGroup && (
+      {liveDetail && (
         <ProductionDetailModal
-          group={detailGroup}
+          group={liveDetail}
           pageColors={pageColors}
           readOnly={readOnly}
           canMarkPosted={isOpsOrAdmin}
           csReviewActions={csReviewOnly}
-          onAdvance={(to) => advance(detailGroup, to)}
-          onSaveGroup={(data) => batchMut.mutate({ ids: detailGroup.copies.map((c) => c.id), data })}
-          onAssign={(copyId, name) => batchMut.mutate({ ids: [copyId], data: { assigned_to: name } })}
+          onAdvance={(to) => advance(liveDetail, to)}
+          onSaveGroup={(data) => batchMut.mutate({ ids: liveDetail.copies.map((c) => c.id), data })}
+          onAssign={(name) => assignGroup(liveDetail, name)}
           onClose={() => setDetailGroup(null)}
         />
       )}
@@ -3171,7 +3244,7 @@ function ProductionDetailModal({ group, pageColors, readOnly, canMarkPosted, csR
   csReviewActions?: boolean;
   onAdvance: (to: string) => void;
   onSaveGroup: (data: Record<string, unknown>) => void;
-  onAssign?: (copyId: string, name: string) => void;
+  onAssign?: (name: string) => void;
   onClose: () => void;
 }) {
   const ls: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "var(--pb-dim)", marginBottom: 8, letterSpacing: "0.04em", textTransform: "uppercase" };
@@ -3179,6 +3252,7 @@ function ProductionDetailModal({ group, pageColors, readOnly, canMarkPosted, csR
   const ss = STATUS_STYLE[group.stage] || STATUS_STYLE.approved;
   // Reference fields are idea-level (shared across pages) — edits apply to every page copy.
   const src = group.copies[0] || {};
+  const assignee = groupAssignee(group);
   return (
     <PbGlassModalShell onClose={onClose}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
@@ -3193,25 +3267,14 @@ function ProductionDetailModal({ group, pageColors, readOnly, canMarkPosted, csR
 
       {!readOnly && canMarkPosted && onAssign && (
         <div>
-          <label style={ls}>Assigned to{group.copies.length > 1 ? " (by page)" : ""}</label>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {group.copies.map((c) => (
-              <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                {group.copies.length > 1 && (
-                  <span style={{ fontSize: 11, fontWeight: 700, color: pageColors[(c.page_handle || "").trim()] || "var(--pb-dim2)", flexShrink: 0, minWidth: 90 }}>
-                    {(c.page_handle || "").trim()}
-                  </span>
-                )}
-                <AssigneeSelect
-                  contentType={group.content_type}
-                  value={c.assigned_to}
-                  onChange={(email) => onAssign(c.id, email)}
-                  className="fglass-input"
-                  style={{ padding: "7px 11px", borderRadius: 9, fontSize: 13, flex: 1 }}
-                />
-              </div>
-            ))}
-          </div>
+          <label style={ls}>Assigned to</label>
+          <AssigneeSelect
+            contentType={group.content_type}
+            value={assignee}
+            onChange={(email) => onAssign(email)}
+            className="fglass-input"
+            style={{ padding: "7px 11px", borderRadius: 9, fontSize: 13, width: "100%" }}
+          />
         </div>
       )}
 
@@ -3335,7 +3398,7 @@ function ProductionDetailModal({ group, pageColors, readOnly, canMarkPosted, csR
   );
 }
 
-function ProductionCard({ group, pageColors, readOnly, canMarkPosted, csReviewActions, onOpen, onAdvance, onAssign }: {
+function ProductionCard({ group, pageColors, readOnly, canMarkPosted, csReviewActions, onOpen, onAdvance }: {
   group: ProdGroup;
   pageColors: Record<string, string>;
   readOnly?: boolean;
@@ -3343,7 +3406,6 @@ function ProductionCard({ group, pageColors, readOnly, canMarkPosted, csReviewAc
   csReviewActions?: boolean;
   onOpen: () => void;
   onAdvance: (to: string) => void;
-  onAssign?: (copyId: string, name: string) => void;
 }) {
   const next = getProductionNext(group.content_type, group.stage);
   // Per-page progress ticks — a page is "done for this stage" once its copy reached it.
@@ -3356,6 +3418,7 @@ function ProductionCard({ group, pageColors, readOnly, canMarkPosted, csReviewAc
   // works as the read source.
   const note = group.copies[0]?.changes_comment || group.copies[0]?.blocked_reason || "";
   const noteIsBlocked = !!group.copies[0]?.blocked_reason;
+  const assignee = groupAssignee(group);
   return (
     <PbKanbanCardShell isSelected={false} onClick={onOpen}>
       <p style={{
@@ -3380,45 +3443,17 @@ function ProductionCard({ group, pageColors, readOnly, canMarkPosted, csReviewAc
         {group.created_by && <span className="fglass-muted" style={{ fontSize: 9.5 }}>· {group.created_by}</span>}
         <SubmissionChip href={group.copies.find((c: any) => c.submission_link)?.submission_link} />
       </div>
-      {!readOnly && canMarkPosted && onAssign ? (
-        // Editable directly from Stage View — one selector per page-copy (a group
-        // spanning multiple pages can have different people on different pages), so
-        // Ops/admin don't need to switch to "By person" view just to assign someone.
-        <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 5 }}>
-          {group.copies.map((c: any) => (
-            <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              {group.copies.length > 1 && (
-                <span style={{ fontSize: 9, color: pageColors[(c.page_handle || "").trim()] || "var(--pb-dim2)", fontWeight: 700, flexShrink: 0 }}>
-                  {(c.page_handle || "").trim()}
-                </span>
-              )}
-              <AssigneeSelect
-                contentType={group.content_type}
-                value={c.assigned_to}
-                onChange={(email) => onAssign(c.id, email)}
-                style={{
-                  fontSize: 9.5, fontWeight: 600, color: c.assigned_to ? "#a78bfa" : "var(--pb-dim)",
-                  background: "var(--pb-card)", border: "1px solid var(--pb-border)", borderRadius: 99,
-                  padding: "1px 6px", cursor: "pointer", flex: 1, minWidth: 0,
-                }}
-              />
-            </div>
-          ))}
+      {assignee ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 5, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 9.5, fontWeight: 600, color: "#a78bfa", background: "#7c3aed1a", borderRadius: 99, padding: "1px 6px" }}>
+            {assigneeDisplayName(assignee)}
+          </span>
         </div>
-      ) : (() => {
-        // Read-only fallback — one name per page-copy, deduped.
-        const assignees = [...new Set(group.copies.map((c: any) => assigneeDisplayName(c.assigned_to).trim()).filter(Boolean))];
-        return assignees.length > 0 ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 5, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 9.5, color: "var(--pb-faint)" }}>Assigned:</span>
-            {assignees.map((name) => (
-              <span key={name} style={{ fontSize: 9.5, fontWeight: 600, color: "#a78bfa", background: "#7c3aed1a", borderRadius: 99, padding: "1px 6px" }}>
-                {name}
-              </span>
-            ))}
-          </div>
-        ) : null;
-      })()}
+      ) : (
+        <div style={{ marginTop: 5 }}>
+          <span style={{ fontSize: 9.5, color: "var(--pb-faint)" }}>Unassigned</span>
+        </div>
+      )}
       {note && (
         <p title={note} style={{
           margin: "5px 0 0", fontSize: 10.5, lineHeight: 1.3, color: noteIsBlocked ? "#FF7070" : "#FFD166",
