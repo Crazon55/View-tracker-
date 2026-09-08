@@ -73,6 +73,146 @@ function pagesOf(idea: any): string[] {
   return String(idea.page_handle || "").split(",").map((s) => s.trim()).filter(Boolean);
 }
 
+type PageHook = { page: string; hook: string };
+
+function parsePageHooks(raw: unknown): PageHook[] {
+  if (Array.isArray(raw)) {
+    const rows = raw.map((x) => {
+      if (typeof x === "string") return { page: "", hook: x };
+      if (x && typeof x === "object") {
+        const o = x as { page?: unknown; hook?: unknown };
+        return { page: String(o.page || "").trim(), hook: String(o.hook || "") };
+      }
+      return { page: "", hook: "" };
+    }).filter((r) => r.hook.trim() || r.page);
+    return rows.length ? rows : [{ page: "", hook: "" }];
+  }
+  const s = typeof raw === "string" ? raw.trim() : "";
+  if (!s) return [{ page: "", hook: "" }];
+  if (s.startsWith("[") || s.startsWith("{")) {
+    try {
+      return parsePageHooks(JSON.parse(s));
+    } catch {
+      /* legacy plain hook */
+    }
+  }
+  return [{ page: "", hook: s }];
+}
+
+function serializePageHooks(rows: PageHook[]): string {
+  const clean = rows.filter((r) => r.hook.trim() || r.page);
+  if (!clean.length) return "";
+  if (clean.length === 1 && !clean[0].page) return clean[0].hook.trim();
+  return JSON.stringify(clean.map((r) => ({ page: r.page, hook: r.hook.trim() })));
+}
+
+function pageHooksForDisplay(raw: unknown): PageHook[] {
+  return parsePageHooks(raw).filter((r) => r.hook.trim());
+}
+
+function assignedPageHooks(raw: unknown): PageHook[] {
+  return parsePageHooks(raw).filter((r) => r.hook.trim() && r.page);
+}
+
+function pageHookMissingPage(rows: PageHook[]): boolean {
+  return rows.some((r) => r.hook.trim() && !r.page);
+}
+
+function shortPage(pb: PlaybookId, page: string): string {
+  return PLAYBOOK_CONFIGS[pb]?.pageShort?.[page] || page;
+}
+
+function copyBoardDay(idea: any): string {
+  const d = String(idea?.day_date || "").slice(0, 10);
+  if (d && d > todayYmd()) return d;
+  return todayYmd();
+}
+
+async function distributeApprovedIdea(idea: any, engineRows: any[], copies: any[]): Promise<{ pages: string[] }> {
+  const ids: string[] = idea._ids?.length ? idea._ids : [idea.id];
+  const pb = idea._playbook as PlaybookId;
+  const api = PB_API[pb];
+  // Skip CD page-copies and Ideas Pool clones minted by "Send" — keep the engine row.
+  const sources = engineRows.filter((r) => ids.includes(r.id) && !r.source_pool_id && !(r.frontseat_pool && r.origin_idea_id));
+  const rows = sources.length ? sources : [{ ...idea }];
+  const sentPages: string[] = [];
+
+  for (const row of rows) {
+    const hooks = assignedPageHooks(row.hook_variations);
+    if (!hooks.length) continue;
+
+    const originId = String(row.origin_idea_id || row.id);
+    let poolId = "";
+    const existingCopy = copies.find((c) => String(c.origin_idea_id) === originId && c.source_pool_id);
+    if (existingCopy?.source_pool_id) poolId = String(existingCopy.source_pool_id);
+    if (!poolId) {
+      const localPool = engineRows.find((r) => r.frontseat_pool && String(r.origin_idea_id) === originId);
+      if (localPool) poolId = String(localPool.id);
+    }
+    if (!poolId) {
+      const bank = await api.getIdeaBank({ day_date: todayYmd(), include_open_pool: true, enrich_cross: false }).catch(() => [] as any[]);
+      const found = (bank || []).find((r: any) => r.frontseat_pool && String(r.origin_idea_id) === originId);
+      if (found) poolId = String(found.id);
+    }
+    if (!poolId) {
+      poolId = String(row.id);
+      await api.updateIdea(row.id, { frontseat_pool: true });
+    }
+
+    const already = new Set<string>();
+    for (const c of copies) {
+      const page = String(c.page_handle || "").trim();
+      if (!page) continue;
+      if (String(c.source_pool_id) === poolId || String(c.origin_idea_id) === originId || String(c.origin_idea_id) === String(row.id)) {
+        already.add(page);
+      }
+    }
+
+    const hasBaseEdit = !!(row.drive_link || row.frame_link);
+    const day = copyBoardDay(row);
+    const postedPages = pagesOf(row);
+    const page_live_links: Record<string, string> = { ...(row.page_live_links || {}) };
+    const page_posting_dates: Record<string, string> = { ...(row.page_posting_dates || {}) };
+    const page_views: Record<string, number> = { ...(row.page_views || {}) };
+    for (const p of postedPages) {
+      if (!(p in page_live_links)) page_live_links[p] = "";
+      if (!(p in page_views)) page_views[p] = 0;
+    }
+
+    for (const h of hooks) {
+      if (already.has(h.page)) continue;
+      await api.createIdea({
+        page_handle: h.page,
+        content_type: row.content_type || "Reel",
+        content_format: row.content_format || "",
+        topic: row.topic || "",
+        script: row.script || "",
+        status: hasBaseEdit ? "under_edit" : "approved",
+        frontseat_pool: false,
+        source_pool_id: poolId,
+        day_date: day,
+        source: "idea_engine",
+        created_by: row.created_by || "",
+        hook_variations: h.hook,
+        comp_link: row.comp_link || "",
+        yt_url: row.yt_url || "",
+        yt_timestamps: row.yt_timestamps || "",
+        frame_link: row.frame_link || "",
+        drive_link: row.drive_link || "",
+        kalakar_link: row.kalakar_link || "",
+        origin_playbook: pb,
+        origin_idea_id: originId,
+        page_live_links,
+        page_posting_dates,
+        page_views,
+      });
+      already.add(h.page);
+      if (!sentPages.includes(h.page)) sentPages.push(h.page);
+    }
+  }
+  return { pages: sentPages };
+}
+
 // Per-page views for a single idea_bank row: prefer the page_views map, else put the
 // row's total on its one page, else 0 per listed page.
 function perPageViews(idea: any): Record<string, number> {
@@ -209,6 +349,7 @@ function mergeIdeasByTopic(list: any[]): any[] {
     // Prefer a real production status over the pool card's "new".
     if ((!g.status || g.status === "new") && idea.status) g.status = idea.status;
     if (!g.engine_review && idea.engine_review) g.engine_review = idea.engine_review;
+    if (!g.hook_variations && idea.hook_variations) g.hook_variations = idea.hook_variations;
     for (const d of (idea.deployed_to_playbooks || [])) g._deployed.add(d);
   }
   return [...map.values()].map((g) => ({
@@ -482,6 +623,7 @@ export default function IdeaEngineGallery() {
         kalakar_link: idea.kalakar_link || "",
         origin_playbook: rootPb,
         origin_idea_id: rootId,
+        hook_variations: idea.hook_variations || "",
         // History maps (not page_handle) so the pool can show "already posted on"
         // without treating those pages as today's assignments.
         page_live_links,
@@ -518,12 +660,15 @@ export default function IdeaEngineGallery() {
   });
 
   const reviewMut = useMutation({
-    mutationFn: ({ idea, engine_review }: { idea: Idea; engine_review: "approved" | "rejected" | "" }) => {
+    mutationFn: async ({ idea, engine_review }: { idea: Idea; engine_review: "approved" | "rejected" | "" }) => {
       const ids: string[] = idea._ids?.length ? idea._ids : [idea.id];
       const payload = { engine_review, engine_reviewed_by: user?.email || "" };
-      return Promise.all(ids.map((id) => PB_API[idea._playbook as PlaybookId].updateIdea(id, payload)));
+      await Promise.all(ids.map((id) => PB_API[idea._playbook as PlaybookId].updateIdea(id, payload)));
+      if (engine_review !== "approved") return { pages: [] as string[] };
+      const engineRows = (qc.getQueryData<Idea[]>(["idea-engine", dayDate]) || []).filter((i) => !i.source_pool_id);
+      return distributeApprovedIdea(idea, engineRows, pipelineCopies);
     },
-    onSuccess: (_d, { idea, engine_review }) => {
+    onSuccess: (result, { idea, engine_review }) => {
       const ids: string[] = idea._ids?.length ? idea._ids : [idea.id];
       const patch = { engine_review };
       qc.setQueryData<Idea[]>(["idea-engine", dayDate], (old) =>
@@ -539,7 +684,24 @@ export default function IdeaEngineGallery() {
         if (!found) next.push({ ...idea, ...patch });
         return next;
       });
-      toast.success(engine_review === "approved" ? "Approved" : engine_review === "rejected" ? "Rejected" : "Review cleared");
+      if (engine_review === "approved") {
+        const pages = result?.pages || [];
+        if (pages.length) {
+          const key = `${idea._playbook}-${idea.id}`;
+          setSentLocal((m) => ({ ...m, [key]: [...new Set([...(m[key] || []), "bpb" as PlaybookId])] }));
+          const names = pages.map((p) => shortPage(idea._playbook as PlaybookId, p)).join(", ");
+          toast.success(`Approved — sent to ${names} and Production`);
+        } else if (assignedPageHooks(idea.hook_variations).length === 0 && pageHooksForDisplay(idea.hook_variations).length > 0) {
+          toast.success("Approved. Pick a page next to each hook to send them out.");
+        } else {
+          toast.success("Approved");
+        }
+        qc.invalidateQueries({ queryKey: ["idea-engine"] });
+        qc.invalidateQueries({ queryKey: ["idea-engine-pipeline"] });
+        qc.invalidateQueries({ queryKey: ["exp", idea._playbook, "idea-bank"], refetchType: "all" });
+      } else {
+        toast.success(engine_review === "rejected" ? "Rejected" : "Review cleared");
+      }
     },
     onError: (e: any) => toast.error(e?.message || "Couldn't save review"),
   });
@@ -800,10 +962,12 @@ function IdeaCard({ idea, sentTo, sending, onSend, onOpen, canEdit, canDelete, d
   const existing = isExistingIdea(idea);
   // Playbooks this idea is already in: backend-derived (deployed_to_playbooks) ∪ this session's sends.
   const sent = [...new Set([...(idea.deployed_to_playbooks || []), ...sentTo])] as PlaybookId[];
-  const alreadySent = sent.includes("bpb");
+  const alreadyDistributed = todayDist.length > 0 || priorDist.length > 0;
+  const alreadySent = sent.includes("bpb") || alreadyDistributed;
   const review = engineReviewOf(idea);
   const rejected = review === "rejected";
   const sendLocked = sending || alreadySent || rejected;
+  const hookRows = pageHooksForDisplay(idea.hook_variations);
 
   return (
     <article className="fglass-panel fglass-purple-shadow" style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
@@ -843,6 +1007,26 @@ function IdeaCard({ idea, sentTo, sending, onSend, onOpen, canEdit, canDelete, d
       </div>
 
       <h3 style={{ fontSize: 16, fontWeight: 600, lineHeight: 1.3 }}>{idea.topic || <em style={{ color: "var(--f-faint)", fontWeight: 400 }}>Untitled idea</em>}</h3>
+
+      {hookRows.length > 0 ? (
+        <div>
+          <div style={{ fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--f-faint)", marginBottom: 6 }}>Hooks</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {hookRows.map((h, i) => (
+              <div key={`${h.page}-${i}`} style={{ fontSize: 12.5, color: "var(--f-dim)", lineHeight: 1.4 }}>
+                <span style={{ whiteSpace: "pre-wrap" }}>{h.hook}</span>
+                {h.page ? (
+                  <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: "var(--f-faint)" }}>
+                    → @{shortPage(pb, h.page)}
+                  </span>
+                ) : (
+                  <span style={{ marginLeft: 8, fontSize: 11, color: "#fbbf24" }}>· pick a page</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {idea.blocked_reason && (
         <p style={{ margin: 0, fontSize: 12, color: "#FF7070" }}>Blocked before: {idea.blocked_reason}</p>
@@ -997,6 +1181,71 @@ function IdeaCard({ idea, sentTo, sending, onSend, onOpen, canEdit, canDelete, d
   );
 }
 
+function HookPageRows({
+  rows,
+  onChange,
+  playbook,
+}: {
+  rows: PageHook[];
+  onChange: (rows: PageHook[]) => void;
+  playbook: PlaybookId;
+}) {
+  const pages = PLAYBOOK_CONFIGS[playbook].pages;
+  const used = new Set(rows.map((r) => r.page).filter(Boolean));
+  return (
+    <div>
+      {rows.map((row, i) => (
+        <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 148px 32px", gap: 8, marginBottom: 8, alignItems: "start" }}>
+          <textarea
+            value={row.hook}
+            onChange={(e) => onChange(rows.map((r, j) => (j === i ? { ...r, hook: e.target.value } : r)))}
+            placeholder="Hook for this page"
+            className="fglass-input"
+            rows={2}
+            style={{ ...modalInput, resize: "vertical", minHeight: 44 }}
+          />
+          <select
+            value={row.page}
+            onChange={(e) => onChange(rows.map((r, j) => (j === i ? { ...r, page: e.target.value } : r)))}
+            className="fglass-input"
+            style={{ ...modalInput, colorScheme: "dark" }}
+          >
+            <option value="">Page</option>
+            {pages.map((p) => (
+              <option key={p} value={p} disabled={used.has(p) && p !== row.page}>
+                {shortPage(playbook, p)}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => onChange(rows.length === 1 ? [{ page: "", hook: "" }] : rows.filter((_, j) => j !== i))}
+            title="Remove hook"
+            style={{
+              display: "inline-flex", alignItems: "center", justifyContent: "center",
+              height: 44, borderRadius: 8, border: "1px solid var(--f-line)",
+              background: "transparent", color: "var(--f-faint)", cursor: "pointer",
+            }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        disabled={rows.length >= pages.length}
+        onClick={() => onChange([...rows, { page: "", hook: "" }])}
+        style={{ ...ghostBtnSm, padding: "6px 10px", opacity: rows.length >= pages.length ? 0.45 : 1 }}
+      >
+        <Plus size={12} strokeWidth={2} /> Add hook
+      </button>
+      <span style={{ display: "block", marginTop: 6, fontSize: 11, color: "var(--f-faint)", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
+        Each hook goes to one page. Approve sends them there and to Production.
+      </span>
+    </div>
+  );
+}
+
 function AddIdeaModal({ author, onClose, onCreated }: {
   author: string; onClose: () => void; onCreated: (savedDay: string) => void;
 }) {
@@ -1006,8 +1255,7 @@ function AddIdeaModal({ author, onClose, onCreated }: {
   const [kinds, setKinds] = useState({ reel: false, carousel: false });
   const [format, setFormat] = useState<ContentFormat | "">("");
   const [day, setDay] = useState(todayYmd());
-  const [reelHook, setReelHook] = useState("");
-  const [carouselHook, setCarouselHook] = useState("");
+  const [pageHooks, setPageHooks] = useState<PageHook[]>([{ page: "", hook: "" }]);
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -1017,11 +1265,13 @@ function AddIdeaModal({ author, onClose, onCreated }: {
     if (!topic.trim()) { toast.error("Give the idea a name."); return; }
     const types = [kinds.reel && "Reel", kinds.carousel && "Carousel"].filter(Boolean) as string[];
     if (!types.length) { toast.error("Pick Reel, Carousel, or both."); return; }
+    if (pageHookMissingPage(pageHooks)) { toast.error("Pick a page next to each hook."); return; }
     setBusy(true);
     try {
       const link = refLink.trim();
       const ytLink = isYouTube(link);
       const savedDay = day || todayYmd();
+      const hooks = serializePageHooks(pageHooks) || undefined;
       // One row per type so Content Distribution can treat reel vs carousel separately.
       await Promise.all(types.map((content_type) => PB_API.bpb.createIdea({
         page_handle: "",
@@ -1034,7 +1284,7 @@ function AddIdeaModal({ author, onClose, onCreated }: {
         comp_link: link && !ytLink ? link : undefined,
         yt_url: ytLink ? link : undefined,
         yt_timestamps: timestamps.trim() || undefined,
-        hook_variations: (content_type === "Carousel" ? carouselHook : reelHook).trim() || undefined,
+        hook_variations: hooks,
         script: content_type === "Carousel" ? (body.trim() || undefined) : undefined,
       })));
       const both = types.length > 1;
@@ -1053,7 +1303,7 @@ function AddIdeaModal({ author, onClose, onCreated }: {
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", backdropFilter: "blur(4px)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div onClick={(e) => e.stopPropagation()} className="fglass-panel" style={{ width: "min(520px, 100%)", padding: "22px 24px", maxHeight: "90vh", overflowY: "auto" }}>
+      <div onClick={(e) => e.stopPropagation()} className="fglass-panel" style={{ width: "min(560px, 100%)", padding: "22px 24px", maxHeight: "90vh", overflowY: "auto" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
           <h2 style={{ fontSize: 18, fontWeight: 600 }}>New idea</h2>
           <button type="button" onClick={onClose} style={{ ...ghostBtnSm, border: "none", padding: 4 }}><X size={18} /></button>
@@ -1134,54 +1384,13 @@ function AddIdeaModal({ author, onClose, onCreated }: {
             </Field>
           </div>
 
-          {/* Hook — separate per type when both are picked, since a reel and a carousel
-              rarely open the same way. Carousel also gets a body/slides box. */}
-          {kinds.reel && kinds.carousel ? (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <Field label="Hook (Reel)">
-                <textarea
-                  value={reelHook}
-                  onChange={(e) => setReelHook(e.target.value)}
-                  placeholder="What's the reel's opening line?"
-                  className="fglass-input"
-                  rows={2}
-                  style={{ ...modalInput, resize: "vertical", minHeight: 44 }}
-                />
-              </Field>
-              <Field label="Hook (Carousel)">
-                <textarea
-                  value={carouselHook}
-                  onChange={(e) => setCarouselHook(e.target.value)}
-                  placeholder="What's the carousel's opening line?"
-                  className="fglass-input"
-                  rows={2}
-                  style={{ ...modalInput, resize: "vertical", minHeight: 44 }}
-                />
-              </Field>
-            </div>
-          ) : kinds.reel ? (
-            <Field label="Hook">
-              <textarea
-                value={reelHook}
-                onChange={(e) => setReelHook(e.target.value)}
-                placeholder="What's the opening line / hook?"
-                className="fglass-input"
-                rows={2}
-                style={{ ...modalInput, resize: "vertical", minHeight: 44 }}
-              />
+          {/* Hook + page — each row is one hook going to one page. Approve
+              pushes those pages into Content Distribution and Production. */}
+          {(kinds.reel || kinds.carousel) && (
+            <Field label="Hooks & pages">
+              <HookPageRows rows={pageHooks} onChange={setPageHooks} playbook="bpb" />
             </Field>
-          ) : kinds.carousel ? (
-            <Field label="Hook">
-              <textarea
-                value={carouselHook}
-                onChange={(e) => setCarouselHook(e.target.value)}
-                placeholder="What's the opening line / hook?"
-                className="fglass-input"
-                rows={2}
-                style={{ ...modalInput, resize: "vertical", minHeight: 44 }}
-              />
-            </Field>
-          ) : null}
+          )}
           {kinds.carousel && (
             <Field label="Body">
               <textarea
@@ -1225,7 +1434,7 @@ function EditIdeaModal({ idea, onClose, onSaved }: {
   const [day, setDay] = useState(String(idea.day_date || "").slice(0, 10) || todayYmd());
   const [views, setViews] = useState(String(idea.views ?? 0));
   const [likes, setLikes] = useState(String(idea.likes ?? 0));
-  const [hook, setHook] = useState(idea.hook_variations || "");
+  const [pageHooks, setPageHooks] = useState<PageHook[]>(() => parsePageHooks(idea.hook_variations));
   const [body, setBody] = useState(idea.script || "");
   const pages = pagesOf(idea);
   const [pageViews, setPageViews] = useState<Record<string, string>>(() => {
@@ -1249,6 +1458,7 @@ function EditIdeaModal({ idea, onClose, onSaved }: {
 
   const submit = async () => {
     if (!topic.trim()) { toast.error("Give the idea a name."); return; }
+    if (pageHookMissingPage(pageHooks)) { toast.error("Pick a page next to each hook."); return; }
     setBusy(true);
     try {
       const link = refLink.trim();
@@ -1261,7 +1471,7 @@ function EditIdeaModal({ idea, onClose, onSaved }: {
         comp_link: link && !ytLink ? link : "",
         yt_url: ytLink ? link : "",
         yt_timestamps: timestamps.trim(),
-        hook_variations: hook.trim(),
+        hook_variations: serializePageHooks(pageHooks),
       };
       if (editingCarousel) {
         patch.script = body.trim();
@@ -1346,15 +1556,8 @@ function EditIdeaModal({ idea, onClose, onSaved }: {
             </Field>
           </div>
 
-          <Field label="Hook">
-            <textarea
-              value={hook}
-              onChange={(e) => setHook(e.target.value)}
-              placeholder="What's the opening line / hook?"
-              className="fglass-input"
-              rows={2}
-              style={{ ...modalInput, resize: "vertical", minHeight: 44 }}
-            />
+          <Field label="Hooks & pages">
+            <HookPageRows rows={pageHooks} onChange={setPageHooks} playbook={idea._playbook} />
           </Field>
           {editingCarousel && (
             <Field label="Body">

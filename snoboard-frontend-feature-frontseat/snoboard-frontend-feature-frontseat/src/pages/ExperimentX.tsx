@@ -1306,7 +1306,7 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
           <label style={ls}>Hook variations</label>
           <SafeArea
             readOnly={readOnly}
-            value={idea.hook_variations || ""}
+            value={displayHookVariations(idea.hook_variations, (idea.page_handle || "").trim())}
             onSave={v => onUpdate(idea.id, { hook_variations: v })}
             placeholder="One hook per line"
             rows={3}
@@ -2708,8 +2708,49 @@ function IdeaBankTab({ pageFilter, search, readOnly, opsOnly }: { pageFilter: st
   );
 }
 
+function parsePageHooks(raw: unknown): { page: string; hook: string }[] {
+  if (Array.isArray(raw)) {
+    return raw.map((x) => {
+      if (typeof x === "string") return { page: "", hook: x };
+      if (x && typeof x === "object") {
+        const o = x as { page?: unknown; hook?: unknown };
+        return { page: String(o.page || "").trim(), hook: String(o.hook || "") };
+      }
+      return { page: "", hook: "" };
+    });
+  }
+  const s = typeof raw === "string" ? raw.trim() : "";
+  if (!s) return [];
+  if (s.startsWith("[") || s.startsWith("{")) {
+    try { return parsePageHooks(JSON.parse(s)); } catch { /* legacy */ }
+  }
+  return [{ page: "", hook: s }];
+}
+
+function hookForPage(raw: unknown, page: string): string {
+  const rows = parsePageHooks(raw).filter((r) => r.hook.trim());
+  if (!rows.length) return "";
+  const match = rows.find((r) => r.page === page);
+  if (match) return match.hook.trim();
+  if (rows.some((r) => r.page)) return "";
+  return rows[0].hook.trim();
+}
+
+function displayHookVariations(raw: unknown, page?: string): string {
+  const rows = parsePageHooks(raw).filter((r) => r.hook.trim());
+  if (!rows.length) return "";
+  if (page) {
+    const match = hookForPage(raw, page);
+    if (match) return match;
+  }
+  if (rows.some((r) => r.page)) {
+    return rows.map((r) => (r.page ? `${r.hook}\n→ ${r.page}` : r.hook)).join("\n\n");
+  }
+  return rows.map((r) => r.hook).join("\n");
+}
+
 function ideaHasHook(idea: any): boolean {
-  return String(idea?.hook_variations || "").trim().length > 0;
+  return parsePageHooks(idea?.hook_variations).some((r) => r.hook.trim());
 }
 
 function ideaIsAssigned(idea: any): boolean {
@@ -4862,7 +4903,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
       topic: pool.topic, source: pool.source, content_type: pool.content_type,
       video_format: pool.video_format || "", content_format: pool.content_format || "",
       status: hasBaseEdit ? "under_edit" : "approved", page_handle: page,
-      hook_variations: pool.hook_variations || "",
+      hook_variations: hookForPage(pool.hook_variations, page),
       comp_link: pool.comp_link || "", yt_url: pool.yt_url || "",
       yt_timestamps: pool.yt_timestamps || "",
       frame_link: pool.frame_link || "", drive_link: pool.drive_link || "", kalakar_link: pool.kalakar_link || "",
