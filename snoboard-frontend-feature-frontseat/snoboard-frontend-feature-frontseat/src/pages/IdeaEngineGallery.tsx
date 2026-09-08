@@ -103,6 +103,12 @@ function perPageLikes(idea: any): Record<string, number> {
   return out;
 }
 
+function isContentDistributionCopy(idea: any): boolean {
+  // Page copies created when an idea is assigned/scheduled in Content Distribution.
+  // They share a topic and a new day_date (e.g. tomorrow) but are not new Idea Engine ideas.
+  return Boolean(idea?.source_pool_id);
+}
+
 // The backend stores each posting as its own row (same topic, different pages). Collapse
 // same-topic rows within a playbook into one card that unions their pages + views.
 function mergeIdeasByTopic(list: any[]): any[] {
@@ -284,8 +290,13 @@ export default function IdeaEngineGallery() {
     refetchOnWindowFocus: false,
   });
 
-  // Collapse duplicate postings of the same idea into one card.
-  const merged = useMemo(() => mergeIdeasByTopic(ideas), [ideas]);
+  // Collapse duplicate postings of the same idea into one card. Skip CD page-copies —
+  // scheduling an existing idea for tomorrow must not mint a "New" Idea Engine card.
+  const engineIdeas = useMemo(
+    () => ideas.filter((i) => !isContentDistributionCopy(i)),
+    [ideas],
+  );
+  const merged = useMemo(() => mergeIdeasByTopic(engineIdeas), [engineIdeas]);
   const dayTally = useMemo(() => tallyReviews(merged), [merged]);
   const dayType = useMemo(() => tallyByType(merged), [merged]);
   const dayPeople = useMemo(() => tallyByPerson(merged), [merged]);
@@ -305,7 +316,11 @@ export default function IdeaEngineGallery() {
     },
     refetchOnWindowFocus: false,
   });
-  const allMerged = useMemo(() => mergeIdeasByTopic(reviewRows), [reviewRows]);
+  const engineReviewRows = useMemo(
+    () => reviewRows.filter((i) => !isContentDistributionCopy(i)),
+    [reviewRows],
+  );
+  const allMerged = useMemo(() => mergeIdeasByTopic(engineReviewRows), [engineReviewRows]);
   const allTally = useMemo(() => tallyReviews(allMerged), [allMerged]);
   const allType = useMemo(() => tallyByType(allMerged), [allMerged]);
   const allPeople = useMemo(() => tallyByPerson(allMerged), [allMerged]);
