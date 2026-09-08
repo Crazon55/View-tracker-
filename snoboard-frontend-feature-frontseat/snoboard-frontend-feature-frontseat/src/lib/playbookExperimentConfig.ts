@@ -126,6 +126,34 @@ export const CONTENT_FORMAT_ACCENT: Record<ContentFormat, string> = {
   Tech: "#7BB0FF",
 };
 
+/** Reel video-format chips on New idea / Production. */
+export const REEL_VIDEO_FORMATS = [
+  "Viral a-roll",
+  "A-roll massy",
+  "A-roll info",
+  "News",
+  "Shark Tank",
+  "Creator videos",
+] as const;
+
+/** Carousel format chips on New idea / Production. */
+export const CAROUSEL_FORMATS = [
+  "Current happening",
+  "Proven Reels to Carousels",
+  "Proven Motivational + Controversial Statements",
+  "Fact Statics",
+  "Gov Schemes",
+  "How To Start A Business/ Income Streams",
+  "Comparison Posts (2 split/ 3Split)",
+  "Government Docs/ Legal Docs",
+  "Top X",
+  "Insider Info Type Posts",
+] as const;
+
+export function formatsForContentType(contentType: string | null | undefined): readonly string[] {
+  return (contentType || "").trim().toLowerCase() === "carousel" ? CAROUSEL_FORMATS : REEL_VIDEO_FORMATS;
+}
+
 /**
  * Who a page-assigned idea can be assigned to, split by content type — Carousel has
  * a smaller pool than Reel. `assigned_to` stores the editor's Gmail (legacy rows may

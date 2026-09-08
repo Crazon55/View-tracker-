@@ -17,10 +17,9 @@ import { useIdeaBankRealtime } from "@/hooks/useIdeaBankRealtime";
 import { canonicalRole } from "@/lib/accessModel";
 import { createExpApi, type ExpApi } from "@/services/api";
 import {
-  CONTENT_FORMATS,
-  CONTENT_FORMAT_ACCENT,
+  CAROUSEL_FORMATS,
   PLAYBOOK_CONFIGS,
-  type ContentFormat,
+  REEL_VIDEO_FORMATS,
   type PlaybookId,
 } from "@/lib/playbookExperimentConfig";
 
@@ -185,6 +184,7 @@ async function distributeApprovedIdea(idea: any, engineRows: any[], copies: any[
         page_handle: h.page,
         content_type: row.content_type || "Reel",
         content_format: row.content_format || "",
+        video_format: row.video_format || "",
         topic: row.topic || "",
         script: row.script || "",
         status: hasBaseEdit ? "under_edit" : "approved",
@@ -604,6 +604,7 @@ export default function IdeaEngineGallery() {
         page_handle: "",
         content_type: idea.content_type || "reel",
         content_format: idea.content_format || "",
+        video_format: idea.video_format || "",
         topic: idea.topic || "",
         status: "new",
         frontseat_pool: true,
@@ -993,6 +994,11 @@ function IdeaCard({ idea, sentTo, sending, onSend, onOpen, canEdit, canDelete, d
           }}>
             {isCarousel(idea) ? "Carousel" : "Reel"}
           </span>
+          {(idea.video_format || idea.content_format) ? (
+            <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: ".02em", borderRadius: 6, padding: "2px 7px", color: "var(--f-dim)", border: "1px solid var(--f-line)" }}>
+              {idea.video_format || idea.content_format}
+            </span>
+          ) : null}
           {review !== "pending" && (
             <span style={{
               fontSize: 10, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", borderRadius: 6, padding: "2px 7px",
@@ -1246,6 +1252,37 @@ function HookPageRows({
   );
 }
 
+function FormatPills({ options, value, onChange }: {
+  options: readonly string[];
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  return (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      {options.map((f) => {
+        const on = value === f;
+        return (
+          <button
+            key={f}
+            type="button"
+            onClick={() => onChange(on ? "" : f)}
+            style={{
+              ...datePillBase,
+              cursor: "pointer",
+              borderColor: on ? "#fff" : "var(--f-line)",
+              background: on ? "#fff" : "transparent",
+              color: on ? "#000" : "var(--f-dim)",
+              fontWeight: on ? 600 : 500,
+            }}
+          >
+            {f}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function AddIdeaModal({ author, onClose, onCreated }: {
   author: string; onClose: () => void; onCreated: (savedDay: string) => void;
 }) {
@@ -1253,7 +1290,8 @@ function AddIdeaModal({ author, onClose, onCreated }: {
   const [refLink, setRefLink] = useState("");
   const [timestamps, setTimestamps] = useState("");
   const [kinds, setKinds] = useState({ reel: false, carousel: false });
-  const [format, setFormat] = useState<ContentFormat | "">("");
+  const [reelFormat, setReelFormat] = useState("");
+  const [carouselFormat, setCarouselFormat] = useState("");
   const [day, setDay] = useState(todayYmd());
   const [pageHooks, setPageHooks] = useState<PageHook[]>([{ page: "", hook: "" }]);
   const [body, setBody] = useState("");
@@ -1277,7 +1315,7 @@ function AddIdeaModal({ author, onClose, onCreated }: {
         page_handle: "",
         topic: topic.trim(),
         content_type,
-        content_format: format || undefined,
+        video_format: content_type === "Carousel" ? (carouselFormat || undefined) : (reelFormat || undefined),
         views: 0,
         day_date: savedDay,
         created_by: author || undefined,
@@ -1310,26 +1348,6 @@ function AddIdeaModal({ author, onClose, onCreated }: {
         </div>
 
         <div style={{ display: "grid", gap: 14 }}>
-          {/* Format — the coarse News / A-roll / Tech / Post split Content Distribution filters on. */}
-          <Field label="Format">
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {CONTENT_FORMATS.map((f) => (
-                <button
-                  key={f}
-                  type="button"
-                  onClick={() => setFormat(format === f ? "" : f)}
-                  style={{
-                    ...datePillBase,
-                    cursor: "pointer",
-                    borderColor: format === f ? CONTENT_FORMAT_ACCENT[f] : "var(--f-line)",
-                    color: format === f ? "var(--f-ink)" : "var(--f-dim)",
-                  }}
-                >
-                  {f}
-                </button>
-              ))}
-            </div>
-          </Field>
           <Field label="Idea name *"><input autoFocus value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="What's the idea?" className="fglass-input" style={modalInput} /></Field>
 
           {/* Reference link + timestamps. Timestamps sit beside the link for comp
@@ -1384,6 +1402,17 @@ function AddIdeaModal({ author, onClose, onCreated }: {
             </Field>
           </div>
 
+          {kinds.reel && (
+            <Field label="Video format">
+              <FormatPills options={REEL_VIDEO_FORMATS} value={reelFormat} onChange={setReelFormat} />
+            </Field>
+          )}
+          {kinds.carousel && (
+            <Field label="Format">
+              <FormatPills options={CAROUSEL_FORMATS} value={carouselFormat} onChange={setCarouselFormat} />
+            </Field>
+          )}
+
           {/* Hook + page — each row is one hook going to one page. Approve
               pushes those pages into Content Distribution and Production. */}
           {(kinds.reel || kinds.carousel) && (
@@ -1430,7 +1459,7 @@ function EditIdeaModal({ idea, onClose, onSaved }: {
   const [refLink, setRefLink] = useState(idea.yt_url || idea.comp_link || "");
   const [timestamps, setTimestamps] = useState(idea.yt_timestamps || "");
   const [contentType, setContentType] = useState(idea.content_type || "Reel");
-  const [format, setFormat] = useState<ContentFormat | "">((idea.content_format as ContentFormat) || "");
+  const [videoFormat, setVideoFormat] = useState(idea.video_format || "");
   const [day, setDay] = useState(String(idea.day_date || "").slice(0, 10) || todayYmd());
   const [views, setViews] = useState(String(idea.views ?? 0));
   const [likes, setLikes] = useState(String(idea.likes ?? 0));
@@ -1466,7 +1495,7 @@ function EditIdeaModal({ idea, onClose, onSaved }: {
       const patch: Record<string, unknown> = {
         topic: topic.trim(),
         content_type: contentType,
-        content_format: format || "",
+        video_format: videoFormat,
         day_date: day || todayYmd(),
         comp_link: link && !ytLink ? link : "",
         yt_url: ytLink ? link : "",
@@ -1510,25 +1539,6 @@ function EditIdeaModal({ idea, onClose, onSaved }: {
         </div>
 
         <div style={{ display: "grid", gap: 14 }}>
-          <Field label="Format">
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {CONTENT_FORMATS.map((f) => (
-                <button
-                  key={f}
-                  type="button"
-                  onClick={() => setFormat(format === f ? "" : f)}
-                  style={{
-                    ...datePillBase,
-                    cursor: "pointer",
-                    borderColor: format === f ? CONTENT_FORMAT_ACCENT[f] : "var(--f-line)",
-                    color: format === f ? "var(--f-ink)" : "var(--f-dim)",
-                  }}
-                >
-                  {f}
-                </button>
-              ))}
-            </div>
-          </Field>
           <Field label="Idea name *"><input autoFocus value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="What's the idea?" className="fglass-input" style={modalInput} /></Field>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 150px", gap: 12 }}>
@@ -1540,7 +1550,17 @@ function EditIdeaModal({ idea, onClose, onSaved }: {
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <Field label="Content type">
-              <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="fglass-input" style={{ ...modalInput, colorScheme: "dark" }}>
+              <select
+                value={contentType}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setContentType(next);
+                  const allowed = next.trim().toLowerCase() === "carousel" ? CAROUSEL_FORMATS : REEL_VIDEO_FORMATS;
+                  if (videoFormat && !(allowed as readonly string[]).includes(videoFormat)) setVideoFormat("");
+                }}
+                className="fglass-input"
+                style={{ ...modalInput, colorScheme: "dark" }}
+              >
                 {["Reel", "Carousel"].map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </Field>
@@ -1555,6 +1575,14 @@ function EditIdeaModal({ idea, onClose, onSaved }: {
               />
             </Field>
           </div>
+
+          <Field label={editingCarousel ? "Format" : "Video format"}>
+            <FormatPills
+              options={editingCarousel ? CAROUSEL_FORMATS : REEL_VIDEO_FORMATS}
+              value={videoFormat}
+              onChange={setVideoFormat}
+            />
+          </Field>
 
           <Field label="Hooks & pages">
             <HookPageRows rows={pageHooks} onChange={setPageHooks} playbook={idea._playbook} />

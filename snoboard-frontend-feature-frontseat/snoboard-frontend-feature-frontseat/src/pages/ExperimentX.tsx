@@ -24,6 +24,7 @@ import {
   assigneeEmailOf,
   isAssignee,
   isEditorSoloView,
+  formatsForContentType,
   type ContentFormat,
   type PlaybookId,
 } from "@/lib/playbookExperimentConfig";
@@ -1281,12 +1282,12 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
 
         {/* Video format */}
         <div>
-          <label style={ls}>Video format</label>
+          <label style={ls}>{(idea.content_type || "").trim().toLowerCase() === "carousel" ? "Format" : "Video format"}</label>
           {readOnly ? (
             <span style={{ fontSize: 13, color: idea.video_format ? "#50E0B0" : "var(--pb-faint)" }}>{idea.video_format || "—"}</span>
           ) : (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {VIDEO_FORMATS.map(fmt => {
+            {formatsForContentType(idea.content_type).map(fmt => {
               const active = idea.video_format === fmt;
               return (
                 <button
@@ -1848,7 +1849,7 @@ function AddIdeaModal({ open, onAdd, onClose }: {
         <div>
           <label style={ls}>Video format</label>
           <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
-            {VIDEO_FORMATS.map(fmt => (
+            {formatsForContentType(type).map(fmt => (
               <button
                 key={fmt} type="button"
                 onClick={() => setVideoFormat(v => v === fmt ? "" : fmt)}
@@ -1920,16 +1921,6 @@ function AddIdeaModal({ open, onAdd, onClose }: {
     </PbGlassModalShell>
   );
 }
-
-// Video format options
-const VIDEO_FORMATS = [
-  "Viral a-roll",
-  "A-roll massy",
-  "A-roll info",
-  "News",
-  "Shark Tank",
-  "Creator videos",
-] as const;
 
 // Testing performance result config (viral = highest tier)
 const TEST_RESULTS = [
@@ -3246,12 +3237,12 @@ function ProductionDetailModal({ group, pageColors, readOnly, canMarkPosted, csR
 
       {/* Video format */}
       <div>
-        <label style={ls}>Video format</label>
+        <label style={ls}>{(src.content_type || "").trim().toLowerCase() === "carousel" ? "Format" : "Video format"}</label>
         {readOnly ? (
           <span style={{ fontSize: 13, color: src.video_format ? "#50E0B0" : "var(--pb-faint)" }}>{src.video_format || "—"}</span>
         ) : (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {VIDEO_FORMATS.map((fmt) => {
+            {formatsForContentType(src.content_type).map((fmt) => {
               const active = src.video_format === fmt;
               return (
                 <button key={fmt} type="button" onClick={() => onSaveGroup({ video_format: active ? "" : fmt })} className={`fglass-pill${active ? " is-on-green" : ""}`}>{fmt}</button>
@@ -4158,7 +4149,7 @@ function QuickAddModal({ open, onAdd, onClose }: {
         <div>
           <label style={ls}>Video format</label>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {VIDEO_FORMATS.map(vf => (
+            {formatsForContentType(format).map(vf => (
               <button key={vf} onClick={() => setVideoFormat(v => v === vf ? "" : vf)} style={{
                 padding: "5px 11px", borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: "pointer",
                 border: videoFormat === vf ? "2px solid #50E0B0" : "1.5px solid var(--pb-border)",
