@@ -31,7 +31,7 @@ type Hub = {
 const hubs = new Map<string, Hub>();
 const START_RETRY_MS = 4_000;
 const MAX_RETRY_MS = 30_000;
-const INVALIDATE_DEBOUNCE_MS = 400;
+const INVALIDATE_DEBOUNCE_MS = 800;
 const STRICT_MODE_GRACE_MS = 500;
 
 function dropSocket(socket: WebSocket | null) {

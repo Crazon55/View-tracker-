@@ -475,19 +475,21 @@ export default function IdeaEngineGallery() {
   const [showAdd, setShowAdd] = useState(false);
   const [editIdea, setEditIdea] = useState<Idea | null>(null);
 
-  const { data: ideas = [], isLoading } = useQuery<Idea[]>({
+  const { data: ideas = [], isLoading, isFetched } = useQuery<Idea[]>({
     queryKey: ["idea-engine", dayDate],
     queryFn: async () => {
       const perPb = await Promise.all(
         PLAYBOOKS.map((pb) =>
           PB_API[pb]
-            .getIdeaBank({ day_date: dayDate, enrich_cross: true })
+            .getIdeaBank({ day_date: dayDate, enrich_cross: false })
             .then((rows) => (rows || []).map((r: any) => ({ ...r, _playbook: pb })))
             .catch(() => [] as Idea[]),
         ),
       );
       return perPb.flat();
     },
+    staleTime: 20_000,
+    placeholderData: (prev) => prev,
     refetchOnWindowFocus: false,
   });
 
@@ -503,20 +505,20 @@ export default function IdeaEngineGallery() {
   const dayPeople = useMemo(() => tallyByPerson(merged), [merged]);
 
   const { data: pipelineRows = [] } = useQuery<Idea[]>({
-    queryKey: ["idea-engine-pipeline", YESTERDAY, TOMORROW],
+    queryKey: ["idea-engine-pipeline"],
     queryFn: async () => {
       const perPb = await Promise.all(
-        PLAYBOOKS.map(async (pb) => {
-          const groups = await Promise.all([
-            PB_API[pb].getIdeaBank({ pending_only: true, enrich_cross: false }).catch(() => [] as Idea[]),
-            PB_API[pb].getIdeaBank({ day_date: YESTERDAY, enrich_cross: false }).catch(() => [] as Idea[]),
-            PB_API[pb].getIdeaBank({ day_date: TOMORROW, enrich_cross: false }).catch(() => [] as Idea[]),
-          ]);
-          return groups.flat().map((r: any) => ({ ...r, _playbook: pb }));
-        }),
+        PLAYBOOKS.map((pb) =>
+          PB_API[pb]
+            .getIdeaBank({ pending_only: true, enrich_cross: false })
+            .then((rows) => (rows || []).map((r: any) => ({ ...r, _playbook: pb })))
+            .catch(() => [] as Idea[]),
+        ),
       );
       return perPb.flat();
     },
+    enabled: isFetched,
+    staleTime: 30_000,
     refetchOnWindowFocus: false,
   });
   const pipelineCopies = useMemo(() => {
@@ -539,6 +541,8 @@ export default function IdeaEngineGallery() {
       );
       return perPb.flat();
     },
+    enabled: scoreScope === "all",
+    staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
   });
   const engineReviewRows = useMemo(
@@ -571,6 +575,8 @@ export default function IdeaEngineGallery() {
       );
       return perPb.flat();
     },
+    enabled: isFetched,
+    staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
   });
   const top6 = useMemo(() => {

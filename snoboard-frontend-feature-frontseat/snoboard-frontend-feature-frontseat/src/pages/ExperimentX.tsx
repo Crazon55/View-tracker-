@@ -2863,12 +2863,11 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
     queryKey: expQk(playbookId, "idea-bank", "pending"),
     queryFn: () => api.getIdeaBank({ pending_only: true, enrich_cross: false }),
     staleTime: EXP_STALE_MS,
-    refetchOnMount: "always",
     // WS is the live path. Poll is the fallback when the socket isn't up (proxy not
     // upgrading, handshake still in flight). Don't stack 8s GETs on top of a live socket
     // — that was a big part of "the API is too slow" while Idea Engine also had 3 sockets
     // invalidating every board cache.
-    refetchInterval: () => (isIdeaBankSocketLive(playbookId) ? 45_000 : 20_000),
+    refetchInterval: () => (isIdeaBankSocketLive(playbookId) ? 60_000 : 20_000),
   });
 
   // Batch status write across every copy in a group (single base edit → all pages).
@@ -4699,8 +4698,7 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
       include_open_pool: !schedulingOffToday,
     }),
     staleTime: EXP_STALE_MS,
-    refetchOnMount: "always",
-    refetchInterval: () => (isIdeaBankSocketLive(playbookId) ? 45_000 : 20_000),
+    refetchInterval: () => (isIdeaBankSocketLive(playbookId) ? 60_000 : 20_000),
   });
   // Tomorrow (or any other day) still needs today's Ideas Pool so you can drag
   // those cards onto that day's page columns.
@@ -4709,22 +4707,19 @@ function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", sear
     queryFn: () => api.getIdeaBank({ day_date: todayStr, enrich_cross: false, include_open_pool: true }),
     enabled: schedulingOffToday,
     staleTime: EXP_STALE_MS,
-    refetchOnMount: "always",
-    refetchInterval: () => (isIdeaBankSocketLive(playbookId) ? 45_000 : 20_000),
+    refetchInterval: () => (isIdeaBankSocketLive(playbookId) ? 60_000 : 20_000),
   });
   const { data: yesterdayRows = [] } = useQuery({
     queryKey: expQk(playbookId, "idea-bank", "board", yesterdayStr),
     queryFn: () => api.getIdeaBank({ day_date: yesterdayStr, enrich_cross: false }),
     staleTime: EXP_STALE_MS,
-    refetchOnMount: "always",
-    refetchInterval: () => (isIdeaBankSocketLive(playbookId) ? 45_000 : 20_000),
+    refetchInterval: () => (isIdeaBankSocketLive(playbookId) ? 60_000 : 20_000),
   });
   const { data: pendingRows = [] } = useQuery({
     queryKey: expQk(playbookId, "idea-bank", "pending"),
     queryFn: () => api.getIdeaBank({ pending_only: true, enrich_cross: false }),
     staleTime: EXP_STALE_MS,
-    refetchOnMount: "always",
-    refetchInterval: () => (isIdeaBankSocketLive(playbookId) ? 45_000 : 20_000),
+    refetchInterval: () => (isIdeaBankSocketLive(playbookId) ? 60_000 : 20_000),
   });
   const ideas = useMemo(() => {
     if (!schedulingOffToday) return dayRows as any[];

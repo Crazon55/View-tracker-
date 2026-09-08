@@ -5518,7 +5518,14 @@ async def exp_list_idea_bank(
             else "id,topic,page_live_links,created_by,content_type"
         )
         try:
-            data = client.table(tables.idea_bank).select(cols).execute().data or []
+            data = (
+                client.table(tables.idea_bank)
+                .select(cols)
+                .is_("source_pool_id", "null")
+                .execute()
+                .data
+                or []
+            )
         except Exception as e:
             logger.warning("review_score query failed for %s: %s", pb, e)
             data = []
