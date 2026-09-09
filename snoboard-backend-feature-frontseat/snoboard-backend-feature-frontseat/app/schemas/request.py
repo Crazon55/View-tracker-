@@ -1,6 +1,27 @@
 """Request schemas."""
-from pydantic import BaseModel
+from __future__ import annotations
+
+import json
 from datetime import datetime
+from typing import Any
+
+from pydantic import BaseModel, field_validator
+
+
+def _coerce_hook_variations(v: Any) -> str | None:
+    """Idea Engine stores page-hook JSON as a string; CD writes a plain hook string.
+    Accept list/dict so a client sending either shape does not 422/500."""
+    if v is None:
+        return None
+    if isinstance(v, str):
+        return v
+    if isinstance(v, list):
+        if v and isinstance(v[0], dict):
+            return json.dumps(v, ensure_ascii=False)
+        return "\n".join(str(x).strip() for x in v if str(x).strip())
+    if isinstance(v, dict):
+        return json.dumps(v, ensure_ascii=False)
+    return str(v)
 
 
 class PageCreate(BaseModel):
@@ -200,6 +221,11 @@ class ExpIdeaCreate(BaseModel):
     engine_reviewed_by: str | None = None
     page_views: dict = {}
 
+    @field_validator("hook_variations", mode="before")
+    @classmethod
+    def _hooks_create(cls, v: Any) -> str:
+        return _coerce_hook_variations(v) or ""
+
 
 class ExpIdeaUpdate(BaseModel):
     page_handle: str | None = None
@@ -241,6 +267,11 @@ class ExpIdeaUpdate(BaseModel):
     assigned_to: str | None = None
     engine_review: str | None = None
     engine_reviewed_by: str | None = None
+
+    @field_validator("hook_variations", mode="before")
+    @classmethod
+    def _hooks_update(cls, v: Any) -> str | None:
+        return _coerce_hook_variations(v)
 
 
 class ExpSettingsUpdate(BaseModel):

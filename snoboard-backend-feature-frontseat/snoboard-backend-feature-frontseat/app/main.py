@@ -5360,6 +5360,50 @@ def _exp_idea_query(client, playbook: str):
     return client.table(tables.idea_bank).select("*")
 
 
+_MISSING_COL_RE = re.compile(r"Could not find the '([^']+)' column", re.I)
+
+
+def _exp_patch_error_detail(msg: str, payload: dict) -> str:
+    keys = ", ".join(payload.keys()) or "no fields"
+    lower = msg.lower()
+    if "assigned_to" in payload or "assigned_to" in lower:
+        return (
+            "Couldn't save assignee. If this keeps failing, run "
+            "migrations/migration_idea_assignee.sql in Supabase so assigned_to exists. "
+            f"({msg})"
+        )
+    if "hook_variations" in payload or "hook_variations" in lower:
+        return f"Couldn't save hook. ({msg})"
+    if "invalid input syntax for type uuid" in lower:
+        return "That idea is still saving — wait a second and try again."
+    return f"Couldn't save idea ({keys}): {msg}"
+
+
+def _exp_apply_idea_patch(client, table: str, idea_id: str, update_data: dict) -> dict:
+    """PATCH idea-bank. Drop columns PostgREST doesn't know yet (schema cache) and retry."""
+    payload = dict(update_data)
+    last_err: Exception | None = None
+    for _ in range(8):
+        if not payload:
+            break
+        try:
+            client.table(table).update(payload).eq("id", idea_id).execute()
+            return payload
+        except Exception as e:
+            last_err = e
+            msg = str(e)
+            m = _MISSING_COL_RE.search(msg)
+            col = m.group(1) if m else None
+            if not col or col not in payload:
+                logger.exception("idea-bank patch failed for %s %s: %s", table, idea_id, msg)
+                raise HTTPException(status_code=400, detail=_exp_patch_error_detail(msg, payload)) from e
+            logger.warning("idea-bank dropping unknown column %s on %s", col, table)
+            payload.pop(col, None)
+    if last_err:
+        raise HTTPException(status_code=400, detail=_exp_patch_error_detail(str(last_err), update_data)) from last_err
+    return payload
+
+
 # Idea Engine approve/reject — not Production `status`. Stored on engine_review when
 # the column exists; otherwise tucked into page_live_links under a reserved key so
 # the score still works before the SQL migration is run.
@@ -5809,7 +5853,11 @@ async def exp_update_idea(playbook: str, idea_id: str, req: ExpIdeaUpdate):
     pb = validate_playbook(playbook)
     client = get_supabase_client()
     tables = get_playbook_tables(pb)
-    update_data = {k: v for k, v in req.model_dump().items() if v is not None}
+    update_data = req.model_dump(exclude_unset=True)
+    if "assigned_to" in update_data and update_data["assigned_to"] is None:
+        update_data["assigned_to"] = ""
+    if "hook_variations" in update_data and update_data["hook_variations"] is None:
+        update_data["hook_variations"] = ""
     # Production's Changes/Blocked stages are a QC gate — moving into either without a
     # reason defeats the point, so this is enforced here (not just in the UI) the same way
     # every other real constraint on this endpoint is.
@@ -5864,18 +5912,9 @@ async def exp_update_idea(playbook: str, idea_id: str, req: ExpIdeaUpdate):
             update_data.pop("engine_review", None)
             update_data.pop("engine_reviewed_by", None)
             update_data.pop("engine_reviewed_at", None)
-    try:
-        client.table(tables.idea_bank).update(update_data).eq("id", idea_id).execute()
-    except Exception as e:
-        msg = str(e).lower()
-        if "submission_link" in msg and ("schema cache" in msg or "could not find" in msg or "column" in msg):
-            update_data.pop("submission_link", None)
-            if update_data:
-                client.table(tables.idea_bank).update(update_data).eq("id", idea_id).execute()
-            else:
-                raise
-        else:
-            raise
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    _exp_apply_idea_patch(client, tables.idea_bank, idea_id, update_data)
     verify = _exp_idea_query(client, pb).eq("id", idea_id).limit(1).execute().data
     updated = (verify[0] if verify else {}) or {}
     if updated:

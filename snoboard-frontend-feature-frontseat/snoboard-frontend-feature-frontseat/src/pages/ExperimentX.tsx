@@ -85,7 +85,24 @@ function expIdeaUpdateMutationOpts(
   hooks?: { onDetail?: (id: string, patch: Record<string, unknown>) => void },
 ) {
   return {
-    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) => api.updateIdea(id, data),
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) => {
+      if (String(id).startsWith("temp-")) {
+        return Promise.reject(new Error("That idea is still saving — wait a second and try again."));
+      }
+      const payload: Record<string, unknown> = { ...data };
+      if ("hook_variations" in payload && payload.hook_variations != null && typeof payload.hook_variations !== "string") {
+        const hv = payload.hook_variations;
+        payload.hook_variations = Array.isArray(hv)
+          ? (hv.length && typeof hv[0] === "object"
+              ? JSON.stringify(hv)
+              : hv.map((x) => String(x)).join("\n"))
+          : String(hv);
+      }
+      if ("assigned_to" in payload && payload.assigned_to != null) {
+        payload.assigned_to = String(payload.assigned_to);
+      }
+      return api.updateIdea(id, payload);
+    },
     onMutate: async ({ id, data }: { id: string; data: Record<string, unknown> }) => {
       await qc.cancelQueries({ queryKey: ["exp", playbookId] });
       const snapshots = qc.getQueriesData<any[]>({ queryKey: ["exp", playbookId] });
