@@ -151,7 +151,9 @@ export const CAROUSEL_FORMATS = [
 ] as const;
 
 export function formatsForContentType(contentType: string | null | undefined): readonly string[] {
-  return (contentType || "").trim().toLowerCase() === "carousel" ? CAROUSEL_FORMATS : REEL_VIDEO_FORMATS;
+  const t = (contentType || "").trim().toLowerCase();
+  // Statics reuse the carousel format list for now — same single-graphic content buckets.
+  return t === "carousel" || t === "static" ? CAROUSEL_FORMATS : REEL_VIDEO_FORMATS;
 }
 
 /**
@@ -181,7 +183,9 @@ export const ASSIGNEE_OPTIONS: Record<"carousel" | "reel", AssigneeOption[]> = {
 };
 
 export function assigneeOptionsFor(contentType: string | null | undefined): AssigneeOption[] {
-  return (contentType || "").trim().toLowerCase() === "carousel" ? ASSIGNEE_OPTIONS.carousel : ASSIGNEE_OPTIONS.reel;
+  const t = (contentType || "").trim().toLowerCase();
+  // Statics are assigned to the same designers as carousels.
+  return t === "carousel" || t === "static" ? ASSIGNEE_OPTIONS.carousel : ASSIGNEE_OPTIONS.reel;
 }
 
 const ALL_ASSIGNEES: AssigneeOption[] = [...ASSIGNEE_OPTIONS.carousel, ...ASSIGNEE_OPTIONS.reel];

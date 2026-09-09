@@ -1282,7 +1282,7 @@ function IdeaDetailModal({ idea, onUpdate, onDelete, onClose, hideStageActions, 
 
         {/* Video format */}
         <div>
-          <label style={ls}>{(idea.content_type || "").trim().toLowerCase() === "carousel" ? "Format" : "Video format"}</label>
+          <label style={ls}>{["carousel", "static"].includes((idea.content_type || "").trim().toLowerCase()) ? "Format" : "Video format"}</label>
           {readOnly ? (
             <span style={{ fontSize: 13, color: idea.video_format ? "#50E0B0" : "var(--pb-faint)" }}>{idea.video_format || "—"}</span>
           ) : (
@@ -2980,8 +2980,10 @@ function ProductionTab({ pageFilter, search, readOnly, contentTypeFilter, viewBy
       if (!(s in PRODUCTION_STAGE_ORDER)) return false;
       if (!ideaInPageFilter(pageFilter, i.page_handle)) return false;
       if (soloView && !isAssignee(i.assigned_to, myEmail)) return false;
-      const isCarousel = (i.content_type || "").trim().toLowerCase() === "carousel";
-      if (isCarousel !== (contentTypeFilter === "carousel")) return false;
+      // Statics share the carousel designer roster/board, so anything that isn't a
+      // reel belongs in the "carousel" bucket here.
+      const bucket = (i.content_type || "").trim().toLowerCase() === "reel" ? "reel" : "carousel";
+      if (bucket !== contentTypeFilter) return false;
       return true;
     });
   }, [allIdeas, pageFilter, soloView, myEmail, contentTypeFilter]);
@@ -3299,7 +3301,7 @@ function ProductionDetailModal({ group, pageColors, readOnly, canMarkPosted, csR
 
       {/* Video format */}
       <div>
-        <label style={ls}>{(src.content_type || "").trim().toLowerCase() === "carousel" ? "Format" : "Video format"}</label>
+        <label style={ls}>{["carousel", "static"].includes((src.content_type || "").trim().toLowerCase()) ? "Format" : "Video format"}</label>
         {readOnly ? (
           <span style={{ fontSize: 13, color: src.video_format ? "#50E0B0" : "var(--pb-faint)" }}>{src.video_format || "—"}</span>
         ) : (
@@ -4474,21 +4476,35 @@ function ideaIsCarousel(idea: any): boolean {
   return String(idea?.content_type || "").trim().toLowerCase() === "carousel";
 }
 
-function matchesKindFilter(idea: any, kinds: { reel: boolean; carousel: boolean }): boolean {
-  if (kinds.reel && kinds.carousel) return true;
-  if (!kinds.reel && !kinds.carousel) return true;
-  return ideaIsCarousel(idea) ? kinds.carousel : kinds.reel;
+function ideaIsStatic(idea: any): boolean {
+  return String(idea?.content_type || "").trim().toLowerCase() === "static";
+}
+
+function ideaKind(idea: any): "reel" | "carousel" | "static" {
+  if (ideaIsCarousel(idea)) return "carousel";
+  if (ideaIsStatic(idea)) return "static";
+  return "reel";
+}
+
+const KIND_BADGE: Record<"reel" | "carousel" | "static", { label: string; color: string }> = {
+  reel: { label: "Reel", color: "#93c5fd" },
+  carousel: { label: "Carousel", color: "#f9a8d4" },
+  static: { label: "Static", color: "#F0C060" },
+};
+
+function matchesKindFilter(idea: any, kinds: { reel: boolean; carousel: boolean; static: boolean }): boolean {
+  if (!kinds.reel && !kinds.carousel && !kinds.static) return true;
+  return kinds[ideaKind(idea)];
 }
 
 function ContentTypeBadge({ idea }: { idea: any }) {
-  const carousel = ideaIsCarousel(idea);
+  const { label, color } = KIND_BADGE[ideaKind(idea)];
   return (
     <span style={{
       fontSize: 9.5, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase",
-      color: carousel ? "#f9a8d4" : "#93c5fd",
-      background: carousel ? "#f9a8d422" : "#93c5fd22",
+      color, background: `${color}22`,
       borderRadius: 5, padding: "2px 6px",
-    }}>{carousel ? "Carousel" : "Reel"}</span>
+    }}>{label}</span>
   );
 }
 
@@ -4601,7 +4617,7 @@ function matchesWrittenBy(idea: any, q: string): boolean {
 function FrontseatTab({ readOnly, formatFilter = "all", pageFilter = "all", search = "", writtenBy = "", view = "kanban", boardDay, kindFilter }: {
   readOnly?: boolean; formatFilter?: string; pageFilter?: string; search?: string; writtenBy?: string; view?: "kanban" | "table";
   boardDay: string;
-  kindFilter: { reel: boolean; carousel: boolean };
+  kindFilter: { reel: boolean; carousel: boolean; static: boolean };
 }) {
   const { pages: allPlaybookPages, pageColors, pageShort, api, id: playbookId } = usePlaybook();
   const playbookPages = isAllPages(pageFilter)
@@ -5350,7 +5366,7 @@ function ExperimentXShell() {
   // News / A-roll filter — Today's Board only, so it sits beside the page filter
   // but renders on the frontseat tab alone.
   const [formatFilter, setFormatFilter] = useState<string>("all");
-  const [kindFilter, setKindFilter] = useState({ reel: false, carousel: false });
+  const [kindFilter, setKindFilter] = useState({ reel: false, carousel: false, static: false });
   const [search, setSearch] = useState("");
   const [csFilter, setCsFilter] = useState(() => {
     try { return localStorage.getItem(CS_WRITTEN_BY_KEY) ?? ""; }
@@ -5559,7 +5575,7 @@ function ExperimentXShell() {
         )}
         {tab === "frontseat" && (
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            {([["reel", "Reel"], ["carousel", "Carousel"]] as const).map(([key, label]) => {
+            {([["reel", "Reel"], ["carousel", "Carousel"], ["static", "Static"]] as const).map(([key, label]) => {
               const on = kindFilter[key];
               return (
                 <button

@@ -63,10 +63,23 @@ function sumLikes(idea: any): number {
 function isCarousel(idea: any): boolean {
   return String(idea.content_type || "").trim().toLowerCase() === "carousel";
 }
-function matchesKindFilter(idea: any, kinds: { reel: boolean; carousel: boolean }): boolean {
-  if (kinds.reel && kinds.carousel) return true;
-  if (!kinds.reel && !kinds.carousel) return true;
-  return isCarousel(idea) ? kinds.carousel : kinds.reel;
+function isStatic(idea: any): boolean {
+  return String(idea.content_type || "").trim().toLowerCase() === "static";
+}
+function contentKind(idea: any): "reel" | "carousel" | "static" {
+  if (isCarousel(idea)) return "carousel";
+  if (isStatic(idea)) return "static";
+  return "reel";
+}
+// Statics are judged the same way as carousels — likes, not views.
+function usesLikesMetric(idea: any): boolean {
+  return isCarousel(idea) || isStatic(idea);
+}
+const KIND_LABEL: Record<"reel" | "carousel" | "static", string> = { reel: "Reel", carousel: "Carousel", static: "Static" };
+const KIND_ACCENT: Record<"reel" | "carousel" | "static", string> = { reel: "#93c5fd", carousel: "#f9a8d4", static: "#F0C060" };
+function matchesKindFilter(idea: any, kinds: { reel: boolean; carousel: boolean; static: boolean }): boolean {
+  if (!kinds.reel && !kinds.carousel && !kinds.static) return true;
+  return kinds[contentKind(idea)];
 }
 function pagesOf(idea: any): string[] {
   return String(idea.page_handle || "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -264,11 +277,11 @@ function copiesMatchingIdea(idea: any, copies: any[]): any[] {
   const ids = new Set((idea._ids?.length ? idea._ids : [idea.id]).map(String));
   const topic = String(idea.topic || "").trim().toLowerCase();
   const pb = idea._playbook;
-  const carousel = isCarousel(idea);
+  const kind = contentKind(idea);
   return copies.filter((r) => {
     if (r._playbook !== pb) return false;
     if (ids.has(String(r.source_pool_id)) || (r.origin_idea_id && ids.has(String(r.origin_idea_id)))) return true;
-    return !!topic && String(r.topic || "").trim().toLowerCase() === topic && isCarousel(r) === carousel;
+    return !!topic && String(r.topic || "").trim().toLowerCase() === topic && contentKind(r) === kind;
   });
 }
 
@@ -316,7 +329,7 @@ function mergeIdeasByTopic(list: any[]): any[] {
   for (const idea of list) {
     const topic = String(idea.topic || "").trim();
     // Untitled ideas stay separate (keyed by id) so they don't all collapse together.
-    const kind = isCarousel(idea) ? "carousel" : "reel";
+    const kind = contentKind(idea);
     const key = topic ? `${idea._playbook}::${topic.toLowerCase()}::${kind}` : `${idea._playbook}::__${idea.id}`;
     let g = map.get(key);
     if (!g) {
@@ -366,6 +379,11 @@ function fmtViews(n: number): string {
   if (n >= 1_000) return `${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}K`;
   return String(n);
 }
+function joinAnd(items: string[]): string {
+  if (items.length <= 1) return items[0] || "";
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+}
 function prettyDate(s: string): string {
   if (s === TODAY) return "Today";
   if (s === YESTERDAY) return "Yesterday";
@@ -411,13 +429,15 @@ function tallyReviews(list: any[]): { approved: number; rejected: number; pendin
   }
   return { approved, rejected, pending };
 }
-function tallyByType(list: any[]): { reels: number; carousels: number } {
-  let reels = 0, carousels = 0;
+function tallyByType(list: any[]): { reels: number; carousels: number; statics: number } {
+  let reels = 0, carousels = 0, statics = 0;
   for (const idea of list) {
-    if (isCarousel(idea)) carousels += 1;
+    const kind = contentKind(idea);
+    if (kind === "carousel") carousels += 1;
+    else if (kind === "static") statics += 1;
     else reels += 1;
   }
-  return { reels, carousels };
+  return { reels, carousels, statics };
 }
 type PersonTally = { name: string; added: number; approved: number; rejected: number; pending: number };
 function tallyByPerson(list: any[]): PersonTally[] {
@@ -471,7 +491,7 @@ export default function IdeaEngineGallery() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [scoreScope, setScoreScope] = useState<"day" | "all">("day");
   const [search, setSearch] = useState("");
-  const [kindFilter, setKindFilter] = useState({ reel: false, carousel: false });
+  const [kindFilter, setKindFilter] = useState({ reel: false, carousel: false, static: false });
   const [showAdd, setShowAdd] = useState(false);
   const [editIdea, setEditIdea] = useState<Idea | null>(null);
 
@@ -581,7 +601,7 @@ export default function IdeaEngineGallery() {
   });
   const top6 = useMemo(() => {
     return mergeIdeasByTopic(topCandidates)
-      .map((idea) => ({ idea, score: isCarousel(idea) ? sumLikes(idea) / 1000 : sumViews(idea) / 200000 }))
+      .map((idea) => ({ idea, score: usesLikesMetric(idea) ? sumLikes(idea) / 1000 : sumViews(idea) / 200000 }))
       .filter((x) => x.score >= 1)
       .sort((a, b) => b.score - a.score)
       .slice(0, 6);
@@ -737,7 +757,7 @@ export default function IdeaEngineGallery() {
             Top 6 · best performing ideas
           </span>
           <span style={{ fontSize: 11, color: "var(--f-faint)", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
-            — posted reels ≥200K views, carousels ≥1K likes
+            — posted reels ≥200K views, carousels/statics ≥1K likes
           </span>
         </div>
         {top6.length ? (
@@ -753,7 +773,7 @@ export default function IdeaEngineGallery() {
           </div>
         ) : (
           <div style={{ padding: "16px 18px", borderRadius: 14, border: "1px dashed var(--f-line)", fontSize: 12.5, color: "var(--f-faint)" }}>
-            No ideas have crossed the bar yet — posted reels need 200K+ views, posted carousels need 1K+ likes.
+            No ideas have crossed the bar yet — posted reels need 200K+ views, posted carousels/statics need 1K+ likes.
           </div>
         )}
       </div>
@@ -769,7 +789,7 @@ export default function IdeaEngineGallery() {
           onOpenChange={setPickerOpen}
           onChange={setDayDate}
         />
-        {([["reel", "Reel"], ["carousel", "Carousel"]] as const).map(([key, label]) => {
+        {([["reel", "Reel"], ["carousel", "Carousel"], ["static", "Static"]] as const).map(([key, label]) => {
           const on = kindFilter[key];
           return (
             <DatePill
@@ -909,8 +929,9 @@ function IdeaLinks({ idea, full }: { idea: any; full: boolean }) {
 // actions, just enough to identify the idea and jump into it.
 function Top6Card({ idea, rank, onOpen }: { idea: Idea; rank: number; onOpen: () => void }) {
   const pb = idea._playbook as PlaybookId;
-  const carousel = isCarousel(idea);
-  const metricValue = carousel ? sumLikes(idea) : sumViews(idea);
+  const likesBased = usesLikesMetric(idea);
+  const metricValue = likesBased ? sumLikes(idea) : sumViews(idea);
+  const kindLabel = KIND_LABEL[contentKind(idea)];
   return (
     <button
       type="button"
@@ -935,10 +956,10 @@ function Top6Card({ idea, rank, onOpen }: { idea: Idea; rank: number; onOpen: ()
         {idea.topic || "Untitled idea"}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, color: "#4ade80" }}>
-        {carousel ? <Heart size={13} strokeWidth={2} /> : <Eye size={13} strokeWidth={2} />}
-        {fmtViews(metricValue)} {carousel ? "likes" : "views"}
+        {likesBased ? <Heart size={13} strokeWidth={2} /> : <Eye size={13} strokeWidth={2} />}
+        {fmtViews(metricValue)} {likesBased ? "likes" : "views"}
         <span style={{ fontSize: 10, fontWeight: 600, color: "var(--f-faint)", textTransform: "uppercase", letterSpacing: ".05em" }}>
-          {carousel ? "Carousel" : "Reel"}
+          {kindLabel}
         </span>
       </div>
     </button>
@@ -994,11 +1015,11 @@ function IdeaCard({ idea, sentTo, sending, onSend, onOpen, canEdit, canDelete, d
           </span>
           <span style={{
             fontSize: 10, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", borderRadius: 6, padding: "2px 7px",
-            color: isCarousel(idea) ? "#f9a8d4" : "#93c5fd",
-            border: isCarousel(idea) ? "1px solid rgba(249,168,212,.4)" : "1px solid rgba(147,197,253,.4)",
-            background: isCarousel(idea) ? "rgba(249,168,212,.12)" : "rgba(147,197,253,.12)",
+            color: KIND_ACCENT[contentKind(idea)],
+            border: `1px solid ${KIND_ACCENT[contentKind(idea)]}66`,
+            background: `${KIND_ACCENT[contentKind(idea)]}1f`,
           }}>
-            {isCarousel(idea) ? "Carousel" : "Reel"}
+            {KIND_LABEL[contentKind(idea)]}
           </span>
           {(idea.video_format || idea.content_format) ? (
             <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: ".02em", borderRadius: 6, padding: "2px 7px", color: "var(--f-dim)", border: "1px solid var(--f-line)" }}>
@@ -1295,9 +1316,10 @@ function AddIdeaModal({ author, onClose, onCreated }: {
   const [topic, setTopic] = useState("");
   const [refLink, setRefLink] = useState("");
   const [timestamps, setTimestamps] = useState("");
-  const [kinds, setKinds] = useState({ reel: false, carousel: false });
+  const [kinds, setKinds] = useState({ reel: false, carousel: false, static: false });
   const [reelFormat, setReelFormat] = useState("");
   const [carouselFormat, setCarouselFormat] = useState("");
+  const [staticFormat, setStaticFormat] = useState("");
   const [day, setDay] = useState(todayYmd());
   const [pageHooks, setPageHooks] = useState<PageHook[]>([{ page: "", hook: "" }]);
   const [body, setBody] = useState("");
@@ -1307,8 +1329,8 @@ function AddIdeaModal({ author, onClose, onCreated }: {
 
   const submit = async () => {
     if (!topic.trim()) { toast.error("Give the idea a name."); return; }
-    const types = [kinds.reel && "Reel", kinds.carousel && "Carousel"].filter(Boolean) as string[];
-    if (!types.length) { toast.error("Pick Reel, Carousel, or both."); return; }
+    const types = [kinds.reel && "Reel", kinds.carousel && "Carousel", kinds.static && "Static"].filter(Boolean) as string[];
+    if (!types.length) { toast.error("Pick Reel, Carousel, Static, or a mix."); return; }
     if (pageHookMissingPage(pageHooks)) { toast.error("Pick a page next to each hook."); return; }
     setBusy(true);
     try {
@@ -1316,12 +1338,12 @@ function AddIdeaModal({ author, onClose, onCreated }: {
       const ytLink = isYouTube(link);
       const savedDay = day || todayYmd();
       const hooks = serializePageHooks(pageHooks) || undefined;
-      // One row per type so Content Distribution can treat reel vs carousel separately.
+      // One row per type so Content Distribution can treat each format separately.
       await Promise.all(types.map((content_type) => PB_API.bpb.createIdea({
         page_handle: "",
         topic: topic.trim(),
         content_type,
-        video_format: content_type === "Carousel" ? (carouselFormat || undefined) : (reelFormat || undefined),
+        video_format: content_type === "Carousel" ? (carouselFormat || undefined) : content_type === "Static" ? (staticFormat || undefined) : (reelFormat || undefined),
         views: 0,
         day_date: savedDay,
         created_by: author || undefined,
@@ -1329,12 +1351,12 @@ function AddIdeaModal({ author, onClose, onCreated }: {
         yt_url: ytLink ? link : undefined,
         yt_timestamps: timestamps.trim() || undefined,
         hook_variations: hooks,
-        script: content_type === "Carousel" ? (body.trim() || undefined) : undefined,
+        script: content_type === "Carousel" || content_type === "Static" ? (body.trim() || undefined) : undefined,
       })));
       const both = types.length > 1;
       toast.success(
         both
-          ? (savedDay === todayYmd() ? "Reel and Carousel added." : `Reel and Carousel added for ${prettyDate(savedDay)}.`)
+          ? (savedDay === todayYmd() ? `${joinAnd(types)} added.` : `${joinAnd(types)} added for ${prettyDate(savedDay)}.`)
           : (savedDay === todayYmd() ? "Idea added." : `Idea added for ${prettyDate(savedDay)}.`),
       );
       onCreated(savedDay);
@@ -1368,7 +1390,7 @@ function AddIdeaModal({ author, onClose, onCreated }: {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <Field label="Content type">
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {([["reel", "Reel"], ["carousel", "Carousel"]] as const).map(([key, label]) => {
+                {([["reel", "Reel"], ["carousel", "Carousel"], ["static", "Static"]] as const).map(([key, label]) => {
                   const on = kinds[key];
                   return (
                     <button
@@ -1390,7 +1412,7 @@ function AddIdeaModal({ author, onClose, onCreated }: {
                 })}
               </div>
               <span style={{ display: "block", marginTop: 6, fontSize: 11, color: "var(--f-faint)", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
-                Pick one or both.
+                Pick one or more.
               </span>
             </Field>
             <Field label="Date">
@@ -1418,20 +1440,25 @@ function AddIdeaModal({ author, onClose, onCreated }: {
               <FormatPills options={CAROUSEL_FORMATS} value={carouselFormat} onChange={setCarouselFormat} />
             </Field>
           )}
+          {kinds.static && (
+            <Field label="Format">
+              <FormatPills options={CAROUSEL_FORMATS} value={staticFormat} onChange={setStaticFormat} />
+            </Field>
+          )}
 
           {/* Hook + page — each row is one hook going to one page. Approve
               pushes those pages into Content Distribution and Production. */}
-          {(kinds.reel || kinds.carousel) && (
+          {(kinds.reel || kinds.carousel || kinds.static) && (
             <Field label="Hooks & pages">
               <HookPageRows rows={pageHooks} onChange={setPageHooks} playbook="bpb" />
             </Field>
           )}
-          {kinds.carousel && (
+          {(kinds.carousel || kinds.static) && (
             <Field label="Body">
               <textarea
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
-                placeholder="Carousel body / slide text"
+                placeholder="Carousel / static body text"
                 className="fglass-input"
                 rows={4}
                 style={{ ...modalInput, resize: "vertical", minHeight: 88 }}
@@ -1443,11 +1470,11 @@ function AddIdeaModal({ author, onClose, onCreated }: {
         <div style={{ display: "flex", gap: 8, marginTop: 22 }}>
           <button
             type="button"
-            disabled={busy || (!kinds.reel && !kinds.carousel)}
+            disabled={busy || (!kinds.reel && !kinds.carousel && !kinds.static)}
             onClick={submit}
-            style={{ ...primaryBtn, opacity: busy || (!kinds.reel && !kinds.carousel) ? 0.5 : 1 }}
+            style={{ ...primaryBtn, opacity: busy || (!kinds.reel && !kinds.carousel && !kinds.static) ? 0.5 : 1 }}
           >
-            <Check size={14} strokeWidth={2} /> {busy ? "Adding…" : kinds.reel && kinds.carousel ? "Add both" : "Add idea"}
+            <Check size={14} strokeWidth={2} /> {busy ? "Adding…" : [kinds.reel, kinds.carousel, kinds.static].filter(Boolean).length > 1 ? "Add all" : "Add idea"}
           </button>
           <button type="button" disabled={busy} onClick={onClose} style={{ ...ghostBtnSm, padding: "9px 14px" }}>Cancel</button>
         </div>
@@ -1487,9 +1514,9 @@ function EditIdeaModal({ idea, onClose, onSaved }: {
   const [busy, setBusy] = useState(false);
 
   const yt = isYouTube(refLink);
-  // Carousels are judged by likes, not views — follows whatever content type is
-  // currently selected in this edit, so switching Reel↔Carousel here swaps the field.
-  const editingCarousel = contentType.trim().toLowerCase() === "carousel";
+  // Carousels and statics are judged by likes, not views — follows whatever content
+  // type is currently selected in this edit, so switching type here swaps the field.
+  const editingLikesBased = ["carousel", "static"].includes(contentType.trim().toLowerCase());
 
   const submit = async () => {
     if (!topic.trim()) { toast.error("Give the idea a name."); return; }
@@ -1508,7 +1535,7 @@ function EditIdeaModal({ idea, onClose, onSaved }: {
         yt_timestamps: timestamps.trim(),
         hook_variations: serializePageHooks(pageHooks),
       };
-      if (editingCarousel) {
+      if (editingLikesBased) {
         patch.script = body.trim();
         if (pages.length > 1) {
           const pl: Record<string, number> = {};
@@ -1561,13 +1588,14 @@ function EditIdeaModal({ idea, onClose, onSaved }: {
                 onChange={(e) => {
                   const next = e.target.value;
                   setContentType(next);
-                  const allowed = next.trim().toLowerCase() === "carousel" ? CAROUSEL_FORMATS : REEL_VIDEO_FORMATS;
+                  const nextLower = next.trim().toLowerCase();
+                  const allowed = nextLower === "carousel" || nextLower === "static" ? CAROUSEL_FORMATS : REEL_VIDEO_FORMATS;
                   if (videoFormat && !(allowed as readonly string[]).includes(videoFormat)) setVideoFormat("");
                 }}
                 className="fglass-input"
                 style={{ ...modalInput, colorScheme: "dark" }}
               >
-                {["Reel", "Carousel"].map((t) => <option key={t} value={t}>{t}</option>)}
+                {["Reel", "Carousel", "Static"].map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </Field>
             <Field label="Date">
@@ -1582,9 +1610,9 @@ function EditIdeaModal({ idea, onClose, onSaved }: {
             </Field>
           </div>
 
-          <Field label={editingCarousel ? "Format" : "Video format"}>
+          <Field label={editingLikesBased ? "Format" : "Video format"}>
             <FormatPills
-              options={editingCarousel ? CAROUSEL_FORMATS : REEL_VIDEO_FORMATS}
+              options={editingLikesBased ? CAROUSEL_FORMATS : REEL_VIDEO_FORMATS}
               value={videoFormat}
               onChange={setVideoFormat}
             />
@@ -1593,12 +1621,12 @@ function EditIdeaModal({ idea, onClose, onSaved }: {
           <Field label="Hooks & pages">
             <HookPageRows rows={pageHooks} onChange={setPageHooks} playbook={idea._playbook} />
           </Field>
-          {editingCarousel && (
+          {editingLikesBased && (
             <Field label="Body">
               <textarea
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
-                placeholder="Carousel body / slide text"
+                placeholder="Carousel / static body text"
                 className="fglass-input"
                 rows={4}
                 style={{ ...modalInput, resize: "vertical", minHeight: 88 }}
@@ -1607,15 +1635,15 @@ function EditIdeaModal({ idea, onClose, onSaved }: {
           )}
 
           {pages.length > 1 ? (
-            <Field label={editingCarousel ? "Likes by page" : "Views by page"}>
+            <Field label={editingLikesBased ? "Likes by page" : "Views by page"}>
               <div style={{ display: "grid", gap: 8 }}>
                 {pages.map((p) => (
                   <div key={p} style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <span style={{ fontSize: 12, color: "var(--f-dim)", width: 140, flexShrink: 0 }}>@{p}</span>
                     <input
                       type="text" inputMode="numeric"
-                      value={(editingCarousel ? pageLikes : pageViews)[p] || ""}
-                      onChange={(e) => (editingCarousel ? setPageLikes : setPageViews)((m) => ({ ...m, [p]: e.target.value }))}
+                      value={(editingLikesBased ? pageLikes : pageViews)[p] || ""}
+                      onChange={(e) => (editingLikesBased ? setPageLikes : setPageViews)((m) => ({ ...m, [p]: e.target.value }))}
                       placeholder="0"
                       className="fglass-input" style={modalInput}
                     />
@@ -1624,11 +1652,11 @@ function EditIdeaModal({ idea, onClose, onSaved }: {
               </div>
             </Field>
           ) : (
-            <Field label={editingCarousel ? "Likes" : "Views"}>
+            <Field label={editingLikesBased ? "Likes" : "Views"}>
               <input
                 type="text" inputMode="numeric"
-                value={editingCarousel ? likes : views}
-                onChange={(e) => (editingCarousel ? setLikes : setViews)(e.target.value)}
+                value={editingLikesBased ? likes : views}
+                onChange={(e) => (editingLikesBased ? setLikes : setViews)(e.target.value)}
                 placeholder="0"
                 className="fglass-input" style={modalInput}
               />
@@ -1780,7 +1808,7 @@ function ReviewBoard({
   onScope: (s: "day" | "all") => void;
   dayLabel: string;
   tally: { approved: number; rejected: number; pending: number };
-  typeTally: { reels: number; carousels: number };
+  typeTally: { reels: number; carousels: number; statics: number };
   people: PersonTally[];
 }) {
   const th: React.CSSProperties = { fontWeight: 500, padding: "0 12px 8px 0", borderBottom: "1px solid var(--f-line)", color: "var(--f-faint)", fontSize: 12 };
@@ -1810,6 +1838,7 @@ function ReviewBoard({
         <ReviewStat n={tally.pending} label="pending" />
         <ReviewStat n={typeTally.reels} label="reels" />
         <ReviewStat n={typeTally.carousels} label="carousels" />
+        <ReviewStat n={typeTally.statics} label="statics" />
       </div>
       {people.length > 0 && (
         <div style={{ maxHeight: 260, overflowY: "auto", maxWidth: 480 }}>
