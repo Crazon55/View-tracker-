@@ -1,0 +1,11 @@
+{
+  "short_name": "FSOS",
+  "name": "Frontseat OS",
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#1c1917",
+  "background_color": "#faf8f5"
+}

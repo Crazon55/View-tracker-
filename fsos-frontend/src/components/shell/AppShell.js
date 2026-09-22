@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { NavLink, Outlet, Navigate, useLocation, useNavigate } from "react-router-dom";
 import * as Icons from "lucide-react";
 import { useDemo } from "../../domain/store";
@@ -6,6 +6,7 @@ import { useUI } from "../idea/IdeaModalProvider";
 import { searchIdeas, notificationOpenTarget } from "../../domain/selectors";
 import { canAccessPath, canCreateIdea, homePathForUser, navItemsForUser, streamFilterForUser } from "../../domain/roles";
 import { resolveAccess, isAwaitingAccess, PREVIEW_ROLES } from "../../domain/access";
+import { NAV } from "../../domain/constants";
 import { sixDayOverdue } from "../../domain/toolSelectors";
 import { Avatar } from "../common/badges";
 import { cn } from "../../lib/utils";
@@ -257,8 +258,22 @@ function PreviewBanner() {
   );
 }
 
+const APP_NAME = "Frontseat OS";
+
+// Browser tab follows the page: "News Feed · Frontseat OS".
+function usePageTitle() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const page = pathname === "/help"
+      ? { label: "Help" }
+      : NAV.find((n) => !n.external && (n.path === "/" ? pathname === "/" : pathname === n.path || pathname.startsWith(`${n.path}/`)));
+    document.title = page ? `${page.label} · ${APP_NAME}` : APP_NAME;
+  }, [pathname]);
+}
+
 export default function AppShell() {
   const { actions } = useDemo();
+  usePageTitle();
   return (
     <div className="flex h-screen overflow-hidden bg-[#FAF8F5]">
       <Sidebar />
