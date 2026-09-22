@@ -1,0 +1,267 @@
+{
+  "project_name": "FSOS — Frontseat Creative Operations Workspace",
+  "app_type": "hybrid_fullstack",
+  "archetype": "ORGANIC & EARTHY / SWISS EDITORIAL HYBRID",
+  "design_philosophy": "A polished, calm, warm-neutral studio workspace operating system for media teams managing multi-IP Instagram content. Replaces generic CRM clutter with dense, scannable, progressive-disclosure interfaces. Prioritizes sticky matrix tables, visual calendar placement, right-hand context panels, and distinct IP brand identities.",
+  "theme": "light_warm_neutral",
+  "file_type_convention": "js",
+  "colors": {
+    "base": {
+      "app_bg": "#FAF8F5",
+      "surface_card": "#FFFFFF",
+      "surface_subtle": "#F5F2EC",
+      "surface_panel": "#EFEBE4",
+      "border_default": "#E6E1D8",
+      "border_strong": "#D1CBBF",
+      "text_primary": "#1A1917",
+      "text_secondary": "#57534E",
+      "text_muted": "#8C857B",
+      "accent_terracotta": "#C0512F"
+    },
+    "streams": {
+      "BO": {
+        "name": "Blue Ocean",
+        "short": "BO",
+        "hex": "#1D4ED8",
+        "badge": "bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100",
+        "indicator": "bg-blue-600",
+        "light_bg": "bg-blue-50/70"
+      },
+      "HPN": {
+        "name": "Happenings",
+        "short": "HPN",
+        "hex": "#D97706",
+        "badge": "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100",
+        "indicator": "bg-amber-600",
+        "light_bg": "bg-amber-50/70"
+      }
+    },
+    "ip_identities": [
+      {
+        "id": "ip-1",
+        "code": "FS-MAIN",
+        "name": "Frontseat Main",
+        "hex": "#9F1239",
+        "badge_class": "bg-rose-950 text-rose-100 border-rose-900",
+        "dot_class": "bg-rose-700"
+      },
+      {
+        "id": "ip-2",
+        "code": "BO-CULT",
+        "name": "Blue Ocean Culture",
+        "hex": "#2563EB",
+        "badge_class": "bg-blue-100 text-blue-900 border-blue-300",
+        "dot_class": "bg-blue-600"
+      },
+      {
+        "id": "ip-3",
+        "code": "BO-TECH",
+        "name": "Blue Ocean Tech",
+        "hex": "#0D9488",
+        "badge_class": "bg-teal-100 text-teal-900 border-teal-300",
+        "dot_class": "bg-teal-600"
+      },
+      {
+        "id": "ip-4",
+        "code": "HPN-DAILY",
+        "name": "Happenings Daily",
+        "hex": "#D97706",
+        "badge_class": "bg-amber-100 text-amber-900 border-amber-300",
+        "dot_class": "bg-amber-600"
+      },
+      {
+        "id": "ip-5",
+        "code": "HPN-LIFE",
+        "name": "Happenings Lifestyle",
+        "hex": "#C2410C",
+        "badge_class": "bg-orange-100 text-orange-900 border-orange-300",
+        "dot_class": "bg-orange-600"
+      },
+      {
+        "id": "ip-6",
+        "code": "FS-X",
+        "name": "Frontseat X Labs",
+        "hex": "#4F46E5",
+        "badge_class": "bg-indigo-100 text-indigo-900 border-indigo-300",
+        "dot_class": "bg-indigo-600"
+      },
+      {
+        "id": "ip-7",
+        "code": "BO-FOCUS",
+        "name": "Blue Ocean Focus",
+        "hex": "#059669",
+        "badge_class": "bg-emerald-100 text-emerald-900 border-emerald-300",
+        "dot_class": "bg-emerald-600"
+      },
+      {
+        "id": "ip-8",
+        "code": "HPN-VIBE",
+        "name": "Happenings Vibes",
+        "hex": "#7C3AED",
+        "badge_class": "bg-purple-100 text-purple-900 border-purple-300",
+        "dot_class": "bg-purple-600"
+      }
+    ],
+    "statuses": {
+      "draft": {
+        "label": "Draft",
+        "badge": "bg-stone-100 text-stone-700 border-stone-300"
+      },
+      "awaiting_approval": {
+        "label": "Awaiting Approval",
+        "badge": "bg-amber-100 text-amber-800 border-amber-300"
+      },
+      "approved_unassigned": {
+        "label": "Approved / Unassigned",
+        "badge": "bg-sky-100 text-sky-800 border-sky-300"
+      },
+      "in_production": {
+        "label": "In Production",
+        "badge": "bg-indigo-100 text-indigo-800 border-indigo-300"
+      },
+      "awaiting_review": {
+        "label": "Awaiting Review",
+        "badge": "bg-purple-100 text-purple-800 border-purple-300"
+      },
+      "changes_requested": {
+        "label": "Changes Requested",
+        "badge": "bg-rose-100 text-rose-800 border-rose-300"
+      },
+      "ready": {
+        "label": "Ready to Publish",
+        "badge": "bg-emerald-100 text-emerald-800 border-emerald-300"
+      },
+      "published": {
+        "label": "Published",
+        "badge": "bg-stone-900 text-stone-100 border-stone-800"
+      }
+    },
+    "performance_tiers": {
+      "good": "bg-emerald-50 text-emerald-800 border-emerald-200",
+      "average": "bg-amber-50 text-amber-800 border-amber-200",
+      "bad": "bg-rose-50 text-rose-800 border-rose-200"
+    }
+  },
+  "typography": {
+    "heading_font": "Georgia, Cambria, 'Times New Roman', Times, serif",
+    "body_font": "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+    "mono_font": "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+    "scale": {
+      "h1": "text-3xl lg:text-4xl font-serif font-medium tracking-tight text-stone-900",
+      "h2": "text-xl lg:text-2xl font-serif font-medium tracking-tight text-stone-900",
+      "h3": "text-lg font-sans font-semibold text-stone-900",
+      "body": "text-sm text-stone-700 leading-normal",
+      "body_dense": "text-xs text-stone-700 leading-tight",
+      "caption": "text-xs text-stone-500 font-normal",
+      "overline": "text-[11px] uppercase tracking-wider font-semibold text-stone-500 font-mono"
+    }
+  },
+  "spacing_and_layout": {
+    "sidebar_width": "w-64",
+    "context_panel_width": "w-80 lg:w-96",
+    "header_height": "h-14",
+    "grid_gap": "gap-4 lg:gap-6",
+    "container_padding": "p-4 lg:p-6",
+    "card_padding": "p-4 lg:p-5",
+    "dense_cell_padding": "px-3 py-2",
+    "sticky_table_headers": true
+  },
+  "visual_enhancers": {
+    "card_style": "bg-white border border-[#E6E1D8] shadow-[0_1px_3px_rgba(0,0,0,0.03)] rounded-lg",
+    "hover_effect": "transition-all duration-150 ease-in-out hover:border-stone-400 hover:shadow-sm",
+    "glass_panel": "backdrop-blur-md bg-white/90 border border-stone-200/80 shadow-sm",
+    "docked_panel": "bg-[#FAF8F5] border-l border-[#E6E1D8] shadow-lg",
+    "active_nav_item": "bg-[#EFEBE4] text-stone-900 font-medium border-l-4 border-stone-800"
+  },
+  "navigation_structure": [
+    {
+      "id": "command-room",
+      "label": "Command Room",
+      "icon": "LayoutDashboard",
+      "description": "Founder network posting status, performance metrics & bank horizon"
+    },
+    {
+      "id": "bo-studio",
+      "label": "BO Studio",
+      "icon": "Compass",
+      "description": "Blue Ocean stream idea bank & editorial workflows"
+    },
+    {
+      "id": "hpn-desk",
+      "label": "HPN Desk",
+      "icon": "Flame",
+      "description": "Happenings stream rapid trend desk & fast-track content"
+    },
+    {
+      "id": "production",
+      "label": "Production",
+      "icon": "Clapperboard",
+      "description": "Stage board, task matrix, workload allocation & My Work view"
+    },
+    {
+      "id": "distribution",
+      "label": "Distribution",
+      "icon": "CalendarDays",
+      "description": "Idea matrix, network calendar, bulk placement & publishing board"
+    },
+    {
+      "id": "performance",
+      "label": "Performance",
+      "icon": "BarChart3",
+      "description": "Inline view capture, IP/category analysis & 6-day cycle cohort analysis"
+    },
+    {
+      "id": "settings",
+      "label": "Settings",
+      "icon": "Settings",
+      "description": "IP profile management, team roles, formats & threshold config"
+    }
+  ],
+  "image_urls": {
+    "studio_photos": [
+      {
+        "url": "https://images.unsplash.com/photo-1758613655198-4ec323049b01?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NDh8MHwxfHNlYXJjaHwzfHxjcmVhdGl2ZSUyMHN0dWRpbyUyMGVkaXRvcmlhbCUyMGNvbnRlbnQlMjBpbnN0YWdyYW0lMjBtZWRpYSUyMHBob3RvfGVufDB8fHx8MTc4OTg0NDg3N3ww&ixlib=rb-4.1.0&q=85",
+        "description": "Fashion shoot studio setup preview"
+      },
+      {
+        "url": "https://images.pexels.com/photos/30173128/pexels-photo-30173128.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Minimalist coffee carousel shoot layout"
+      },
+      {
+        "url": "https://images.pexels.com/photos/15525846/pexels-photo-15525846.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Instagram mobile UI content preview"
+      }
+    ],
+    "avatars": [
+      {
+        "name": "Maya Lin (Founder/Lead)",
+        "url": "https://images.unsplash.com/photo-1762504013886-cfe75393f4bf?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2MzR8MHwxfHNlYXJjaHw0fHxwb3R0cmFpdCUyMHN0dWRpbyUyMHBlcnNvbiUyMGZhY2UlMjBjcmVhdGl2ZSUyMHByb2ZpbGV8ZW58MHx8fHwxNzg5ODQ0ODg4fDA&ixlib=rb-4.1.0&q=85"
+      },
+      {
+        "name": "Alex Chen (BO Lead)",
+        "url": "https://images.unsplash.com/photo-1775218889106-fd9d61b41f92?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2MzR8MHwxfHNlYXJjaHxfHxwb3R0cmFpdCUyMHN0dWRpbyUyMHBlcnNvbiUyMGZhY2UlMjBjcmVhdGl2ZSUyMHByb2ZpbGV8ZW58MHx8fHwxNzg5ODQ0ODg4fDA&ixlib=rb-4.1.0&q=85"
+      },
+      {
+        "name": "Marcus Vance (HPN Lead)",
+        "url": "https://images.unsplash.com/photo-1761882265757-c848f377c87d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2MzR8MHwxfHNlYXJjaHwyfHxwb3R0cmFpdCUyMHN0dWRpbyUyMHBlcnNvbiUyMGZhY2UlMjBjcmVhdGl2ZSUyMHByb2ZpbGV8ZW58MHx8fHwxNzg5ODQ0ODg4fDA&ixlib=rb-4.1.0&q=85"
+      }
+    ]
+  },
+  "instructions_to_main_agent": {
+    "header_and_navigation": "Render a sticky top bar (height h-14) with global search, persistent role/demo switcher ('Founder', 'BO Producer', 'HPN Editor', 'Distribution Manager'), stream toggle pill (All / BO / HPN), notification count indicator, and quick '+ Create Idea' CTA. Sidebar must be clear with 7 distinct nav routes and data-testid attributes.",
+    "data_testid_requirement": "Every interactive button, input, tab, select, row, cell, and card MUST have a explicit data-testid attribute in kebab-case (e.g. data-testid='nav-command-room', data-testid='idea-card-brief-tab', data-testid='matrix-cell-hpn-mon').",
+    "matrix_and_calendar": "Implement sticky header rows and sticky first columns for matrix and network calendar. Never horizontal-scroll the whole page; keep internal scroll containers clean with overflow-x-auto. Use color badges for IPs and clear state badges for statuses. Support click to open the right persistent context side panel.",
+    "context_side_panel": "The persistent right-hand drawer (w-80 lg:w-96) shows the active idea/cell details with tabbed inspection (Brief, Page Versions, Anchored Comments with replies, Distribution placement). Ensure top overlay backgrounds are semi-opaque/blurred and NEVER fully transparent.",
+    "idea_modal_progressive_disclosure": "Rich Idea Card modal supports 6 tabs: Brief, Page Versions (per-IP hook & caption variations), Production & Review (slide editor for Carousels / Reel preview), Distribution, Performance, Activity.",
+    "command_room": "Show 4 core cards: (1) Network Posting-Status matrix (required vs planned vs confirmed), (2) Yesterday's Performance breakdown (Good/Average/Bad with metrics), (3) 6-Day Performance Cycle cohort trend graph, (4) BO Bank Health & Calendar Horizon indicator cards."
+  },
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients.",
+    "Avoid generic centered layouts and uniform full-screen gradients.",
+    "You MUST NOT apply universal transition like transition: all. Always specify transition-colors, transition-opacity, or transition-transform.",
+    "You MUST NOT center align the app container. Maintain clean left-aligned studio hierarchy.",
+    "NEVER use generic emoji characters like 🤖🧠💭💡🔮🎯 for UI icons. Use Lucide icons or SVG vectors exclusively.",
+    "All interactive elements MUST include data-testid attributes for testing.",
+    "Ensure header background is non-transparent (backdrop-blur-md bg-white/90 or solid bg-[#FAF8F5]) so elements behind it never clash."
+  ]
+}
