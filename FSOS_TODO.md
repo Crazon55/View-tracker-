@@ -25,8 +25,8 @@ Tick items off as they're done (`[x]`). **Owner:** 🧑 you (needs the Supabase 
 
 ## 1. Load the database
 
-- [ ] 🤖 Copy `supabase/import/out/run_in_supabase.sql` to the clipboard.
-- [ ] 🧑 Supabase → project `huyylvmlwpphuolpckxw` → **SQL Editor → New query** → paste → **Run**. It should end in "Success".
+- [x] 🤖 Copy the setup SQL to the clipboard. (23 Sept: the schema had already been run, so `out/run_remaining.sql` — migration 2 + data — was used instead.)
+- [x] 🧑 Supabase → project `huyylvmlwpphuolpckxw` → **SQL Editor → New query** → paste → **Run**. Done 23 Sept: finished with `setval 55`, the last statement, so the import completed.
 - [ ] 🧑 **Table Editor** check. `people` = 25, `ips` = 48, `tickets` = 32, `six_day_entries` = 407 (more if step 0 picked up new data).
 - [ ] 🤖 Spot-check with the service key: roles per person, 13 active IPs, the next ticket number continues after the highest imported one (#56 today).
 

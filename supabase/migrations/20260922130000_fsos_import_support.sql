@@ -7,7 +7,7 @@
 
 drop table if exists growth_followers;
 
-create table growth_monthly (
+create table if not exists growth_monthly (
   month            date not null check (extract(day from month) = 1),
   ip_id            uuid not null references ips (id) on delete cascade,
   views            bigint,             -- null = use 6-Day cycle sums for this month
