@@ -16,6 +16,21 @@ Tick items off as they're done (`[x]`). **Owner:** 🧑 you (needs the Supabase 
 
 ---
 
+## Where we are (23 Sept, end of day)
+
+Steps 0–3 done. The API is real and tested; the frontend still runs on demo data.
+
+**Next up:** step 4 (login) — it blocks every frontend item below it.
+**Blocked on you:** Google provider in Supabase (step 4), and the drop-tickets SQL (step 1).
+
+Running locally: `fsos-frontend` on :3000 (`npx craco start`), `fsos-backend` on :8000
+(`python -m uvicorn app.main:app --port 8000`, needs `FSOS_DEV_LOGIN=true` until login exists).
+Tests: `CI=true npx craco test --watchAll=false` (11) and `python fsos-backend/tests/test_people_api.py` (39).
+
+Latest commits on `fsos`: `4e3dbc8` remove tickets · `e4672c4` privilege-escalation fix · `5e8831a` the API.
+
+---
+
 ## 0. Before we start
 
 - [x] 🧑 **Confirm which old database is production.** Answered 23 Sept: View-tracker uses **both**. `lzeinlserdexophlmqsh` holds all the data (people, pages, tickets, 6-Day) and is what the import reads; `fxsfhooszmzpmwcaclsd` has no data tables and is used **only for Google login**. FSOS gets its own login on the new project, and people are matched by email.
@@ -27,8 +42,10 @@ Tick items off as they're done (`[x]`). **Owner:** 🧑 you (needs the Supabase 
 
 - [x] 🤖 Copy the setup SQL to the clipboard. (23 Sept: the schema had already been run, so `out/run_remaining.sql` — migration 2 + data — was used instead.)
 - [x] 🧑 Supabase → project `huyylvmlwpphuolpckxw` → **SQL Editor → New query** → paste → **Run**. Done 23 Sept: finished with `setval 55`, the last statement, so the import completed.
-- [ ] 🧑 **Table Editor** check. `people` = 25, `ips` = 48, `tickets` = 32, `six_day_entries` = 407 (more if step 0 picked up new data).
-- [x] 🤖 Spot-check with the service key. 23 Sept: 25 people (CS 6, Editor 5, Designer 3, COC 2, COA 2, COA+Founder/Admin 1, Short-form Lead 1, 5 pending), 48 IPs / 13 active, 407 six-day entries, 249 top content, 44 growth rows, 32 tickets with #55 the highest, 5 imported person overrides.
+- [x] 🤖 **Row counts checked 23 Sept.** With data: `people` 26, `ips` 48, `six_day_entries` 407, `six_day_top_content` 249, `growth_monthly` 44, `access_person_overrides` 5, `news_feedback` 5, `news_saved` 3, `app_settings` 1. The other 14 tables are empty because they belong to step 6.
+- [ ] 🧑 **Run the drop-tickets SQL.** `supabase/migrations/20260923120000_drop_tickets.sql` → SQL Editor on `huyylvmlwpphuolpckxw`. The only irreversible step of the tickets removal; the 32 rows stay in the old project regardless.
+- [ ] 🧑 **Decide on `krishna@owledmedia.com`** — a pending row with no roles, created 23 Sept by a wrong-email API test of mine (the real one is `krishna.koushik@`). Harmless; delete it or leave it.
+- [x] 🤖 Spot-check with the service key. 23 Sept: 25 people (CS 6, Editor 5, Designer 3, COC 2, COA 2, COA+Founder/Admin 1, Short-form Lead 1, 5 pending), 48 IPs / 13 active, 407 six-day entries, 249 top content, 44 growth rows, 5 imported person overrides.
 
 ## 2. API keys and environment
 
@@ -43,6 +60,10 @@ Tick items off as they're done (`[x]`). **Owner:** 🧑 you (needs the Supabase 
 - [x] 🤖 Auth: the session token is verified with Supabase, the person is matched by email (new emails become pending), roles and access resolved. `FSOS_DEV_LOGIN` allows a dev header locally until Google sign-in exists.
 - [x] 🤖 Server-side access checks in `app/access.py` (mirrors the frontend rules); every route calls `require(...)`. 39 API tests pass.
 - [x] 🤖 No privilege escalation: you can't grant access above your own, only a Founder/Admin grants that role, and the last one can't be removed. Before this any COA could have promoted themselves.
+- [ ] 🤖 **Test that `app/access.py` and `access.js` can't drift.** They're the same rules written twice; only a comment holds them together today. Worth doing before the feature routers land.
+- [ ] 🤖 **Refuse to start if `FSOS_DEV_LOGIN` is on with a non-localhost CORS origin.** It accepts an email header instead of a token — a total bypass if it ever ships.
+- [ ] 🤖 Convert the test script to pytest. Fine at 39 checks, awkward at 300.
+- [ ] 🤖 Rate-limit `/api/me` (it hits Supabase auth on every cold token).
 
 ## 4. Login
 
@@ -55,7 +76,7 @@ Tick items off as they're done (`[x]`). **Owner:** 🧑 you (needs the Supabase 
 
 ## 5. Connect the added features to real data
 
-**Tickets was removed on 23 Sept** — all 32 were resolved, the last on 8 Aug, and nobody was using it. They were Pintu bug reports, not FSOS workflow. Cloudinary went with it, so no Cloudinary keys are needed. `supabase/migrations/20260923120000_drop_tickets.sql` drops the table; the rows stay in the old project either way.
+**Tickets was removed on 23 Sept** — all 32 were resolved, the last on 8 Aug, and nobody was using it. They were Pintu bug reports, not FSOS workflow. Cloudinary went with it, so no Cloudinary keys are needed. The code is gone as of `4e3dbc8`; the table itself is dropped by the SQL in step 1.
 
 Each item ends with "works in the browser against the new database", checked by both of us.
 
@@ -63,7 +84,7 @@ Each item ends with "works in the browser against the new database", checked by 
 - [x] 🤖 API: list people, update roles and person access, role-default overrides, add member, remove access. Self-lockout and Founder/Admin are protected.
 - [ ] 🤖 Frontend: hide actions the API would refuse (granting above your own access, the Founder/Admin role for non-founders) so nobody meets a dead button.
 - [ ] 🤖 Frontend: Users & Roles page and sidebar gating read from the API.
-- [ ] 🧑 Check: all 25 people show with the right roles. Changing someone's access changes their sidebar after they reload.
+- [ ] 🧑 Check: all 26 people show with the right roles. Changing someone's access changes their sidebar after they reload.
 
 ### 5b. 6-Day Tracker
 - [ ] 🤖 API: month view (cycles, entries, topline), upsert an entry, topline add/edit/delete, month-end actuals, 6-Day assignee setting.
