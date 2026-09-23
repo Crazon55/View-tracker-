@@ -71,6 +71,7 @@ function diffFrom(base, matrix) {
 
 function PeopleAccess({ editable }) {
   const { db, actions, actingUser } = useWorkspace();
+  const { canPreview, setPreview } = useAccess();
   const [roleDraft, setRoleDraft] = useState({});
   const [matrixDraft, setMatrixDraft] = useState({});
   const [open, setOpen] = useState(null); // `${id}:roles` | `${id}:access`
