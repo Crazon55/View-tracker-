@@ -18,10 +18,10 @@ Tick items off as they're done (`[x]`). **Owner:** 🧑 you (needs the Supabase 
 
 ## 0. Before we start
 
-- [ ] 🧑 **Confirm which old database is production.** The backend `.env` uses `lzeinlserdexophlmqsh`, which has the real data. The Cloud Run frontend Dockerfile points at `fxsfhooszmzpmwcaclsd`. Open both dashboards and check which one has recent tickets or 6-Day entries. The import only reads from `lzei…`.
-- [ ] 🤖 Re-run the export so the import includes anything added in snoboard since 22 Sept:
+- [x] 🧑 **Confirm which old database is production.** Answered 23 Sept: View-tracker uses **both**. `lzeinlserdexophlmqsh` holds all the data (people, pages, tickets, 6-Day) and is what the import reads; `fxsfhooszmzpmwcaclsd` has no data tables and is used **only for Google login**. FSOS gets its own login on the new project, and people are matched by email.
+- [x] 🤖 Re-run the export so the import includes anything added in snoboard since 22 Sept:
       `python supabase/import/export_from_snoboard.py`, then rebuild `out/run_in_supabase.sql`.
-- [ ] 🤖 Start the dev server from `fsos-frontend/` (`npm start` → http://localhost:3000).
+- [x] 🤖 Start the dev server from `fsos-frontend/` (`npm start` → http://localhost:3000).
 
 ## 1. Load the database
 
