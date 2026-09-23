@@ -57,7 +57,7 @@ GROUP_OF = {h: g for g, hs in TRACKER_GROUPS.items() for h in hs}
 
 # FSOS role defaults — keep in sync with fsos-frontend/src/domain/access.js.
 AREAS = ["command_room", "bo_studio", "hpn_desk", "production", "distribution", "performance",
-         "news", "tickets", "pintu", "six_day", "growth", "users_roles", "settings"]
+         "news", "pintu", "six_day", "growth", "users_roles", "settings"]
 WS = {"command_room": "edit", "bo_studio": "edit", "hpn_desk": "edit", "production": "edit", "distribution": "edit", "performance": "edit"}
 
 
@@ -68,19 +68,19 @@ def _m(**levels):
 ROLE_DEFAULTS = {
     "Founder/Admin": {a: "edit" for a in AREAS},
     "COA": {a: "edit" for a in AREAS},
-    "Short-form Lead": _m(**WS, news="edit", tickets="edit", pintu="view", six_day="edit", growth="view"),
+    "Short-form Lead": _m(**WS, news="edit", pintu="view", six_day="edit", growth="view"),
     "CS": _m(command_room="edit", bo_studio="edit", hpn_desk="edit", production="edit", performance="edit",
-             news="edit", tickets="edit", pintu="view", six_day="view", growth="view"),
-    "Designer": _m(production="edit", tickets="edit", pintu="view", growth="view"),
-    "Editor": _m(production="edit", tickets="edit", pintu="view", growth="view"),
+             news="edit", pintu="view", six_day="view", growth="view"),
+    "Designer": _m(production="edit", pintu="view", growth="view"),
+    "Editor": _m(production="edit", pintu="view", growth="view"),
     "COC": _m(command_room="edit", distribution="edit", performance="edit",
-              news="view", tickets="edit", six_day="edit", growth="view"),
+              news="view", six_day="edit", growth="view"),
 }
 RANK = {"none": 0, "view": 1, "edit": 2}
 
 # snoboard per-person area → FSOS area(s). Seeding / canvas / other playbooks don't exist in FSOS.
 AREA_MAP = {
-    "production": ["production"], "news": ["news"], "tickets": ["tickets"], "pintu": ["pintu"],
+    "production": ["production"], "news": ["news"], "pintu": ["pintu"],
     "six_day": ["six_day"], "growth": ["growth"], "users_roles": ["users_roles"],
     "idea_engine": ["bo_studio", "hpn_desk"], "playbook_bpb": ["distribution"],
 }
@@ -193,7 +193,6 @@ def main():
     entries = fetch_all(url, key, "six_day_entries")
     top = fetch_all(url, key, "six_day_top_content")
     growth = fetch_all(url, key, "growth_data")
-    tickets = fetch_all(url, key, "tickets", "ticket_number")
     feedback = fetch_all(url, key, "news_feed_feedback")
     saved = fetch_all(url, key, "news_feed_saved")
     access_path = BACKEND / "app" / "user_access.json"
@@ -295,27 +294,6 @@ def main():
         )
     sql.append("")
 
-    # tickets
-    sql.append("-- Tickets (original numbers kept)")
-    for t in tickets:
-        desc = (t.get("description") or "").strip() or (t.get("title") or "Ticket")
-        title = (t.get("title") or "").strip() or desc.splitlines()[0][:120]
-        status = t.get("status") if t.get("status") in ("not_started", "in_progress", "resolved") else "not_started"
-        urgency = t.get("urgency") if t.get("urgency") in ("low", "normal", "urgent") else "normal"
-        sql.append(
-            "insert into tickets (legacy_id, ticket_number, title, description, urgency, status, tags, reporter_id, assignee_id, "
-            "attachments, resolved_at, created_at, updated_at) values ("
-            f"{lit(t['id'])}, {int(t['ticket_number'])}, {lit(title)}, {lit(desc)}, {lit(urgency)}, {lit(status)}, {arr(t.get('tags') or [])}, "
-            f"{person_ref(t.get('reporter_email'))}, {person_ref(t.get('assigned_to_email'))}, {js(t.get('attachments') or [])}, "
-            f"{lit(t.get('resolved_at'))}, {lit(t.get('created_at'))}, {lit(t.get('updated_at') or t.get('created_at'))}) "
-            "on conflict (legacy_id) do update set title = excluded.title, description = excluded.description, urgency = excluded.urgency, "
-            "status = excluded.status, tags = excluded.tags, assignee_id = excluded.assignee_id, attachments = excluded.attachments, "
-            "resolved_at = excluded.resolved_at;"
-        )
-    if tickets:
-        sql.append("select setval(pg_get_serial_sequence('tickets', 'ticket_number'), (select max(ticket_number) from tickets));")
-    sql.append("")
-
     # news
     sql.append("-- News feed votes and saved stories")
     for f in feedback:
@@ -340,7 +318,7 @@ def main():
     print(f"Wrote {OUT.relative_to(REPO)}")
     print(f"  people {len(users)} (pending access: {len(pending)}), person access overrides {overrides}")
     print(f"  IPs {len(pages)} ({active_count} active, {len(pages) - active_count} paused)")
-    print(f"  6-Day entries {len(entries)}, topline {len(top)}, growth rows {growth_rows}, tickets {len(tickets)}")
+    print(f"  6-Day entries {len(entries)}, topline {len(top)}, growth rows {growth_rows}")
     print(f"  news votes {len(feedback)}, saved {len(saved)}")
 
 

@@ -45,10 +45,8 @@ function NavItem({ n, badge }) {
 }
 
 function Sidebar() {
-  const { db, actingUser, gateUser, access } = useDemo();
+  const { gateUser, access } = useDemo();
   const items = navItemsForUser(gateUser, access);
-  // Unread-style badge: open tickets assigned to the acting user.
-  const myTickets = db.tickets.filter((t) => t.assigneeId === actingUser.id && t.status !== "resolved").length;
   const sections = [...new Set(items.map((n) => n.section))];
   return (
     <aside className="w-60 shrink-0 border-r border-[#E6E1D8] bg-[#F5F2EC] flex flex-col" data-testid="sidebar">
@@ -63,7 +61,7 @@ function Sidebar() {
         {sections.map((s, i) => (
           <div key={s} className={cn("space-y-0.5", i > 0 && "mt-4")}>
             {sections.length > 1 && <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-stone-400 font-mono">{s}</div>}
-            {items.filter((n) => n.section === s).map((n) => <NavItem key={n.id} n={n} badge={n.id === "tickets" ? myTickets : 0} />)}
+            {items.filter((n) => n.section === s).map((n) => <NavItem key={n.id} n={n} />)}
           </div>
         ))}
       </nav>
@@ -104,14 +102,13 @@ function TopBar() {
   const { db, actions, actingUser, gateUser, today } = useDemo();
   const { openCreate, streamFilter, setStreamFilter, openIdea } = useUI();
   const navigate = useNavigate();
-  // Notifications without a userId are team-wide; ticket notifications target one person.
+  // Notifications without a userId are team-wide; the rest target one person.
   const mine = db.notifications.filter((n) => !n.userId || n.userId === actingUser.id);
   // 6-day overdue alerts go only to the configured tracker assignee (computed live, never stored).
   const overdue = db.sixDay.config.assigneeId === actingUser.id ? sixDayOverdue(db, today) : [];
   const unread = mine.filter((n) => !n.read).length + overdue.length;
   const openNotification = (n) => {
     actions.markNotificationRead(n.id);
-    if (n.ticketId) { navigate(`/tickets?ticket=${n.ticketId}`); return; }
     const { ideaId, tab } = notificationOpenTarget(db, n);
     if (ideaId) openIdea(ideaId, { tab });
   };
@@ -156,7 +153,7 @@ function TopBar() {
           {mine.length === 0 && overdue.length === 0 && <div className="px-3 py-4 text-xs text-stone-500">No notifications.</div>}
           {mine.slice(0, 8).map((n) => (
             <DropdownMenuItem key={n.id} onClick={() => openNotification(n)} className="flex flex-col items-start gap-0.5 cursor-pointer">
-              <span className="text-xs text-stone-800">{n.ticketId && <Icons.Ticket className="mr-1 inline h-3 w-3 text-violet-600" />}{n.text}</span>
+              <span className="text-xs text-stone-800">{n.text}</span>
               <span className="text-[10px] text-stone-400">{n.read ? "read" : "new"}</span>
             </DropdownMenuItem>
           ))}

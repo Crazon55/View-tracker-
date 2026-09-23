@@ -17,4 +17,3 @@ create table if not exists growth_monthly (
 alter table growth_monthly enable row level security;
 
 alter table six_day_top_content add column if not exists legacy_id uuid unique;
-alter table tickets add column if not exists legacy_id uuid unique;

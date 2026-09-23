@@ -7,7 +7,7 @@ from fastapi import HTTPException
 
 AREAS = [
     "command_room", "bo_studio", "hpn_desk", "production", "distribution", "performance",
-    "news", "tickets", "pintu", "six_day", "growth", "users_roles", "settings",
+    "news", "pintu", "six_day", "growth", "users_roles", "settings",
 ]
 LEVELS = ("none", "view", "edit")
 RANK = {"none": 0, "view": 1, "edit": 2}
@@ -23,13 +23,13 @@ def _m(**levels) -> dict:
 ROLE_ACCESS_DEFAULTS: dict[str, dict] = {
     "Founder/Admin": {a: "edit" for a in AREAS},
     "COA": {a: "edit" for a in AREAS},
-    "Short-form Lead": _m(**_WORKSPACE, news="edit", tickets="edit", pintu="view", six_day="edit", growth="view"),
+    "Short-form Lead": _m(**_WORKSPACE, news="edit", pintu="view", six_day="edit", growth="view"),
     "CS": _m(command_room="edit", bo_studio="edit", hpn_desk="edit", production="edit", performance="edit",
-             news="edit", tickets="edit", pintu="view", six_day="view", growth="view"),
-    "Designer": _m(production="edit", tickets="edit", pintu="view", growth="view"),
-    "Editor": _m(production="edit", tickets="edit", pintu="view", growth="view"),
+             news="edit", pintu="view", six_day="view", growth="view"),
+    "Designer": _m(production="edit", pintu="view", growth="view"),
+    "Editor": _m(production="edit", pintu="view", growth="view"),
     "COC": _m(command_room="edit", distribution="edit", performance="edit",
-              news="view", tickets="edit", six_day="edit", growth="view"),
+              news="view", six_day="edit", growth="view"),
 }
 
 

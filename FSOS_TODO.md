@@ -33,7 +33,7 @@ Tick items off as they're done (`[x]`). **Owner:** 🧑 you (needs the Supabase 
 ## 2. API keys and environment
 
 - [x] 🧑 Supabase → **Project Settings → API Keys**. Done 23 Sept.
-- [x] 🤖 Service key in `fsos-backend/.env`; URL + anon key in `fsos-frontend/.env.local`. The News Feed keeps reading the old project (`REACT_APP_NEWS_SUPABASE_*`) until step 5e.
+- [x] 🤖 Service key in `fsos-backend/.env`; URL + anon key in `fsos-frontend/.env.local`. The News Feed keeps reading the old project (`REACT_APP_NEWS_SUPABASE_*`) until step 5d.
 - [x] 🤖 Checked: both files are git-ignored and no key is staged.
 
 ## 3. Backend
@@ -53,7 +53,9 @@ Tick items off as they're done (`[x]`). **Owner:** 🧑 you (needs the Supabase 
 - [ ] 🤖 Replace the demo "act as" switcher with the logged-in user plus a sign-out button. Keep **Preview as role** for admins.
 - [ ] 🧑 Test: log in as yourself, check your role and sidebar, then log out.
 
-## 5. Connect the 6 added features to real data
+## 5. Connect the added features to real data
+
+**Tickets was removed on 23 Sept** — all 32 were resolved, the last on 8 Aug, and nobody was using it. They were Pintu bug reports, not FSOS workflow. Cloudinary went with it, so no Cloudinary keys are needed. `supabase/migrations/20260923120000_drop_tickets.sql` drops the table; the rows stay in the old project either way.
 
 Each item ends with "works in the browser against the new database", checked by both of us.
 
@@ -63,30 +65,24 @@ Each item ends with "works in the browser against the new database", checked by 
 - [ ] 🤖 Frontend: Users & Roles page and sidebar gating read from the API.
 - [ ] 🧑 Check: all 25 people show with the right roles. Changing someone's access changes their sidebar after they reload.
 
-### 5b. Tickets
-- [ ] 🤖 API: list, create, update (status, assignee, title, description), delete. Notifications for @mentions, assignment and status changes.
-- [ ] 🤖 Attachments: switch from in-browser images to Cloudinary signed uploads (reuse snoboard's `cloudinary_sign.py`). Needs the Cloudinary keys in the backend `.env`.
-- [ ] 🤖 Frontend: Tickets page, sidebar badge and bell notifications read from the API.
-- [ ] 🧑 Check: the 32 old tickets appear. A new ticket gets the next number. Take and finish both work. The person you mention sees a notification.
-
-### 5c. 6-Day Tracker
+### 5b. 6-Day Tracker
 - [ ] 🤖 API: month view (cycles, entries, topline), upsert an entry, topline add/edit/delete, month-end actuals, 6-Day assignee setting.
 - [ ] 🤖 Frontend: the page reads and writes through the API. Overdue alerts go to the assignee.
 - [ ] 🧑 Check: April–September history matches snoboard. Editing a number and reloading keeps it.
 
-### 5d. Growth
+### 5c. Growth
 - [ ] 🤖 API: monthly rows per IP. 6-Day cycle sums win; `growth_monthly` fills the months before the 6-Day Tracker existed.
 - [ ] 🤖 Frontend: Growth reads the API; followers are editable for Edit users.
 - [ ] 🧑 Check: monthly totals match snoboard's Growth page for the same months.
 
-### 5e. News Feed
+### 5d. News Feed
 - [ ] 🤖 Deploy `supabase/functions/fetch-news` to the new project (Supabase CLI: `supabase functions deploy fetch-news --project-ref huyylvmlwpphuolpckxw`).
 - [ ] 🧑 Schedule it daily: Supabase → **Integrations → Cron**, or the same scheduler that runs it on the old project.
 - [ ] 🤖 API: articles (last 2 days), votes, learned rules, saved. Inshorts goes through the backend instead of the dev-only proxy, so it works when deployed.
 - [ ] 🤖 Frontend: News Feed uses the API. Remove the direct Supabase calls and `setupProxy.js`.
 - [ ] 🧑 Check: today's stories show. The next morning there are new stories without anyone clicking anything.
 
-### 5f. Pintu
+### 5e. Pintu
 - [ ] 🤖 Nothing to connect (it's an external link). Confirm it's gated by the real access matrix after login.
 - [ ] 🧑 Confirm the URL `http://16.112.125.207:5173/` is still correct.
 

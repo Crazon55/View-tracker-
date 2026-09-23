@@ -67,7 +67,6 @@ export const NAV = [
   { id: "distribution", path: "/distribution", label: "Distribution", icon: "CalendarDays", area: "distribution", section: "Workspace" },
   { id: "performance", path: "/performance", label: "Performance", icon: "BarChart3", area: "performance", section: "Workspace" },
   { id: "news", path: "/news", label: "News Feed", icon: "Newspaper", area: "news", section: "Tools" },
-  { id: "tickets", path: "/tickets", label: "Tickets", icon: "Ticket", area: "tickets", section: "Tools" },
   { id: "pintu", path: "http://16.112.125.207:5173/", label: "Pintu", icon: "Scissors", area: "pintu", section: "Tools", external: true },
   { id: "six-day", path: "/six-day-tracker", label: "6-Day Tracker", icon: "Timer", area: "six_day", section: "Tools" },
   { id: "growth", path: "/growth", label: "Growth", icon: "TrendingUp", area: "growth", section: "Tools" },

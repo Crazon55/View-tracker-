@@ -23,7 +23,6 @@ export const AREAS = [
   { key: "performance", label: "Performance", group: "Workspace", route: "/performance" },
 
   { key: "news", label: "News Feed", group: "Content tools", route: "/news" },
-  { key: "tickets", label: "Tickets", group: "Content tools", route: "/tickets" },
   { key: "pintu", label: "Pintu", group: "Content tools", route: PINTU_URL, external: true },
 
   { key: "six_day", label: "6-Day Tracker", group: "Cops", route: "/six-day-tracker" },
@@ -53,25 +52,25 @@ export const ROLE_ACCESS_DEFAULTS = {
 
   "Short-form Lead": withOverrides("none", {
     ...WORKSPACE_ALL,
-    news: "edit", tickets: "edit", pintu: "view", six_day: "edit", growth: "view",
+    news: "edit", pintu: "view", six_day: "edit", growth: "view",
   }),
 
   CS: withOverrides("none", {
     command_room: "edit", bo_studio: "edit", hpn_desk: "edit", production: "edit", performance: "edit",
-    news: "edit", tickets: "edit", pintu: "view", six_day: "view", growth: "view",
+    news: "edit", pintu: "view", six_day: "view", growth: "view",
   }),
 
   Designer: withOverrides("none", {
-    production: "edit", tickets: "edit", pintu: "view", growth: "view",
+    production: "edit", pintu: "view", growth: "view",
   }),
 
   Editor: withOverrides("none", {
-    production: "edit", tickets: "edit", pintu: "view", growth: "view",
+    production: "edit", pintu: "view", growth: "view",
   }),
 
   COC: withOverrides("none", {
     command_room: "edit", distribution: "edit", performance: "edit",
-    news: "view", tickets: "edit", six_day: "edit", growth: "view",
+    news: "view", six_day: "edit", growth: "view",
   }),
 };
 

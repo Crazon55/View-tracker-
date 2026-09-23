@@ -1,5 +1,5 @@
 // Seed data for the tool surfaces ported from snoboard: 6-Day Tracker, Growth,
-// Tickets, News Feed and the Users & Roles access store. Kept separate from
+// News Feed and the Users & Roles access store. Kept separate from
 // seed.js so existing (v2) local data can be topped up without a reset.
 import { addDays } from "./dates";
 
@@ -125,27 +125,6 @@ function buildGrowth(ips, anchor, rnd) {
   return { followers };
 }
 
-// ---- Tickets ----
-function buildTickets(users, anchor) {
-  const by = (role) => users.find((u) => u.roles.includes(role)) || users[0];
-  const mention = (u) => `@${u.name.split(" ")[0]}`;
-  const [founder, lead, cs, coa, designer, editor, coc] =
-    [by("Founder/Admin"), by("Short-form Lead"), by("CS"), by("COA"), by("Designer"), by("Editor"), by("COC")];
-  const at = (daysAgo, hh = "09") => `${addDays(anchor, -daysAgo)}T${hh}:15:00.000Z`;
-  const rows = [
-    { title: "Distribution calendar freezes on 10-day view", description: "Scrolling the network calendar past day 7 freezes the tab for ~5s.\nHappens on Chrome, not on Safari.\nScreenshot attached.", urgency: "urgent", status: "not_started", tags: [mention(coa), "#distribution"], reporterId: coc.id, assigneeId: null, createdAt: at(0, "05") },
-    { title: "Canva link not accepted on IFC version", description: "Pasting a Canva share link on the IFC version says 'invalid link'. Drive links work fine.", urgency: "normal", status: "not_started", tags: [mention(designer)], reporterId: designer.id, assigneeId: null, createdAt: at(1) },
-    { title: "Need 'IHN' added to HPN quick record", description: "IHN is missing from the HPN quick-record destination list.", urgency: "low", status: "not_started", tags: ["#hpn"], reporterId: cs.id, assigneeId: null, createdAt: at(2) },
-    { title: "Pintu export drops audio on 9:16", description: "Batch export from Pintu loses the music track on 9:16 renders. 1:1 is fine.", urgency: "urgent", status: "in_progress", tags: [mention(editor), "#pintu"], reporterId: editor.id, assigneeId: coa.id, createdAt: at(1, "11") },
-    { title: "6-day tracker: Reel % not saving", description: "Reel % goes blank again after tabbing out on cycle 3.", urgency: "normal", status: "in_progress", tags: [mention(coc)], reporterId: coc.id, assigneeId: founder.id, createdAt: at(3) },
-    { title: "Wrong view count on yesterday cohort", description: "Command Room yesterday cohort shows 0 for a post that has views captured.", urgency: "normal", status: "resolved", tags: [], reporterId: lead.id, assigneeId: coa.id, createdAt: at(6), resolvedAt: at(4) },
-    { title: "Add dark overlay option to static template", description: "Request: statics need a dark overlay preset for photo-heavy posts.", urgency: "low", status: "resolved", tags: [mention(designer)], reporterId: cs.id, assigneeId: designer.id, createdAt: at(9), resolvedAt: at(7) },
-  ];
-  return rows.map((r, i) => ({
-    id: uid("tkt"), ticketNumber: 101 + i, attachments: [], updatedAt: r.resolvedAt || r.createdAt, resolvedAt: null, ...r,
-  }));
-}
-
 // ---- News feed ----
 const NEWS_ITEMS = [
   ["news", "Inc42", "Zepto raises $450 Mn at a $7 Bn valuation ahead of its IPO filing", "The quick-commerce startup's latest round was led by existing investors, taking its total funding past $1.9 Bn as it prepares a draft red herring prospectus."],
@@ -222,8 +201,6 @@ export function buildToolsSeed({ ips, users, anchor }) {
   return {
     sixDay: buildSixDay(ips, users, anchor, rnd),
     growth: buildGrowth(ips, anchor, rnd),
-    tickets: buildTickets(users, anchor),
-    ticketSeq: 108,
     news: buildNews(rnd),
     newsState: { saved: [], feedback: {}, rules: [] },
     access: { roles: {}, people: {} },
@@ -239,7 +216,7 @@ export function ensureToolSlices(d) {
     if (!ip.group) ip.group = m.group;
     if (!ip.stage) ip.stage = m.stage;
   });
-  const missing = ["sixDay", "growth", "tickets", "ticketSeq", "news", "newsState", "access"].filter((k) => d[k] === undefined);
+  const missing = ["sixDay", "growth", "news", "newsState", "access"].filter((k) => d[k] === undefined);
   if (!missing.length) return d;
   const fresh = buildToolsSeed({ ips: d.ips, users: d.users, anchor: d.meta.anchor });
   missing.forEach((k) => { d[k] = fresh[k]; });

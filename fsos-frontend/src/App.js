@@ -12,7 +12,6 @@ import Performance from "@/pages/Performance";
 import Settings from "@/pages/Settings";
 import Help from "@/pages/Help";
 import NewsFeed from "@/pages/NewsFeed";
-import Tickets from "@/pages/Tickets";
 import SixDayTracker from "@/pages/SixDayTracker";
 import Growth from "@/pages/Growth";
 import UsersRoles from "@/pages/UsersRoles";
@@ -32,7 +31,6 @@ function App() {
               <Route path="/distribution" element={<Distribution />} />
               <Route path="/performance" element={<Performance />} />
               <Route path="/news" element={<NewsFeed />} />
-              <Route path="/tickets" element={<Tickets />} />
               <Route path="/six-day-tracker" element={<SixDayTracker />} />
               <Route path="/growth" element={<Growth />} />
               <Route path="/users-roles" element={<UsersRoles />} />

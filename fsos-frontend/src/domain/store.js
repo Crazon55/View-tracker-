@@ -501,42 +501,6 @@ export function DemoProvider({ children }) {
       });
     },
 
-    // --- tickets ---
-    createTicket({ title, description, urgency, tags, attachments }) {
-      update((d) => {
-        d.ticketSeq = (d.ticketSeq || 100) + 1;
-        const firstLine = (description || "").split("\n")[0].trim().slice(0, 120);
-        const t = {
-          id: uid("tkt"), ticketNumber: d.ticketSeq, title: (title || "").trim() || firstLine || "Ticket",
-          description, urgency: urgency || "normal", status: "not_started", tags: tags || [],
-          reporterId: d.actingUserId, assigneeId: null, attachments: attachments || [],
-          createdAt: nowIso(), updatedAt: nowIso(), resolvedAt: null,
-        };
-        d.tickets.unshift(t);
-        ticketMentionNotifications(d, t, []);
-        return d;
-      });
-    },
-    patchTicket(id, patch) {
-      update((d) => {
-        const t = d.tickets.find((x) => x.id === id);
-        if (!t) return d;
-        const before = { status: t.status, assigneeId: t.assigneeId, tags: [...(t.tags || [])] };
-        Object.assign(t, patch, { updatedAt: nowIso() });
-        if ("status" in patch) t.resolvedAt = patch.status === "resolved" ? nowIso() : null;
-        const label = `#${t.ticketNumber}: ${t.title}`;
-        if (t.assigneeId && t.assigneeId !== before.assigneeId && t.assigneeId !== d.actingUserId) {
-          notifyUser(d, t.assigneeId, "ticket", `Ticket assigned to you — ${label}`, t.id);
-        }
-        if (t.status !== before.status && t.reporterId && t.reporterId !== d.actingUserId) {
-          if (t.status === "in_progress") notifyUser(d, t.reporterId, "ticket", `Your ticket is being worked on — ${label}`, t.id);
-          if (t.status === "resolved") notifyUser(d, t.reporterId, "ticket", `Your ticket was marked finished — ${label}`, t.id);
-        }
-        ticketMentionNotifications(d, t, before.tags);
-        return d;
-      });
-    },
-    deleteTicket(id) { update((d) => { d.tickets = d.tickets.filter((x) => x.id !== id); return d; }); },
 
     // --- news feed ---
     // `item` is kept so saved live stories survive after they age out of the feed.
@@ -621,19 +585,7 @@ export function DemoProvider({ children }) {
   );
 }
 
-function notifyUser(d, userId, type, text, ticketId) {
-  d.notifications.unshift({ id: uid("nt"), type, userId, text, ticketId, at: nowIso(), read: false });
-}
 
-// "@First" tags address people by first name — notify anyone newly mentioned.
-function ticketMentionNotifications(d, t, prevTags) {
-  if (t.status === "resolved") return;
-  (t.tags || []).filter((tag) => tag.startsWith("@") && !prevTags.includes(tag)).forEach((tag) => {
-    const name = tag.slice(1).toLowerCase();
-    const u = d.users.find((x) => x.name.split(" ")[0].toLowerCase() === name);
-    if (u && u.id !== d.actingUserId) notifyUser(d, u.id, "ticket", `You were mentioned on ticket #${t.ticketNumber}: ${t.title}`, t.id);
-  });
-}
 
 /** Area access for the acting user (or the previewed role). */
 export function useAccess() {

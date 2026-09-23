@@ -12,15 +12,14 @@ describe("tool seed", () => {
   const db = buildSeed();
 
   it("seeds every new slice", () => {
-    ["sixDay", "growth", "tickets", "news", "newsState", "access"].forEach((k) => expect(db[k]).toBeDefined());
-    expect(db.tickets.length).toBeGreaterThan(0);
+    ["sixDay", "growth", "news", "newsState", "access"].forEach((k) => expect(db[k]).toBeDefined());
     expect(db.news.items.length).toBeGreaterThan(20);
     db.ips.forEach((ip) => { expect(ip.handle).toBeTruthy(); expect(ip.stage).toBeGreaterThan(0); });
   });
 
   it("tops up a v2 db that predates the tools without touching existing data", () => {
     const old = buildSeed();
-    ["sixDay", "growth", "tickets", "ticketSeq", "news", "newsState", "access"].forEach((k) => delete old[k]);
+    ["sixDay", "growth", "news", "newsState", "access"].forEach((k) => delete old[k]);
     old.ips.forEach((ip) => { delete ip.handle; delete ip.group; delete ip.stage; });
     const ideas = old.ideas.length;
     const migrated = ensureToolSlices(old);
@@ -53,7 +52,7 @@ describe("access model", () => {
   const db = buildSeed();
 
   it("keeps each role's pre-existing workspace nav", () => {
-    expect(navIds(db, byRole(db, "Designer"))).toEqual(expect.arrayContaining(["production", "tickets", "pintu", "growth"]));
+    expect(navIds(db, byRole(db, "Designer"))).toEqual(expect.arrayContaining(["production", "pintu", "growth"]));
     expect(navIds(db, byRole(db, "Designer"))).not.toContain("distribution");
     expect(navIds(db, byRole(db, "COC"))).toEqual(expect.arrayContaining(["command-room", "distribution", "performance", "six-day"]));
     expect(navIds(db, byRole(db, "Founder/Admin"))).toContain("users-roles");
@@ -76,7 +75,7 @@ describe("access model", () => {
     const cs = byRole(db, "CS");
     const access = resolvePersonAccess(cs.roles, null, { CS: { news: "none" } });
     expect(canAccessPath(cs, "/news", access)).toBe(false);
-    expect(canAccessPath(cs, "/tickets", access)).toBe(true);
+    expect(canAccessPath(cs, "/six-day-tracker", access)).toBe(true);
   });
 
   it("a user with no areas never redirects to a page they cannot open", () => {

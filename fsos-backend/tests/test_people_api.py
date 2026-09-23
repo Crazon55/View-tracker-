@@ -120,7 +120,7 @@ api("PATCH", f"/api/people/{editor['id']}", email=A, body={"clear_matrix": True}
 api("DELETE", f"/api/people/{limited['id']}/access", email=A)
 
 print("role defaults")
-matrix = {**{a: "none" for a in listing["areas"]}, "production": "edit", "news": "edit", "tickets": "edit"}
+matrix = {**{a: "none" for a in listing["areas"]}, "production": "edit", "news": "edit", "six_day": "edit"}
 check("set Designer defaults", api("PUT", "/api/roles/access", email=A, body={"role": "Designer", "matrix": matrix})[0], 200)
 roles = {r["role"]: r for r in api("GET", "/api/roles/access", email=A)[1]["roles"]}
 check("Designer tuned", roles["Designer"]["tuned"], True)
