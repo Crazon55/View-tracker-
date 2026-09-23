@@ -122,8 +122,14 @@ Each item ends with "works in the browser against the new database", checked by 
 while `news_articles` was empty. The only thing working was the Inshorts scrape, which
 never touched Supabase. That's why it looked fine.
 
-- [ ] 🧑 **Deploy `supabase/functions/fetch-news` to the new project**: `supabase functions deploy fetch-news --project-ref huyylvmlwpphuolpckxw`. Until this runs, `news_articles` stays empty and the feed is Inshorts only.
-- [ ] 🧑 Schedule it daily: Supabase → **Integrations → Cron**, or the same scheduler that runs it on the old project.
+**How the stories actually arrive:** an n8n workflow on Hostinger cloud collects them and
+POSTs them into Supabase. It was still pointed at the *old* project, which is why
+`news_articles` was empty here and the feed showed Inshorts only. The `fetch-news` edge
+function is not in the loop and does not need deploying.
+
+- [x] 🤖 `POST /api/news/ingest` takes the stories, authenticated by a shared token. n8n is a machine on someone else's cloud: it gets a token that can add news articles and nothing else, rather than the service-role key, which would let whoever holds it read every table in the project. Accepts a single object, an array, or `{"articles":[…]}`, upserts on `url`, and skips a malformed story rather than rejecting the batch.
+- [ ] 🧑 **Set `FSOS_NEWS_INGEST_TOKEN` in `fsos-backend/.env` on the server** (`openssl rand -base64 32`) and redeploy. The route returns 503 until it's set.
+- [ ] 🧑 **Repoint the n8n "Save to Supabase" node** at `https://thefrontseatmedia.com/api/news/ingest`, with headers `X-FSOS-Ingest-Token: <that token>` and `Content-Type: application/json`. Remove the `apikey` and `Authorization` headers — it no longer talks to Supabase directly. Body stays `{{ $json }}`.
 - [x] 🤖 API: articles (last 2 days), votes, learned rules, saved (`app/routers/news.py`). Inshorts is read server-side, so it works on a deployed build.
 - [x] 🤖 Frontend: News Feed uses the API. The direct Supabase calls and `setupProxy.js` are gone. The LinkedIn tab went too — that feed is snoboard's n8n ingest and the team don't need it.
 - [ ] 🧑 Check: today's stories show. The next morning there are new stories without anyone clicking anything.

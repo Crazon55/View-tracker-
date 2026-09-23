@@ -19,6 +19,12 @@ CORS_ORIGINS = [o.strip() for o in (os.getenv("FSOS_CORS_ORIGINS") or "http://lo
 # Must never be enabled on a deployed instance.
 DEV_LOGIN = (os.getenv("FSOS_DEV_LOGIN") or "").strip().lower() == "true"
 
+# Shared secret for POST /api/news/ingest, used by the n8n workflow that collects
+# stories. It is deliberately narrow: it can add news articles and do nothing else, so
+# a machine on someone else's cloud never needs the service-role key. Unset disables
+# the route entirely.
+INGEST_TOKEN = (os.getenv("FSOS_NEWS_INGEST_TOKEN") or "").strip()
+
 if not SUPABASE_URL or not SERVICE_KEY:
     raise RuntimeError("FSOS_SUPABASE_URL and FSOS_SUPABASE_SERVICE_KEY must be set in fsos-backend/.env")
 

@@ -3,7 +3,8 @@
 Two sources, both fetched server-side so the feed works on a deployed build rather than
 only under the dev server:
 
-* `news_articles`, filled by the `fetch-news` Supabase edge function on a daily schedule;
+* `news_articles`, filled by the n8n workflow that collects stories, which POSTs them
+  to /api/news/ingest with a narrow shared token (see below);
 * Inshorts, which publishes no API and no CORS headers — its pages embed the feed as
   `window.__STATE__`, so we read it here instead of through a browser proxy.
 
@@ -12,15 +13,17 @@ Each source fails on its own. A dead Inshorts must not empty the feed.
 import asyncio
 import json
 import re
+import secrets
 from datetime import datetime, timedelta, timezone
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from .. import db
 from ..access import require
 from ..auth import Caller, current_caller
+from ..config import INGEST_TOKEN
 
 router = APIRouter(prefix="/api/news", tags=["news"])
 
@@ -124,6 +127,88 @@ async def feed(caller: Caller = Depends(current_caller)):
             "inshorts": len(inshorts) if ok(inshorts) else None,
         },
     }
+
+
+# ───────────────────────── ingest (n8n) ─────────────────────────
+
+class Article(BaseModel):
+    title: str = ""
+    url: str = ""
+    summary: str | None = None
+    body: str | None = None
+    source: str | None = None
+    keywords: list[str] = Field(default_factory=list)
+    published_date: str | None = None
+
+
+class Ingest(BaseModel):
+    articles: list[Article] = Field(default_factory=list)
+
+
+def _as_articles(payload) -> list[dict]:
+    """Take whatever n8n sends.
+
+    Its HTTP Request node runs once per item by default, so the natural body is a single
+    article object; `{{ $json }}` over a list sends an array; and a wrapper object is
+    what you'd write by hand. Accepting all three is a few lines here and saves rebuilding
+    a workflow that already works.
+    """
+    if isinstance(payload, dict):
+        inner = payload.get("articles")
+        if isinstance(inner, list):
+            return [a for a in inner if isinstance(a, dict)]
+        return [payload]
+    if isinstance(payload, list):
+        return [a for a in payload if isinstance(a, dict)]
+    return []
+
+
+@router.post("/ingest")
+async def ingest(payload: dict | list = Body(...), x_fsos_ingest_token: str | None = Header(default=None)):
+    """Stories in from the n8n workflow that collects them.
+
+    This is the one route with no signed-in person: n8n is a machine, running on
+    somebody else's cloud. It holds a token that can do exactly this and nothing else,
+    which is the point — the service-role key would let whoever holds it read every
+    table in the project, staff emails included, and it has no business leaving here.
+
+    Articles are upserted on `url`, so re-running the workflow refreshes rather than
+    duplicating.
+    """
+    if not INGEST_TOKEN:
+        raise HTTPException(status_code=503, detail="News ingest is not configured on this server.")
+    # Constant-time: a plain == leaks the token a character at a time to anyone patient.
+    if not x_fsos_ingest_token or not secrets.compare_digest(x_fsos_ingest_token, INGEST_TOKEN):
+        raise HTTPException(status_code=401, detail="Bad ingest token.")
+
+    incoming = _as_articles(payload)
+    if not incoming:
+        return {"ok": True, "received": 0, "stored": 0}
+    if len(incoming) > 200:
+        raise HTTPException(status_code=413, detail="Send at most 200 articles per request.")
+
+    rows, seen = [], set()
+    for raw in incoming:
+        try:
+            a = Article(**{k: v for k, v in raw.items() if k in Article.model_fields})
+        except Exception:
+            continue          # one malformed story shouldn't reject the batch
+        url, title = (a.url or "").strip(), (a.title or "").strip()
+        # url is what the upsert keys on, so a blank one would collide with itself.
+        if not url or not title or url in seen:
+            continue
+        seen.add(url)
+        rows.append({
+            "title": title, "url": url,
+            "summary": (a.summary or "").strip() or None,
+            "body": (a.body or "").strip() or None,
+            "source": (a.source or "").strip() or None,
+            "keywords": a.keywords,
+            "published_date": a.published_date,
+        })
+    if rows:
+        await db.insert("news_articles", rows, upsert_on="url")
+    return {"ok": True, "received": len(incoming), "stored": len(rows)}
 
 
 class Vote(BaseModel):
