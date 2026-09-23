@@ -1,6 +1,7 @@
 """Settings for the FSOS API, read from fsos-backend/.env (git-ignored)."""
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
@@ -20,3 +21,22 @@ DEV_LOGIN = (os.getenv("FSOS_DEV_LOGIN") or "").strip().lower() == "true"
 
 if not SUPABASE_URL or not SERVICE_KEY:
     raise RuntimeError("FSOS_SUPABASE_URL and FSOS_SUPABASE_SERVICE_KEY must be set in fsos-backend/.env")
+
+
+def _is_local(origin: str) -> bool:
+    host = urlparse(origin).hostname or ""
+    return host in ("localhost", "127.0.0.1", "::1", "0.0.0.0")
+
+
+# Dev login accepts an email header in place of a token: anyone who can reach the API
+# can be anyone. That is fine on a laptop and catastrophic anywhere else, and the only
+# reliable signal for "anywhere else" is being asked to serve a real origin. Refusing to
+# start is the point — a warning in a log nobody reads is how this ships by accident.
+if DEV_LOGIN:
+    public = [o for o in CORS_ORIGINS if not _is_local(o)]
+    if public:
+        raise RuntimeError(
+            "FSOS_DEV_LOGIN=true accepts an email header instead of a real login, so it must "
+            f"never run anywhere reachable. FSOS_CORS_ORIGINS includes {', '.join(public)}. "
+            "Turn off FSOS_DEV_LOGIN, or keep the origins to localhost while developing."
+        )

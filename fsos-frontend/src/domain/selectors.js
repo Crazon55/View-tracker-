@@ -153,8 +153,12 @@ export function recentBaseline(db, ipId, format, excludePubId, sample) {
 
 // ---- six-day cycles ----
 export function sixDayCycles(db, count = 6, stream = "All") {
-  const anchor = db.settings.cycleAnchor; // start date
   const today = db.meta.anchor;
+  // The anchor fixes where the six-day cycles fall. Until someone sets one in Settings
+  // it isn't configured, and a window ending on today is the honest stand-in: it's a
+  // way of looking at real publications, not invented data. Once set, the boundaries
+  // stop moving, which is the whole point of having an anchor.
+  const anchor = db.settings.cycleAnchor || addDays(today, -6 * count + 1);
   // build cycles forward from anchor until covering today
   const cycles = [];
   let start = anchor;

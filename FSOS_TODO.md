@@ -70,7 +70,7 @@ survives repeated reloads.
 - [x] 🤖 Server-side access checks in `app/access.py` (mirrors the frontend rules); every route calls `require(...)`. 39 API tests pass.
 - [x] 🤖 No privilege escalation: you can't grant access above your own, only a Founder/Admin grants that role, and the last one can't be removed. Before this any COA could have promoted themselves.
 - [ ] 🤖 **Test that `app/access.py` and `access.js` can't drift.** They're the same rules written twice; only a comment holds them together today. Worth doing before the feature routers land.
-- [ ] 🤖 **Refuse to start if `FSOS_DEV_LOGIN` is on with a non-localhost CORS origin.** It accepts an email header instead of a token — a total bypass if it ever ships.
+- [x] 🤖 **Refuses to start if `FSOS_DEV_LOGIN` is on with a non-localhost CORS origin** (`app/config.py`). It accepts an email header instead of a token, so it must never run anywhere reachable; a warning in a log nobody reads is how that ships by accident.
 - [ ] 🤖 Convert the test script to pytest. Fine at 39 checks, awkward at 300.
 - [ ] 🤖 Rate-limit `/api/me` (it hits Supabase auth on every cold token).
 

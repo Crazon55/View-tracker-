@@ -149,11 +149,11 @@ function RulesSettings() {
         <h3 className="text-sm font-semibold text-stone-900 mb-3">Approval owners</h3>
         <div className="space-y-3">
           <div><label className="text-xs text-stone-600">Current BO approver</label>
-            <Select value={s.approverBoId} onValueChange={(v) => { actions.updateSettings({ approverBoId: v }); toast.success("BO approver updated — workflow keeps working"); }}><SelectTrigger className="mt-1" data-testid="bo-approver"><SelectValue /></SelectTrigger><SelectContent>{approvers.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent></Select>
+            <Select value={s.approverBoId || undefined} onValueChange={(v) => { actions.updateSettings({ approverBoId: v }); toast.success("BO approver updated — workflow keeps working"); }}><SelectTrigger className="mt-1" data-testid="bo-approver"><SelectValue /></SelectTrigger><SelectContent>{approvers.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent></Select>
             <p className="mt-1 text-[10px] text-stone-400">Delegating to the Short-form Lead replaces Jaskaran as approver without breaking the flow.</p>
           </div>
           <div><label className="text-xs text-stone-600">Short-form Lead</label>
-            <Select value={s.shortFormLeadId} onValueChange={(v) => actions.updateSettings({ shortFormLeadId: v })}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent>{approvers.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent></Select>
+            <Select value={s.shortFormLeadId || undefined} onValueChange={(v) => actions.updateSettings({ shortFormLeadId: v })}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent>{approvers.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent></Select>
           </div>
         </div>
       </div>
@@ -163,7 +163,7 @@ function RulesSettings() {
           <NumField label="Good ≥ % of target" value={s.thresholds.good} onChange={(v) => actions.updateSettings({ thresholds: { ...s.thresholds, good: v } })} />
           <NumField label="Average ≥ % of target" value={s.thresholds.average} onChange={(v) => actions.updateSettings({ thresholds: { ...s.thresholds, average: v } })} />
           <NumField label="Baseline sample size" value={s.baselineSample} onChange={(v) => actions.updateSettings({ baselineSample: v })} />
-          <div><label className="text-[10px] uppercase tracking-wide text-stone-400">6-day cycle anchor</label><Input type="date" value={s.cycleAnchor} onChange={(e) => actions.updateSettings({ cycleAnchor: e.target.value })} className="h-8 mt-1 text-xs" data-testid="cycle-anchor" /></div>
+          <div><label className="text-[10px] uppercase tracking-wide text-stone-400">6-day cycle anchor</label><Input type="date" value={s.cycleAnchor || ""} onChange={(e) => actions.updateSettings({ cycleAnchor: e.target.value })} className="h-8 mt-1 text-xs" data-testid="cycle-anchor" /></div>
         </div>
         <p className="mt-2 text-[10px] text-stone-400">Illustrative thresholds, not agreed Frontseat policy. Without a configured target, items show Unrated.</p>
       </div>
