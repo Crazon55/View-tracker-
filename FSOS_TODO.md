@@ -21,7 +21,7 @@ Tick items off as they're done (`[x]`). **Owner:** 🧑 you (needs the Supabase 
 Steps 0–3 done. The API is real and tested; the frontend still runs on demo data.
 
 **Next up:** step 4 (login) — it blocks every frontend item below it.
-**Blocked on you:** Google provider in Supabase (step 4), and the drop-tickets SQL (step 1).
+**Blocked on you:** the Google provider in Supabase (step 4). Nothing else.
 
 Running locally: `fsos-frontend` on :3000 (`npx craco start`), `fsos-backend` on :8000
 (`python -m uvicorn app.main:app --port 8000`, needs `FSOS_DEV_LOGIN=true` until login exists).
@@ -43,7 +43,7 @@ Latest commits on `fsos`: `4e3dbc8` remove tickets · `e4672c4` privilege-escala
 - [x] 🤖 Copy the setup SQL to the clipboard. (23 Sept: the schema had already been run, so `out/run_remaining.sql` — migration 2 + data — was used instead.)
 - [x] 🧑 Supabase → project `huyylvmlwpphuolpckxw` → **SQL Editor → New query** → paste → **Run**. Done 23 Sept: finished with `setval 55`, the last statement, so the import completed.
 - [x] 🤖 **Row counts checked 23 Sept.** With data: `people` 26, `ips` 48, `six_day_entries` 407, `six_day_top_content` 249, `growth_monthly` 44, `access_person_overrides` 5, `news_feedback` 5, `news_saved` 3, `app_settings` 1. The other 14 tables are empty because they belong to step 6.
-- [ ] 🧑 **Run the drop-tickets SQL.** `supabase/migrations/20260923120000_drop_tickets.sql` → SQL Editor on `huyylvmlwpphuolpckxw`. The only irreversible step of the tickets removal; the 32 rows stay in the old project regardless.
+- [x] 🧑 **Drop-tickets SQL run 23 Sept.** Verified: `tickets` gone (404), `notifications.ticket_id` and its foreign key gone, everything else intact, 39 API tests still pass. 23 tables left. The 32 rows remain in the old project.
 - [ ] 🧑 **Decide on `krishna@owledmedia.com`** — a pending row with no roles, created 23 Sept by a wrong-email API test of mine (the real one is `krishna.koushik@`). Harmless; delete it or leave it.
 - [x] 🤖 Spot-check with the service key. 23 Sept: 25 people (CS 6, Editor 5, Designer 3, COC 2, COA 2, COA+Founder/Admin 1, Short-form Lead 1, 5 pending), 48 IPs / 13 active, 407 six-day entries, 249 top content, 44 growth rows, 5 imported person overrides.
 
