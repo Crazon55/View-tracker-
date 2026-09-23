@@ -32,6 +32,33 @@ if grep -qE '^FSOS_DEV_LOGIN=true' "$BACKEND_DIR/.env"; then
   exit 1
 fi
 
+# The Supabase URL and anon key are compiled into the bundle at build time — sign-in is
+# the only thing the browser does directly. .env.local is git-ignored, so a fresh clone
+# here does not have it, and without this the build succeeds and ships an app whose
+# login page reads "Sign-in isn't configured".
+if [ ! -f "$FRONTEND_DIR/.env.local" ]; then
+  cat >&2 <<'MISSING'
+Missing fsos-frontend/.env.local — nobody would be able to sign in. Create it here:
+
+  REACT_APP_SUPABASE_URL=https://huyylvmlwpphuolpckxw.supabase.co
+  REACT_APP_SUPABASE_ANON_KEY=<anon key from Supabase → Project Settings → API Keys>
+
+Leave REACT_APP_FSOS_API_URL out; this script builds with it empty on purpose.
+MISSING
+  exit 1
+fi
+for key in REACT_APP_SUPABASE_URL REACT_APP_SUPABASE_ANON_KEY; do
+  if ! grep -qE "^${key}=.+" "$FRONTEND_DIR/.env.local"; then
+    echo "$key is missing or empty in fsos-frontend/.env.local — sign-in would be dead." >&2
+    exit 1
+  fi
+done
+
+if grep -qE '^REACT_APP_FSOS_DEV_EMAIL=.+' "$FRONTEND_DIR/.env.local"; then
+  echo "REACT_APP_FSOS_DEV_EMAIL is set — that bypasses login. Comment it out." >&2
+  exit 1
+fi
+
 echo "=== Pulling latest ==="
 git -C "$REPO_ROOT" pull --ff-only
 
@@ -60,7 +87,12 @@ echo ""
 echo "=== Frontend: build ==="
 cd "$FRONTEND_DIR"
 npm ci --no-audit
-REACT_APP_FSOS_API_URL= npm run build
+# Webpack needs more headroom than snoboard's vite build, which is already capped at
+# 768MB on this box — so cap it explicitly rather than letting node guess and get
+# OOM-killed halfway through. Raise it if the box has the memory.
+# REACT_APP_FSOS_API_URL= : production talks to /api on this origin, and an empty value
+# beats .env.local's localhost. Verified — the compiled base is the empty string.
+NODE_OPTIONS="--max-old-space-size=1024" REACT_APP_FSOS_API_URL= npm run build
 
 echo ""
 echo "=== Nginx reload ==="
