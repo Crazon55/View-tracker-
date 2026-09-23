@@ -78,6 +78,7 @@ const CALLS = [
   ["pageSummaries", (db) => T.pageSummaries(db, "2026-09")],
   ["growthRows", (db) => T.growthRows(db)],
   ["trackerGroup", (db) => T.trackerGroup(db.ips[0])],
+  ["visibleIps", (db) => S.visibleIps(db)],
 ];
 
 describe("a brand-new database", () => {
@@ -100,6 +101,47 @@ describe("a brand-new database", () => {
     db.settings.cycleAnchor = "2026-09-01";
     const cycles = S.sixDayCycles(db, 6);
     expect(cycles[0].start).toBe("2026-09-01");
+  });
+
+  it("shows only the IPs being posted to, not the whole imported roster", () => {
+    // 48 pages came across in the import and 13 are active. Listing all of them buries
+    // the roster in rows reading "0P · 0R · met", which is what the team saw on day one.
+    const db = empty();
+    db.ips = [
+      { id: "on-1", code: "A", active: true, floors: { posts: 0, reels: 0 } },
+      { id: "off-1", code: "B", active: false, floors: { posts: 0, reels: 0 } },
+      { id: "off-2", code: "C", active: false, floors: { posts: 0, reels: 0 } },
+    ];
+    expect(S.visibleIps(db).map((i) => i.id)).toEqual(["on-1"]);
+    expect(S.networkStatus(db, db.meta.anchor).map((r) => r.ip.id)).toEqual(["on-1"]);
+  });
+
+  it("keeps a paused IP visible while it still has work on it", () => {
+    // Pausing an IP doesn't delete its placements — hiding them would hide real work.
+    const db = empty();
+    db.ips = [
+      { id: "on-1", code: "A", active: true, floors: { posts: 0, reels: 0 } },
+      { id: "off-1", code: "B", active: false, floors: { posts: 0, reels: 0 } },
+      { id: "off-2", code: "C", active: false, floors: { posts: 0, reels: 0 } },
+    ];
+    db.placements = [{ id: "p1", versionId: "v1", ipId: "off-1", date: db.meta.anchor, state: "pending" }];
+    expect(S.visibleIps(db).map((i) => i.id).sort()).toEqual(["off-1", "on-1"]);
+
+    // Cancel it and the paused IP drops out again.
+    db.placements[0].state = "cancelled";
+    expect(S.visibleIps(db).map((i) => i.id)).toEqual(["on-1"]);
+  });
+
+  it("keeps a paused IP in historical views that published in the window", () => {
+    const db = empty();
+    db.ips = [
+      { id: "on-1", code: "A", active: true, floors: { posts: 0, reels: 0 } },
+      { id: "off-1", code: "B", active: false, floors: { posts: 0, reels: 0 } },
+    ];
+    db.publications = [{ id: "pub1", ipIds: ["off-1"], versionIds: [], publishedAt: "2026-09-20T05:00:00Z" }];
+    expect(S.cyclePerIp(db, "2026-09-18", "2026-09-23").map((r) => r.ip.id).sort()).toEqual(["off-1", "on-1"]);
+    // The bank looks forward, so a past publication doesn't keep it there.
+    expect(S.bankStockDays(db).map((r) => r.ip.id)).toEqual(["on-1"]);
   });
 
   it("reports no coverage rather than inventing any", () => {

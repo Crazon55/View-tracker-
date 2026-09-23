@@ -3,6 +3,27 @@ import { addDays, diffDays } from "./dates";
 
 // ---- lookups ----
 export const ipById = (db, id) => db.ips.find((i) => i.id === id);
+
+/**
+ * The IPs an operational screen should show: the ones being posted to, plus any paused
+ * one that still has something on it.
+ *
+ * All 48 pages came across in the import and only 13 are active, so listing every one
+ * buries the roster in rows reading "0P · 0R · met". A paused IP isn't deleted, though —
+ * it keeps its placements and publications — so it stays visible while it has work
+ * attached and drops out once it doesn't. Settings deliberately lists all of them; that's
+ * where you turn one back on.
+ */
+export function visibleIps(db, { withPlacements = true, withPublications = true } = {}) {
+  const busy = new Set();
+  if (withPlacements) {
+    db.placements.forEach((p) => { if (p.state !== "cancelled") busy.add(p.ipId); });
+  }
+  if (withPublications) {
+    db.publications.forEach((p) => (p.ipIds || []).forEach((id) => busy.add(id)));
+  }
+  return db.ips.filter((ip) => ip.active || busy.has(ip.id));
+}
 export const userById = (db, id) => db.users.find((u) => u.id === id);
 export const ideaById = (db, id) => db.ideas.find((i) => i.id === id);
 export const versionsOf = (db, ideaId) => db.versions.filter((v) => v.ideaId === ideaId);
@@ -86,7 +107,7 @@ export function bankSummary(db, stream = "BO") {
 // stock days per IP/format — Not configured when no BO target
 export function bankStockDays(db, stream = "BO") {
   const ready = readyBankVersions(db, stream);
-  return db.ips.map((ip) => {
+  return visibleIps(db, { withPublications: false }).map((ip) => {
     const readyReel = ready.filter((v) => v.ipId === ip.id && ideaById(db, v.ideaId).format === "Reel").length;
     const readyPost = ready.filter((v) => v.ipId === ip.id && ideaById(db, v.ideaId).format !== "Reel").length;
     const boReel = ip.boTarget?.reels ?? null;
@@ -99,7 +120,7 @@ export function bankStockDays(db, stream = "BO") {
 
 // ---- network posting status for a date ----
 export function networkStatus(db, date, stream = "All") {
-  return db.ips.map((ip) => {
+  return visibleIps(db, { withPublications: false }).map((ip) => {
     const req = ip.floors;
     let plannedPosts = 0, plannedReels = 0, confPosts = 0, confReels = 0, readyPosts = 0, readyReels = 0;
     db.placements.filter((p) => p.date === date && p.state !== "cancelled" && p.ipId === ip.id).forEach((p) => {
@@ -190,7 +211,7 @@ export function sixDayCycles(db, count = 6, stream = "All") {
 
 // per-IP within a cycle range
 export function cyclePerIp(db, start, end, stream = "All") {
-  return db.ips.map((ip) => {
+  return visibleIps(db).map((ip) => {
     const pubs = db.publications.filter((p) => p.ipIds.includes(ip.id) && p.publishedAt.slice(0, 10) >= start && p.publishedAt.slice(0, 10) <= end && pubMatchesStream(db, p, stream));
     let sum = 0, measured = 0, missing = 0;
     pubs.forEach((p) => { const s = snapshotOf(db, p.id); if (s && s.views != null) { sum += s.views; measured += 1; } else missing += 1; });

@@ -4,7 +4,7 @@ import { useWorkspace } from "../domain/store";
 import { useUI } from "../components/idea/IdeaModalProvider";
 import { PageHeader } from "../components/common/PageHeader";
 import { StreamBadge, StatusBadge, FormatBadge, IPBadge, VersionBadge, PerfBadge } from "../components/common/badges";
-import { versionsOf, ideaById, ipById, userById, activePlacementOf, publicationOf, snapshotOf, readyBankVersions, bankSummary, targetFor, classify, sameDayConflict, matchesStream } from "../domain/selectors";
+import { versionsOf, ideaById, ipById, userById, activePlacementOf, publicationOf, snapshotOf, readyBankVersions, bankSummary, targetFor, classify, sameDayConflict, matchesStream, visibleIps } from "../domain/selectors";
 import { formatCounts } from "../domain/constants";
 import { fmtDate, weekdayShort, addDays, nowIso, istTimeStr } from "../domain/dates";
 import { Button } from "../components/ui/button";
@@ -73,7 +73,7 @@ function Bank() {
       </div>
       )}
       <div className="flex gap-2 mb-3">
-        <FSel value={ipf} onChange={setIpf} options={[["all", "All IPs"], ...db.ips.map((i) => [i.id, i.code])]} />
+        <FSel value={ipf} onChange={setIpf} options={[["all", "All IPs"], ...visibleIps(db).map((i) => [i.id, i.code])]} />
         <FSel value={fmt} onChange={setFmt} options={[["all", "All formats"], ["Reel", "Reels"], ["Post", "Posts"]]} />
         <FSel value={alloc} onChange={setAlloc} options={[["all", "All"], ["allocated", "Allocated"], ["unallocated", "Unallocated"]]} />
       </div>
@@ -124,7 +124,7 @@ function IdeaMatrix() {
             <thead className="sticky top-0 z-20">
               <tr>
                 <th className="sticky left-0 z-30 bg-[#F5F2EC] border-b border-r border-stone-200 px-3 py-2 text-left font-medium text-stone-500 min-w-[240px]">Idea</th>
-                {db.ips.map((ip) => (
+                {visibleIps(db).map((ip) => (
                   <th key={ip.id} className="bg-[#F5F2EC] border-b border-stone-200 px-2 py-2 min-w-[64px]">
                     <div className="flex flex-col items-center gap-1"><span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: ip.hex }} /><span className="font-mono text-[10px] text-stone-600">{ip.code}</span></div>
                   </th>
@@ -140,7 +140,7 @@ function IdeaMatrix() {
                       <div className="text-[11px] text-stone-800 truncate max-w-[220px]">{idea.title}</div>
                     </button>
                   </td>
-                  {db.ips.map((ip) => {
+                  {visibleIps(db).map((ip) => {
                     const v = versionsOf(db, idea.id).find((x) => x.ipId === ip.id);
                     if (!v) return <td key={ip.id} className="border-b border-stone-100 text-center text-stone-200">·</td>;
                     const pub = publicationOf(db, v.id);
@@ -320,7 +320,7 @@ function IPWeekView() {
   return (
     <div>
       <div className="flex items-center gap-2 mb-3 flex-wrap">
-        <FSel value={ipId} onChange={setIpId} options={db.ips.map((i) => [i.id, i.code])} />
+        <FSel value={ipId} onChange={setIpId} options={visibleIps(db).map((i) => [i.id, i.code])} />
         <div className="flex items-center gap-2 ml-2">
           <Button size="sm" variant="outline" className="h-8" onClick={() => setWeekStart(addDays(weekStart, -7))}><Icons.ChevronLeft className="h-4 w-4" /></Button>
           <span className="text-xs text-stone-500">{fmtDate(days[0])} – {fmtDate(days[6])}</span>
@@ -411,7 +411,7 @@ function NetworkCalendar() {
               </tr>
             </thead>
             <tbody>
-              {db.ips.map((ip) => (
+              {visibleIps(db).map((ip) => (
                 <tr key={ip.id}>
                   <td className={cn("sticky left-0 z-10 border-b border-r border-stone-100 px-3 py-2 min-w-[120px]", ip.active ? "bg-white" : "bg-stone-50")}><IPBadge ip={ip} />{!ip.active && <span className="ml-1 text-[9px] text-amber-700">paused</span>}</td>
                   {days.map((d) => {
@@ -481,7 +481,7 @@ function BankDrawer({ sel, onClose }) {
 function Today() {
   const { db, actions, today } = useWorkspace();
   const { openIdea, streamFilter } = useUI();
-  const rows = db.ips.map((ip) => {
+  const rows = visibleIps(db, { withPublications: false }).map((ip) => {
     const pls = db.placements.filter((p) => {
       if (p.ipId !== ip.id || p.date !== today || p.state === "cancelled") return false;
       const v = db.versions.find((x) => x.id === p.versionId);

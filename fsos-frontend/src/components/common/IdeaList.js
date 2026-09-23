@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import * as Icons from "lucide-react";
 import { useWorkspace } from "../../domain/store";
 import { useUI } from "../idea/IdeaModalProvider";
-import { versionsOf, ideaById, ipById, userById, ideaDerivedState, ideaProgress } from "../../domain/selectors";
+import { versionsOf, ideaById, ipById, userById, ideaDerivedState, ideaProgress , visibleIps } from "../../domain/selectors";
 import { IDEA_STATES, FORMATS } from "../../domain/constants";
 import { StreamBadge, StatusBadge, FormatBadge, IPBadge, Avatar } from "./badges";
 import { Input } from "../ui/input";
@@ -46,7 +46,7 @@ export default function IdeaList({ stream }) {
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter ideas…" className="pl-8 h-9 w-56 bg-white" data-testid="idealist-search" />
         </div>
         <FilterSelect value={format} onChange={setFormat} placeholder="Format" testid="filter-format" options={[["all", "All formats"], ...FORMATS.map((f) => [f, f])]} />
-        <FilterSelect value={ipf} onChange={setIpf} placeholder="IP" testid="filter-ip" options={[["all", "All IPs"], ...db.ips.map((i) => [i.id, i.code])]} />
+        <FilterSelect value={ipf} onChange={setIpf} placeholder="IP" testid="filter-ip" options={[["all", "All IPs"], ...visibleIps(db).map((i) => [i.id, i.code])]} />
         <FilterSelect value={status} onChange={setStatus} placeholder="Status" testid="filter-status" options={[["all", "All statuses"], ...Object.entries(IDEA_STATES).map(([k, v]) => [k, v.label])]} />
         <FilterSelect value={owner} onChange={setOwner} placeholder="Owner" testid="filter-owner" options={[["all", "All owners"], ...db.users.filter((u) => u.roles.some((r) => ["Designer", "Editor"].includes(r))).map((u) => [u.id, u.name])]} />
         {activeFilters.length > 0 && (
