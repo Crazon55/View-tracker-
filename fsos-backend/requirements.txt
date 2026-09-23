@@ -1,3 +1,6 @@
+# Needs Python 3.10 or newer: the app uses `str | None` annotations, which are
+# evaluated at import time and are a TypeError on 3.9. Amazon Linux 2023 ships
+# 3.9 as `python3` — install python3.11 there.
 fastapi>=0.115
 uvicorn[standard]>=0.30
 httpx>=0.27
