@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import db
 from .auth import Caller, current_caller
 from .config import CORS_ORIGINS, DEV_LOGIN, SUPABASE_URL
-from .routers import people
+from .routers import collab, distribution, ideas, news, people, performance, production, settings, tools, workspace
 
 app = FastAPI(title="FSOS API", version="0.1.0")
 
@@ -21,8 +21,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(people.router)
-app.include_router(people.roles_router)
+for _r in (
+    people.router, people.roles_router,
+    workspace.router,
+    ideas.router, ideas.versions_router, ideas.batches_router, ideas.categories_router,
+    production.router,
+    distribution.router,
+    performance.router,
+    collab.router, collab.notifications_router,
+    settings.router, settings.settings_router,
+    tools.router, tools.growth_router,
+    news.router,
+):
+    app.include_router(_r)
 
 
 @app.get("/api/health")

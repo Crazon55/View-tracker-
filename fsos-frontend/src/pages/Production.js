@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import * as Icons from "lucide-react";
-import { useDemo } from "../domain/store";
+import { useWorkspace } from "../domain/store";
 import { useUI } from "../components/idea/IdeaModalProvider";
 import { PageHeader } from "../components/common/PageHeader";
 import { StreamBadge, StatusBadge, FormatBadge, IPBadge, VersionBadge, Avatar } from "../components/common/badges";
@@ -18,7 +18,7 @@ const VIEWS = [["board", "Stage board"], ["table", "Task table"], ["people", "Pe
 const STAGES = ["approved_unassigned", "in_production", "awaiting_review", "changes_requested", "ready"];
 
 export default function Production() {
-  const { actingUser } = useDemo();
+  const { actingUser } = useWorkspace();
   const producerOnly = isProducerRole(actingUser);
   const [view, setView] = useState(producerOnly ? "mine" : "board");
   useEffect(() => { setView(producerOnly ? "mine" : "board"); }, [actingUser.id, producerOnly]);
@@ -45,7 +45,7 @@ export default function Production() {
 }
 
 function useProdIdeas() {
-  const { db } = useDemo();
+  const { db } = useWorkspace();
   const { streamFilter } = useUI();
   return db.ideas.filter((i) => {
     if (streamFilter !== "All" && i.stream !== streamFilter) return false;
@@ -54,7 +54,7 @@ function useProdIdeas() {
 }
 
 function StageBoard() {
-  const { db } = useDemo();
+  const { db } = useWorkspace();
   const { openIdea, streamFilter } = useUI();
   const ideas = useProdIdeas();
   const groups = STAGES.map((s) => ({ s, items: ideas.filter((i) => ideaDerivedState(db, i) === s) }));
@@ -94,7 +94,7 @@ function StageBoard() {
 }
 
 function TaskTable() {
-  const { db, actions, actingUser } = useDemo();
+  const { db, actions, actingUser } = useWorkspace();
   const { openIdea } = useUI();
   const ideas = useProdIdeas();
   const [sel, setSel] = useState([]);
@@ -149,7 +149,7 @@ function TaskTable() {
 }
 
 function PeopleWorkload() {
-  const { db } = useDemo();
+  const { db } = useWorkspace();
   const { openIdea } = useUI();
   const prodIdeas = useProdIdeas();
   const producers = db.users.filter((u) => u.roles.some((r) => ["Designer", "Editor"].includes(r)));
@@ -182,7 +182,7 @@ function PeopleWorkload() {
 }
 
 function MyWork() {
-  const { db, actions, actingUser } = useDemo();
+  const { db, actions, actingUser } = useWorkspace();
   const { openIdea, streamFilter } = useUI();
   const producerOnly = isProducerRole(actingUser);
   const [user, setUser] = useState(actingUser.id);

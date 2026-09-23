@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { NavLink, Outlet, Navigate, useLocation, useNavigate } from "react-router-dom";
 import * as Icons from "lucide-react";
-import { useDemo } from "../../domain/store";
+import { useWorkspace } from "../../domain/store";
+import { signOut } from "../../lib/session";
 import { useUI } from "../idea/IdeaModalProvider";
 import { searchIdeas, notificationOpenTarget } from "../../domain/selectors";
 import { canAccessPath, canCreateIdea, homePathForUser, navItemsForUser, streamFilterForUser } from "../../domain/roles";
@@ -16,10 +17,6 @@ import {
 } from "../ui/dropdown-menu";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
-  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
-} from "../ui/alert-dialog";
 
 function NavItem({ n, badge }) {
   const Icon = Icons[n.icon] || Icons.Circle;
@@ -45,7 +42,7 @@ function NavItem({ n, badge }) {
 }
 
 function Sidebar() {
-  const { gateUser, access } = useDemo();
+  const { gateUser, access } = useWorkspace();
   const items = navItemsForUser(gateUser, access);
   const sections = [...new Set(items.map((n) => n.section))];
   return (
@@ -75,7 +72,7 @@ function Sidebar() {
 }
 
 function GlobalSearch() {
-  const { db } = useDemo();
+  const { db } = useWorkspace();
   const { openIdea, streamFilter } = useUI();
   const [q, setQ] = useState("");
   const results = searchIdeas(db, q, streamFilter);
@@ -99,7 +96,7 @@ function GlobalSearch() {
 }
 
 function TopBar() {
-  const { db, actions, actingUser, gateUser, today } = useDemo();
+  const { db, actions, actingUser, gateUser, today } = useWorkspace();
   const { openCreate, streamFilter, setStreamFilter, openIdea } = useUI();
   const navigate = useNavigate();
   // Notifications without a userId are team-wide; the rest target one person.
@@ -160,25 +157,35 @@ function TopBar() {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <RoleSwitcher />
+      <AccountMenu />
     </header>
   );
 }
 
-function RoleSwitcher() {
-  const { db, actions, actingUser } = useDemo();
+function AccountMenu() {
+  const { actingUser, access, previewRole, setPreviewRole, canPreview } = useWorkspace();
   const { setStreamFilter } = useUI();
   const navigate = useNavigate();
-  const actAs = (u) => {
-    actions.setActingUser(u.id);
-    setStreamFilter(streamFilterForUser(u));
-    navigate(homePathForUser(u, resolveAccess(db, u, null)));
-    toast.success(`Acting as ${u.name}`, { description: u.roles.join(" · ") || "Pending access" });
+
+  const preview = (role) => {
+    setPreviewRole(role);
+    const as = { ...actingUser, roles: [role] };
+    const m = resolveAccess({ access: { roles: {}, people: {} } }, as, role);
+    setStreamFilter(streamFilterForUser(as));
+    navigate(homePathForUser(as, m));
+    toast.info(`Previewing as ${role}`, { description: "You're still signed in as yourself." });
   };
+
+  const stopPreview = () => {
+    setPreviewRole(null);
+    setStreamFilter(streamFilterForUser(actingUser));
+    navigate(homePathForUser(actingUser, access));
+  };
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button data-testid="role-switcher" className="flex items-center gap-2 rounded-md border border-stone-200 bg-white pl-1 pr-2 py-1 hover:border-stone-300 transition-colors">
+        <button data-testid="account-menu" className="flex items-center gap-2 rounded-md border border-stone-200 bg-white pl-1 pr-2 py-1 hover:border-stone-300 transition-colors">
           <Avatar user={actingUser} size={26} />
           <span className="text-left leading-tight">
             <span className="block text-xs font-medium text-stone-900">{actingUser.name}</span>
@@ -188,27 +195,43 @@ function RoleSwitcher() {
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuLabel>Demo — act as</DropdownMenuLabel>
+        <DropdownMenuLabel className="pb-1">
+          <span className="block text-xs font-medium text-stone-900">{actingUser.name}</span>
+          <span className="block text-[10px] font-normal text-stone-500">{actingUser.email}</span>
+          <span className="block text-[10px] font-normal text-stone-500">{actingUser.roles.join(" · ") || "Pending access"}</span>
+        </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {db.users.filter((u) => u.active).map((u) => (
-          <DropdownMenuItem key={u.id} data-testid={`act-as-${u.id}`} onSelect={() => actAs(u)} className="gap-2 cursor-pointer">
-            <Avatar user={u} size={24} />
-            <span className="flex-1">
-              <span className="block text-xs">{u.name}</span>
-              <span className="block text-[10px] text-stone-500">{u.roles.join(", ") || "Pending access"}</span>
-            </span>
-            {u.id === db.actingUserId && <Icons.Check className="h-3.5 w-3.5 text-emerald-600" />}
-          </DropdownMenuItem>
-        ))}
-        <DropdownMenuSeparator />
-        <div className="px-2 py-1.5 text-[10px] text-stone-400">Role switching demonstrates workflows — not production authentication.</div>
+
+        {/* Admins can look at the app through another role's eyes. It changes what is
+            shown, never who you are: every write still goes out as you. */}
+        {canPreview && (
+          <>
+            <DropdownMenuLabel className="text-[10px] font-normal text-stone-400">Preview as role</DropdownMenuLabel>
+            {PREVIEW_ROLES.map((role) => (
+              <DropdownMenuItem key={role} data-testid={`preview-${role}`} onSelect={() => preview(role)} className="gap-2 cursor-pointer text-xs">
+                <span className="flex-1">{role}</span>
+                {previewRole === role && <Icons.Check className="h-3.5 w-3.5 text-emerald-600" />}
+              </DropdownMenuItem>
+            ))}
+            {previewRole && (
+              <DropdownMenuItem data-testid="preview-off" onSelect={stopPreview} className="gap-2 cursor-pointer text-xs text-amber-800">
+                <Icons.X className="h-3.5 w-3.5" /> Stop previewing
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
+          </>
+        )}
+
+        <DropdownMenuItem data-testid="sign-out" onSelect={signOut} className="gap-2 cursor-pointer text-xs">
+          <Icons.LogOut className="h-3.5 w-3.5" /> Sign out
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
 }
 
 function RoleGate() {
-  const { gateUser, access, previewRole } = useDemo();
+  const { gateUser, access, previewRole } = useWorkspace();
   const location = useLocation();
   if (!previewRole && isAwaitingAccess(gateUser)) return <PendingAccess />;
   if (!navItemsForUser(gateUser, access).some((n) => !n.external) && location.pathname !== "/help") return <PendingAccess noAreas />;
@@ -220,7 +243,7 @@ function RoleGate() {
 
 // New joiners (no role yet) and people with every area switched off land here.
 function PendingAccess({ noAreas }) {
-  const { actingUser } = useDemo();
+  const { actingUser } = useWorkspace();
   return (
     <div className="grid min-h-full place-items-center p-6" data-testid="pending-access">
       <div className="max-w-md space-y-4 text-center">
@@ -238,7 +261,7 @@ function PendingAccess({ noAreas }) {
 }
 
 function PreviewBanner() {
-  const { previewRole, setPreviewRole, actingUser } = useDemo();
+  const { previewRole, setPreviewRole, actingUser } = useWorkspace();
   const navigate = useNavigate();
   if (!previewRole) return null;
   return (
@@ -269,7 +292,6 @@ function usePageTitle() {
 }
 
 export default function AppShell() {
-  const { actions } = useDemo();
   usePageTitle();
   return (
     <div className="flex h-screen overflow-hidden bg-[#FAF8F5]">
@@ -281,32 +303,19 @@ export default function AppShell() {
           <RoleGate />
         </main>
       </div>
-      <DemoClock onReset={actions.resetDemo} />
+      <TodayChip />
     </div>
   );
 }
 
-function DemoClock({ onReset }) {
-  const { today } = useDemo();
+function TodayChip() {
+  const { today, busy } = useWorkspace();
   return (
-    <div className="fixed bottom-3 right-3 z-30 flex items-center gap-2 rounded-full border border-stone-200 bg-white/90 backdrop-blur px-3 py-1.5 shadow-sm text-[11px] text-stone-600" data-testid="demo-clock">
-      <Icons.Clock className="h-3.5 w-3.5 text-stone-400" />
-      <span>Demo today (IST): <span className="font-mono text-stone-800">{today}</span></span>
-      <AlertDialog>
-        <AlertDialogTrigger asChild>
-          <button data-testid="reset-demo-btn" className="ml-1 rounded-full p-1 hover:bg-stone-100"><Icons.RotateCcw className="h-3.5 w-3.5" /></button>
-        </AlertDialogTrigger>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Reset the demo?</AlertDialogTitle>
-            <AlertDialogDescription>This clears all local edits, assignments, comments, placements and metrics, and regenerates fresh seed data with today's date.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel data-testid="reset-cancel">Cancel</AlertDialogCancel>
-            <AlertDialogAction data-testid="reset-confirm" onClick={onReset} className="bg-[#C0512F] hover:bg-[#a8432593]">Reset demo</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+    <div className="fixed bottom-3 right-3 z-30 flex items-center gap-2 rounded-full border border-stone-200 bg-white/90 backdrop-blur px-3 py-1.5 shadow-sm text-[11px] text-stone-600" data-testid="today-chip">
+      {busy
+        ? <Icons.Loader2 className="h-3.5 w-3.5 animate-spin text-stone-400" />
+        : <Icons.Clock className="h-3.5 w-3.5 text-stone-400" />}
+      <span>{busy ? "Saving…" : <>Today (IST): <span className="font-mono text-stone-800">{today}</span></>}</span>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import React from "react";
 import * as Icons from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { useDemo } from "../domain/store";
+import { useWorkspace } from "../domain/store";
 import { useUI } from "../components/idea/IdeaModalProvider";
 import { PageHeader, StatCard } from "../components/common/PageHeader";
 import { IPBadge, PerfBadge, StreamBadge } from "../components/common/badges";
@@ -10,7 +10,7 @@ import { fmtDate, addDays } from "../domain/dates";
 import { cn } from "../lib/utils";
 
 export default function CommandRoom() {
-  const { db, today } = useDemo();
+  const { db, today } = useWorkspace();
   const { openIdea, streamFilter } = useUI();
   const net = networkStatus(db, today, streamFilter);
   const cohort = yesterdayCohort(db, streamFilter);

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import * as Icons from "lucide-react";
-import { useDemo } from "../domain/store";
+import { useWorkspace } from "../domain/store";
 import { useUI } from "../components/idea/IdeaModalProvider";
 import { PageHeader } from "../components/common/PageHeader";
 import IdeaList from "../components/common/IdeaList";
@@ -14,7 +14,7 @@ import { canCreateIdea } from "../domain/roles";
 import { toast } from "sonner";
 
 export default function HPNDesk() {
-  const { db, actingUser } = useDemo();
+  const { db, actingUser } = useWorkspace();
   const { openCreate } = useUI();
   const [quickIdea, setQuickIdea] = useState(null);
 
@@ -48,7 +48,7 @@ export default function HPNDesk() {
 }
 
 function QuickRecordDrawer({ ideaId, onClose }) {
-  const { db, actions } = useDemo();
+  const { db, actions } = useWorkspace();
   const idea = ideaId ? ideaById(db, ideaId) : null;
   const [owner, setOwner] = useState("");
   const [reviewer, setReviewer] = useState("");

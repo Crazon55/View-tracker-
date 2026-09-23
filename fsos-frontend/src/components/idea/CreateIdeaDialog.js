@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useDemo } from "../../domain/store";
+import { useWorkspace } from "../../domain/store";
 import { FORMATS } from "../../domain/constants";
 import { StreamBadge, IPBadge } from "../common/badges";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { cn } from "../../lib/utils";
 
 export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, onCreated }) {
-  const { db, actions } = useDemo();
+  const { db, actions } = useWorkspace();
   const [title, setTitle] = useState("");
   const [format, setFormat] = useState("Reel");
   const [category, setCategory] = useState("");
@@ -36,7 +36,7 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
     setIpHooks((h) => ({ ...h, [id]: { hook: "", subHook: "", ...h[id], [field]: value } }));
   };
 
-  const submit = () => {
+  const submit = async () => {
     if (!title.trim()) { toast.error("Title is required"); return; }
     if (!dests.length) { toast.error("Select at least one destination IP"); return; }
     const brief = {};
@@ -51,7 +51,13 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
         subHook: format === "Reel" ? (ipHooks[ipId]?.subHook || "").trim() : "",
       };
     });
-    const id = actions.addIdea({ stream, title, format, category: category || cats[0]?.name, brief, destinations: dests, sources, batchId: batchId || null, versionHooks });
+    let id;
+    try {
+      id = await actions.addIdea({ stream, title, format, category: category || cats[0]?.name, brief, destinations: dests, sources, batchId: batchId || null, versionHooks });
+    } catch (e) {
+      /* the store already showed the error */
+      return;
+    }
     toast.success("Idea created — creator & timestamp captured automatically");
     onCreated(id);
   };

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import * as Icons from "lucide-react";
-import { useDemo } from "../../domain/store";
+import { useWorkspace } from "../../domain/store";
 import { useUI } from "../idea/IdeaModalProvider";
 import { versionsOf, ideaById, ipById, userById, ideaDerivedState, ideaProgress } from "../../domain/selectors";
 import { IDEA_STATES, FORMATS } from "../../domain/constants";
@@ -11,7 +11,7 @@ import { Button } from "../ui/button";
 import { cn } from "../../lib/utils";
 
 export default function IdeaList({ stream }) {
-  const { db } = useDemo();
+  const { db } = useWorkspace();
   const { openIdea, streamFilter } = useUI();
   const [format, setFormat] = useState("all");
   const [ipf, setIpf] = useState("all");

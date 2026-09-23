@@ -1,13 +1,13 @@
 import React, { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import * as Icons from "lucide-react";
-import { useDemo, useAccess } from "../domain/store";
+import { useWorkspace, useAccess } from "../domain/store";
 import { PageHeader, StatCard } from "../components/common/PageHeader";
 import { IPBadge } from "../components/common/badges";
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { fmtDate } from "../domain/dates";
-import { monthOf, shiftMonth, toolMetaForIP } from "../domain/seedTools";
+import { monthOf, shiftMonth, ipMeta } from "../domain/sixDay";
 import {
   TRACKER_GROUPS, trackerGroup, sixDayMonth, sixDayOverdue, pageSummaries, isIPFilled, fmtCompact, monthLabel,
 } from "../domain/toolSelectors";
@@ -22,7 +22,7 @@ const rowsOf = (items) => {
 };
 
 export default function SixDayTracker() {
-  const { db, today, actions } = useDemo();
+  const { db, today, actions } = useWorkspace();
   const { canEdit: canEditArea } = useAccess();
   const canEdit = canEditArea("six_day");
   const [tab, setTab] = useState("cycles");
@@ -137,7 +137,7 @@ function Pill({ on, onClick, children, testid }) {
 const Count = ({ n }) => <span className="font-mono text-[10px] opacity-70 tabular-nums">{n}</span>;
 
 function CycleCard({ cycle, month, ips, ipIds, canEdit, expanded, onToggle }) {
-  const { db } = useDemo();
+  const { db } = useWorkspace();
   const [openId, setOpenId] = useState(null);
   useEffect(() => { if (!expanded) setOpenId(null); }, [expanded]);
 
@@ -198,10 +198,10 @@ function CycleCard({ cycle, month, ips, ipIds, canEdit, expanded, onToggle }) {
 }
 
 function IPChip({ ip, cycle, month, selected, onSelect }) {
-  const { db } = useDemo();
+  const { db } = useWorkspace();
   const e = cycle.entries.find((x) => x.ipId === ip.id);
   const hasData = isIPFilled(db, month, cycle.cycle, ip.id);
-  const { handle } = toolMetaForIP(ip);
+  const { handle } = ipMeta(ip);
   return (
     <button type="button" onClick={onSelect} data-testid={`ip-chip-${cycle.cycle}-${ip.id}`}
       className={cn("flex items-center gap-2.5 rounded-md border px-3 py-2 text-left transition-colors",
@@ -231,7 +231,7 @@ const optNum = (s) => { const t = String(s).trim(); if (t === "") return null; c
 const str = (v) => (v == null ? "" : String(v));
 
 function IPDetailSheet({ ip, cycle, month, canEdit, onClose }) {
-  const { actions } = useDemo();
+  const { actions } = useWorkspace();
   const entry = cycle.entries.find((x) => x.ipId === ip.id);
   const items = cycle.topContent.filter((t) => t.ipId === ip.id).sort((a, b) => (b.views || 0) - (a.views || 0));
   const init = { views: str(entry?.views ?? 0), reelPct: str(entry?.reelPct), postPct: str(entry?.postPct), reelPerf: str(entry?.reelPerf), postPerf: str(entry?.postPerf) };
@@ -241,7 +241,7 @@ function IPDetailSheet({ ip, cycle, month, canEdit, onClose }) {
   formRef.current = form;
   const [adding, setAdding] = useState(false);
   const [newItem, setNewItem] = useState({ link: "", views: "", type: "reel" });
-  const { handle } = toolMetaForIP(ip);
+  const { handle } = ipMeta(ip);
 
   const save = (f = formRef.current) => {
     if (!canEdit) return;
@@ -328,7 +328,7 @@ function IPDetailSheet({ ip, cycle, month, canEdit, onClose }) {
 }
 
 function TopContentRow({ item, canEdit }) {
-  const { actions } = useDemo();
+  const { actions } = useWorkspace();
   const [editing, setEditing] = useState(false);
   const [f, setF] = useState({ link: item.link, views: String(item.views || 0), type: item.type });
   useEffect(() => setF({ link: item.link, views: String(item.views || 0), type: item.type }), [item.link, item.views, item.type]);
@@ -365,7 +365,7 @@ function TopContentRow({ item, canEdit }) {
 }
 
 function ReconcileView({ month, summaries, canEdit }) {
-  const { actions } = useDemo();
+  const { actions } = useWorkspace();
   const [drafts, setDrafts] = useState({});
   const [openId, setOpenId] = useState(null);
   useEffect(() => {

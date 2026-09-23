@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import * as Icons from "lucide-react";
-import { useDemo } from "../../domain/store";
+import { useWorkspace } from "../../domain/store";
 import { versionsOf, ideaById, ipById, publicationOf, activePlacementOf } from "../../domain/selectors";
 import { formatCounts } from "../../domain/constants";
 import { addDays, fmtDate } from "../../domain/dates";
@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { cn } from "../../lib/utils";
 
 export default function BulkPlacement({ open, onOpenChange }) {
-  const { db, actions, today } = useDemo();
+  const { db, actions, today } = useWorkspace();
   const [step, setStep] = useState(1);
   const [batchId, setBatchId] = useState("all");
   const [selIdeas, setSelIdeas] = useState([]);

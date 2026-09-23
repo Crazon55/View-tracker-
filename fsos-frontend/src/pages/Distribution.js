@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import * as Icons from "lucide-react";
-import { useDemo } from "../domain/store";
+import { useWorkspace } from "../domain/store";
 import { useUI } from "../components/idea/IdeaModalProvider";
 import { PageHeader } from "../components/common/PageHeader";
 import { StreamBadge, StatusBadge, FormatBadge, IPBadge, VersionBadge, PerfBadge } from "../components/common/badges";
@@ -41,7 +41,7 @@ export default function Distribution() {
 
 /* ---------------- BANK ---------------- */
 function Bank() {
-  const { db } = useDemo();
+  const { db } = useWorkspace();
   const { openIdea, streamFilter } = useUI();
   const [ipf, setIpf] = useState("all");
   const [fmt, setFmt] = useState("all");
@@ -100,7 +100,7 @@ function Bank() {
 
 /* ---------------- IDEA MATRIX ---------------- */
 function IdeaMatrix() {
-  const { db } = useDemo();
+  const { db } = useWorkspace();
   const { openIdea, streamFilter } = useUI();
   const [panel, setPanel] = useState(null); // versionId
   const [batchF, setBatchF] = useState("all");
@@ -168,7 +168,7 @@ function IdeaMatrix() {
 }
 
 function CellPanel({ versionId, onClose }) {
-  const { db, actingUser } = useDemo();
+  const { db, actingUser } = useWorkspace();
   const { openIdea } = useUI();
   const v = db.versions.find((x) => x.id === versionId);
   const idea = ideaById(db, v.ideaId);
@@ -211,15 +211,17 @@ function CellPanel({ versionId, onClose }) {
 }
 
 function AllocateForm({ versionId, ipCode }) {
-  const { actions, today } = useDemo();
+  const { actions, today } = useWorkspace();
   const [date, setDate] = useState(today);
   const [time, setTime] = useState("");
   useEffect(() => { setDate(today); setTime(""); }, [versionId, today]);
-  const place = () => {
+  const place = async () => {
     if (!date) { toast.error("Pick a date to place this page."); return; }
-    const c = actions.placeVersion(versionId, date, time || null);
-    if (c === "same_day_repetition") toast.warning("Same idea already placed on another IP that date — needs authorised exception");
-    else toast.success(`Placed on ${ipCode || "calendar"} — ${fmtDate(date)}`);
+    try {
+      const c = await actions.placeVersion(versionId, date, time || null);
+      if (c === "same_day_repetition") toast.warning("Same idea already placed on another IP that date — needs authorised exception");
+      else toast.success(`Placed on ${ipCode || "calendar"} — ${fmtDate(date)}`);
+    } catch (e) { /* the store already showed the error */ }
   };
   return (
     <div className="mt-3 rounded-md border border-amber-200 bg-amber-50/70 p-3" data-testid={`matrix-allocate-${versionId}`}>
@@ -235,7 +237,7 @@ function AllocateForm({ versionId, ipCode }) {
 }
 
 function CaptureViews({ pub, snap, target }) {
-  const { actions } = useDemo();
+  const { actions } = useWorkspace();
   const [val, setVal] = useState(snap?.views ?? "");
   useEffect(() => { setVal(snap?.views ?? ""); }, [snap?.views, pub?.id]);
   const save = () => {
@@ -260,15 +262,17 @@ function CaptureViews({ pub, snap, target }) {
 }
 
 function ConfirmLiveForm({ versionId, ideaId, dateLabel, ready, onPublished }) {
-  const { actions } = useDemo();
+  const { actions } = useWorkspace();
   const { openIdea } = useUI();
   const [url, setUrl] = useState("");
-  const submit = () => {
+  const submit = async () => {
     const link = url.trim();
     if (!link) { toast.error("Paste the live link to confirm publication."); return; }
-    const r = actions.confirmPublication(versionId, link, nowIso());
-    if (r.dupUrl) toast.warning("URL already used — link as collaboration instead");
-    else toast.success("Publication confirmed — add views on Performance");
+    try {
+      const r = await actions.confirmPublication(versionId, link, nowIso());
+      if (r.dupUrl) toast.warning("URL already used — link as collaboration instead");
+      else toast.success("Publication confirmed — add views on Performance");
+    } catch (e) { /* the store already showed the error */ return; }
     if (onPublished) onPublished();
     openIdea(ideaId, { tab: "performance" });
   };
@@ -305,7 +309,7 @@ function CalendarView() {
 }
 
 function IPWeekView() {
-  const { db, today } = useDemo();
+  const { db, today } = useWorkspace();
   const { openIdea, streamFilter } = useUI();
   const [ipId, setIpId] = useState(db.ips[0]?.id);
   const [weekStart, setWeekStart] = useState(today);
@@ -381,7 +385,7 @@ function IPWeekView() {
 }
 
 function NetworkCalendar() {
-  const { db, actions, today } = useDemo();
+  const { db, actions, today } = useWorkspace();
   const { openIdea, streamFilter } = useUI();
   const [start, setStart] = useState(today);
   const [sel, setSel] = useState(null); // {ipId, date}
@@ -449,7 +453,7 @@ function NetworkCalendar() {
 }
 
 function BankDrawer({ sel, onClose }) {
-  const { db, actions } = useDemo();
+  const { db, actions } = useWorkspace();
   const { streamFilter } = useUI();
   const ip = ipById(db, sel.ipId);
   const eligible = readyBankVersions(db, streamFilter).filter((v) => v.ipId === sel.ipId && !activePlacementOf(db, v.id));
@@ -462,7 +466,7 @@ function BankDrawer({ sel, onClose }) {
       <div className="flex items-center justify-between mb-2"><div className="text-xs font-medium text-stone-700 flex items-center gap-1.5"><IPBadge ip={ip} /> {fmtDate(sel.date)}</div><button onClick={onClose} className="text-stone-400 hover:text-stone-700"><Icons.X className="h-4 w-4" /></button></div>
       <p className="text-[10px] text-stone-400 mb-2">Eligible ready versions for this IP. Click to place. Calendar can also hold versions still in production, shown pending.</p>
       {eligible.map((v) => { const idea = ideaById(db, v.ideaId); return (
-        <button key={v.id} data-testid={`drawer-place-${v.id}`} onClick={() => { const c = actions.placeVersion(v.id, sel.date); if (c === "same_day_repetition") toast.warning("Repetition conflict — needs authorised exception"); else toast.success("Placed"); }} className="w-full text-left rounded-md border border-stone-200 bg-white p-2 mb-1.5 hover:border-blue-400 transition-colors">
+        <button key={v.id} data-testid={`drawer-place-${v.id}`} onClick={async () => { try { const c = await actions.placeVersion(v.id, sel.date); if (c === "same_day_repetition") toast.warning("Repetition conflict — needs authorised exception"); else toast.success("Placed"); } catch (e) { /* the store already showed the error */ } }} className="w-full text-left rounded-md border border-stone-200 bg-white p-2 mb-1.5 hover:border-blue-400 transition-colors">
           <div className="flex items-center gap-1.5 mb-0.5"><FormatBadge format={idea.format} /><span className="text-[10px] text-emerald-700">ready</span></div>
           <div className="text-[11px] text-stone-800 truncate">{idea.title}</div>
         </button>
@@ -475,7 +479,7 @@ function BankDrawer({ sel, onClose }) {
 
 /* ---------------- TODAY ---------------- */
 function Today() {
-  const { db, actions, today } = useDemo();
+  const { db, actions, today } = useWorkspace();
   const { openIdea, streamFilter } = useUI();
   const rows = db.ips.map((ip) => {
     const pls = db.placements.filter((p) => {
@@ -526,7 +530,7 @@ function Today() {
 }
 
 function ConflictRow({ placement, conflicts, today }) {
-  const { db, actions, actingUser } = useDemo();
+  const { db, actions, actingUser } = useWorkspace();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("Deliberate collaboration / major happening");
   const canAuthorise = (db.settings.exceptionApproverIds || []).includes(actingUser.id) || isAdmin(actingUser) || actingUser.roles.includes("Short-form Lead");
@@ -552,7 +556,7 @@ function ConflictRow({ placement, conflicts, today }) {
 }
 
 function CollabLink({ versionId, date }) {
-  const { db, actions } = useDemo();
+  const { db, actions } = useWorkspace();
   const [open, setOpen] = useState(false);
   const todaysPubs = db.publications.filter((p) => p.publishedAt.slice(0, 10) === date);
   if (!todaysPubs.length) return null;
@@ -576,14 +580,14 @@ function CollabLink({ versionId, date }) {
 }
 
 function RecordLive({ versionId }) {
-  const { actions } = useDemo();
+  const { actions } = useWorkspace();
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState("");
   if (!open) return <Button size="sm" variant="outline" className="h-7 text-xs" data-testid={`record-live-${versionId}`} onClick={() => setOpen(true)}><Icons.Upload className="h-3 w-3 mr-1" /> Record live</Button>;
   return (
     <div className="flex items-center gap-1.5">
       <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="live URL" className="h-7 w-40 text-xs" />
-      <Button size="sm" className="h-7 text-xs" onClick={() => { if (!url) { actions.reportLivePending(versionId); toast("Reported live — link pending (not counted as confirmed)"); } else { const r = actions.confirmPublication(versionId, url, nowIso()); if (r.dupUrl) toast.warning("URL already used — link as collaboration instead"); else toast.success("Publication confirmed"); } setOpen(false); }}>Save</Button>
+      <Button size="sm" className="h-7 text-xs" onClick={async () => { try { if (!url) { await actions.reportLivePending(versionId); toast("Reported live — link pending (not counted as confirmed)"); } else { const r = await actions.confirmPublication(versionId, url, nowIso()); if (r.dupUrl) toast.warning("URL already used — link as collaboration instead"); else toast.success("Publication confirmed"); } setOpen(false); } catch (e) { /* the store already showed the error */ } }}>Save</Button>
     </div>
   );
 }

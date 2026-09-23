@@ -1,12 +1,12 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import * as Icons from "lucide-react";
-import { useDemo } from "../domain/store";
+import { useWorkspace } from "../domain/store";
 import { PageHeader } from "../components/common/PageHeader";
 import { IPBadge, Avatar } from "../components/common/badges";
 import { ROLES, STREAMS } from "../domain/constants";
 import { TRACKER_GROUPS } from "../domain/toolSelectors";
-import { toolMetaForIP } from "../domain/seedTools";
+import { ipMeta } from "../domain/sixDay";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Switch } from "../components/ui/switch";
@@ -35,7 +35,7 @@ export default function Settings() {
 }
 
 function IPSettings() {
-  const { db, actions } = useDemo();
+  const { db, actions } = useWorkspace();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", code: "", hex: "#2563EB", posts: 0, reels: 0 });
   return (
@@ -85,7 +85,7 @@ function IPSettings() {
 }
 
 function PeopleSettings() {
-  const { db, actions } = useDemo();
+  const { db, actions } = useWorkspace();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", roles: [], streams: [], skills: "" });
   const toggleRole = (r) => setForm((f) => ({ ...f, roles: f.roles.includes(r) ? f.roles.filter((x) => x !== r) : [...f.roles, r] }));
@@ -121,7 +121,7 @@ function PeopleSettings() {
 }
 
 function CategorySettings() {
-  const { db, actions } = useDemo();
+  const { db, actions } = useWorkspace();
   const [name, setName] = useState("");
   const [stream, setStream] = useState("BO");
   return (
@@ -140,7 +140,7 @@ function CategorySettings() {
 }
 
 function RulesSettings() {
-  const { db, actions } = useDemo();
+  const { db, actions } = useWorkspace();
   const s = db.settings;
   const approvers = db.users.filter((u) => u.roles.some((r) => ["Founder/Admin", "COA", "Short-form Lead", "CS"].includes(r)));
   return (
@@ -181,7 +181,7 @@ function RulesSettings() {
 
 // Handle / 6-Day tracker group / Growth stage — used by the 6-Day Tracker and Growth.
 function TrackerFields({ ip, onChange }) {
-  const meta = toolMetaForIP(ip);
+  const meta = ipMeta(ip);
   return (
     <div className="mt-3 grid grid-cols-3 gap-3 border-t border-stone-100 pt-3 text-xs">
       <div><label className="text-[10px] uppercase tracking-wide text-stone-400 block">Instagram handle</label>

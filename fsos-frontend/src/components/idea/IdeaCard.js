@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import * as Icons from "lucide-react";
-import { useDemo } from "../../domain/store";
+import { useWorkspace } from "../../domain/store";
 import { versionsOf, ideaById, ipById, userById, ideaDerivedState, ideaProgress, activePlacementOf, publicationOf, snapshotOf, targetFor, classify, needsIdeaApproval } from "../../domain/selectors";
 import { StreamBadge, StatusBadge, FormatBadge, IPBadge, VersionBadge, PerfBadge, Avatar } from "../common/badges";
 import { nowIso, istDateTimeLabel, fmtDate } from "../../domain/dates";
@@ -55,7 +55,7 @@ function submitIdeaIfReady(actions, idea, versions, pending = {}) {
 }
 
 export default function IdeaCard({ ideaId, mode, initialTab, onClose, onOpenIdea }) {
-  const { db, actions, actingUser } = useDemo();
+  const { db, actions, actingUser } = useWorkspace();
   const idea = ideaId ? ideaById(db, ideaId) : null;
   const [tab, setTab] = useState("brief");
   const [highlightAnchor, setHighlightAnchor] = useState(null);
@@ -179,7 +179,7 @@ function Section({ title, children, right }) {
 }
 
 function CommentAnchorBtn({ idea, anchor }) {
-  const { actions, actingUser } = useDemo();
+  const { actions, actingUser } = useWorkspace();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   return (
@@ -196,7 +196,7 @@ function CommentAnchorBtn({ idea, anchor }) {
 }
 
 function BriefTab({ idea, highlight }) {
-  const { db, actions } = useDemo();
+  const { db, actions } = useWorkspace();
   const slides = idea.brief.slides || [];
   return (
     <div>
@@ -255,7 +255,7 @@ function BriefTab({ idea, highlight }) {
 }
 
 function VersionRow({ idea, v, ownerWorkspace = false, pendingLinks = {}, setPendingLinks }) {
-  const { db, actions, actingUser } = useDemo();
+  const { db, actions, actingUser } = useWorkspace();
   const ip = ipById(db, v.ipId);
   const pub = publicationOf(db, v.id);
   const pending = pendingLinks[v.id] || { type: "canva", url: "" };
@@ -399,7 +399,7 @@ function VersionRow({ idea, v, ownerWorkspace = false, pendingLinks = {}, setPen
 }
 
 function VersionFeedbackNote({ comment: c }) {
-  const { db, actions } = useDemo();
+  const { db, actions } = useWorkspace();
   const [reply, setReply] = useState("");
   const author = userById(db, c.authorId);
   return (
@@ -432,7 +432,7 @@ function updateVersion(actions, versionId, patch) {
 }
 
 function AssetLinkRow({ versionId, link, canManage }) {
-  const { actions } = useDemo();
+  const { actions } = useWorkspace();
   const [editing, setEditing] = useState(false);
   const [type, setType] = useState(link.type || "canva");
   const [url, setUrl] = useState(link.url || "");
@@ -476,7 +476,7 @@ function AssetLinkRow({ versionId, link, canManage }) {
 }
 
 function RequestChangesBtn({ versionId }) {
-  const { actions } = useDemo();
+  const { actions } = useWorkspace();
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
   if (!open) return <Button size="sm" variant="outline" className="h-7 text-xs border-rose-300 text-rose-700 hover:bg-rose-50" data-testid={`request-changes-${versionId}`} onClick={() => setOpen(true)}><Icons.RotateCcw className="h-3 w-3 mr-1" /> Request changes</Button>;
@@ -489,7 +489,7 @@ function RequestChangesBtn({ versionId }) {
 }
 
 function ReplaceAssetBtn({ versionId }) {
-  const { actions } = useDemo();
+  const { actions } = useWorkspace();
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState("");
   if (!open) return <Button size="sm" variant="outline" className="h-7 text-xs" data-testid={`replace-asset-${versionId}`} onClick={() => setOpen(true)}><Icons.RefreshCw className="h-3 w-3 mr-1" /> Replace approved asset</Button>;
@@ -518,7 +518,7 @@ function VersionsTab({ idea, versions, pendingLinks, setPendingLinks }) {
 }
 
 function ProductionTab({ idea, versions, ownerWorkspace = false, pendingLinks, setPendingLinks }) {
-  const { db, actions, actingUser } = useDemo();
+  const { db, actions, actingUser } = useWorkspace();
   const isCoa = canAssignProduction(actingUser);
   const producers = db.users.filter((u) => u.active && u.roles.some((r) => ["Designer", "Editor"].includes(r)));
   const reviewers = db.users.filter((u) => u.active && u.roles.some((r) => ["CS", "Founder/Admin", "COA", "Short-form Lead"].includes(r)));
@@ -575,7 +575,7 @@ function ProductionTab({ idea, versions, ownerWorkspace = false, pendingLinks, s
 }
 
 function DistributionTab({ idea, versions }) {
-  const { db, actions, actingUser } = useDemo();
+  const { db, actions, actingUser } = useWorkspace();
   const isCoc = actingUser.roles.includes("COC") || isAdmin(actingUser);
   return (
     <div className="space-y-3">
@@ -590,7 +590,7 @@ function DistributionTab({ idea, versions }) {
             {pub ? <StatusBadge state="published" /> : <VersionBadge status={v.reviewStatus} />}
             <div className="flex items-center gap-2 text-sm">
               <Icons.Calendar className="h-3.5 w-3.5 text-stone-400" />
-              <Input type="date" value={pl?.date || ""} disabled={!isCoc || !!pub} onChange={(e) => { const c = actions.placeVersion(v.id, e.target.value); if (c === "same_day_repetition") toast.warning("Same idea already placed on another IP that date — needs authorised exception"); else toast.success("Placed"); }} className="h-8 w-40 text-sm" />
+              <Input type="date" value={pl?.date || ""} disabled={!isCoc || !!pub} onChange={async (e) => { try { const c = await actions.placeVersion(v.id, e.target.value); if (c === "same_day_repetition") toast.warning("Same idea already placed on another IP that date — needs authorised exception"); else toast.success("Placed"); } catch (err) { /* the store already showed the error */ } }} className="h-8 w-40 text-sm" />
               {pl?.time && <span className="font-mono text-[11px] text-stone-500">{pl.time} IST</span>}
               {pl && <span className="text-[10px] rounded px-1.5 py-0.5 border border-stone-200 text-stone-500">{pl.state}</span>}
             </div>
@@ -606,8 +606,8 @@ function DistributionTab({ idea, versions }) {
 }
 
 function PublishBtn({ versionId }) {
-  const { actions } = useDemo();
-  return <Button size="sm" className="h-7 text-xs ml-auto bg-stone-900" data-testid={`publish-${versionId}`} onClick={() => { const r = actions.confirmPublication(versionId, "https://instagram.com/reel/" + Math.random().toString(36).slice(2, 8), nowIso()); if (r.dupUrl) toast.warning("URL already used — consider collaboration linkage"); else toast.success("Publication confirmed — 24h capture task created"); }}><Icons.Upload className="h-3 w-3 mr-1" /> Confirm publication</Button>;
+  const { actions } = useWorkspace();
+  return <Button size="sm" className="h-7 text-xs ml-auto bg-stone-900" data-testid={`publish-${versionId}`} onClick={async () => { try { const r = await actions.confirmPublication(versionId, "https://instagram.com/reel/" + Math.random().toString(36).slice(2, 8), nowIso()); if (r.dupUrl) toast.warning("URL already used — consider collaboration linkage"); else toast.success("Publication confirmed — 24h capture task created"); } catch (e) { /* the store already showed the error */ } }}><Icons.Upload className="h-3 w-3 mr-1" /> Confirm publication</Button>;
 }
 
 function PerformanceTab({ idea, versions }) {
@@ -620,7 +620,7 @@ function PerformanceTab({ idea, versions }) {
 }
 
 function PerfVersionRow({ idea, v }) {
-  const { db, actions } = useDemo();
+  const { db, actions } = useWorkspace();
   const ip = ipById(db, v.ipId);
   const pub = publicationOf(db, v.id);
   const snap = pub && snapshotOf(db, pub.id);
@@ -664,7 +664,7 @@ function PerfVersionRow({ idea, v }) {
 }
 
 function ActivityTab({ idea, comments, onJump }) {
-  const { db, actions } = useDemo();
+  const { db, actions } = useWorkspace();
   const events = db.activity.filter((a) => a.ideaId === idea.id).slice().reverse();
   const [reply, setReply] = useState({});
   return (
@@ -717,7 +717,7 @@ function ActivityTab({ idea, comments, onJump }) {
 }
 
 function GeneralComment({ idea }) {
-  const { actions } = useDemo();
+  const { actions } = useWorkspace();
   const [text, setText] = useState("");
   return (
     <div className="flex gap-2">

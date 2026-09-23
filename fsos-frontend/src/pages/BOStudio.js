@@ -1,6 +1,6 @@
 import React from "react";
 import * as Icons from "lucide-react";
-import { useDemo } from "../domain/store";
+import { useWorkspace } from "../domain/store";
 import { useUI } from "../components/idea/IdeaModalProvider";
 import { PageHeader } from "../components/common/PageHeader";
 import IdeaList from "../components/common/IdeaList";
@@ -10,7 +10,7 @@ import { ideaProgress } from "../domain/selectors";
 import { fmtDate } from "../domain/dates";
 
 export default function BOStudio() {
-  const { db, actingUser } = useDemo();
+  const { db, actingUser } = useWorkspace();
   const { openCreate } = useUI();
   const boBatches = db.batches.filter((b) => b.stream === "BO");
 

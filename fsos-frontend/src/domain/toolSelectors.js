@@ -1,6 +1,6 @@
 // Derived views for the 6-Day Tracker and Growth. Growth is computed from 6-day
 // cycle entries (the source of truth), so both screens always agree.
-import { sixDayCyclesFor, monthOf, toolMetaForIP } from "./seedTools";
+import { sixDayCyclesFor, monthOf, ipMeta } from "./sixDay";
 
 export const TRACKER_GROUPS = [
   { key: "bizz_playbook", label: "Bizz playbook", emoji: "💼" },
@@ -15,7 +15,7 @@ export const TRACKER_GROUPS = [
 /** Tracker group for an IP — paused IPs always land in Inactive. */
 export function trackerGroup(ip) {
   if (!ip.active) return "inactive";
-  return toolMetaForIP(ip).group;
+  return ipMeta(ip).group;
 }
 
 const meaningful = (e) =>
@@ -86,7 +86,7 @@ export function growthRows(db) {
     .map((r) => {
       const ip = db.ips.find((i) => i.id === r.ipId);
       if (!ip) return null;
-      const meta = toolMetaForIP(ip);
+      const meta = ipMeta(ip);
       return { ...r, reelViews: Math.round(r.reelViews), postViews: Math.round(r.postViews), ip, handle: meta.handle, stage: meta.stage };
     })
     .filter(Boolean);

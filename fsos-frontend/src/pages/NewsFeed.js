@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import * as Icons from "lucide-react";
-import { useDemo, useAccess } from "../domain/store";
+import { useWorkspace, useAccess } from "../domain/store";
 import { useUI } from "../components/idea/IdeaModalProvider";
 import { canCreateIdea } from "../domain/roles";
-import { liveNewsConfigured, fetchLiveFeed, fetchRemoteState, pushVote, pushSaved, triggerNewsScrape } from "../lib/newsLive";
+import { fetchLiveFeed } from "../lib/newsLive";
 import { cn } from "../lib/utils";
 import { toast } from "sonner";
 
@@ -92,11 +92,6 @@ function matchesTopic(item, topic) {
   return TOPIC_KEYWORDS[topic].some((k) => text.includes(k));
 }
 const primaryTopic = (item) => TOPICS.find((t) => t.key !== "all" && matchesTopic(item, t.key))?.key || null;
-const withinLinkedInWindow = (item) => {
-  if (item.type !== "linkedin" || !item.publishedAt) return true;
-  const t = new Date(item.publishedAt).getTime();
-  return Number.isNaN(t) || t >= Date.now() - LINKEDIN_WINDOW_MS;
-};
 
 const fmtCompact = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(/\.0$/, "")}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1).replace(/\.0$/, "")}K` : String(n || 0));
 const fmtWhen = (iso) => {
@@ -107,11 +102,11 @@ const fmtWhen = (iso) => {
   return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 };
 
-const TABS = ["All", "News", "Inshorts", "LinkedIn"];
-const TYPE_OF_TAB = { News: "news", Inshorts: "inshorts", LinkedIn: "linkedin" };
+const TABS = ["All", "News", "Inshorts"];
+const TYPE_OF_TAB = { News: "news", Inshorts: "inshorts" };
 
 export default function NewsFeed() {
-  const { db, actions, actingUser } = useDemo();
+  const { db, actions, actingUser } = useWorkspace();
   const { canEdit } = useAccess();
   const { openCreate } = useUI();
   const editable = canEdit("news");
@@ -119,8 +114,7 @@ export default function NewsFeed() {
   const [topic, setTopic] = useState("all");
   const [search, setSearch] = useState("");
   const [scraping, setScraping] = useState(false);
-  const [live, setLive] = useState({ loading: liveNewsConfigured, items: null, status: null, at: null, error: null });
-  const syncWarned = useRef(false);
+  const [live, setLive] = useState({ loading: true, items: null, status: null, at: null, error: null });
 
   const loadLive = useCallback(async () => {
     setLive((l) => ({ ...l, loading: true }));
@@ -132,29 +126,20 @@ export default function NewsFeed() {
     }
   }, []);
 
-  useEffect(() => {
-    if (!liveNewsConfigured) return;
-    loadLive();
-    fetchRemoteState().then((r) => { if (r.ok) actions.mergeNewsRemote(r); }).catch(() => {});
-  }, [loadLive]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadLive(); }, [loadLive]);
 
-  // Live mode once any live source answered with stories; otherwise the seeded demo feed.
+  // Votes, bookmarks and learned rules are part of the workspace, so they're already
+  // loaded and already saved — only the stories themselves are fetched here.
   const isLive = !!live.items?.length;
   const { feedback, rules, saved } = db.newsState;
   const items = useMemo(
-    () => [...(isLive ? live.items : db.news.items)].sort((a, b) => (new Date(b.publishedAt).getTime() || 0) - (new Date(a.publishedAt).getTime() || 0)),
-    [isLive, live.items, db.news.items],
+    () => [...(live.items || [])].sort((a, b) => (new Date(b.publishedAt).getTime() || 0) - (new Date(a.publishedAt).getTime() || 0)),
+    [live.items],
   );
-  const syncFailed = () => {
-    if (syncWarned.current) return;
-    syncWarned.current = true;
-    toast.warning("Couldn't sync to Supabase — kept on this device", { description: "The anon key may not have write access to the feedback / saved tables." });
-  };
-  const visible = useMemo(() => items.filter((i) => !isBlocked(i, feedback, rules) && withinLinkedInWindow(i)), [items, feedback, rules]);
+  const visible = useMemo(() => items.filter((i) => !isBlocked(i, feedback, rules)), [items, feedback, rules]);
   const counts = {
     news: visible.filter((i) => i.type === "news").length,
     inshorts: visible.filter((i) => i.type === "inshorts").length,
-    linkedin: visible.filter((i) => i.type === "linkedin").length,
   };
 
   const base = tab === "Saved" ? saved.map((id) => items.find((i) => i.id === id) || db.newsState.savedItems?.[id]).filter(Boolean) : visible.filter((i) => tab === "All" || i.type === TYPE_OF_TAB[tab]);
@@ -163,38 +148,25 @@ export default function NewsFeed() {
   const filtered = base.filter((i) => (tab === "Saved" || matchesTopic(i, topic)) && (!q || `${i.title} ${i.body || ""}`.toLowerCase().includes(q)));
   const hiddenCount = Object.values(feedback).filter((v) => v === "no").length;
 
+  const syncFailed = (e) => toast.error("That didn't save", { description: e.message });
+
+  // The daily collection is a scheduled Supabase function; this just re-reads it.
   const scrape = async () => {
-    if (isLive || liveNewsConfigured) {
-      setScraping(true);
-      try {
-        const r = await triggerNewsScrape();
-        toast.success(r?.inserted ? `Pulled ${r.inserted} stor${r.inserted === 1 ? "y" : "ies"} from RSS` : "No new stories from the RSS sources", { description: "Ran the Supabase fetch-news function." });
-      } catch (e) {
-        toast.error("Couldn't run fetch-news", { description: `${e.message} — reloading what's already in Supabase.` });
-      }
-      await loadLive();
-      setScraping(false);
-      return;
-    }
     setScraping(true);
-    setTimeout(() => {
-      const n = actions.scrapeNews();
-      setScraping(false);
-      toast(n ? `${n} fresh stor${n === 1 ? "y" : "ies"} pulled in` : "Feed is up to date — no new stories", { description: "Demo mode: stories come from a local queue, not live sources." });
-    }, 700);
+    await loadLive();
+    setScraping(false);
+    toast.success("Feed reloaded");
   };
   const vote = (item, v) => {
-    if (isLive) pushVote(item, v).catch(syncFailed);
-    if (v === "yes") { actions.voteNews(item.id, "yes"); toast.success("Got it — more like this"); return; }
+    if (v === "yes") { actions.voteNews(item.id, "yes", null, item).catch(syncFailed); toast.success("Got it — more like this"); return; }
     const c = detectCategory(item);
     const learn = c !== "general" ? c : null;
-    actions.voteNews(item.id, "no", learn);
+    actions.voteNews(item.id, "no", learn, item).catch(syncFailed);
     toast(learn ? `Hidden + learned — will auto-block ${CATEGORY_LABELS[learn]} from now on` : "Hidden", { icon: "🚫" });
   };
   const toggleSave = (item) => {
     const was = saved.includes(item.id);
-    actions.toggleNewsSaved(item.id, item);
-    if (isLive) pushSaved(item, !was).catch(syncFailed);
+    actions.toggleNewsSaved(item.id, item).catch(syncFailed);
     toast.success(was ? "Removed from saved" : "Saved");
   };
   const toIdea = canCreateIdea(actingUser, "HPN")
@@ -213,7 +185,7 @@ export default function NewsFeed() {
             <h1 className="font-serif text-4xl tracking-[.08em] text-stone-900 lg:text-5xl">NEWS PIECES</h1>
             <p className="mt-1 text-stone-400" aria-hidden>❧</p>
             <p className="font-serif text-sm italic text-stone-600">India business intelligence — curated daily</p>
-            <p className="mt-0.5 font-mono text-[10px] uppercase tracking-[.25em] text-stone-400">News · Inshorts · LinkedIn</p>
+            <p className="mt-0.5 font-mono text-[10px] uppercase tracking-[.25em] text-stone-400">News · Inshorts</p>
           </div>
           <div className="pb-1 text-right font-mono text-[10px] uppercase tracking-[.15em] text-stone-500">
             <p>{new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</p>
@@ -236,7 +208,7 @@ export default function NewsFeed() {
       <div className="mb-3 flex flex-wrap items-center gap-1 border-b border-stone-300 pb-2">
         {TABS.map((t) => {
           const n = counts[TYPE_OF_TAB[t]];
-          const Icon = { News: Icons.Newspaper, Inshorts: Icons.Zap, LinkedIn: Icons.Linkedin }[t];
+          const Icon = { News: Icons.Newspaper, Inshorts: Icons.Zap }[t];
           return (
             <button key={t} onClick={() => setTab(t)} data-testid={`news-tab-${t}`}
               className={cn("inline-flex items-center gap-1.5 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[.15em] transition-colors",
@@ -298,18 +270,15 @@ export default function NewsFeed() {
 }
 
 function LiveStatus({ live, isLive, onReload }) {
-  if (!liveNewsConfigured) {
-    return <p className="mt-6 text-center text-[11px] text-stone-400">Demo mode — Supabase isn't configured (REACT_APP_SUPABASE_URL / REACT_APP_SUPABASE_ANON_KEY), so seeded stories are shown.</p>;
-  }
   const s = live.status || {};
   const part = (label, n) => <span className={n == null ? "text-rose-600" : n === 0 ? "text-stone-400" : "text-stone-600"}>{label} {n == null ? "unreachable" : n}</span>;
   return (
     <div className="mt-6 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-stone-400" data-testid="news-live-status">
       <span className={cn("inline-flex items-center gap-1.5 font-semibold", isLive ? "text-emerald-700" : "text-amber-700")}>
         <span className={cn("h-1.5 w-1.5 rounded-full", isLive ? "bg-emerald-500" : "bg-amber-500")} />
-        {live.loading ? "Loading live feed…" : isLive ? "Live from Supabase" : "Live sources returned nothing — showing demo stories"}
+        {live.loading ? "Loading stories…" : isLive ? "Live" : "No stories from any source right now"}
       </span>
-      {live.status && (<>{part("News", s.news)}·{part("Inshorts", s.inshorts)}·{part("LinkedIn (n8n)", s.linkedin)}</>)}
+      {live.status && (<>{part("News", s.news)}·{part("Inshorts", s.inshorts)}</>)}
       {live.at && <span>· updated {live.at.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>}
       <button onClick={onReload} className="underline hover:text-stone-700">Reload</button>
     </div>

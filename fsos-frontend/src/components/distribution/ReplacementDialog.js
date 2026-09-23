@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import * as Icons from "lucide-react";
-import { useDemo } from "../../domain/store";
+import { useWorkspace } from "../../domain/store";
 import { ideaById, ipById, publicationOf, candidateGaps, activePlacementOf } from "../../domain/selectors";
 import { StreamBadge, FormatBadge, IPBadge } from "../common/badges";
 import { fmtDate, addDays } from "../../domain/dates";
@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { cn } from "../../lib/utils";
 
 export default function ReplacementDialog({ open, onClose, boVersionId, ipId, date }) {
-  const { db, actions } = useDemo();
+  const { db, actions } = useWorkspace();
   const boV = boVersionId && db.versions.find((x) => x.id === boVersionId);
   const boIdea = boV && ideaById(db, boV.ideaId);
   const [hpnVersionId, setHpnVersionId] = useState("");

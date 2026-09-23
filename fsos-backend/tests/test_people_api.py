@@ -4,6 +4,10 @@ Run with the API on http://localhost:8000 and FSOS_DEV_LOGIN=true:
     python fsos-backend/tests/test_people_api.py
 
 Every change it makes is undone before it exits.
+
+Run one suite at a time. Both write to the real project and tidy up after themselves,
+so two copies at once will each undo the other's setup and report failures that
+aren't real.
 """
 import json
 import sys

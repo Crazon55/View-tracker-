@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import * as Icons from "lucide-react";
-import { useDemo, useAccess } from "../domain/store";
+import { useWorkspace, useAccess } from "../domain/store";
 import { PageHeader } from "../components/common/PageHeader";
 import { Avatar } from "../components/common/badges";
 import { AccessMatrix } from "../components/access/AccessMatrix";
@@ -20,7 +20,7 @@ import { toast } from "sonner";
 const TABS = [["people", "People"], ["roles", "Role defaults"]];
 
 export default function UsersRoles() {
-  const { db } = useDemo();
+  const { db } = useWorkspace();
   const { canEdit, canPreview, previewRole, setPreviewRole } = useAccess();
   const editable = canEdit("users_roles");
   const [tab, setTab] = useState("people");
@@ -64,7 +64,7 @@ function diffFrom(base, matrix) {
 }
 
 function PeopleAccess({ editable }) {
-  const { db, actions, actingUser } = useDemo();
+  const { db, actions, actingUser } = useWorkspace();
   const [roleDraft, setRoleDraft] = useState({});
   const [matrixDraft, setMatrixDraft] = useState({});
   const [open, setOpen] = useState(null); // `${id}:roles` | `${id}:access`
@@ -205,7 +205,7 @@ function PeopleAccess({ editable }) {
 }
 
 function AddMemberDialog({ open, onOpenChange }) {
-  const { actions } = useDemo();
+  const { actions } = useWorkspace();
   const [form, setForm] = useState({ name: "", roles: [], streams: ["BO", "HPN"] });
   const toggle = (key, v) => setForm((f) => ({ ...f, [key]: f[key].includes(v) ? f[key].filter((x) => x !== v) : [...f[key], v] }));
   const submit = () => {
@@ -238,7 +238,7 @@ function AddMemberDialog({ open, onOpenChange }) {
 }
 
 function RoleDefaults({ editable }) {
-  const { db, actions } = useDemo();
+  const { db, actions } = useWorkspace();
   const [open, setOpen] = useState(null);
   const [draft, setDraft] = useState({});
   const matrixFor = (r) => draft[r] ?? resolveRoleAccess(r, db.access.roles);

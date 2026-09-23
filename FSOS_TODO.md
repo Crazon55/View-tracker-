@@ -16,18 +16,27 @@ Tick items off as they're done (`[x]`). **Owner:** 🧑 you (needs the Supabase 
 
 ---
 
-## Where we are (23 Sept, end of day)
+## Where we are (23 Sept, later)
 
-Steps 0–3 done. The API is real and tested; the frontend still runs on demo data.
+Steps 0–3 done. **The demo store is gone.** The app now loads everything from the API and
+writes everything to the new database — ideas, production, distribution, performance,
+comments, notifications, settings, 6-Day, Growth and News. Nothing is seeded and nothing
+lives only in the browser.
 
-**Next up:** step 4 (login) — it blocks every frontend item below it.
-**Blocked on you:** the Google provider in Supabase (step 4). Nothing else.
+**Next up:** step 4 — the Google provider in Supabase. That's yours, and it's the only
+thing standing between this and a real sign-in. The login page, the pending-access screen
+and the account menu are written and waiting for it.
+
+**Meanwhile:** the app runs locally with `REACT_APP_FSOS_DEV_EMAIL` in
+`fsos-frontend/.env.local` acting as a stand-in for sign-in. Comment that line out the
+moment Google is on.
 
 Running locally: `fsos-frontend` on :3000 (`npx craco start`), `fsos-backend` on :8000
-(`python -m uvicorn app.main:app --port 8000`, needs `FSOS_DEV_LOGIN=true` until login exists).
-Tests: `CI=true npx craco test --watchAll=false` (11) and `python fsos-backend/tests/test_people_api.py` (39).
-
-Latest commits on `fsos`: `4e3dbc8` remove tickets · `e4672c4` privilege-escalation fix · `5e8831a` the API.
+(`python -m uvicorn app.main:app --port 8000`, with `FSOS_DEV_LOGIN=true`).
+Tests: `CI=true npx craco test --watchAll=false`, `python fsos-backend/tests/test_people_api.py` (39),
+and `python fsos-backend/tests/test_workflow_api.py` (107) — the last one walks an idea
+from creation to a 24-hour view capture against the real database and checks every value
+survives repeated reloads.
 
 ---
 
@@ -50,7 +59,7 @@ Latest commits on `fsos`: `4e3dbc8` remove tickets · `e4672c4` privilege-escala
 ## 2. API keys and environment
 
 - [x] 🧑 Supabase → **Project Settings → API Keys**. Done 23 Sept.
-- [x] 🤖 Service key in `fsos-backend/.env`; URL + anon key in `fsos-frontend/.env.local`. The News Feed keeps reading the old project (`REACT_APP_NEWS_SUPABASE_*`) until step 5d.
+- [x] 🤖 Service key in `fsos-backend/.env`; URL + anon key in `fsos-frontend/.env.local`, plus `REACT_APP_FSOS_API_URL`. The old project's `REACT_APP_NEWS_SUPABASE_*` are gone — the News Feed goes through the backend now.
 - [x] 🤖 Checked: both files are git-ignored and no key is staged.
 
 ## 3. Backend
@@ -67,11 +76,17 @@ Latest commits on `fsos`: `4e3dbc8` remove tickets · `e4672c4` privilege-escala
 
 ## 4. Login
 
-- [ ] 🧑 Supabase → **Authentication → Providers → Google**. Turn it on with the Google OAuth client (the same one snoboard uses, or a new one). Add the redirect URLs for localhost:3000 and the production domain.
-- [ ] 🤖 Login page in FSOS, restricted to `@owledmedia.com`.
-- [ ] 🤖 On first login, link the Supabase user to their `people` row by email (`people.auth_user_id`).
-- [ ] 🤖 Someone who logs in but isn't in `people` gets a new row with no role and sees "pending access".
-- [ ] 🤖 Replace the demo "act as" switcher with the logged-in user plus a sign-out button. Keep **Preview as role** for admins.
+**The code is done and waiting on the provider.** Everything below is written and builds;
+none of it can be *proved* until Google is switched on, so the ticks stay off.
+
+- [ ] 🧑 Supabase → **Authentication → Providers → Google**. Turn it on with the Google OAuth client (the same one snoboard uses, or a new one).
+      Google Cloud → authorised redirect URI: `https://huyylvmlwpphuolpckxw.supabase.co/auth/v1/callback`.
+      Supabase → **Authentication → URL Configuration**: Site URL `http://localhost:3000`, redirect URL `http://localhost:3000/**`.
+      Add the production URL there too once we have one.
+- [x] 🤖 Login page (`components/auth/SignIn.js`), Google only, `@owledmedia.com` only — `lib/session.js` drives the redirect against Supabase's auth API, no SDK.
+- [x] 🤖 First login links the Supabase user to their `people` row by email and stores `auth_user_id` (`app/auth.py`, already there since step 3).
+- [x] 🤖 Someone not in `people` gets a row with no roles and sees the pending-access screen (`components/auth/Gate.js`).
+- [x] 🤖 The demo "act as" switcher is gone. In its place: an account menu with your name, email and roles, **Preview as role** for admins, and sign out.
 - [ ] 🧑 Test: log in as yourself, check your role and sidebar, then log out.
 
 ## 5. Connect the added features to real data
@@ -82,46 +97,67 @@ Each item ends with "works in the browser against the new database", checked by 
 
 ### 5a. Users & Roles
 - [x] 🤖 API: list people, update roles and person access, role-default overrides, add member, remove access. Self-lockout and Founder/Admin are protected.
-- [ ] 🤖 Frontend: hide actions the API would refuse (granting above your own access, the Founder/Admin role for non-founders) so nobody meets a dead button.
-- [ ] 🤖 Frontend: Users & Roles page and sidebar gating read from the API.
+- [x] 🤖 API also takes profile edits now (name, streams, skills, active) so Settings → People works. You can't deactivate yourself or the last Founder/Admin.
+- [ ] 🤖 Frontend: hide actions the API would refuse (granting above your own access, the Founder/Admin role for non-founders) so nobody meets a dead button. **Still open** — the API refuses correctly, but the button is still there to press.
+- [x] 🤖 Frontend: Users & Roles page and sidebar gating read from the API.
 - [ ] 🧑 Check: all 26 people show with the right roles. Changing someone's access changes their sidebar after they reload.
 
 ### 5b. 6-Day Tracker
-- [ ] 🤖 API: month view (cycles, entries, topline), upsert an entry, topline add/edit/delete, month-end actuals, 6-Day assignee setting.
-- [ ] 🤖 Frontend: the page reads and writes through the API. Overdue alerts go to the assignee.
+- [x] 🤖 API: entries upserted on (month, cycle, IP), top content add/edit/delete, month-end actuals, assignee setting (`app/routers/tools.py`).
+- [x] 🤖 Frontend: the page reads and writes through the API. Overdue cycles still surface to the assignee in the bell.
 - [ ] 🧑 Check: April–September history matches snoboard. Editing a number and reloading keeps it.
 
 ### 5c. Growth
-- [ ] 🤖 API: monthly rows per IP. 6-Day cycle sums win; `growth_monthly` fills the months before the 6-Day Tracker existed.
-- [ ] 🤖 Frontend: Growth reads the API; followers are editable for Edit users.
+- [x] 🤖 API: `growth_monthly` per IP per month; editing followers leaves the imported `views` alone. Cycle sums still win where 6-Day data exists.
+- [x] 🤖 Frontend: Growth reads the workspace; followers are editable for Edit users.
 - [ ] 🧑 Check: monthly totals match snoboard's Growth page for the same months.
 
 ### 5d. News Feed
-- [ ] 🤖 Deploy `supabase/functions/fetch-news` to the new project (Supabase CLI: `supabase functions deploy fetch-news --project-ref huyylvmlwpphuolpckxw`).
+**What was actually wrong:** `newsLive.js` pointed at the *new* project but queried
+`news_feed_feedback`, `news_feed_saved` and `linkedin_feed` — none of which exist there —
+while `news_articles` was empty. The only thing working was the Inshorts scrape, which
+never touched Supabase. That's why it looked fine.
+
+- [ ] 🧑 **Deploy `supabase/functions/fetch-news` to the new project**: `supabase functions deploy fetch-news --project-ref huyylvmlwpphuolpckxw`. Until this runs, `news_articles` stays empty and the feed is Inshorts only.
 - [ ] 🧑 Schedule it daily: Supabase → **Integrations → Cron**, or the same scheduler that runs it on the old project.
-- [ ] 🤖 API: articles (last 2 days), votes, learned rules, saved. Inshorts goes through the backend instead of the dev-only proxy, so it works when deployed.
-- [ ] 🤖 Frontend: News Feed uses the API. Remove the direct Supabase calls and `setupProxy.js`.
+- [x] 🤖 API: articles (last 2 days), votes, learned rules, saved (`app/routers/news.py`). Inshorts is read server-side, so it works on a deployed build.
+- [x] 🤖 Frontend: News Feed uses the API. The direct Supabase calls and `setupProxy.js` are gone. The LinkedIn tab went too — that feed is snoboard's n8n ingest and the team don't need it.
 - [ ] 🧑 Check: today's stories show. The next morning there are new stories without anyone clicking anything.
 
 ### 5e. Pintu
-- [ ] 🤖 Nothing to connect (it's an external link). Confirm it's gated by the real access matrix after login.
+- [x] 🤖 Nothing to connect (it's an external link); it's gated by the real access matrix like every other area.
 - [ ] 🧑 Confirm the URL `http://16.112.125.207:5173/` is still correct.
 
-## 6. The core FSOS workflow (after the 6 features)
+## 6. The core FSOS workflow
 
-These screens have no data in the old database, so they start empty on the real database.
+Done. These screens started empty — the old database has nothing like them — and they now
+read and write the new one.
 
-- [ ] 🤖 IPs, categories and settings via the API (Settings page).
-- [ ] 🤖 Ideas and versions: create, edit brief, destinations, approval, BO batches (BO Studio, HPN Desk, Idea Card).
-- [ ] 🤖 Production: assign owner, deadline and reviewer, links, submit, approve, request changes.
-- [ ] 🤖 Distribution: placements, bulk placement, same-day exception, HPN displacement, confirm publication.
-- [ ] 🤖 Performance: 24-hour view capture, baselines, cycles. Command Room summaries.
-- [ ] 🤖 Comments, activity log and notifications.
-- [ ] 🤖 Turn off the demo store for signed-in users. Keep it available only as an explicit demo mode, if wanted.
+- [x] 🤖 IPs, categories and settings via the API. Settings defaults (thresholds, baseline sample, approvers) live in `app/routers/settings.py` and are merged over whatever's stored, so a fresh database is usable on day one and an unset quota still reads "Not configured" rather than a fake zero.
+- [x] 🤖 Ideas and versions: create, edit brief, destinations, approval, batches. One version per destination IP; adding a destination creates one, removing a destination keeps it.
+- [x] 🤖 Production: one owner per idea (reassignment pushes the old owner onto `previous_owners` rather than overwriting), deadline, reviewer, asset links, submit, approve, request changes. Nothing reaches review without an asset; a rejection always carries a comment.
+- [x] 🤖 Distribution: placements, bulk placement, same-day repetition exception (recorded with who and why), HPN displacement that reschedules or returns the BO version but never drops it, publication confirmation.
+- [x] 🤖 Performance: 24-hour capture. `views` stays NULL until someone types a number — missing is not zero — and `age_hours` is measured from publication, so a late capture reads as the age it really is.
+- [x] 🤖 Comments (anchored to a slide, asset or version), replies, resolve, the activity log, and per-person notifications. `notifyUser()` came back as part of this.
+- [x] 🤖 **The demo store is gone.** `domain/seed.js` and `domain/seedTools.js` are deleted, along with `localStorage` persistence, "Reset demo" and the "act as" switcher. `domain/store.js` is now an API-backed workspace; the calendar maths that lived in the seed moved to `domain/sixDay.js`, which is real domain logic, not demo data.
+- [ ] 🧑 **Walk through it in the browser** and tell me what feels wrong. It's verified by tests, not by eyes, and those are different things.
+
+**How it's put together.** `GET /api/workspace` returns the whole state in one round trip,
+in the shape the UI already held, so the selectors and every screen were left alone.
+Mutations write to the database first and only then update what's on screen. The browser
+never touches Supabase except to sign in — RLS denies the anon key everything on purpose,
+so the backend is the single door.
+
+**Proof it's actually stored.** `python fsos-backend/tests/test_workflow_api.py` — 107
+checks. It walks one idea from creation through approval, production, review, the
+calendar, publication and a 24-hour capture, then verifies every value three ways: the
+mutation's response, three consecutive fresh `GET /api/workspace` calls (what a refresh
+does), and a direct PostgREST read that never touches the API. It cleans up after itself;
+`--keep` leaves the walkthrough in the app so you can look at it.
 
 ## 7. Go-live
 
-- [ ] 🤖 Production build of `fsos-frontend` in Docker (nginx, like snoboard's Dockerfile) with the new env vars.
+- [ ] 🤖 Production build of `fsos-frontend` in Docker (nginx, like snoboard's Dockerfile) with the new env vars. **`REACT_APP_FSOS_DEV_EMAIL` must not be set, and `FSOS_DEV_LOGIN` must be off.**
 - [ ] 🤖 Update `deploy.sh` to build `fsos-frontend/` and the FSOS backend instead of the snoboard folders.
 - [ ] 🧑 Pick a cutover time when nobody is mid-task in snoboard.
 - [ ] 🤖 Cutover day: re-run the export and import (it's safe to re-run) so the latest snoboard data comes across.

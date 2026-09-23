@@ -3,7 +3,7 @@ import * as Icons from "lucide-react";
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
 } from "recharts";
-import { useDemo, useAccess } from "../domain/store";
+import { useWorkspace, useAccess } from "../domain/store";
 import { PageHeader } from "../components/common/PageHeader";
 import { Input } from "../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
@@ -24,7 +24,7 @@ const STAGES = [
 ];
 
 export default function Growth() {
-  const { db } = useDemo();
+  const { db } = useWorkspace();
   const [ipFilter, setIpFilter] = useState("all");
   const [drillMonth, setDrillMonth] = useState(null);
 
@@ -167,7 +167,7 @@ function MonthSection({ month, rows }) {
 }
 
 function GrowthTable({ rows, total, month, showFollowers }) {
-  const { actions } = useDemo();
+  const { actions } = useWorkspace();
   const { canEdit } = useAccess();
   const editable = canEdit("growth");
   const sum = rows.reduce((s, r) => s + r.views, 0);

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import * as Icons from "lucide-react";
-import { useDemo } from "../domain/store";
+import { useWorkspace } from "../domain/store";
 import { useUI } from "../components/idea/IdeaModalProvider";
 import { PageHeader } from "../components/common/PageHeader";
 import { IPBadge, PerfBadge, FormatBadge, StreamBadge } from "../components/common/badges";
@@ -31,7 +31,7 @@ export default function Performance() {
 }
 
 function Capture() {
-  const { db, actions } = useDemo();
+  const { db, actions } = useWorkspace();
   const { openIdea, streamFilter } = useUI();
   const tasks = captureTasks(db, streamFilter);
   const now = new Date();
@@ -60,7 +60,7 @@ function Capture() {
 }
 
 function CaptureRow({ t, openIdea, record }) {
-  const { db } = useDemo();
+  const { db } = useWorkspace();
   const v = db.versions.find((x) => x.id === t.pub.versionIds[0]);
   const idea = v && ideaById(db, v.ideaId);
   const [val, setVal] = useState(t.snap?.views ?? "");
@@ -83,7 +83,7 @@ function CaptureRow({ t, openIdea, record }) {
 }
 
 function IdeasPerf() {
-  const { db } = useDemo();
+  const { db } = useWorkspace();
   const { openIdea, streamFilter } = useUI();
   const publishedIdeas = db.ideas.filter((i) => matchesStream(i, streamFilter) && db.versions.some((v) => v.ideaId === i.id && publicationOf(db, v.id)));
   return (
@@ -117,7 +117,7 @@ function IdeasPerf() {
 }
 
 function IPCycles() {
-  const { db } = useDemo();
+  const { db } = useWorkspace();
   const { streamFilter } = useUI();
   const cycles = sixDayCycles(db, 6, streamFilter);
   const [sel, setSel] = useState(cycles.length - 1);

@@ -66,6 +66,11 @@ class PersonPatch(BaseModel):
     roles: list[str] | None = None
     matrix: dict[str, str] | None = None   # null clears the person's override
     clear_matrix: bool = False
+    # Profile fields, edited from Settings → People.
+    name: str | None = None
+    streams: list[str] | None = None
+    skills: list[str] | None = None
+    active: bool | None = None
 
 
 class RoleMatrix(BaseModel):
@@ -79,6 +84,7 @@ class NewPerson(BaseModel):
     email: str | None = None
     roles: list[str] = Field(default_factory=list)
     streams: list[str] = Field(default_factory=lambda: ["BO", "HPN"])
+    skills: list[str] = Field(default_factory=list)
 
 
 @router.get("")
@@ -117,8 +123,22 @@ async def update_person(person_id: str, patch: PersonPatch, caller: Caller = Dep
     if person_id == caller.id and LOCKED_ROLE not in roles and effective.get("users_roles") != "edit":
         raise HTTPException(status_code=400, detail="That would remove your own access to Users & Roles.")
 
+    # Deactivating yourself would lock you out on the next request.
+    if patch.active is False and person_id == caller.id:
+        raise HTTPException(status_code=400, detail="You can't deactivate your own account.")
+    if patch.active is False and LOCKED_ROLE in roles and await _last_admin(person_id):
+        raise HTTPException(status_code=400, detail=f"{person['name']} is the last {LOCKED_ROLE}.")
+
+    profile = {k: v for k, v in (
+        ("name", patch.name.strip() if patch.name else None),
+        ("streams", patch.streams),
+        ("skills", patch.skills),
+        ("active", patch.active),
+    ) if v is not None}
     if patch.roles is not None:
-        await db.update("people", {"id": f"eq.{person_id}"}, {"roles": roles})
+        profile["roles"] = roles
+    if profile:
+        await db.update("people", {"id": f"eq.{person_id}"}, profile)
     if patch.clear_matrix or patch.matrix == {}:
         await db.delete("access_person_overrides", {"person_id": f"eq.{person_id}"})
     elif patch.matrix is not None:
@@ -146,6 +166,7 @@ async def add_person(body: NewPerson, caller: Caller = Depends(current_caller)):
         "initials": initials,
         "roles": roles,
         "streams": body.streams,
+        "skills": body.skills,
     })
 
 
