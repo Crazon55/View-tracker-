@@ -121,18 +121,22 @@ async def list_people(caller: Caller = Depends(current_caller)):
     require(caller.access, "users_roles", "view")
     people = await db.select("people", {"select": PERSON_FIELDS, "order": "name"})
     role_overrides, person_overrides = await _overrides()
-    # Who has ever done anything. One pass over each table rather than one per person:
-    # 26 people against 13 tables would otherwise be 338 round trips.
-    used: set[str] = set()
-    for table, column, _ in HISTORY:
+    # Who has ever done anything, and the first thing they did. One pass over each table
+    # rather than one per person: 26 people against 13 tables would be 338 round trips.
+    used: dict[str, str] = {}
+    for table, column, description in HISTORY:
         for row in await db.select(table, {"select": column}):
-            if row.get(column):
-                used.add(row[column])
+            pid = row.get(column)
+            if pid and pid not in used:
+                used[pid] = description
     for p in people:
         p["accessOverride"] = person_overrides.get(p["id"])
         p["access"] = resolve_person_access(p.get("roles") or [], p["accessOverride"], role_overrides)
-        # Deletable only with no history, and never yourself.
-        p["canDelete"] = p["id"] not in used and p["id"] != caller.id
+        # You can always delete someone except yourself; the last-admin case is caught
+        # on the way in, since it depends on who else holds the role.
+        p["canDelete"] = p["id"] != caller.id
+        # What deleting them would detach, so the dialog can say so before you do it.
+        p["deleteDetaches"] = used.get(p["id"])
     return {"people": people, "roles": ROLES, "areas": AREAS}
 
 
@@ -229,13 +233,17 @@ async def remove_access(person_id: str, caller: Caller = Depends(current_caller)
 
 @router.delete("/{person_id}")
 async def delete_person(person_id: str, caller: Caller = Depends(current_caller)):
-    """Remove someone from the team for good.
+    """Remove someone from the team. Delete means delete.
 
-    Only for people who have never done anything — a wrong-email typo, a test row, or
-    somebody imported who was never going to use FSOS. Anyone who has actually worked
-    stays: their name is attached to ideas, comments and captures, and deleting it would
-    leave holes in records other people rely on. Clear their access instead; they keep
-    their history and see the pending screen.
+    Every column that points at a person is nullable, so we detach first and then remove
+    them. The work itself stays — a 6-Day entry keeps its numbers, an idea keeps its
+    brief, a comment keeps its text — it just stops being attributed to anyone. That is
+    the honest trade: the alternative is either refusing (which isn't what "delete"
+    means) or cascading (which would take 28 million views of August with it).
+
+    Two refusals remain, and neither is about tidiness: you can't delete yourself
+    mid-session, and you can't delete the last Founder/Admin, because nobody could undo
+    either.
     """
     require(caller.access, "users_roles", "edit")
     if person_id == caller.id:
@@ -247,17 +255,16 @@ async def delete_person(person_id: str, caller: Caller = Depends(current_caller)
     if LOCKED_ROLE in (person.get("roles") or []) and await _last_admin(person_id):
         raise HTTPException(status_code=400, detail=f"{person['name']} is the last {LOCKED_ROLE}.")
 
-    history = await _history(person_id)
-    if history:
-        raise HTTPException(
-            status_code=409,
-            detail=f"{person['name']} can't be removed — they {history[0]}. "
-                   "Remove their access instead; that keeps the record intact.",
-        )
+    # Detach, then delete. Order matters: the foreign keys are NO ACTION, so the delete
+    # fails while anything still points here.
+    detached = 0
+    for table, column, _ in HISTORY:
+        rows = await db.update(table, {column: f"eq.{person_id}"}, {column: None})
+        detached += len(rows)
 
-    # Notifications and the access override go with them; both cascade.
+    # notifications and access_person_overrides cascade.
     await db.delete("people", {"id": f"eq.{person_id}"})
-    return {"ok": True, "deleted": person_id}
+    return {"ok": True, "deleted": person_id, "detached": detached}
 
 
 @roles_router.get("/access")

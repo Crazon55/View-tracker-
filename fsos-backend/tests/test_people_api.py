@@ -47,10 +47,19 @@ def api(method, path, *, email=None, body=None):
             return e.code, None
 
 
-def supabase(path):
-    req = urllib.request.Request(f"{SB_URL}/rest/v1/{path}", headers={"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}"})
-    with urllib.request.urlopen(req) as r:
-        return json.load(r)
+def supabase(path, method="GET", body=None):
+    req = urllib.request.Request(
+        f"{SB_URL}/rest/v1/{path}", method=method,
+        data=json.dumps(body).encode() if body is not None else None,
+        headers={"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}",
+                 "Content-Type": "application/json", "Prefer": "return=representation"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            raw = r.read()
+            return json.loads(raw) if raw else None
+    except urllib.error.HTTPError as e:
+        print(f"    (supabase {method} {path} -> {e.code} {e.read()[:160]})")
+        return None
 
 
 people = supabase("people?select=id,email,name,roles&order=name&limit=200")
@@ -135,6 +144,28 @@ designer = next((p for p in supabase("people?select=id,roles") if p["roles"] == 
 if designer:
     d = next(p for p in api("GET", "/api/people", email=A)[1]["people"] if p["id"] == designer["id"])
     check("role override reaches its people", d["access"]["news"], "edit")
+
+print("deleting a person keeps their work and drops their name")
+# The rule the team asked for: delete means delete, and what they entered stays. Every
+# column pointing at a person is nullable, so the row survives without the attribution.
+ip = supabase("ips?select=id&limit=1")[0]
+tmp = supabase("people", method="POST", body={
+    "name": "[selftest] Deletable", "email": "selftest-deletable@owledmedia.com",
+    "initials": "SD", "roles": ["Editor"]})[0]
+entry = supabase("six_day_entries?on_conflict=month,cycle,ip_id", method="POST", body={
+    "month": "2026-07-01", "cycle": 5, "ip_id": ip["id"], "views": 123456, "filled_by": tmp["id"]})[0]
+check("the throwaway person has history", supabase(f"people?select=id&id=eq.{tmp['id']}") != [], True)
+
+status, body = api("DELETE", f"/api/people/{tmp['id']}", email=A)
+check("delete succeeds despite the history", status, 200)
+check("it says what it detached", body.get("detached"), 1)
+check("the person is gone", supabase(f"people?select=id&id=eq.{tmp['id']}"), [])
+kept = supabase(f"six_day_entries?select=views,filled_by&id=eq.{entry['id']}")
+check("their 6-Day numbers survive", kept[0]["views"] if kept else None, 123456)
+check("with nobody's name on them", kept[0]["filled_by"] if kept else "missing", None)
+supabase(f"six_day_entries?id=eq.{entry['id']}", method="DELETE")
+
+check("you can't delete yourself", api("DELETE", f"/api/people/{admin['id']}", email=A)[0], 400)
 
 print("cleanup")
 check("reset Designer", api("POST", "/api/roles/access/reset", email=A, body={"role": "Designer"})[0], 200)
