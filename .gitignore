@@ -10,3 +10,6 @@ dist/
 .DS_Store
 Thumbs.db
 .claude/worktrees/
+
+# Records the commit whose frontend build is currently in /var/www/fsos.
+.fsos-last-build

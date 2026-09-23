@@ -112,13 +112,35 @@ pm2 start "$VENV_DIR/bin/uvicorn" \
 pm2 save
 
 echo ""
-echo "=== Frontend: build ==="
-# webpack wants more than this box has. 916MB of RAM with no swap doesn't fail cleanly,
-# it thrashes until you give up and press Ctrl-C.
-avail_mb="$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 9999)"
-swap_mb="$(awk '/SwapTotal/{print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)"
-if [ "$avail_mb" -lt 1500 ] && [ "$swap_mb" -lt 512 ]; then
-  cat >&2 <<SWAP
+echo "=== Frontend ==="
+# Rebuilding takes five to ten minutes on this box and most deploys are backend-only,
+# so only build when something under fsos-frontend/ actually changed since the last
+# successful one. The stamp records the commit that produced what's in the web root;
+# if either the stamp or the web root is missing we build regardless.
+STAMP="$REPO_ROOT/.fsos-last-build"
+HEAD_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+need_build=1
+if [ "${1:-}" = "--force-build" ]; then
+  echo "  --force-build: rebuilding whatever the stamp says"
+elif [ -f "$STAMP" ] && [ -f "$WEB_ROOT/index.html" ]; then
+  last="$(cat "$STAMP" 2>/dev/null || true)"
+  if [ -n "$last" ] && git -C "$REPO_ROOT" cat-file -e "${last}^{commit}" 2>/dev/null; then
+    if git -C "$REPO_ROOT" diff --quiet "$last" "$HEAD_SHA" -- fsos-frontend/; then
+      need_build=0
+      echo "  nothing changed under fsos-frontend/ since ${last:0:8} — skipping the build"
+    fi
+  fi
+fi
+
+if [ "$need_build" = "0" ]; then
+  echo "  (run with --force-build to rebuild anyway)"
+else
+  # webpack wants more than this box has. 916MB of RAM with no swap doesn't fail
+  # cleanly, it thrashes until you give up and press Ctrl-C.
+  avail_mb="$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 9999)"
+  swap_mb="$(awk '/SwapTotal/{print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)"
+  if [ "$avail_mb" -lt 1500 ] && [ "$swap_mb" -lt 512 ]; then
+    cat >&2 <<SWAP
 Only ${avail_mb}MB available and ${swap_mb}MB of swap. The production build needs
 roughly 1.5GB and will stall rather than fail. Add swap first:
 
@@ -126,35 +148,45 @@ roughly 1.5GB and will stall rather than fail. Add swap first:
   sudo mkswap /swapfile && sudo swapon /swapfile
   echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 SWAP
-  exit 1
-fi
-cd "$FRONTEND_DIR"
-npm ci --no-audit
-# Webpack needs more headroom than snoboard's vite build, which is already capped at
-# 768MB on this box — so cap it explicitly rather than letting node guess and get
-# OOM-killed halfway through. Raise it if the box has the memory.
-# REACT_APP_FSOS_API_URL= : production talks to /api on this origin, and an empty value
-# beats .env.local's localhost. Verified — the compiled base is the empty string.
-NODE_OPTIONS="--max-old-space-size=1024" REACT_APP_FSOS_API_URL= npm run build
+    exit 1
+  fi
 
-echo ""
-echo "=== Publishing to $WEB_ROOT ==="
-# Out of the home directory: nginx runs as `nginx` and /home/ec2-user is mode 700, so
-# serving from there is a 403 on every request.
-sudo mkdir -p "$WEB_ROOT"
-if command -v rsync >/dev/null 2>&1; then
-  sudo rsync -a --delete "$FRONTEND_DIR/build/" "$WEB_ROOT/"
-else
-  # Amazon Linux minimal images don't always ship rsync. Replace wholesale rather than
-  # copying over the top, or the last deploy's hashed bundles linger forever.
-  sudo find "$WEB_ROOT" -mindepth 1 -delete
-  sudo cp -a "$FRONTEND_DIR/build/." "$WEB_ROOT/"
-fi
-sudo chown -R nginx:nginx "$WEB_ROOT"
-# If SELinux is enforcing, files under /var/www carry the wrong label and nginx gets a
-# 403 that looks exactly like a permissions bug. No-op when SELinux is off.
-if command -v restorecon >/dev/null 2>&1; then
-  sudo restorecon -R "$WEB_ROOT" 2>/dev/null || true
+  cd "$FRONTEND_DIR"
+  # npm ci wipes and reinstalls node_modules, which is a minute by itself. Only needed
+  # when the lockfile moved or the tree isn't there.
+  if [ ! -d node_modules ] || ! git -C "$REPO_ROOT" diff --quiet "${last:-$HEAD_SHA}" "$HEAD_SHA" -- fsos-frontend/package-lock.json 2>/dev/null; then
+    npm ci --no-audit
+  else
+    echo "  dependencies unchanged — skipping npm ci"
+  fi
+
+  # Webpack wants more headroom than snoboard's vite build, which is capped at 768MB on
+  # this box. Cap it deliberately rather than letting node grow into swap and crawl.
+  # REACT_APP_FSOS_API_URL= : production talks to /api on this origin, and an empty value
+  # beats .env.local's localhost. Verified — the compiled base is the empty string.
+  NODE_OPTIONS="--max-old-space-size=1024" REACT_APP_FSOS_API_URL= npm run build
+
+  echo ""
+  echo "=== Publishing to $WEB_ROOT ==="
+  # Out of the home directory: nginx runs as `nginx` and /home/ec2-user is mode 700, so
+  # serving from there is a 403 on every request.
+  sudo mkdir -p "$WEB_ROOT"
+  if command -v rsync >/dev/null 2>&1; then
+    sudo rsync -a --delete "$FRONTEND_DIR/build/" "$WEB_ROOT/"
+  else
+    # Amazon Linux minimal images don't always ship rsync. Replace wholesale rather than
+    # copying over the top, or the last deploy's hashed bundles linger forever.
+    sudo find "$WEB_ROOT" -mindepth 1 -delete
+    sudo cp -a "$FRONTEND_DIR/build/." "$WEB_ROOT/"
+  fi
+  sudo chown -R nginx:nginx "$WEB_ROOT"
+  # If SELinux is enforcing, files under /var/www carry the wrong label and nginx gets a
+  # 403 that looks exactly like a permissions bug. No-op when SELinux is off.
+  if command -v restorecon >/dev/null 2>&1; then
+    sudo restorecon -R "$WEB_ROOT" 2>/dev/null || true
+  fi
+  # Only now, with the build actually published, is this commit the one on disk.
+  echo "$HEAD_SHA" > "$STAMP"
 fi
 
 echo ""
