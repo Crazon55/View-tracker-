@@ -328,7 +328,14 @@ check("an Editor cannot place on the calendar",
       api("POST", "/api/distribution/place", email=E, body={"versionId": v2["id"], "date": TODAY})[0], 403)
 check("an Editor cannot edit Settings",
       api("PATCH", "/api/settings", email=E, body={"settings": {"x": 1}})[0], 403)
-check("an unknown person gets nothing", api("GET", "/api/workspace", email="nobody@owledmedia.com")[0], 403)
+STRANGER = "fsos-selftest-stranger@owledmedia.com"
+check("an unknown person gets nothing", api("GET", "/api/workspace", email=STRANGER)[0], 403)
+# That request just created them: an unrecognised sign-in becomes a pending person,
+# which is the point of it. Clean up, or every run adds another row to the team list.
+for row in supabase(f"people?select=id&email=eq.{urllib.parse.quote(STRANGER)}") or []:
+    supabase(f"people?id=eq.{row['id']}", method="DELETE")
+check("the stranger row was cleaned up",
+      supabase(f"people?select=id&email=eq.{urllib.parse.quote(STRANGER)}"), [])
 
 # ───────────────────────── 9. it is really in Postgres ─────────────────────────
 print("\n9. Multiple refreshes, then a read that bypasses the API entirely")

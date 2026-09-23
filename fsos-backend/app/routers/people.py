@@ -87,15 +87,52 @@ class NewPerson(BaseModel):
     skills: list[str] = Field(default_factory=list)
 
 
+# Everywhere a person can be referenced. Deleting someone who appears in any of these
+# would either fail on a foreign key or quietly orphan the record, so we look first and
+# say which it is.
+HISTORY = [
+    ("ideas", "creator_id", "created an idea"),
+    ("ideas", "production_owner_id", "owned production on an idea"),
+    ("ideas", "reviewer_id", "is a reviewer on an idea"),
+    ("ideas", "approved_by", "approved an idea"),
+    ("batches", "reviewer_id", "is a reviewer on a batch"),
+    ("comments", "author_id", "wrote a comment"),
+    ("activity", "actor_id", "appears in the activity log"),
+    ("placements", "exception_by", "authorised a repetition exception"),
+    ("snapshots", "recorded_by", "recorded a view capture"),
+    ("six_day_entries", "filled_by", "filled in the 6-Day Tracker"),
+    ("six_day_actuals", "filled_by", "filled in a month-end actual"),
+    ("news_feedback", "voted_by", "voted on the News Feed"),
+    ("news_saved", "saved_by", "saved a news story"),
+]
+
+
+async def _history(person_id: str) -> list[str]:
+    found = []
+    for table, column, description in HISTORY:
+        if await db.select_one(table, {column: f"eq.{person_id}", "select": column}):
+            found.append(description)
+    return found
+
+
 @router.get("")
 async def list_people(caller: Caller = Depends(current_caller)):
     """Everyone, with their effective access. Needs view on Users & Roles."""
     require(caller.access, "users_roles", "view")
     people = await db.select("people", {"select": PERSON_FIELDS, "order": "name"})
     role_overrides, person_overrides = await _overrides()
+    # Who has ever done anything. One pass over each table rather than one per person:
+    # 26 people against 13 tables would otherwise be 338 round trips.
+    used: set[str] = set()
+    for table, column, _ in HISTORY:
+        for row in await db.select(table, {"select": column}):
+            if row.get(column):
+                used.add(row[column])
     for p in people:
         p["accessOverride"] = person_overrides.get(p["id"])
         p["access"] = resolve_person_access(p.get("roles") or [], p["accessOverride"], role_overrides)
+        # Deletable only with no history, and never yourself.
+        p["canDelete"] = p["id"] not in used and p["id"] != caller.id
     return {"people": people, "roles": ROLES, "areas": AREAS}
 
 
@@ -185,6 +222,39 @@ async def remove_access(person_id: str, caller: Caller = Depends(current_caller)
     await db.update("people", {"id": f"eq.{person_id}"}, {"roles": []})
     await db.delete("access_person_overrides", {"person_id": f"eq.{person_id}"})
     return {"ok": True}
+
+
+@router.delete("/{person_id}")
+async def delete_person(person_id: str, caller: Caller = Depends(current_caller)):
+    """Remove someone from the team for good.
+
+    Only for people who have never done anything — a wrong-email typo, a test row, or
+    somebody imported who was never going to use FSOS. Anyone who has actually worked
+    stays: their name is attached to ideas, comments and captures, and deleting it would
+    leave holes in records other people rely on. Clear their access instead; they keep
+    their history and see the pending screen.
+    """
+    require(caller.access, "users_roles", "edit")
+    if person_id == caller.id:
+        raise HTTPException(status_code=400, detail="You can't remove yourself.")
+    person = await db.select_one("people", {"id": f"eq.{person_id}", "select": "id,name,roles"})
+    if not person:
+        raise HTTPException(status_code=404, detail="Person not found")
+    _guard_locked_role(caller, person.get("roles") or [], [])
+    if LOCKED_ROLE in (person.get("roles") or []) and await _last_admin(person_id):
+        raise HTTPException(status_code=400, detail=f"{person['name']} is the last {LOCKED_ROLE}.")
+
+    history = await _history(person_id)
+    if history:
+        raise HTTPException(
+            status_code=409,
+            detail=f"{person['name']} can't be removed — they {history[0]}. "
+                   "Remove their access instead; that keeps the record intact.",
+        )
+
+    # Notifications and the access override go with them; both cascade.
+    await db.delete("people", {"id": f"eq.{person_id}"})
+    return {"ok": True, "deleted": person_id}
 
 
 @roles_router.get("/access")

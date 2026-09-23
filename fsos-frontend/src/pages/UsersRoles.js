@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import * as Icons from "lucide-react";
 import { useWorkspace, useAccess } from "../domain/store";
 import { PageHeader } from "../components/common/PageHeader";
@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { ROLES, STREAMS } from "../domain/constants";
 import { AREA_KEYS, LOCKED_ROLE, ROLE_ACCESS_DEFAULTS, resolvePersonAccess, resolveRoleAccess, countLevels } from "../domain/access";
 import { cn } from "../lib/utils";
+import { api } from "../lib/api";
 import { toast } from "sonner";
 
 const TABS = [["people", "People"], ["roles", "Role defaults"]];
@@ -72,11 +73,25 @@ function PeopleAccess({ editable }) {
   const [removing, setRemoving] = useState(null);
   const [q, setQ] = useState("");
 
+  // Who can actually be deleted rather than just have their access cleared. Working it
+  // out means checking thirteen tables for any reference to each person — too much to
+  // put on every workspace load, so this page (admin-only, rarely opened) asks for it.
+  const [deletable, setDeletable] = useState(null);
+  useEffect(() => {
+    let live = true;
+    api.get("/api/people")
+      .then((r) => { if (live) setDeletable(new Set(r.people.filter((x) => x.canDelete).map((x) => x.id))); })
+      .catch(() => { if (live) setDeletable(new Set()); })   // no flags is the safe default
+    return () => { live = false; };
+  }, [db.users]);
+
   const people = useMemo(() => {
-    const list = db.users.filter((u) => !q || u.name.toLowerCase().includes(q.toLowerCase()) || u.roles.join(" ").toLowerCase().includes(q.toLowerCase()));
+    const list = db.users
+      .filter((u) => !q || u.name.toLowerCase().includes(q.toLowerCase()) || u.roles.join(" ").toLowerCase().includes(q.toLowerCase()))
+      .map((u) => ({ ...u, canDelete: !!deletable?.has(u.id) }));
     // pending people first, then active, then deactivated
     return [...list].sort((a, b) => (a.roles.length ? 1 : 0) - (b.roles.length ? 1 : 0) || (a.active ? 0 : 1) - (b.active ? 0 : 1));
-  }, [db.users, q]);
+  }, [db.users, q, deletable]);
 
   const rolesFor = (u) => roleDraft[u.id] ?? u.roles;
   const baseFor = (u) => resolvePersonAccess(rolesFor(u), null, db.access.roles);
@@ -155,7 +170,7 @@ function PeopleAccess({ editable }) {
                       Edit access <Icons.ChevronDown className={cn("ml-1 h-3 w-3 transition-transform", open === `${u.id}:access` && "rotate-180")} />
                     </Button>
                     <Button size="sm" className="h-8 bg-stone-900 text-xs" disabled={!dirty(u)} onClick={() => save(u)} data-testid={`ur-save-${u.id}`}>Save</Button>
-                    <button title="Remove role & access" onClick={() => setRemoving(u)} disabled={u.id === actingUser.id}
+                    <button title={u.canDelete ? "Remove from the team" : "Remove role & access"} onClick={() => setRemoving(u)} disabled={u.id === actingUser.id}
                       className="grid h-8 w-8 place-items-center rounded-md border border-stone-200 text-stone-400 hover:text-rose-600 disabled:opacity-30" data-testid={`ur-remove-${u.id}`}><Icons.Trash2 className="h-3.5 w-3.5" /></button>
                   </>)}
                   {!editable && (
@@ -191,12 +206,36 @@ function PeopleAccess({ editable }) {
       <AlertDialog open={!!removing} onOpenChange={(o) => !o && setRemoving(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove {removing?.name}'s role & access?</AlertDialogTitle>
-            <AlertDialogDescription>They stay in the team (history and assignments are kept) but will see the "pending access" screen until someone assigns a role again.</AlertDialogDescription>
+            <AlertDialogTitle>
+              {removing?.canDelete ? `Remove ${removing?.name} from the team?` : `Remove ${removing?.name}'s role & access?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {removing?.canDelete
+                ? "They've never created, reviewed or recorded anything, so there's nothing to keep. This deletes them. If they sign in with Google again they'll reappear as pending."
+                : "They stay in the team — their name is on ideas, comments and captures, and those records need it. They'll see the \"pending access\" screen until someone assigns a role again."}
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction className="bg-[#C0512F] hover:bg-[#a84325]" data-testid="ur-confirm-remove" onClick={() => { actions.removePersonAccess(removing.id); clear(removing.id); toast.success(`Removed ${removing.name}'s access`); setRemoving(null); }}>Remove access</AlertDialogAction>
+            <AlertDialogAction
+              className="bg-[#C0512F] hover:bg-[#a84325]"
+              data-testid="ur-confirm-remove"
+              onClick={async () => {
+                const who = removing;
+                setRemoving(null);
+                try {
+                  if (who.canDelete) {
+                    await actions.deletePerson(who.id);
+                    toast.success(`Removed ${who.name} from the team`);
+                  } else {
+                    await actions.removePersonAccess(who.id);
+                    toast.success(`Removed ${who.name}'s access`);
+                  }
+                  clear(who.id);
+                } catch (e) { /* the store already showed the error */ }
+              }}>
+              {removing?.canDelete ? "Remove from team" : "Remove access"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

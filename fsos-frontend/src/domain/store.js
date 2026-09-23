@@ -416,6 +416,12 @@ export function WorkspaceProvider({ children }) {
       return reload();
     },
 
+    /** Delete someone outright. The API refuses if they have any history. */
+    async deletePerson(userId) {
+      await run(() => api.del(`/api/people/${userId}`));
+      return reload();
+    },
+
     // ── 6-Day tracker ────────────────────────────────────────────────────────
     async upsertSixDayEntry({ month, cycle, ipId, ...fields }) {
       const entry = await run(() => api.put("/api/six-day/entries", { month, cycle, ipId, ...fields }));
