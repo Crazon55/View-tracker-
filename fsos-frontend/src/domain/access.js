@@ -97,10 +97,21 @@ export function resolvePersonAccess(roles, personAccess, roleOverrides) {
   return { ...base, ...personAccess };
 }
 
-/** Effective access for the acting user, or for a previewed role when preview is on. */
-export function resolveAccess(db, user, previewRole) {
+/**
+ * Effective access for the acting user, or for whatever is being previewed.
+ *
+ * Preview comes in two kinds. A *role* shows that role's defaults — what a new Editor
+ * would get. A *person* shows what one named teammate actually sees, which is the more
+ * useful question here, because per-person overrides are exactly what Users & Roles is
+ * for and a role preview is blind to them.
+ */
+export function resolveAccess(db, user, preview) {
   const access = db.access || {};
-  if (previewRole) return resolveRoleAccess(previewRole, access.roles);
+  if (preview?.kind === "role") return resolveRoleAccess(preview.role, access.roles);
+  if (preview?.kind === "person") {
+    const person = (db.users || []).find((u) => u.id === preview.id);
+    if (person) return resolvePersonAccess(person.roles, access.people?.[person.id], access.roles);
+  }
   return resolvePersonAccess(user?.roles, access.people?.[user?.id], access.roles);
 }
 

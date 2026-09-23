@@ -163,21 +163,22 @@ function TopBar() {
 }
 
 function AccountMenu() {
-  const { actingUser, access, previewRole, setPreviewRole, canPreview } = useWorkspace();
+  const { db, actingUser, access, preview, setPreview, canPreview } = useWorkspace();
   const { setStreamFilter } = useUI();
   const navigate = useNavigate();
 
-  const preview = (role) => {
-    setPreviewRole(role);
-    const as = { ...actingUser, roles: [role] };
-    const m = resolveAccess({ access: { roles: {}, people: {} } }, as, role);
+  const startPreview = (next, label) => {
+    setPreview(next);
+    const as = next.kind === "person"
+      ? db.users.find((u) => u.id === next.id) || actingUser
+      : { ...actingUser, roles: [next.role] };
     setStreamFilter(streamFilterForUser(as));
-    navigate(homePathForUser(as, m));
-    toast.info(`Previewing as ${role}`, { description: "You're still signed in as yourself." });
+    navigate(homePathForUser(as, resolveAccess(db, actingUser, next)));
+    toast.info(`Previewing as ${label}`, { description: "You're still signed in as yourself." });
   };
 
   const stopPreview = () => {
-    setPreviewRole(null);
+    setPreview(null);
     setStreamFilter(streamFilterForUser(actingUser));
     navigate(homePathForUser(actingUser, access));
   };
@@ -208,12 +209,12 @@ function AccountMenu() {
           <>
             <DropdownMenuLabel className="text-[10px] font-normal text-stone-400">Preview as role</DropdownMenuLabel>
             {PREVIEW_ROLES.map((role) => (
-              <DropdownMenuItem key={role} data-testid={`preview-${role}`} onSelect={() => preview(role)} className="gap-2 cursor-pointer text-xs">
+              <DropdownMenuItem key={role} data-testid={`preview-${role}`} onSelect={() => startPreview({ kind: "role", role }, role)} className="gap-2 cursor-pointer text-xs">
                 <span className="flex-1">{role}</span>
-                {previewRole === role && <Icons.Check className="h-3.5 w-3.5 text-emerald-600" />}
+                {preview?.kind === "role" && preview.role === role && <Icons.Check className="h-3.5 w-3.5 text-emerald-600" />}
               </DropdownMenuItem>
             ))}
-            {previewRole && (
+            {preview && (
               <DropdownMenuItem data-testid="preview-off" onSelect={stopPreview} className="gap-2 cursor-pointer text-xs text-amber-800">
                 <Icons.X className="h-3.5 w-3.5" /> Stop previewing
               </DropdownMenuItem>
@@ -231,9 +232,9 @@ function AccountMenu() {
 }
 
 function RoleGate() {
-  const { gateUser, access, previewRole } = useWorkspace();
+  const { gateUser, access, preview } = useWorkspace();
   const location = useLocation();
-  if (!previewRole && isAwaitingAccess(gateUser)) return <PendingAccess />;
+  if (!preview && isAwaitingAccess(gateUser)) return <PendingAccess />;
   if (!navItemsForUser(gateUser, access).some((n) => !n.external) && location.pathname !== "/help") return <PendingAccess noAreas />;
   if (!canAccessPath(gateUser, location.pathname, access)) {
     return <Navigate to={homePathForUser(gateUser, access)} replace />;
@@ -261,17 +262,23 @@ function PendingAccess({ noAreas }) {
 }
 
 function PreviewBanner() {
-  const { previewRole, setPreviewRole, actingUser } = useWorkspace();
+  const { preview, setPreview, previewLabel, actingUser } = useWorkspace();
   const navigate = useNavigate();
-  if (!previewRole) return null;
+  if (!preview) return null;
   return (
     <div className="flex shrink-0 items-center justify-center gap-3 border-b border-amber-300 bg-amber-100 px-4 py-1.5 text-sm text-amber-950" data-testid="preview-banner">
       <Icons.Eye className="h-4 w-4 text-amber-700" />
-      <span>Previewing as <b>{previewRole}</b><span className="text-amber-800/70"> · signed in as {actingUser.name}</span></span>
-      <select value={previewRole} onChange={(e) => setPreviewRole(e.target.value)} className="h-7 rounded-md border border-amber-300 bg-white/70 px-2 text-xs">
-        {PREVIEW_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-      </select>
-      <button onClick={() => { setPreviewRole(null); navigate("/users-roles"); }} className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs hover:bg-amber-200" data-testid="exit-preview">
+      <span>
+        Previewing as <b>{previewLabel}</b>
+        {preview.kind === "person" && <span className="text-amber-800/70"> (their own access, overrides included)</span>}
+        <span className="text-amber-800/70"> · signed in as {actingUser.name}</span>
+      </span>
+      {preview.kind === "role" && (
+        <select value={preview.role} onChange={(e) => setPreview({ kind: "role", role: e.target.value })} className="h-7 rounded-md border border-amber-300 bg-white/70 px-2 text-xs">
+          {PREVIEW_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
+      )}
+      <button onClick={() => { setPreview(null); navigate("/users-roles"); }} className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs hover:bg-amber-200" data-testid="exit-preview">
         <Icons.X className="h-3.5 w-3.5" /> Exit preview
       </button>
     </div>

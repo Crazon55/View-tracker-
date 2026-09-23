@@ -131,9 +131,30 @@ describe("access model", () => {
     expect(homePathForUser(u, none)).toBe("/");
   });
 
-  it("preview resolves from the previewed role only", () => {
-    const m = resolveAccess(db, byId("u-admin"), "Editor");
+  it("previewing a role shows that role's defaults, not your own access", () => {
+    const m = resolveAccess(db, byId("u-admin"), { kind: "role", role: "Editor" });
     expect(m.users_roles).toBe("none");
     expect(m.production).toBe("edit");
+  });
+
+  it("previewing a person shows what they actually see, overrides included", () => {
+    // A role preview can't answer this: the Designer default has no distribution, but
+    // this particular Designer was given it. "What does an Editor get" and "what does
+    // Chitvan see" are different questions, and the second is the one an admin has.
+    const withOverride = {
+      ...db,
+      users: [...users, { id: "u-odd", name: "Odd One", roles: ["Designer"], streams: ["BO"] }],
+      access: { roles: {}, people: { "u-odd": { distribution: "edit" } } },
+    };
+    const asRole = resolveAccess(withOverride, byId("u-admin"), { kind: "role", role: "Designer" });
+    const asPerson = resolveAccess(withOverride, byId("u-admin"), { kind: "person", id: "u-odd" });
+    expect(asRole.distribution).toBe("none");
+    expect(asPerson.distribution).toBe("edit");
+    expect(asPerson.production).toBe("edit");   // still a Designer underneath
+  });
+
+  it("falls back to your own access when the previewed person is gone", () => {
+    const m = resolveAccess(db, byId("u-admin"), { kind: "person", id: "deleted" });
+    expect(m.users_roles).toBe("edit");
   });
 });

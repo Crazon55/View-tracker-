@@ -22,7 +22,7 @@ const TABS = [["people", "People"], ["roles", "Role defaults"]];
 
 export default function UsersRoles() {
   const { db } = useWorkspace();
-  const { canEdit, canPreview, previewRole, setPreviewRole } = useAccess();
+  const { canEdit, canPreview, preview, setPreview } = useAccess();
   const editable = canEdit("users_roles");
   const [tab, setTab] = useState("people");
   const pending = db.users.filter((u) => u.active && !u.roles.length).length;
@@ -31,7 +31,12 @@ export default function UsersRoles() {
     <div className="p-6" data-testid="users-roles-page">
       <PageHeader title="Users & Roles" icon={Icons.ShieldCheck} subtitle="Who can open which area, and whether they can change things there. Role defaults apply to everyone with that role; per-person access overrides them.">
         {canPreview && (
-          <Select value={previewRole || "__none"} onValueChange={(v) => { setPreviewRole(v === "__none" ? null : v); if (v !== "__none") toast(`Previewing as ${v}`, { description: "Nav and page access now follow that role's defaults." }); }}>
+          <Select
+            value={preview?.kind === "role" ? preview.role : "__none"}
+            onValueChange={(v) => {
+              setPreview(v === "__none" ? null : { kind: "role", role: v });
+              if (v !== "__none") toast(`Previewing as ${v}`, { description: "Nav and page access now follow that role's defaults." });
+            }}>
             <SelectTrigger className="h-9 w-52 bg-white" data-testid="preview-role-select"><Icons.Eye className="mr-1 h-3.5 w-3.5 text-stone-500" /><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="__none">Preview as role…</SelectItem>
@@ -170,6 +175,13 @@ function PeopleAccess({ editable }) {
                       Edit access <Icons.ChevronDown className={cn("ml-1 h-3 w-3 transition-transform", open === `${u.id}:access` && "rotate-180")} />
                     </Button>
                     <Button size="sm" className="h-8 bg-stone-900 text-xs" disabled={!dirty(u)} onClick={() => save(u)} data-testid={`ur-save-${u.id}`}>Save</Button>
+                    {canPreview && u.roles.length > 0 && u.id !== actingUser.id && (
+                      <button
+                        title={`See FSOS as ${u.name} sees it`}
+                        onClick={() => { setPreview({ kind: "person", id: u.id }); toast(`Previewing as ${u.name}`, { description: "Their roles and any personal overrides, exactly as they'd see it." }); }}
+                        className="grid h-8 w-8 place-items-center rounded-md border border-stone-200 text-stone-400 hover:text-stone-900"
+                        data-testid={`ur-preview-${u.id}`}><Icons.Eye className="h-3.5 w-3.5" /></button>
+                    )}
                     <button title={u.canDelete ? "Remove from the team" : "Remove role & access"} onClick={() => setRemoving(u)} disabled={u.id === actingUser.id}
                       className="grid h-8 w-8 place-items-center rounded-md border border-stone-200 text-stone-400 hover:text-rose-600 disabled:opacity-30" data-testid={`ur-remove-${u.id}`}><Icons.Trash2 className="h-3.5 w-3.5" /></button>
                   </>)}

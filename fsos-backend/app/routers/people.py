@@ -197,7 +197,7 @@ async def add_person(body: NewPerson, caller: Caller = Depends(current_caller)):
     role_overrides, _ = await _overrides()
     _no_escalation(caller, resolve_person_access(roles, None, role_overrides), None, name)
     initials = "".join(p[0] for p in name.replace(".", " ").split()[:2]).upper() or "?"
-    return await db.insert("people", {
+    made = await db.insert("people", {
         "name": name,
         "email": (body.email or "").strip().lower() or None,
         "initials": initials,
@@ -205,6 +205,9 @@ async def add_person(body: NewPerson, caller: Caller = Depends(current_caller)):
         "streams": body.streams,
         "skills": body.skills,
     })
+    # Same shape as a PATCH, so the browser can merge it straight in rather than
+    # reloading the whole workspace to find out what it just created.
+    return await person_detail(made["id"], caller)
 
 
 @router.delete("/{person_id}/access")

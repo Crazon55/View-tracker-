@@ -18,8 +18,14 @@ import { resolveAccess } from "./access";
 const WorkspaceContext = createContext(null);
 const PREVIEW_KEY = "fsos_role_preview";
 
+// { kind: "role", role } | { kind: "person", id } | null
 function loadPreview() {
-  try { return sessionStorage.getItem(PREVIEW_KEY) || null; } catch (e) { return null; }
+  try {
+    const raw = sessionStorage.getItem(PREVIEW_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.kind ? parsed : null;
+  } catch (e) { return null; }
 }
 
 /** Replace a row in a list by id, or append it if it's new. */
@@ -43,13 +49,13 @@ export function WorkspaceProvider({ children }) {
   const [busy, setBusy] = useState(false);
   // Who we are when the workspace won't load — /api/me answers even with no roles.
   const [identity, setIdentity] = useState(null);
-  const [previewRole, setPreviewRoleState] = useState(loadPreview);
+  const [preview, setPreviewState] = useState(loadPreview);
   const inflight = useRef(null);
 
-  const setPreviewRole = useCallback((role) => {
-    setPreviewRoleState(role || null);
+  const setPreview = useCallback((next) => {
+    setPreviewState(next || null);
     try {
-      if (role) sessionStorage.setItem(PREVIEW_KEY, role);
+      if (next) sessionStorage.setItem(PREVIEW_KEY, JSON.stringify(next));
       else sessionStorage.removeItem(PREVIEW_KEY);
     } catch (e) { /* private browsing — preview just won't persist */ }
   }, []);
@@ -131,16 +137,28 @@ export function WorkspaceProvider({ children }) {
 
   const ownAccess = useMemo(() => (db && actingUser ? resolveAccess(db, actingUser, null) : {}), [db, actingUser]);
   const canPreview = ownAccess.users_roles === "edit";
-  const activePreview = canPreview ? previewRole : null;
+  const activePreview = canPreview ? preview : null;
   const access = useMemo(
     () => (activePreview && db ? resolveAccess(db, actingUser, activePreview) : ownAccess),
     [activePreview, db, actingUser, ownAccess],
   );
-  // Stand-in used for nav / route gating while previewing a role.
-  const gateUser = useMemo(
-    () => (activePreview && actingUser ? { ...actingUser, roles: [activePreview] } : actingUser),
-    [activePreview, actingUser],
-  );
+
+  /** Whose nav, streams and route gating to use while previewing. */
+  const gateUser = useMemo(() => {
+    if (!activePreview || !actingUser) return actingUser;
+    if (activePreview.kind === "person") {
+      return (db?.users || []).find((u) => u.id === activePreview.id) || actingUser;
+    }
+    return { ...actingUser, roles: [activePreview.role] };
+  }, [activePreview, actingUser, db]);
+
+  /** What to call the thing being previewed, for the banner. */
+  const previewLabel = useMemo(() => {
+    if (!activePreview) return null;
+    if (activePreview.kind === "role") return activePreview.role;
+    const p = (db?.users || []).find((u) => u.id === activePreview.id);
+    return p ? p.name : "someone";
+  }, [activePreview, db]);
 
   const actions = useMemo(() => ({
     reload,
@@ -386,40 +404,74 @@ export function WorkspaceProvider({ children }) {
     },
 
     // ── users & roles ────────────────────────────────────────────────────────
+    // These all used to reload the whole workspace, which is a second or two of
+    // staring at an unchanged screen for what is usually a one-field change. The API
+    // hands back the person it touched, so merge that instead.
     async addUser(u) {
-      await run(() => api.post("/api/people", u));
-      return reload();
+      const person = await run(() => api.post("/api/people", u));
+      patch((d) => { d.users = upsert(d.users, person); return d; });
+      return person;
     },
 
     async updateUser(id, p) {
-      await run(() => api.patch(`/api/people/${id}`, p));
-      return reload();
+      const person = await run(() => api.patch(`/api/people/${id}`, p));
+      patch((d) => { d.users = upsert(d.users, person); return d; });
+      return person;
     },
 
     async setRoleAccess(role, matrix) {
       await run(() => api.put("/api/roles/access", { role, matrix }));
-      return reload();
+      patch((d) => {
+        d.access = { ...d.access, roles: { ...d.access.roles, [role]: { ...matrix } } };
+        return d;
+      });
     },
 
     async resetRoleAccess(role) {
       await run(() => api.post("/api/roles/access/reset", { role }));
-      return reload();
+      patch((d) => {
+        const roles = { ...d.access.roles };
+        delete roles[role];
+        d.access = { ...d.access, roles };
+        return d;
+      });
     },
 
     async setPersonAccess(userId, { roles, matrix }) {
-      await run(() => api.patch(`/api/people/${userId}`, { roles, matrix }));
-      return reload();
+      const person = await run(() => api.patch(`/api/people/${userId}`, { roles, matrix }));
+      patch((d) => {
+        d.users = upsert(d.users, person);
+        const people = { ...d.access.people };
+        // `accessOverride` is null once the person is back on their roles' defaults.
+        if (person.accessOverride) people[userId] = person.accessOverride;
+        else delete people[userId];
+        d.access = { ...d.access, people };
+        return d;
+      });
+      return person;
     },
 
     async removePersonAccess(userId) {
       await run(() => api.del(`/api/people/${userId}/access`));
-      return reload();
+      patch((d) => {
+        d.users = d.users.map((u) => (u.id === userId ? { ...u, roles: [] } : u));
+        const people = { ...d.access.people };
+        delete people[userId];
+        d.access = { ...d.access, people };
+        return d;
+      });
     },
 
     /** Delete someone outright. The API refuses if they have any history. */
     async deletePerson(userId) {
       await run(() => api.del(`/api/people/${userId}`));
-      return reload();
+      patch((d) => {
+        d.users = d.users.filter((u) => u.id !== userId);
+        const people = { ...d.access.people };
+        delete people[userId];
+        d.access = { ...d.access, people };
+        return d;
+      });
     },
 
     // ── 6-Day tracker ────────────────────────────────────────────────────────
@@ -531,24 +583,25 @@ export function WorkspaceProvider({ children }) {
 
   const value = useMemo(() => ({
     db, actions, actingUser, gateUser, today: db?.meta?.anchor, access,
-    previewRole: activePreview, setPreviewRole, canPreview,
+    preview: activePreview, setPreview, previewLabel, canPreview,
     status, error, busy, reload, identity,
-  }), [db, actions, actingUser, gateUser, access, activePreview, setPreviewRole, canPreview,
-       status, error, busy, reload, identity]);
+  }), [db, actions, actingUser, gateUser, access, activePreview, setPreview, previewLabel,
+       canPreview, status, error, busy, reload, identity]);
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }
 
 /** Area access for the acting user (or the previewed role). */
 export function useAccess() {
-  const { access, previewRole, setPreviewRole, canPreview } = useWorkspace();
+  const { access, preview, setPreview, previewLabel, canPreview } = useWorkspace();
   return {
     access,
     level: (area) => access[area] || "none",
     canView: (area) => (access[area] || "none") !== "none",
     canEdit: (area) => access[area] === "edit",
-    previewRole,
-    setPreviewRole,
+    preview,
+    setPreview,
+    previewLabel,
     canPreview,
   };
 }
