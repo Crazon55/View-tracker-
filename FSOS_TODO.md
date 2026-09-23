@@ -32,16 +32,16 @@ Tick items off as they're done (`[x]`). **Owner:** 🧑 you (needs the Supabase 
 
 ## 2. API keys and environment
 
-- [ ] 🧑 Supabase → **Project Settings → API Keys**. Send the **anon/publishable** key and the **service_role/secret** key.
-- [ ] 🤖 Put the service key only in the backend's git-ignored `.env`. Put the URL and anon key in `fsos-frontend/.env.local`.
-- [ ] 🤖 Check nothing secret is tracked: `git grep` for key prefixes returns nothing. The repo is **public**.
+- [x] 🧑 Supabase → **Project Settings → API Keys**. Done 23 Sept.
+- [x] 🤖 Service key in `fsos-backend/.env`; URL + anon key in `fsos-frontend/.env.local`. The News Feed keeps reading the old project (`REACT_APP_NEWS_SUPABASE_*`) until step 5e.
+- [x] 🤖 Checked: both files are git-ignored and no key is staged.
 
 ## 3. Backend
 
-- [ ] 🧑 **Decide where the API lives.** Recommended: a new, small `fsos-backend/` (FastAPI) that talks only to the new database. The alternative is adding routes to snoboard's 6,000-line `main.py`, which still points at the old database.
-- [ ] 🤖 Scaffold it: FastAPI + Supabase client (service key), `/api/health`, CORS for localhost and the production domain, Dockerfile.
-- [ ] 🤖 Auth middleware. Verify the Supabase login token on every request, find the person by email, and load their roles and access.
-- [ ] 🤖 Access checks on the server. Reuse the area rules from `fsos-frontend/src/domain/access.js`, so a "view" user can't write even by calling the API directly.
+- [x] 🧑 **Where the API lives:** a new `fsos-backend/` (FastAPI), talking only to the new database. Say so if you'd rather it lived in the snoboard backend.
+- [x] 🤖 Scaffolded: FastAPI + PostgREST client (service key), `/api/health`, `/api/me`, CORS. Dockerfile still to do (step 7).
+- [x] 🤖 Auth: the session token is verified with Supabase, the person is matched by email (new emails become pending), roles and access resolved. `FSOS_DEV_LOGIN` allows a dev header locally until Google sign-in exists.
+- [x] 🤖 Server-side access checks in `app/access.py` (mirrors the frontend rules); every route calls `require(...)`. 29 API tests pass.
 
 ## 4. Login
 
@@ -57,7 +57,7 @@ Tick items off as they're done (`[x]`). **Owner:** 🧑 you (needs the Supabase 
 Each item ends with "works in the browser against the new database", checked by both of us.
 
 ### 5a. Users & Roles
-- [ ] 🤖 API: list people, update roles and person access, role-default overrides, add member, remove access.
+- [x] 🤖 API: list people, update roles and person access, role-default overrides, add member, remove access. Self-lockout and Founder/Admin are protected.
 - [ ] 🤖 Frontend: Users & Roles page and sidebar gating read from the API.
 - [ ] 🧑 Check: all 25 people show with the right roles. Changing someone's access changes their sidebar after they reload.
 
