@@ -101,28 +101,44 @@ echo "=== Publishing to $WEB_ROOT ==="
 # Out of the home directory: nginx runs as `nginx` and /home/ec2-user is mode 700, so
 # serving from there is a 403 on every request.
 sudo mkdir -p "$WEB_ROOT"
-sudo rsync -a --delete "$FRONTEND_DIR/build/" "$WEB_ROOT/"
+if command -v rsync >/dev/null 2>&1; then
+  sudo rsync -a --delete "$FRONTEND_DIR/build/" "$WEB_ROOT/"
+else
+  # Amazon Linux minimal images don't always ship rsync. Replace wholesale rather than
+  # copying over the top, or the last deploy's hashed bundles linger forever.
+  sudo find "$WEB_ROOT" -mindepth 1 -delete
+  sudo cp -a "$FRONTEND_DIR/build/." "$WEB_ROOT/"
+fi
 sudo chown -R nginx:nginx "$WEB_ROOT"
+# If SELinux is enforcing, files under /var/www carry the wrong label and nginx gets a
+# 403 that looks exactly like a permissions bug. No-op when SELinux is off.
+if command -v restorecon >/dev/null 2>&1; then
+  sudo restorecon -R "$WEB_ROOT" 2>/dev/null || true
+fi
 
 echo ""
 echo "=== Nginx ==="
+# The backup lives outside conf.d. nginx includes conf.d/*.conf, and a copy sitting
+# next to the live file is one rename away from being loaded as a second vhost.
+BACKUP=/etc/nginx/frontseat.conf.pre-fsos
 if [ -f "$REPO_ROOT/deploy/frontseat.conf" ]; then
   # Keep one copy of whatever was there before — this is the rollback to snoboard.
-  if [ -f /etc/nginx/conf.d/frontseat.conf ] && [ ! -f /etc/nginx/conf.d/frontseat.conf.pre-fsos ]; then
-    sudo cp /etc/nginx/conf.d/frontseat.conf /etc/nginx/conf.d/frontseat.conf.pre-fsos
-    echo "  backed up the previous vhost to frontseat.conf.pre-fsos"
+  if [ -f /etc/nginx/conf.d/frontseat.conf ] && [ ! -f "$BACKUP" ]; then
+    sudo cp /etc/nginx/conf.d/frontseat.conf "$BACKUP"
+    echo "  previous vhost saved to $BACKUP"
   fi
   sudo cp "$REPO_ROOT/deploy/frontseat.conf" /etc/nginx/conf.d/frontseat.conf
 fi
 
 # A second vhost claiming the same server_name silently wins or loses depending on load
 # order, and the deploy then "succeeds" while the old site is still being served.
-dupes="$(grep -rlE 'server_name[^;]*thefrontseatmedia\.com' /etc/nginx/conf.d/ 2>/dev/null \
+# Only *.conf counts — that's all nginx includes.
+dupes="$(grep -lE 'server_name[^;]*thefrontseatmedia\.com' /etc/nginx/conf.d/*.conf 2>/dev/null \
          | grep -v '/frontseat\.conf$' || true)"
 if [ -n "$dupes" ]; then
   echo "Another nginx vhost also claims thefrontseatmedia.com:" >&2
   echo "$dupes" >&2
-  echo "Move it aside (e.g. rename to .disabled) and re-run." >&2
+  echo "Move it aside (rename so it doesn't end in .conf) and re-run." >&2
   exit 1
 fi
 

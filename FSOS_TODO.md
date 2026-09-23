@@ -16,27 +16,31 @@ Tick items off as they're done (`[x]`). **Owner:** 🧑 you (needs the Supabase 
 
 ---
 
-## Where we are (23 Sept, later)
+## Where we are (23 Sept, evening)
 
-Steps 0–3 done. **The demo store is gone.** The app now loads everything from the API and
-writes everything to the new database — ideas, production, distribution, performance,
-comments, notifications, settings, 6-Day, Growth and News. Nothing is seeded and nothing
-lives only in the browser.
+Steps 0–5 done, and step 6 with them. **The demo store is gone** — the app loads and
+saves everything through the API against the new database. **Google sign-in works**, proved
+end to end on localhost.
 
-**Next up:** step 4 — the Google provider in Supabase. That's yours, and it's the only
-thing standing between this and a real sign-in. The login page, the pending-access screen
-and the account menu are written and waiting for it.
+**Next up:** the cutover. snoboard is already stopped on the EC2 box, so the domain is
+down until `./deploy-fsos-pm2.sh` runs there. That script is the whole deploy: venv +
+uvicorn under pm2 on 127.0.0.1:8000, a production build published to `/var/www/fsos`,
+and nginx serving it with `/api` proxied on the same origin.
 
-**Meanwhile:** the app runs locally with `REACT_APP_FSOS_DEV_EMAIL` in
-`fsos-frontend/.env.local` acting as a stand-in for sign-in. Comment that line out the
-moment Google is on.
+**Before running it on the box**, two files have to exist there — neither is in git:
+`fsos-backend/.env` (service key, `FSOS_DEV_LOGIN` absent or false,
+`FSOS_ALLOWED_EMAIL_DOMAIN=owledmedia.com`, `FSOS_CORS_ORIGINS=https://thefrontseatmedia.com`)
+and `fsos-frontend/.env.local` (Supabase URL + anon key, no dev email). The script
+refuses to run without them rather than shipping an app nobody can sign into.
+
+**Rollback:** the script saves the vhost it replaces to `/etc/nginx/frontseat.conf.pre-fsos`.
+Restoring that file and reloading nginx puts snoboard's vhost back; its code is still on disk.
 
 Running locally: `fsos-frontend` on :3000 (`npx craco start`), `fsos-backend` on :8000
 (`python -m uvicorn app.main:app --port 8000`, with `FSOS_DEV_LOGIN=true`).
-Tests: `CI=true npx craco test --watchAll=false`, `python fsos-backend/tests/test_people_api.py` (39),
-and `python fsos-backend/tests/test_workflow_api.py` (107) — the last one walks an idea
-from creation to a 24-hour view capture against the real database and checks every value
-survives repeated reloads.
+Tests: `CI=true npx craco test --watchAll=false` (44), `python fsos-backend/tests/test_people_api.py` (39),
+`python fsos-backend/tests/test_workflow_api.py` (108). Run the two API suites one at a
+time — they both write to the real project and tidy up after themselves.
 
 ---
 
@@ -76,10 +80,9 @@ survives repeated reloads.
 
 ## 4. Login
 
-**The code is done and waiting on the provider.** Everything below is written and builds;
-none of it can be *proved* until Google is switched on, so the ticks stay off.
+**Done and proved 23 Sept — a real Google sign-in completed end to end on localhost.**
 
-- [ ] 🧑 Supabase → **Authentication → Providers → Google**. Turn it on with the Google OAuth client (the same one snoboard uses, or a new one).
+- [x] 🧑 Supabase → **Authentication → Providers → Google**. Turn it on with the Google OAuth client (the same one snoboard uses, or a new one).
       Google Cloud → authorised redirect URI: `https://huyylvmlwpphuolpckxw.supabase.co/auth/v1/callback`.
       Supabase → **Authentication → URL Configuration**: Site URL `http://localhost:3000`, redirect URL `http://localhost:3000/**`.
       Add the production URL there too once we have one.
@@ -87,7 +90,8 @@ none of it can be *proved* until Google is switched on, so the ticks stay off.
 - [x] 🤖 First login links the Supabase user to their `people` row by email and stores `auth_user_id` (`app/auth.py`, already there since step 3).
 - [x] 🤖 Someone not in `people` gets a row with no roles and sees the pending-access screen (`components/auth/Gate.js`).
 - [x] 🤖 The demo "act as" switcher is gone. In its place: an account menu with your name, email and roles, **Preview as role** for admins, and sign out.
-- [ ] 🧑 Test: log in as yourself, check your role and sidebar, then log out.
+- [x] 🧑 **Tested 23 Sept: signed in with Google, landed as Founder/Admin.** That was the first time the whole chain ran — Google client, Supabase callback, person matched by email, roles and access resolved.
+- [x] 🧑 Supabase → **URL Configuration**: Site URL `https://thefrontseatmedia.com`; Redirect URLs `http://localhost:3000/**`, `https://thefrontseatmedia.com`, `https://thefrontseatmedia.com/**`.
 
 ## 5. Connect the added features to real data
 
