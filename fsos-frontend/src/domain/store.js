@@ -97,6 +97,32 @@ export function WorkspaceProvider({ children }) {
   useEffect(() => { reload(); }, [reload]);
 
   /**
+   * Pick up what other people have done.
+   *
+   * There is one database and one API; roles decide what you may do, not which copy of
+   * the data you get. But each browser holds a snapshot taken when it last asked, so
+   * somebody else deleting an idea doesn't reach your screen on its own.
+   *
+   * Refreshing when the tab regains focus covers almost all of it — you look away, you
+   * look back, it's current — and a slow interval catches the case of leaving a screen
+   * open and watching it. Only while the tab is visible: there's no sense polling for a
+   * window nobody is looking at.
+   */
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible" && !document.hidden) reload();
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    const timer = setInterval(refresh, 60000);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+      clearInterval(timer);
+    };
+  }, [reload]);
+
+  /**
    * Refresh in the background, without making anyone wait for it.
    *
    * Most mutations already hand back the row they changed, and that's what the screen

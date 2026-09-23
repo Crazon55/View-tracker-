@@ -4,6 +4,7 @@ An idea is the unit of work; a version is that idea aimed at one IP. Adding a
 destination creates a version, and every version carries its own hook, caption and
 assets. The two streams are gated separately: BO work needs BO Studio, HPN needs HPN Desk.
 """
+import asyncio
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -120,17 +121,25 @@ async def create_idea(body: NewIdea, caller: Caller = Depends(current_caller)):
     if idea is None:
         raise HTTPException(status_code=409, detail="Couldn't allocate an idea code — try again.")
 
+    # The insert returns the rows, and the activity entry is nobody's blocker — so do
+    # both together and answer from what we already have. A PostgREST round trip costs
+    # ~150ms whatever it carries, so each one skipped is 150ms off the click.
+    versions: list[dict] = []
     if body.destinations:
         hooks = body.versionHooks or {}
-        await db.insert("versions", [{
-            "idea_id": idea["id"], "ip_id": ip_id,
-            "hook_override": (hooks.get(ip_id) or {}).get("hookOverride", ""),
-            "sub_hook": (hooks.get(ip_id) or {}).get("subHook", ""),
-            "caption": body.brief.get("defaultCaption", "") if body.brief else "",
-        } for ip_id in body.destinations])
+        versions, _ = await asyncio.gather(
+            db.insert("versions", [{
+                "idea_id": idea["id"], "ip_id": ip_id,
+                "hook_override": (hooks.get(ip_id) or {}).get("hookOverride", ""),
+                "sub_hook": (hooks.get(ip_id) or {}).get("subHook", ""),
+                "caption": body.brief.get("defaultCaption", "") if body.brief else "",
+            } for ip_id in body.destinations]),
+            events.log(idea["id"], "created", f"Idea created by {caller.person['name']}", caller.id),
+        )
+    else:
+        await events.log(idea["id"], "created", f"Idea created by {caller.person['name']}", caller.id)
 
-    await events.log(idea["id"], "created", f"Idea created by {caller.person['name']}", caller.id)
-    return await idea_payload(idea["id"])
+    return {"idea": shape.to_idea(idea), "versions": [shape.to_version(v) for v in versions]}
 
 
 @router.patch("/{idea_id}")

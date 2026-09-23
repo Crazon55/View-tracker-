@@ -7,7 +7,7 @@ from ..access import (
     AREAS, LEVELS, LOCKED_ROLE, ROLE_ACCESS_DEFAULTS,
     grants_beyond, require, resolve_person_access, resolve_role_access,
 )
-from ..auth import Caller, current_caller
+from ..auth import Caller, current_caller, invalidate_caller
 
 router = APIRouter(prefix="/api/people", tags=["people"])
 # Separate prefix: "/api/people/roles/..." would be captured by "/api/people/{person_id}/...".
@@ -178,6 +178,7 @@ async def update_person(person_id: str, patch: PersonPatch, caller: Caller = Dep
     ) if v is not None}
     if patch.roles is not None:
         profile["roles"] = roles
+    invalidate_caller()
     if profile:
         await db.update("people", {"id": f"eq.{person_id}"}, profile)
     if patch.clear_matrix or patch.matrix == {}:
@@ -228,6 +229,7 @@ async def remove_access(person_id: str, caller: Caller = Depends(current_caller)
         raise HTTPException(status_code=400, detail=f"{person['name']} is the last {LOCKED_ROLE}.")
     await db.update("people", {"id": f"eq.{person_id}"}, {"roles": []})
     await db.delete("access_person_overrides", {"person_id": f"eq.{person_id}"})
+    invalidate_caller()
     return {"ok": True}
 
 
@@ -264,6 +266,7 @@ async def delete_person(person_id: str, caller: Caller = Depends(current_caller)
 
     # notifications and access_person_overrides cascade.
     await db.delete("people", {"id": f"eq.{person_id}"})
+    invalidate_caller()
     return {"ok": True, "deleted": person_id, "detached": detached}
 
 
@@ -291,6 +294,7 @@ async def set_role_access(body: RoleMatrix, caller: Caller = Depends(current_cal
     _no_escalation(caller, {**resolve_role_access(body.role), **_valid_matrix(body.matrix)},
                    resolve_role_access(body.role, role_overrides), f"the {body.role} role")
     await db.insert("access_role_overrides", {"role": body.role, "matrix": body.matrix}, upsert_on="role")
+    invalidate_caller()
     return {"ok": True}
 
 
@@ -307,6 +311,7 @@ async def reset_role_access(body: RoleName, caller: Caller = Depends(current_cal
     _no_escalation(caller, resolve_role_access(body.role),
                    resolve_role_access(body.role, role_overrides), f"the {body.role} role")
     await db.delete("access_role_overrides", {"role": f"eq.{body.role}"})
+    invalidate_caller()
     return {"ok": True}
 
 

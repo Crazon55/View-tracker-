@@ -139,25 +139,37 @@ async def get_workspace(caller: Caller = Depends(current_caller)):
     if not caller.roles:
         raise HTTPException(status_code=403, detail="Your account is waiting for a role.")
 
-    core, access = await asyncio.gather(_core(), _access())
-    state = {
+    # Every one of these is a separate PostgREST request, and a request costs ~150ms of
+    # fixed overhead regardless of how much it returns — a query for one row and a query
+    # for every idea both take about 175ms. So the number of round trips is the only
+    # thing that matters, and they all go out at once rather than in waves. Doing this
+    # in sequence cost about two seconds; in parallel it's one request's worth of time.
+    empty_six = {"entries": [], "topContent": [], "actuals": [], "config": {"assigneeId": None}}
+    empty_news = {"feedback": {}, "rules": [], "saved": [], "savedItems": {}}
+
+    async def nothing(value):
+        return value
+
+    core, access, six, growth, news, notes = await asyncio.gather(
+        _core(),
+        _access(),
+        _six_day() if _can(caller, "six_day") else nothing(empty_six),
+        _growth() if _can(caller, "growth") else nothing({"followers": []}),
+        _news() if _can(caller, "news") else nothing(empty_news),
+        # Notifications are per-person: your own, plus the team-wide ones.
+        db.select("notifications", {
+            "select": "*", "or": f"(person_id.is.null,person_id.eq.{caller.id})",
+            "order": "created_at.desc", "limit": "200",
+        }),
+    )
+
+    return {
         "meta": {"anchor": today_ist(), "loadedAt": datetime.now(timezone.utc).isoformat(), "source": "api"},
         "actingUserId": caller.id,
         "access": access,
         **core,
+        "sixDay": six,
+        "growth": growth,
+        "newsState": news,
+        "notifications": [shape.to_notification(n) for n in notes],
     }
-
-    # Standalone areas: only for people who may see them.
-    state["sixDay"] = await _six_day() if _can(caller, "six_day") else {
-        "entries": [], "topContent": [], "actuals": [], "config": {"assigneeId": None}}
-    state["growth"] = await _growth() if _can(caller, "growth") else {"followers": []}
-    state["newsState"] = await _news() if _can(caller, "news") else {
-        "feedback": {}, "rules": [], "saved": [], "savedItems": {}}
-
-    # Notifications are per-person: your own, plus the team-wide ones.
-    notes = await db.select("notifications", {
-        "select": "*", "or": f"(person_id.is.null,person_id.eq.{caller.id})",
-        "order": "created_at.desc", "limit": "200",
-    })
-    state["notifications"] = [shape.to_notification(n) for n in notes]
-    return state

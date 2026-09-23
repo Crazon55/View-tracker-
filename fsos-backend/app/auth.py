@@ -4,6 +4,7 @@ The browser sends its Supabase session token. We ask Supabase who that token bel
 (so no JWT secret is needed here), then look the person up in `people` by email and
 resolve their access matrix.
 """
+import asyncio
 import time
 
 import httpx
@@ -16,6 +17,24 @@ from .config import ALLOWED_EMAIL_DOMAIN, ANON_KEY, DEV_LOGIN, SUPABASE_URL
 _auth_client = httpx.AsyncClient(base_url=f"{SUPABASE_URL}/auth/v1", timeout=15.0)
 _token_cache: dict[str, tuple[float, dict]] = {}  # token -> (expires_at, user)
 _TOKEN_TTL = 120.0
+
+# Working out who you are costs two PostgREST round trips — the person, then their
+# access overrides — and at ~150ms each that was a third of a second added to every
+# request in the app, for an answer that changes maybe twice a week.
+#
+# So it's cached briefly, keyed by email. Fifteen seconds is short enough that nobody
+# waits meaningfully for a role change, and `invalidate_caller` clears it the moment
+# access is edited, so the usual case is immediate anyway.
+_caller_cache: dict[str, tuple[float, dict, dict]] = {}  # email -> (expires_at, person, access)
+_CALLER_TTL = 15.0
+
+
+def invalidate_caller(email: str | None = None) -> None:
+    """Forget cached access. Called whenever roles or overrides change."""
+    if email:
+        _caller_cache.pop(email.strip().lower(), None)
+    else:
+        _caller_cache.clear()
 
 
 async def _supabase_user(token: str) -> dict:
@@ -94,13 +113,24 @@ async def current_caller(
     if ALLOWED_EMAIL_DOMAIN and not email.endswith(f"@{ALLOWED_EMAIL_DOMAIN}"):
         raise HTTPException(status_code=403, detail=f"FSOS is limited to @{ALLOWED_EMAIL_DOMAIN} accounts.")
 
+    hit = _caller_cache.get(email)
+    if hit and hit[0] > time.time():
+        return Caller(hit[1], hit[2])
+
     person = await _person_for(email, auth_user_id=auth_user_id, name_hint=name_hint)
     if not person.get("active", True):
         raise HTTPException(status_code=403, detail="This account has been deactivated.")
 
-    role_overrides = {r["role"]: r["matrix"] for r in await db.select("access_role_overrides", {"select": "role,matrix"})}
-    person_override = await db.select_one("access_person_overrides", {"person_id": f"eq.{person['id']}", "select": "matrix"})
+    # Both overrides at once. Every request pays for this, and a PostgREST round trip is
+    # ~150ms whatever it returns, so two in sequence is 150ms added to every single call.
+    role_rows, person_rows = await asyncio.gather(
+        db.select("access_role_overrides", {"select": "role,matrix"}),
+        db.select("access_person_overrides", {"person_id": f"eq.{person['id']}", "select": "matrix"}),
+    )
+    role_overrides = {r["role"]: r["matrix"] for r in role_rows}
+    person_override = person_rows[0] if person_rows else None
     access = resolve_person_access(person.get("roles") or [], (person_override or {}).get("matrix"), role_overrides)
+    _caller_cache[email] = (time.time() + _CALLER_TTL, person, access)
     return Caller(person, access)
 
 
