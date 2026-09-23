@@ -159,6 +159,8 @@ does), and a direct PostgREST read that never touches the API. It cleans up afte
 
 - [ ] 🤖 Production build of `fsos-frontend` in Docker (nginx, like snoboard's Dockerfile) with the new env vars. **`REACT_APP_FSOS_DEV_EMAIL` must not be set, and `FSOS_DEV_LOGIN` must be off.**
 - [ ] 🤖 Update `deploy.sh` to build `fsos-frontend/` and the FSOS backend instead of the snoboard folders.
+- [ ] 🧑 **Decided 23 Sept: one host.** nginx on `thefrontseatmedia.com` serves the built frontend and proxies `/api` to the FSOS backend. So there is no CORS in production, no second certificate, and `REACT_APP_FSOS_API_URL` is left **unset** in the production build — the app calls `/api` on its own origin (`lib/api.js` already defaults that way).
+- [ ] 🧑 Supabase → **Authentication → URL Configuration**: Site URL `https://thefrontseatmedia.com`, and keep both `http://localhost:3000/**` and `https://thefrontseatmedia.com/**` in Redirect URLs. The Google Cloud redirect URI does **not** change with the app's domain — it's Supabase's callback.
 - [ ] 🧑 Pick a cutover time when nobody is mid-task in snoboard.
 - [ ] 🤖 Cutover day: re-run the export and import (it's safe to re-run) so the latest snoboard data comes across.
 - [ ] 🧑 Final check with 2–3 teammates (a CS, an Editor, a COC) on the deployed build.

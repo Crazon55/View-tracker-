@@ -5,7 +5,14 @@
 // This module attaches who you are and turns a failed response into an Error carrying
 // the API's own message, which is written to be shown to a person.
 
-const BASE = (process.env.REACT_APP_FSOS_API_URL || "http://localhost:8000").replace(/\/$/, "");
+// In production the app and the API share an origin — nginx serves the build and
+// proxies /api to the backend — so the base is empty and every request is same-origin.
+// That's why there is no CORS configuration on the deployed instance. In development
+// the two run on different ports, so we need the full URL. Either can be overridden
+// with REACT_APP_FSOS_API_URL; note that the value is baked in at build time, not read
+// when the page loads.
+const DEFAULT_BASE = process.env.NODE_ENV === "production" ? "" : "http://localhost:8000";
+const BASE = (process.env.REACT_APP_FSOS_API_URL ?? DEFAULT_BASE).replace(/\/$/, "");
 
 // Local development only, and only while FSOS_DEV_LOGIN is on in the backend: identify
 // as this person instead of signing in. Never set in a deployed build.
