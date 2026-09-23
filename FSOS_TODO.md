@@ -28,7 +28,7 @@ Tick items off as they're done (`[x]`). **Owner:** 🧑 you (needs the Supabase 
 - [x] 🤖 Copy the setup SQL to the clipboard. (23 Sept: the schema had already been run, so `out/run_remaining.sql` — migration 2 + data — was used instead.)
 - [x] 🧑 Supabase → project `huyylvmlwpphuolpckxw` → **SQL Editor → New query** → paste → **Run**. Done 23 Sept: finished with `setval 55`, the last statement, so the import completed.
 - [ ] 🧑 **Table Editor** check. `people` = 25, `ips` = 48, `tickets` = 32, `six_day_entries` = 407 (more if step 0 picked up new data).
-- [ ] 🤖 Spot-check with the service key: roles per person, 13 active IPs, the next ticket number continues after the highest imported one (#56 today).
+- [x] 🤖 Spot-check with the service key. 23 Sept: 25 people (CS 6, Editor 5, Designer 3, COC 2, COA 2, COA+Founder/Admin 1, Short-form Lead 1, 5 pending), 48 IPs / 13 active, 407 six-day entries, 249 top content, 44 growth rows, 32 tickets with #55 the highest, 5 imported person overrides.
 
 ## 2. API keys and environment
 
@@ -41,7 +41,8 @@ Tick items off as they're done (`[x]`). **Owner:** 🧑 you (needs the Supabase 
 - [x] 🧑 **Where the API lives:** a new `fsos-backend/` (FastAPI), talking only to the new database. Say so if you'd rather it lived in the snoboard backend.
 - [x] 🤖 Scaffolded: FastAPI + PostgREST client (service key), `/api/health`, `/api/me`, CORS. Dockerfile still to do (step 7).
 - [x] 🤖 Auth: the session token is verified with Supabase, the person is matched by email (new emails become pending), roles and access resolved. `FSOS_DEV_LOGIN` allows a dev header locally until Google sign-in exists.
-- [x] 🤖 Server-side access checks in `app/access.py` (mirrors the frontend rules); every route calls `require(...)`. 29 API tests pass.
+- [x] 🤖 Server-side access checks in `app/access.py` (mirrors the frontend rules); every route calls `require(...)`. 39 API tests pass.
+- [x] 🤖 No privilege escalation: you can't grant access above your own, only a Founder/Admin grants that role, and the last one can't be removed. Before this any COA could have promoted themselves.
 
 ## 4. Login
 
@@ -58,6 +59,7 @@ Each item ends with "works in the browser against the new database", checked by 
 
 ### 5a. Users & Roles
 - [x] 🤖 API: list people, update roles and person access, role-default overrides, add member, remove access. Self-lockout and Founder/Admin are protected.
+- [ ] 🤖 Frontend: hide actions the API would refuse (granting above your own access, the Founder/Admin role for non-founders) so nobody meets a dead button.
 - [ ] 🤖 Frontend: Users & Roles page and sidebar gating read from the API.
 - [ ] 🧑 Check: all 25 people show with the right roles. Changing someone's access changes their sidebar after they reload.
 
