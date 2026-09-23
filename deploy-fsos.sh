@@ -1,4 +1,8 @@
 #!/bin/bash
+# NOT the script for the current server. This one needs Docker and Debian-style
+# sites-available; the EC2 box runs Amazon Linux with nginx conf.d, pm2 and no Docker.
+# Use ./deploy-fsos-pm2.sh there. Kept for a box that does have Docker.
+#
 # Deploy FSOS to thefrontseatmedia.com (replaces snoboard on this box).
 #
 #   ./deploy-fsos.sh

@@ -15,6 +15,8 @@ REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 BACKEND_DIR="$REPO_ROOT/fsos-backend"
 FRONTEND_DIR="$REPO_ROOT/fsos-frontend"
 VENV_DIR="$BACKEND_DIR/.venv"
+# Must match `root` in deploy/frontseat.conf.
+WEB_ROOT="/var/www/fsos"
 
 branch="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD)"
 if [ "$branch" != "fsos" ]; then
@@ -95,10 +97,35 @@ npm ci --no-audit
 NODE_OPTIONS="--max-old-space-size=1024" REACT_APP_FSOS_API_URL= npm run build
 
 echo ""
-echo "=== Nginx reload ==="
+echo "=== Publishing to $WEB_ROOT ==="
+# Out of the home directory: nginx runs as `nginx` and /home/ec2-user is mode 700, so
+# serving from there is a 403 on every request.
+sudo mkdir -p "$WEB_ROOT"
+sudo rsync -a --delete "$FRONTEND_DIR/build/" "$WEB_ROOT/"
+sudo chown -R nginx:nginx "$WEB_ROOT"
+
+echo ""
+echo "=== Nginx ==="
 if [ -f "$REPO_ROOT/deploy/frontseat.conf" ]; then
+  # Keep one copy of whatever was there before — this is the rollback to snoboard.
+  if [ -f /etc/nginx/conf.d/frontseat.conf ] && [ ! -f /etc/nginx/conf.d/frontseat.conf.pre-fsos ]; then
+    sudo cp /etc/nginx/conf.d/frontseat.conf /etc/nginx/conf.d/frontseat.conf.pre-fsos
+    echo "  backed up the previous vhost to frontseat.conf.pre-fsos"
+  fi
   sudo cp "$REPO_ROOT/deploy/frontseat.conf" /etc/nginx/conf.d/frontseat.conf
 fi
+
+# A second vhost claiming the same server_name silently wins or loses depending on load
+# order, and the deploy then "succeeds" while the old site is still being served.
+dupes="$(grep -rlE 'server_name[^;]*thefrontseatmedia\.com' /etc/nginx/conf.d/ 2>/dev/null \
+         | grep -v '/frontseat\.conf$' || true)"
+if [ -n "$dupes" ]; then
+  echo "Another nginx vhost also claims thefrontseatmedia.com:" >&2
+  echo "$dupes" >&2
+  echo "Move it aside (e.g. rename to .disabled) and re-run." >&2
+  exit 1
+fi
+
 sudo nginx -t
 sudo systemctl reload nginx
 
