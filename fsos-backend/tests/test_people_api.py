@@ -86,6 +86,39 @@ check("self-lockout blocked", api("PATCH", f"/api/people/{admin['id']}", email=A
                                   body={"roles": ["Editor"], "matrix": {"users_roles": "none"}})[0], 400)
 check("editor cannot edit people", api("PATCH", f"/api/people/{pending['id']}", email=E, body={"roles": ["CS"]})[0], 403)
 
+print("privilege escalation")
+# A COA manages access but is not a Founder/Admin. They must not be able to become one,
+# nor to route around it by handing themselves (or a role they hold) more than they have.
+coa = next((p for p in people if p["roles"] == ["COA"]), None)
+if coa:
+    C = coa["email"]
+    check("COA cannot grant Founder/Admin",
+          api("PATCH", f"/api/people/{pending['id']}", email=C, body={"roles": ["Founder/Admin"]})[0], 403)
+    check("COA cannot make themselves Founder/Admin",
+          api("PATCH", f"/api/people/{coa['id']}", email=C, body={"roles": ["COA", "Founder/Admin"]})[0], 403)
+    check("COA cannot remove a Founder/Admin's role",
+          api("PATCH", f"/api/people/{admin['id']}", email=C, body={"roles": ["COA"]})[0], 403)
+    check("COA cannot strip a Founder/Admin",
+          api("DELETE", f"/api/people/{admin['id']}/access", email=C)[0], 403)
+    check("COA still manages ordinary people",
+          api("PATCH", f"/api/people/{pending['id']}", email=C, body={"roles": ["Editor"]})[0], 200)
+
+# Someone whose own access is limited must not be able to hand out more than they hold.
+limited = pending
+api("PATCH", f"/api/people/{limited['id']}", email=A, body={"roles": ["Editor"], "matrix": {"users_roles": "edit"}})
+L = limited["email"]
+check("limited manager can list people", api("GET", "/api/people", email=L)[0], 200)
+check("cannot grant an area they lack",
+      api("PATCH", f"/api/people/{editor['id']}", email=L, body={"matrix": {"growth": "edit"}})[0], 403)
+check("cannot assign a role above themselves",
+      api("PATCH", f"/api/people/{editor['id']}", email=L, body={"roles": ["COA"]})[0], 403)
+check("cannot raise a role's defaults above themselves",
+      api("PUT", "/api/roles/access", email=L, body={"role": "Editor", "matrix": {"growth": "edit"}})[0], 403)
+check("can still grant what they do hold",
+      api("PATCH", f"/api/people/{editor['id']}", email=L, body={"matrix": {"production": "view"}})[0], 200)
+api("PATCH", f"/api/people/{editor['id']}", email=A, body={"clear_matrix": True})
+api("DELETE", f"/api/people/{limited['id']}/access", email=A)
+
 print("role defaults")
 matrix = {**{a: "none" for a in listing["areas"]}, "production": "edit", "news": "edit", "tickets": "edit"}
 check("set Designer defaults", api("PUT", "/api/roles/access", email=A, body={"role": "Designer", "matrix": matrix})[0], 200)
@@ -100,7 +133,7 @@ if designer:
     check("role override reaches its people", d["access"]["news"], "edit")
 
 print("cleanup")
-check("reset Designer", api("DELETE", f"/api/roles/access?role={urllib.parse.quote('Designer')}", email=A)[0], 200)
+check("reset Designer", api("POST", "/api/roles/access/reset", email=A, body={"role": "Designer"})[0], 200)
 check("remove the test person's access", api("DELETE", f"/api/people/{pending['id']}/access", email=A)[0], 200)
 after = api("GET", "/api/people", email=A)[1]["people"]
 check("test person pending again", next(p for p in after if p["id"] == pending["id"])["roles"], [])
@@ -111,7 +144,7 @@ if designer:
 
 # Always put the database back, even if an assertion above failed.
 api("DELETE", f"/api/people/{pending['id']}/access", email=A)
-api("DELETE", f"/api/roles/access?role={urllib.parse.quote('Designer')}", email=A)
+api("POST", "/api/roles/access/reset", email=A, body={"role": "Designer"})
 check("no person overrides left behind", {o["person_id"] for o in supabase("access_person_overrides?select=person_id")}, overridden)
 check("no role overrides left behind", supabase("access_role_overrides?select=role"), [])
 

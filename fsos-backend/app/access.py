@@ -53,6 +53,20 @@ def resolve_person_access(roles: list[str], person_override: dict | None = None,
     return {**matrix, **(person_override or {})} if person_override else matrix
 
 
+def grants_beyond(matrix: dict, ceiling: dict, previous: dict | None = None) -> str | None:
+    """The first area where `matrix` raises access above `ceiling`, otherwise None.
+
+    Used to stop privilege escalation: you can't hand out more than you hold. Areas that
+    `previous` already granted are ignored, so you can still *lower* someone who currently
+    outranks you.
+    """
+    for area, level in matrix.items():
+        rank = RANK.get(level, 0)
+        if rank > RANK.get(ceiling.get(area, "none"), 0) and rank > RANK.get((previous or {}).get(area, "none"), 0):
+            return area
+    return None
+
+
 def require(matrix: dict, area: str, level: str = "view") -> None:
     """Raise 403 unless the matrix grants at least `level` on `area`."""
     if RANK.get(matrix.get(area, "none"), 0) < RANK[level]:
