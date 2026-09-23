@@ -68,9 +68,20 @@ admin = next(p for p in people if "Founder/Admin" in (p["roles"] or []))
 # Pick people with no personal override, so the assertions below see the role defaults
 # and the test never edits access that was imported from snoboard.
 editor = next(p for p in people if p["roles"] == ["Editor"] and p["id"] not in overridden)
-pending = next(p for p in people if not p["roles"] and p["id"] not in overridden)
 A, E = admin["email"], editor["email"]
-print(f"  (admin {admin['name']}, editor {editor['name']}, spare {pending['name']})")
+
+# The spare is created here rather than borrowed from the team. It used to pick a real
+# person with no roles, which worked until those people were deleted from the app and
+# the test died on StopIteration — a fixture that depends on the state of real data is
+# a test that fails for reasons that have nothing to do with the code.
+SPARE_EMAIL = "selftest-spare@owledmedia.com"
+for row in supabase(f"people?select=id&email=eq.{SPARE_EMAIL}") or []:
+    supabase(f"people?id=eq.{row['id']}", method="DELETE")
+pending = supabase("people", method="POST", body={
+    "name": "[selftest] Spare", "email": SPARE_EMAIL, "initials": "SS", "roles": []})[0]
+# Re-read now the spare exists, so the count below is of what the API should return.
+people = supabase("people?select=id,email,name,roles&order=name&limit=200")
+print(f"  ({len(people)} people; admin {admin['name']}, editor {editor['name']}, spare {pending['name']})")
 
 print("auth")
 check("no credentials -> 401", api("GET", "/api/me")[0], 401)
@@ -82,7 +93,7 @@ print("access gating")
 check("editor cannot list people", api("GET", "/api/people", email=E)[0], 403)
 status, listing = api("GET", "/api/people", email=A)
 check("admin can list people", status, 200)
-check("all 25 people returned", len(listing["people"]), len(people))
+check("every person is returned", len(listing["people"]), len(people))
 ed = next(p for p in listing["people"] if p["id"] == editor["id"])
 check("editor's resolved access: production edit", ed["access"]["production"], "edit")
 check("editor's resolved access: news none", ed["access"]["news"], "none")
@@ -180,6 +191,8 @@ if designer:
 # Always put the database back, even if an assertion above failed.
 api("DELETE", f"/api/people/{pending['id']}/access", email=A)
 api("POST", "/api/roles/access/reset", email=A, body={"role": "Designer"})
+supabase(f"people?id=eq.{pending['id']}", method="DELETE")
+check("the spare person was cleaned up", supabase(f"people?select=id&id=eq.{pending['id']}"), [])
 check("no person overrides left behind", {o["person_id"] for o in supabase("access_person_overrides?select=person_id")}, overridden)
 check("no role overrides left behind", supabase("access_role_overrides?select=role"), [])
 

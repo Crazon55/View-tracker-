@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useWorkspace } from "../../domain/store";
 import { FORMATS } from "../../domain/constants";
 import { StreamBadge, IPBadge } from "../common/badges";
@@ -36,7 +36,11 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
     setIpHooks((h) => ({ ...h, [id]: { hook: "", subHook: "", ...h[id], [field]: value } }));
   };
 
+  const [saving, setSaving] = useState(false);
+  const inFlight = useRef(false);
+
   const submit = async () => {
+    if (inFlight.current) return;
     if (!title.trim()) { toast.error("Title is required"); return; }
     if (!dests.length) { toast.error("Select at least one destination IP"); return; }
     const brief = {};
@@ -51,12 +55,17 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
         subHook: format === "Reel" ? (ipHooks[ipId]?.subHook || "").trim() : "",
       };
     });
+    inFlight.current = true;
+    setSaving(true);
     let id;
     try {
       id = await actions.addIdea({ stream, title, format, category: category || cats[0]?.name, brief, destinations: dests, sources, batchId: batchId || null, versionHooks });
     } catch (e) {
       /* the store already showed the error */
       return;
+    } finally {
+      inFlight.current = false;
+      setSaving(false);
     }
     toast.success("Idea created — creator & timestamp captured automatically");
     onCreated(id);
@@ -160,7 +169,7 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button data-testid="create-submit" onClick={submit} className="bg-stone-900 hover:bg-stone-800">Create idea</Button>
+          <Button data-testid="create-submit" onClick={submit} disabled={saving} className="bg-stone-900 hover:bg-stone-800">{saving ? "Creating…" : "Create idea"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

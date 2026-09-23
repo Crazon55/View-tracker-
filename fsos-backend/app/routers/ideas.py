@@ -160,6 +160,44 @@ async def set_destinations(idea_id: str, body: Destinations, caller: Caller = De
     return await idea_payload(idea_id)
 
 
+@router.delete("/{idea_id}")
+async def delete_idea(idea_id: str, caller: Caller = Depends(current_caller)):
+    """Delete an idea and everything hanging off it.
+
+    Versions, placements, comments, activity and notifications all cascade from the
+    idea. Publications don't — they're their own record — so any left with nothing
+    attached go too, and their snapshots with them; a publication of nothing is not a
+    thing anyone can act on.
+
+    This is for mistakes: a duplicate, a typo, a test. An idea that has been published
+    is real history, so the caller is told what they're about to lose and has to say
+    yes to it.
+    """
+    idea = await get_idea(idea_id)
+    require(caller.access, area_for(idea["stream"]), "edit")
+
+    versions = await db.select("versions", {"idea_id": f"eq.{idea_id}", "select": "id"})
+    version_ids = [v["id"] for v in versions]
+    pub_ids: set[str] = set()
+    if version_ids:
+        links = await db.select("publication_versions", {
+            "version_id": f"in.({','.join(version_ids)})", "select": "publication_id"})
+        pub_ids = {l["publication_id"] for l in links}
+
+    await db.delete("ideas", {"id": f"eq.{idea_id}"})   # versions, comments, activity cascade
+
+    # Publications whose last version just went with the idea.
+    orphaned = 0
+    for pub_id in pub_ids:
+        remaining = await db.select("publication_versions", {
+            "publication_id": f"eq.{pub_id}", "select": "version_id", "limit": 1})
+        if not remaining:
+            await db.delete("publications", {"id": f"eq.{pub_id}"})   # snapshot cascades
+            orphaned += 1
+
+    return {"ok": True, "deleted": idea_id, "versions": len(version_ids), "publications": orphaned}
+
+
 @router.post("/{idea_id}/approve")
 async def approve_idea(idea_id: str, caller: Caller = Depends(current_caller)):
     idea = await get_idea(idea_id)

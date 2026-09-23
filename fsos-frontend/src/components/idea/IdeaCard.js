@@ -1,10 +1,14 @@
 import React, { useState, useMemo, useEffect } from "react";
 import * as Icons from "lucide-react";
-import { useWorkspace } from "../../domain/store";
+import { useWorkspace, useAccess } from "../../domain/store";
 import { versionsOf, ideaById, ipById, userById, ideaDerivedState, ideaProgress, activePlacementOf, publicationOf, snapshotOf, targetFor, classify, needsIdeaApproval } from "../../domain/selectors";
 import { StreamBadge, StatusBadge, FormatBadge, IPBadge, VersionBadge, PerfBadge, Avatar } from "../common/badges";
 import { nowIso, istDateTimeLabel, fmtDate } from "../../domain/dates";
 import { Dialog, DialogContent, DialogTitle } from "../ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "../ui/alert-dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -56,17 +60,27 @@ function submitIdeaIfReady(actions, idea, versions, pending = {}) {
 
 export default function IdeaCard({ ideaId, mode, initialTab, onClose, onOpenIdea }) {
   const { db, actions, actingUser } = useWorkspace();
+  const { canEdit } = useAccess();
   const idea = ideaId ? ideaById(db, ideaId) : null;
   const [tab, setTab] = useState("brief");
   const [highlightAnchor, setHighlightAnchor] = useState(null);
   const [pendingLinks, setPendingLinks] = useState({});
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const producerView = (actingUser && isAssignedProducerView(actingUser)) || mode === "owner";
 
   useEffect(() => {
     setTab(producerView ? "production" : (initialTab || "brief"));
     setHighlightAnchor(null);
     setPendingLinks({});
+    setConfirmDelete(false);
   }, [ideaId, producerView, initialTab]);
+
+  // How much real history deleting this would take with it.
+  const publishedCount = useMemo(() => {
+    if (!idea) return 0;
+    const mine = new Set(versionsOf(db, idea.id).map((v) => v.id));
+    return db.publications.filter((pub) => (pub.versionIds || []).some((v) => mine.has(v))).length;
+  }, [db, idea]);
 
   if (!idea) return null;
   const versions = versionsOf(db, idea.id);
@@ -130,9 +144,48 @@ export default function IdeaCard({ ideaId, mode, initialTab, onClose, onOpenIdea
                 </Button>
               )}
               {needsIdeaApproval(idea) && idea.approval.state === "approved" && <span className="text-[11px] text-emerald-700 inline-flex items-center gap-1"><Icons.CheckCircle2 className="h-3.5 w-3.5" /> Approved by {userById(db, idea.approval.by)?.name}</span>}
+              {canEdit(idea.stream === "BO" ? "bo_studio" : "hpn_desk") && (
+                <button
+                  title="Delete this idea"
+                  data-testid="delete-idea-btn"
+                  onClick={() => setConfirmDelete(true)}
+                  className="grid h-8 w-8 place-items-center rounded-md border border-stone-200 text-stone-400 hover:border-rose-300 hover:text-rose-600">
+                  <Icons.Trash2 className="h-4 w-4" />
+                </button>
+              )}
             </div>
           </div>
         </div>
+
+        <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete “{idea.title}”?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {publishedCount > 0
+                  ? `This idea has been published ${publishedCount === 1 ? "once" : `${publishedCount} times`}. Deleting it removes those publications and their view captures as well — that's real history, not a draft.`
+                  : "Its versions, comments and activity go with it. Nothing has been published, so nothing is lost beyond the draft itself."}
+                {" "}This can't be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-[#C0512F] hover:bg-[#a84325]"
+                data-testid="confirm-delete-idea"
+                onClick={async () => {
+                  setConfirmDelete(false);
+                  try {
+                    await actions.deleteIdea(idea.id);
+                    toast.success("Idea deleted");
+                    onClose();
+                  } catch (e) { /* the store already showed the error */ }
+                }}>
+                Delete idea
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Body */}
         <Tabs value={producerView ? "production" : tab} onValueChange={setTab} className="flex-1 flex flex-col min-h-0">

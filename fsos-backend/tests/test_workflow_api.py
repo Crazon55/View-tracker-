@@ -368,6 +368,35 @@ prow = supabase(f"placements?select=*&id=eq.{pl_id}")[0]
 check("[postgres] placement state", prow["state"], "confirmed")
 check("[postgres] sort_order is the UI's `order`", prow["sort_order"], 1)
 
+# ───────────────────────── 10. deleting an idea ─────────────────────────
+print()
+print("10. An idea can be deleted, and takes its own work with it")
+
+status, throwaway = api("POST", "/api/ideas", email=A, body={
+    "stream": "BO", "title": f"{MARK} throwaway", "format": "Reel",
+    "destinations": [IP1["id"], IP2["id"]]})
+check("throwaway created", status, 200)
+t_id = throwaway["idea"]["id"]
+t_v = throwaway["versions"][0]["id"]
+api("POST", "/api/distribution/place", email=A, body={"versionId": t_v, "date": TODAY})
+t_pub = api("POST", "/api/distribution/publish", email=A, body={
+    "versionId": t_v, "url": "https://example.com/fsos-selftest-throwaway",
+    "publishedAt": (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()})[1]["publicationId"]
+
+status, res = api("DELETE", f"/api/ideas/{t_id}", email=A)
+check("delete succeeds", status, 200)
+check("it reports the versions it took", res.get("versions"), 2)
+check("and the publication left with nothing attached", res.get("publications"), 1)
+
+ws = refresh(A)
+check("idea gone", find(ws["ideas"], id=t_id), None)
+check("its versions went with it", [v for v in ws["versions"] if v["ideaId"] == t_id], [])
+check("its placement went with it", [p for p in ws["placements"] if p["versionId"] == t_v], [])
+check("the orphaned publication went too", find(ws["publications"], id=t_pub), None)
+check("[postgres] nothing left behind", supabase(f"versions?select=id&idea_id=eq.{t_id}"), [])
+check("[postgres] its snapshot went with the publication",
+      supabase(f"snapshots?select=id&publication_id=eq.{t_pub}"), [])
+
 # ───────────────────────── cleanup ─────────────────────────
 if KEEP:
     print(f"\n--keep: left idea {idea_id} in the database. Delete it from Settings or re-run without --keep.")

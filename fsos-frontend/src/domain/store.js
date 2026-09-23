@@ -96,6 +96,16 @@ export function WorkspaceProvider({ children }) {
 
   useEffect(() => { reload(); }, [reload]);
 
+  /**
+   * Refresh in the background, without making anyone wait for it.
+   *
+   * Most mutations already hand back the row they changed, and that's what the screen
+   * shows. The reload is for the ripples — the activity entry, the notification, the
+   * batch's idea list — which nobody is staring at. Awaiting it turned every click into
+   * a second of nothing happening, which is how you end up pressing the button twice.
+   */
+  const reloadSoon = useCallback(() => { reload(); }, [reload]);
+
   /** Local-only patch, for merging a server response back into state. */
   const patch = useCallback((fn) => setDb((prev) => (prev ? fn({ ...prev }) : prev)), []);
 
@@ -177,8 +187,24 @@ export function WorkspaceProvider({ children }) {
         batchId: payload.batchId || null,
       }));
       mergeIdea(res);
-      await reload();   // activity, notifications and the batch's idea list all moved
+      reloadSoon();     // activity, notifications and the batch's idea list catch up
       return res.idea.id;
+    },
+
+    /** Delete an idea and everything under it. */
+    async deleteIdea(ideaId) {
+      await run(() => api.del(`/api/ideas/${ideaId}`));
+      patch((d) => {
+        const versionIds = new Set(d.versions.filter((v) => v.ideaId === ideaId).map((v) => v.id));
+        d.ideas = d.ideas.filter((i) => i.id !== ideaId);
+        d.versions = d.versions.filter((v) => v.ideaId !== ideaId);
+        d.placements = d.placements.filter((pl) => !versionIds.has(pl.versionId));
+        d.comments = d.comments.filter((c) => c.ideaId !== ideaId);
+        d.activity = d.activity.filter((a) => a.ideaId !== ideaId);
+        d.publications = d.publications.filter((pub) => (pub.versionIds || []).some((v) => !versionIds.has(v)));
+        return d;
+      });
+      reloadSoon();
     },
 
     async updateIdea(ideaId, p) {
@@ -191,12 +217,12 @@ export function WorkspaceProvider({ children }) {
 
     async approveIdea(ideaId) {
       mergeIdea(await run(() => api.post(`/api/ideas/${ideaId}/approve`)));
-      return reload();
+      reloadSoon();
     },
 
     async approveBatch(batchId) {
       await run(() => api.post(`/api/batches/${batchId}/approve`));
-      return reload();
+      reloadSoon();
     },
 
     async updateBatch(id, p) {
@@ -239,40 +265,40 @@ export function WorkspaceProvider({ children }) {
     // ── production ───────────────────────────────────────────────────────────
     async assignProduction(ideaIds, ownerId, deadline, reviewerId) {
       await run(() => api.post("/api/production/assign", { ideaIds, ownerId, deadline, reviewerId }));
-      return reload();
+      reloadSoon();
     },
 
     async submitForReview(versionId, extraLink) {
       mergeIdea(await run(() => api.post(`/api/production/versions/${versionId}/submit`,
         { extraLink: extraLink || null })));
-      return reload();
+      reloadSoon();
     },
 
     async submitIdeaForReview(ideaId, extraLinks) {
       mergeIdea(await run(() => api.post(`/api/production/ideas/${ideaId}/submit`,
         { extraLinks: extraLinks || [] })));
-      return reload();
+      reloadSoon();
     },
 
     async requestReview(ideaId, reviewerId) {
       mergeIdea(await run(() => api.post(`/api/production/ideas/${ideaId}/request-review`, { reviewerId })));
-      return reload();
+      reloadSoon();
     },
 
     async approveVersion(versionId) {
       mergeIdea(await run(() => api.post(`/api/production/versions/${versionId}/approve`)));
-      return reload();
+      reloadSoon();
     },
 
     async requestChanges(versionId, note) {
       mergeIdea(await run(() => api.post(`/api/production/versions/${versionId}/request-changes`, { note })));
-      return reload();
+      reloadSoon();
     },
 
     async replaceAsset(versionId, link) {
       mergeIdea(await run(() => api.post(`/api/production/versions/${versionId}/replace-asset`,
         { link: link || null })));
-      return reload();
+      reloadSoon();
     },
 
     /** HPN's one-screen record: owner, asset and outcome together. */
@@ -285,7 +311,7 @@ export function WorkspaceProvider({ children }) {
         if (outcome === "approved") await api.post(`/api/production/versions/${v.id}/approve`);
         else await api.post(`/api/production/versions/${v.id}/request-changes`, { note: "Changes requested" });
       }
-      return reload();
+      reloadSoon();
     },
 
     // ── comments ─────────────────────────────────────────────────────────────
@@ -314,7 +340,10 @@ export function WorkspaceProvider({ children }) {
         versionId, date, time, order: opts.order || 1,
         force: !!opts.force, exception: !!opts.exception, reason: opts.reason || null,
       }));
-      if (res.placement) await reload();
+      if (res.placement) {
+        patch((d) => { d.placements = upsert(d.placements, res.placement); return d; });
+        reloadSoon();
+      }
       return res.conflict;
     },
 
@@ -322,50 +351,52 @@ export function WorkspaceProvider({ children }) {
       await run(() => api.post("/api/distribution/bulk-place", {
         proposals: proposals.map((p) => ({ versionId: p.versionId, date: p.date, time: p.time || null })),
       }));
-      return reload();
+      reloadSoon();
     },
 
     async movePlacement(placementId, date) {
       await run(() => api.patch(`/api/distribution/placements/${placementId}`, { date }));
-      return reload();
+      reloadSoon();
     },
 
     async cancelPlacement(placementId, reason) {
       await run(() => api.post(`/api/distribution/placements/${placementId}/cancel`, { reason }));
-      return reload();
+      reloadSoon();
     },
 
     async unallocateVersion(versionId, reason) {
       await run(() => api.post(`/api/distribution/versions/${versionId}/unallocate`, { reason }));
-      return reload();
+      reloadSoon();
     },
 
     async authorizeException(placementId, reason) {
       await run(() => api.post(`/api/distribution/placements/${placementId}/authorize-exception`, { reason }));
-      return reload();
+      reloadSoon();
     },
 
     async replaceBOWithHPN(payload) {
       await run(() => api.post("/api/distribution/displace", payload));
-      return reload();
+      reloadSoon();
     },
 
     /** Returns { dupUrl } — the URL is already on another publication. */
     async confirmPublication(versionId, url, publishedAtIso) {
       const res = await run(() => api.post("/api/distribution/publish", {
         versionId, url, publishedAt: publishedAtIso }));
+      // A publication creates a placement change, a publication row and a snapshot, so
+      // this one really does need the round trip before the screen is right.
       await reload();
       return { dupUrl: !!res.dupUrl };
     },
 
     async linkCollaboration(publicationId, versionId) {
       await run(() => api.post(`/api/distribution/publications/${publicationId}/collab`, { versionId }));
-      return reload();
+      reloadSoon();
     },
 
     async reportLivePending(versionId) {
       await run(() => api.post(`/api/distribution/versions/${versionId}/report-pending`));
-      return reload();
+      reloadSoon();
     },
 
     // ── performance ──────────────────────────────────────────────────────────
@@ -563,7 +594,7 @@ export function WorkspaceProvider({ children }) {
 
     async resetNewsLearning() {
       await run(() => api.post("/api/news/reset-learning"));
-      return reload();
+      reloadSoon();
     },
 
     // ── notifications ────────────────────────────────────────────────────────
@@ -579,7 +610,7 @@ export function WorkspaceProvider({ children }) {
       });
       return api.post(`/api/notifications/${id}/read`);
     },
-  }), [db, patch, reload, run, mergeIdea]);
+  }), [db, patch, reload, reloadSoon, run, mergeIdea]);
 
   const value = useMemo(() => ({
     db, actions, actingUser, gateUser, today: db?.meta?.anchor, access,
