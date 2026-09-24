@@ -16,6 +16,47 @@ Tick items off as they're done (`[x]`). **Owner:** 🧑 you (needs the Supabase 
 
 ---
 
+## Running it day to day
+
+On the EC2 box (`~/View-tracker-`, branch `fsos`):
+
+| Command | What it does |
+|---|---|
+| `./deploy-fsos-pm2.sh` | Pull and deploy. The normal one. Skips the frontend build when nothing under `fsos-frontend/` changed, so a backend-only change is under a minute. |
+| `./deploy-fsos-pm2.sh --force-build` | Forces the frontend rebuild. Needed after editing `.env.local`, because the Supabase URL is compiled into the bundle. |
+| `pm2 logs fsos-backend --lines 50` | Backend logs. |
+| `pm2 list` | Is the API up. |
+| `pm2 restart fsos-backend` | Restart the API without redeploying. |
+| `curl -s https://thefrontseatmedia.com/api/health` | Which Supabase project it's talking to. |
+
+Worth adding to `~/.bashrc` so they're one word each:
+
+```bash
+alias fsos-deploy='cd ~/View-tracker- && ./deploy-fsos-pm2.sh'
+alias fsos-deploy-full='cd ~/View-tracker- && ./deploy-fsos-pm2.sh --force-build'
+alias fsos-logs='pm2 logs fsos-backend --lines 50'
+alias fsos-status='pm2 list; curl -s https://thefrontseatmedia.com/api/health'
+```
+
+The deploy refuses rather than half-succeeding: wrong branch, missing `.env`, a
+Supabase key absent, `FSOS_DEV_LOGIN` left on, Python older than 3.10, not enough
+memory to build, or another nginx vhost claiming the domain. If it stops, the message
+says which.
+
+**Rollback to the previous database** (while the Seoul project still exists):
+
+```bash
+cd ~/View-tracker-
+cp fsos-backend/.env.seoul fsos-backend/.env
+cp fsos-frontend/.env.local.seoul fsos-frontend/.env.local
+./deploy-fsos-pm2.sh --force-build
+```
+
+**Rollback to snoboard entirely:** `sudo cp /etc/nginx/frontseat.conf.pre-fsos
+/etc/nginx/conf.d/frontseat.conf && sudo systemctl reload nginx`. Its code is still on disk.
+
+---
+
 ## Where we are (23 Sept, evening)
 
 Steps 0–5 done, and step 6 with them. **The demo store is gone** — the app loads and
