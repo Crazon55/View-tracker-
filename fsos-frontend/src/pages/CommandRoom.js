@@ -113,7 +113,18 @@ export default function CommandRoom() {
         </Panel>
 
         {/* 3. Six-day cycles */}
-        <Panel title="Six-day performance cycles" subtitle="Mean captured ~24h views · publication cohorts" icon={Icons.BarChart3} data-testid="cycles-panel">
+        <Panel title="Published through FSOS · six-day cohorts" subtitle="Mean captured ~24h views — not the 6-Day Tracker" icon={Icons.BarChart3} data-testid="cycles-panel">
+          {!chartData.some((d) => d.mean > 0) ? (
+            <div className="rounded-md border border-dashed border-stone-200 px-4 py-6 text-center">
+              <p className="text-[11px] text-stone-500">Nothing published through FSOS yet.</p>
+              <p className="mt-1 text-[10px] text-stone-400">
+                This fills in once ideas are placed on the calendar, confirmed live, and their
+                24-hour views captured. It counts FSOS publications only — the imported history
+                lives in the 6-Day Tracker.
+              </p>
+            </div>
+          ) : (
+          <>
           <div className="h-40">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 6, right: 4, left: -18, bottom: 0 }}>
@@ -134,6 +145,8 @@ export default function CommandRoom() {
               </div>
             ))}
           </div>
+          </>
+          )}
         </Panel>
       </div>
 
