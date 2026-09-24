@@ -458,8 +458,8 @@ export function WorkspaceProvider({ children }) {
       return ip;
     },
 
-    async addCategory({ name, stream, formatGroup = "Post" }) {
-      const made = await run(() => api.post("/api/categories", { name, stream, formatGroup }));
+    async addCategory({ name, stream, format = "Carousel" }) {
+      const made = await run(() => api.post("/api/categories", { name, stream, format }));
       patch((d) => { d.categories = upsert(d.categories, made); return d; });
       return made;
     },

@@ -71,13 +71,14 @@ def from_ip(patch: dict) -> dict:
 
 
 def to_category(r: dict) -> dict:
-    # formatGroup is "Reel" or "Post"; Post covers Carousel and Static, the same split
-    # the IP floors and cadence counting use.
+    # The exact format the category is for: Reel, Carousel or Static. Not the
+    # Reel-versus-Post grouping used for cadence — that answers "how many went out",
+    # this answers "what kind of thing is it".
     return {
         "id": r["id"],
         "name": r.get("name"),
         "stream": r.get("stream"),
-        "formatGroup": r.get("format_group") or "Post",
+        "format": r.get("format") or "Carousel",
     }
 
 

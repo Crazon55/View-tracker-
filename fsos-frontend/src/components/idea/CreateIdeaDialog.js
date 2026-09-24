@@ -25,11 +25,10 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
     if (open) { setTitle(prefill?.title || ""); setFormat("Reel"); setCategory(""); setDests([]); setIpHooks({}); setSrcUrl(prefill?.sourceUrl || ""); setSrcStart(""); setSrcEnd(""); setBatchId(""); }
   }, [open, stream, prefill]);
 
-  // Only the categories for this stream and this content type. It used to offer every
+  // Only the categories for this stream and this exact format. It used to offer every
   // category in the system, so a BO reel could be filed under an HPN carousel heading.
-  const formatGroup = format === "Reel" ? "Reel" : "Post";
   const cats = db.categories.filter(
-    (c) => c.stream === stream && (c.formatGroup || "Post") === formatGroup,
+    (c) => c.stream === stream && (c.format || "Carousel") === format,
   );
   const isVideoSource = format === "Reel";
   const activeIps = db.ips.filter((i) => i.active);

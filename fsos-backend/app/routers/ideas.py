@@ -375,18 +375,10 @@ async def approve_batch(batch_id: str, caller: Caller = Depends(current_caller))
 
 # ───────────────────────── categories ─────────────────────────
 
-FORMAT_GROUPS = ("Reel", "Post")
-
-
-def format_group_of(fmt: str) -> str:
-    """Which category bucket a format belongs to. Carousel and Static are both posts."""
-    return "Reel" if fmt == "Reel" else "Post"
-
-
 class NewCategory(BaseModel):
     name: str
     stream: str
-    formatGroup: str = "Post"
+    format: str = "Carousel"
 
 
 @categories_router.post("")
@@ -394,15 +386,15 @@ async def create_category(body: NewCategory, caller: Caller = Depends(current_ca
     require(caller.access, "settings", "edit")
     if body.stream not in STREAMS:
         raise HTTPException(status_code=400, detail=f"Unknown stream: {body.stream}")
-    if body.formatGroup not in FORMAT_GROUPS:
-        raise HTTPException(status_code=400, detail=f"Format must be Reel or Post, got: {body.formatGroup}")
+    if body.format not in FORMATS:
+        raise HTTPException(status_code=400, detail=f"Unknown format: {body.format}")
     name = body.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="A category needs a name.")
     return shape.to_category(await db.insert(
         "categories",
-        {"name": name, "stream": body.stream, "format_group": body.formatGroup},
-        upsert_on="name,stream,format_group"))
+        {"name": name, "stream": body.stream, "format": body.format},
+        upsert_on="name,stream,format"))
 
 
 @categories_router.delete("/{category_id}")
