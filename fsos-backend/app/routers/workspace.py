@@ -45,11 +45,15 @@ async def _core() -> dict:
         db.select_one("app_settings", {"select": "settings"}),
         db.select("batches", {"select": "*", "order": "created_at"}),
         db.select("ideas", {"select": "*", "order": "created_at"}),
-        db.select("versions", {"select": "*"}),
-        db.select("placements", {"select": "*"}),
+        # Every list the UI renders needs a deterministic order. Without one, Postgres
+        # hands back physical row order, and an UPDATE rewrites the row at the end of
+        # the table — so editing a version's copy silently moved its card after the next
+        # refresh. Cards jumping around while you work is its own kind of broken.
+        db.select("versions", {"select": "*", "order": "created_at,id"}),
+        db.select("placements", {"select": "*", "order": "created_at,id"}),
         db.select("publications", {"select": "*", "order": "published_at"}),
-        db.select("publication_versions", {"select": "*"}),
-        db.select("snapshots", {"select": "*"}),
+        db.select("publication_versions", {"select": "*", "order": "publication_id,version_id"}),
+        db.select("snapshots", {"select": "*", "order": "created_at,id"}),
         db.select("comments", {"select": "*", "order": "created_at"}),
         db.select("activity", {"select": "*", "order": "created_at"}),
     )
@@ -87,9 +91,9 @@ async def _core() -> dict:
 
 async def _six_day() -> dict:
     entries, top, actuals, settings_row = await asyncio.gather(
-        db.select("six_day_entries", {"select": "*"}),
-        db.select("six_day_top_content", {"select": "*"}),
-        db.select("six_day_actuals", {"select": "*"}),
+        db.select("six_day_entries", {"select": "*", "order": "month,cycle,ip_id"}),
+        db.select("six_day_top_content", {"select": "*", "order": "month,cycle,views.desc"}),
+        db.select("six_day_actuals", {"select": "*", "order": "month,ip_id"}),
         db.select_one("app_settings", {"select": "settings"}),
     )
     assignee = with_defaults((settings_row or {}).get("settings")).get("sixDayAssigneeId")
@@ -102,7 +106,7 @@ async def _six_day() -> dict:
 
 
 async def _growth() -> dict:
-    rows = await db.select("growth_monthly", {"select": "*"})
+    rows = await db.select("growth_monthly", {"select": "*", "order": "month,ip_id"})
     return {"followers": [shape.to_growth(r) for r in rows]}
 
 

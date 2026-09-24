@@ -26,7 +26,25 @@ export function visibleIps(db, { withPlacements = true, withPublications = true 
 }
 export const userById = (db, id) => db.users.find((u) => u.id === id);
 export const ideaById = (db, id) => db.ideas.find((i) => i.id === id);
-export const versionsOf = (db, ideaId) => db.versions.filter((v) => v.ideaId === ideaId);
+/**
+ * An idea's versions, in the order its destinations were chosen.
+ *
+ * Not whatever order the rows arrive in: editing a version rewrites its row, and
+ * without an explicit order that moved its card on the next refresh. Anything not in
+ * `destinations` any more (a removed IP whose version was kept) sorts to the end.
+ */
+export const versionsOf = (db, ideaId) => {
+  const idea = db.ideas.find((i) => i.id === ideaId);
+  const order = idea?.destinations || [];
+  return db.versions
+    .filter((v) => v.ideaId === ideaId)
+    .slice()
+    .sort((a, b) => {
+      const ia = order.indexOf(a.ipId);
+      const ib = order.indexOf(b.ipId);
+      return (ia === -1 ? 1e6 : ia) - (ib === -1 ? 1e6 : ib) || String(a.id).localeCompare(String(b.id));
+    });
+};
 export const activePlacementOf = (db, versionId) => db.placements.find((p) => p.versionId === versionId && p.state !== "cancelled");
 export const publicationOf = (db, versionId) => db.publications.find((p) => p.versionIds.includes(versionId));
 export const snapshotOf = (db, publicationId) => db.snapshots.find((s) => s.publicationId === publicationId);

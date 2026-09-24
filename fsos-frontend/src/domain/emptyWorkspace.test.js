@@ -144,6 +144,34 @@ describe("a brand-new database", () => {
     expect(S.bankStockDays(db).map((r) => r.ip.id)).toEqual(["on-1"]);
   });
 
+  it("keeps an idea's versions in the order its destinations were chosen", () => {
+    // Editing a version rewrites its row, and Postgres then hands it back in a
+    // different position. Without an explicit order the card moved on the next
+    // refresh, which is alarming when you're halfway through writing copy.
+    const db = empty();
+    db.ideas = [{ id: "i1", destinations: ["ip-a", "ip-b", "ip-c"] }];
+    db.versions = [
+      { id: "v3", ideaId: "i1", ipId: "ip-c" },
+      { id: "v1", ideaId: "i1", ipId: "ip-a" },
+      { id: "v2", ideaId: "i1", ipId: "ip-b" },
+    ];
+    expect(S.versionsOf(db, "i1").map((v) => v.ipId)).toEqual(["ip-a", "ip-b", "ip-c"]);
+
+    // Arriving in any order gives the same answer.
+    db.versions.reverse();
+    expect(S.versionsOf(db, "i1").map((v) => v.ipId)).toEqual(["ip-a", "ip-b", "ip-c"]);
+  });
+
+  it("puts a version whose destination was removed at the end", () => {
+    const db = empty();
+    db.ideas = [{ id: "i1", destinations: ["ip-a"] }];
+    db.versions = [
+      { id: "v-old", ideaId: "i1", ipId: "ip-dropped" },
+      { id: "v1", ideaId: "i1", ipId: "ip-a" },
+    ];
+    expect(S.versionsOf(db, "i1").map((v) => v.ipId)).toEqual(["ip-a", "ip-dropped"]);
+  });
+
   it("reports no coverage rather than inventing any", () => {
     const db = empty();
     expect(S.readyBankVersions(db)).toEqual([]);
