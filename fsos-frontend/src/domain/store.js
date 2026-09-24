@@ -328,6 +328,11 @@ export function WorkspaceProvider({ children }) {
       return mergeIdea(await run(() => api.put(`/api/ideas/${ideaId}/destinations`, { ipIds })));
     },
 
+    async rejectIdea(ideaId, reason) {
+      mergeIdea(await run(() => api.post(`/api/ideas/${ideaId}/reject`, { reason })));
+      reloadSoon();
+    },
+
     async approveIdea(ideaId) {
       mergeIdea(await run(() => api.post(`/api/ideas/${ideaId}/approve`)));
       reloadSoon();
@@ -386,8 +391,8 @@ export function WorkspaceProvider({ children }) {
     },
 
     // ── production ───────────────────────────────────────────────────────────
-    async assignProduction(ideaIds, ownerId, deadline, reviewerId) {
-      await run(() => api.post("/api/production/assign", { ideaIds, ownerId, deadline, reviewerId }));
+    async assignProduction(ideaIds, ownerId, deadline, reviewerId, deadlineTime) {
+      await run(() => api.post("/api/production/assign", { ideaIds, ownerId, deadline, reviewerId, deadlineTime }));
       reloadSoon();
     },
 

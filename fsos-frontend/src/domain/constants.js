@@ -22,6 +22,7 @@ export const VSTATUS = {
 export const IDEA_STATES = {
   draft: { label: "Draft", badge: "bg-stone-100 text-stone-700 border-stone-300" },
   awaiting_approval: { label: "Awaiting idea approval", badge: "bg-amber-100 text-amber-800 border-amber-300" },
+  rejected: { label: "Rejected", badge: "bg-rose-200 text-rose-900 border-rose-400" },
   approved_unassigned: { label: "Approved / Unassigned", badge: "bg-sky-100 text-sky-800 border-sky-300" },
   in_production: { label: "In production", badge: "bg-indigo-100 text-indigo-800 border-indigo-300" },
   awaiting_review: { label: "Awaiting review", badge: "bg-purple-100 text-purple-800 border-purple-300" },

@@ -107,6 +107,7 @@ IDEA_COLS = {
     "sources": "sources", "brief": "brief", "destinations": "destinations",
     "productionOwnerId": "production_owner_id", "previousOwners": "previous_owners",
     "reviewerId": "reviewer_id", "batchId": "batch_id", "deadline": "deadline",
+    "deadlineTime": "deadline_time",
     "bypassUsed": "bypass_used", "dropped": "dropped",
 }
 
@@ -130,12 +131,15 @@ def to_idea(r: dict) -> dict:
             "state": r.get("approval_state") or "pending",
             "by": r.get("approved_by"),
             "at": _iso(r.get("approved_at")),
+            # Why it was turned down. Approval needs no note; a rejection always does.
+            "note": r.get("decision_note"),
         },
         "productionOwnerId": r.get("production_owner_id"),
         "previousOwners": r.get("previous_owners") or [],
         "reviewerId": r.get("reviewer_id"),
         "batchId": r.get("batch_id"),
         "deadline": r.get("deadline"),
+        "deadlineTime": r.get("deadline_time"),
         "bypassUsed": r.get("bypass_used"),
         "dropped": r.get("dropped") or [],
     }
@@ -148,6 +152,7 @@ def from_idea(patch: dict) -> dict:
         cols["approval_state"] = approval.get("state", "pending")
         cols["approved_by"] = approval.get("by")
         cols["approved_at"] = approval.get("at")
+        cols["decision_note"] = approval.get("note")
     return cols
 
 

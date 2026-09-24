@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from .. import db, events, shape
 from ..access import require
+from ..links import require_asset_link
 from ..auth import Caller, current_caller
 
 router = APIRouter(prefix="/api/ideas", tags=["ideas"])
@@ -213,11 +214,51 @@ async def approve_idea(idea_id: str, caller: Caller = Depends(current_caller)):
     require(caller.access, area_for(idea["stream"]), "edit")
     if idea.get("approval_state") == "approved":
         return await idea_payload(idea_id)
-    await db.update("ideas", {"id": f"eq.{idea_id}"},
-                    {"approval_state": "approved", "approved_by": caller.id, "approved_at": events.now_iso()})
+    patch = {"approval_state": "approved", "approved_by": caller.id, "approved_at": events.now_iso()}
+    # Only clear the note when there is one to clear. Approving an idea nobody rejected
+    # must not reference `decision_note` at all, so this route keeps working on a
+    # database where the rejection migration has not been run yet.
+    if idea.get("approval_state") == "rejected":
+        patch["decision_note"] = None
+    await db.update("ideas", {"id": f"eq.{idea_id}"}, patch)
     await events.log(idea_id, "approved", f"Idea approved by {caller.person['name']}", caller.id)
     if idea.get("creator_id") and idea["creator_id"] != caller.id:
         await events.notify(idea["creator_id"], "idea_approved", f"Approved: {idea['title']}", idea_id=idea_id)
+    return await idea_payload(idea_id)
+
+
+class Rejection(BaseModel):
+    reason: str | None = None
+
+
+@router.post("/{idea_id}/reject")
+async def reject_idea(idea_id: str, body: Rejection, caller: Caller = Depends(current_caller)):
+    """Turn an idea down, with a reason.
+
+    Approve was the only answer the system had, so a reviewer who did not want an idea
+    either approved it anyway or left it in the pending list and said nothing — and
+    whoever raised it had no way to tell "not yet looked at" from "no". A rejection is
+    recorded like an approval and the reason goes back to the person who raised it.
+
+    Reversible on purpose: approving a rejected idea moves it straight to approved, so
+    a rethink does not mean raising the idea again from scratch.
+    """
+    idea = await get_idea(idea_id)
+    require(caller.access, area_for(idea["stream"]), "edit")
+    if idea.get("approval_state") == "rejected":
+        return await idea_payload(idea_id)
+    reason = (body.reason or "").strip()
+    await db.update("ideas", {"id": f"eq.{idea_id}"}, {
+        "approval_state": "rejected", "approved_by": caller.id,
+        "approved_at": events.now_iso(), "decision_note": reason or None,
+    })
+    await events.log(idea_id, "rejected",
+                     f"Idea rejected by {caller.person['name']}" + (f" — {reason}" if reason else ""),
+                     caller.id)
+    if idea.get("creator_id") and idea["creator_id"] != caller.id:
+        await events.notify(idea["creator_id"], "idea_rejected",
+                            f"Rejected: {idea['title']}" + (f" — {reason}" if reason else ""),
+                            idea_id=idea_id)
     return await idea_payload(idea_id)
 
 
@@ -265,8 +306,7 @@ async def add_link(version_id: str, body: Link, caller: Caller = Depends(current
     v = await get_version(version_id)
     if not caller.can("production", "edit"):
         require(caller.access, await _version_area(v), "edit")
-    if not body.url.strip():
-        raise HTTPException(status_code=400, detail="A link needs a URL.")
+    require_asset_link(body.url)
     links = v.get("asset_links") or []
     if any(l.get("url") == body.url for l in links):
         return shape.to_version(v)

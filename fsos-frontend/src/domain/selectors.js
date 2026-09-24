@@ -70,6 +70,10 @@ export function needsIdeaApproval(idea) {
 }
 
 export function ideaDerivedState(db, idea) {
+  // A rejection outranks everything downstream. Work may already exist against the
+  // idea — that is exactly when someone needs to see it has been turned down, rather
+  // than the card going on reporting how production is coming along.
+  if (idea?.approval?.state === "rejected") return "rejected";
   if (needsIdeaApproval(idea) && idea.approval.state === "pending" && !idea.bypassUsed) {
     const anyProduced = versionsOf(db, idea.id).some((v) => v.assetLinks.length);
     return anyProduced ? "in_production" : "awaiting_approval";

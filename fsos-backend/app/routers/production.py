@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from .. import db, events, shape
 from ..access import require
+from ..links import require_asset_link
 from ..auth import Caller, current_caller
 from .ideas import get_idea, get_version, idea_payload
 
@@ -25,6 +26,9 @@ class Assignment(BaseModel):
     ideaIds: list[str]
     ownerId: str
     deadline: str | None = None
+    # HPN is due at a time today, not on a date. Sent alongside the date rather than
+    # instead of it, so everything that already reads `deadline` keeps working.
+    deadlineTime: str | None = None
     reviewerId: str | None = None
 
 
@@ -65,7 +69,10 @@ async def person_name(person_id: str | None) -> str:
 async def _attach(version: dict, link: Link, actor_id: str) -> dict:
     """Add an asset link, and move an untouched version into production."""
     links = version.get("asset_links") or []
-    if not link.url.strip() or any(l.get("url") == link.url for l in links):
+    if not link.url.strip():
+        return version
+    require_asset_link(link.url)
+    if any(l.get("url") == link.url for l in links):
         return version
     links.append({"id": f"lnk-{uuid4().hex[:8]}",
                   "type": link.type, "url": link.url, "label": link.label or ""})
@@ -92,6 +99,8 @@ async def assign(body: Assignment, caller: Caller = Depends(current_caller)):
                 {"ownerId": idea["production_owner_id"], "until": events.now_iso()}]
         if body.deadline:
             patch["deadline"] = body.deadline
+        if body.deadlineTime is not None:
+            patch["deadline_time"] = body.deadlineTime or None
         if body.reviewerId:
             patch["reviewer_id"] = body.reviewerId
         await db.update("ideas", {"id": f"eq.{idea_id}"}, patch)
@@ -203,6 +212,7 @@ async def replace_asset(version_id: str, body: Replace, caller: Caller = Depends
     patch = {}
 
     if body.link and body.link.url.strip():
+        require_asset_link(body.link.url)
         # Replace, not append. It appended before, which left a reviewer looking at two
         # links with nothing to say which one to open. The old ones aren't lost — they
         # go into the revision history, which is what that history is for.

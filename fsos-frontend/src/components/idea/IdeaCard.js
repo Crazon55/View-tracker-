@@ -17,6 +17,7 @@ import { SavedField } from "../common/SavedField";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { toast } from "sonner";
 import { cn, externalHref } from "../../lib/utils";
+import { assetLinkError } from "../../lib/links";
 import { isAdmin, canEditProduction, canAssignProduction } from "../../domain/roles";
 
 function canApprove(user, stream, settings) {
@@ -145,12 +146,22 @@ export default function IdeaCard({ ideaId, mode, initialTab, onClose, onOpenIdea
                   <Icons.Send className="h-4 w-4 mr-1" /> Submit for review
                 </Button>
               )}
-              {needsIdeaApproval(idea) && idea.approval.state === "pending" && !idea.bypassUsed && canApprove(actingUser, idea.stream, db.settings) && (
+              {needsIdeaApproval(idea) && ["pending", "rejected"].includes(idea.approval.state) && !idea.bypassUsed && canApprove(actingUser, idea.stream, db.settings) && (
                 <Button size="sm" data-testid="approve-idea-btn" onClick={() => { actions.approveIdea(idea.id); toast.success("Idea approved"); }} className="h-8 bg-emerald-700 hover:bg-emerald-800">
-                  <Icons.Check className="h-4 w-4 mr-1" /> Approve idea
+                  <Icons.Check className="h-4 w-4 mr-1" /> {idea.approval.state === "rejected" ? "Approve anyway" : "Approve idea"}
                 </Button>
               )}
+              {needsIdeaApproval(idea) && idea.approval.state === "pending" && !idea.bypassUsed && canApprove(actingUser, idea.stream, db.settings) && (
+                <RejectIdeaBtn idea={idea} />
+              )}
               {needsIdeaApproval(idea) && idea.approval.state === "approved" && <span className="text-[11px] text-emerald-700 inline-flex items-center gap-1"><Icons.CheckCircle2 className="h-3.5 w-3.5" /> Approved by {userById(db, idea.approval.by)?.name}</span>}
+              {idea.approval.state === "rejected" && (
+                <span className="inline-flex items-center gap-1 text-[11px] text-rose-700" data-testid="idea-rejected-note">
+                  <Icons.XCircle className="h-3.5 w-3.5" />
+                  Rejected by {userById(db, idea.approval.by)?.name}
+                  {idea.approval.note && <span className="text-rose-600">— {idea.approval.note}</span>}
+                </span>
+              )}
               {canEdit(idea.stream === "BO" ? "bo_studio" : "hpn_desk") && (
                 <button
                   title="Delete this idea"
@@ -234,6 +245,49 @@ function Section({ title, children, right }) {
         {right}
       </div>
       {children}
+    </div>
+  );
+}
+
+/**
+ * Turning an idea down, with a reason.
+ *
+ * The reason is asked for rather than optional-in-passing: a rejection with no note
+ * reaches the person who raised the idea as a bare "no", and they come back and ask
+ * anyway. Cheaper to type it once here.
+ */
+function RejectIdeaBtn({ idea }) {
+  const { actions } = useWorkspace();
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  if (!open) {
+    return (
+      <Button size="sm" variant="outline" data-testid="reject-idea-btn" onClick={() => setOpen(true)}
+        className="h-8 border-rose-300 text-rose-700 hover:bg-rose-50">
+        <Icons.X className="h-4 w-4 mr-1" /> Reject
+      </Button>
+    );
+  }
+  const send = () => {
+    actions.rejectIdea(idea.id, reason.trim());
+    toast.success("Idea rejected — the person who raised it has been told");
+    setOpen(false);
+    setReason("");
+  };
+  return (
+    <div className="flex items-center gap-1.5">
+      <Input
+        autoFocus
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        placeholder="Why? They will see this…"
+        data-testid="reject-idea-reason"
+        className="h-8 w-64 text-xs"
+        onKeyDown={(e) => { if (e.key === "Enter" && reason.trim()) send(); if (e.key === "Escape") setOpen(false); }}
+      />
+      <Button size="sm" data-testid="reject-idea-confirm" disabled={!reason.trim()} onClick={send}
+        className="h-8 bg-rose-700 hover:bg-rose-800">Reject</Button>
+      <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setOpen(false)}>Cancel</Button>
     </div>
   );
 }
@@ -421,6 +475,10 @@ function VersionRow({ idea, v, ownerWorkspace = false, readOnly = false, pending
   const commitLink = () => {
     const url = linkUrl.trim();
     if (!url) return false;
+    // Checked here rather than only on save, so nobody gets to the end of their work
+    // and finds out the thing they pasted an hour ago was never going to open.
+    const complaint = assetLinkError(url);
+    if (complaint) { toast.error(complaint); return false; }
     actions.addVersionLink(v.id, { type: linkType, url: externalHref(url), label: url });
     setPending(null);
     return true;
@@ -500,7 +558,9 @@ function VersionRow({ idea, v, ownerWorkspace = false, readOnly = false, pending
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (commitLink()) toast.success("Link added"); } }}
               />
               <Button size="sm" variant="outline" className="h-7 text-xs" data-testid={`add-link-${v.id}`} onClick={() => {
-                if (!commitLink()) { toast.error("Paste the Canva or Drive link."); return; }
+                // commitLink says what is wrong — an empty box and a link to nowhere
+                // deserve different sentences.
+                if (!commitLink()) { if (!linkUrl.trim()) toast.error("Paste the Canva or Drive link."); return; }
                 toast.success("Link added");
               }}><Icons.Plus className="h-3 w-3 mr-1" /> Add</Button>
             </div>
@@ -649,7 +709,12 @@ function ReplaceAssetBtn({ versionId, status }) {
       <Button size="sm" className="h-7 text-xs" onClick={() => {
         const link = url.trim();
         if (!link) { toast.error("Paste the new link — nothing is added automatically."); return; }
-        actions.replaceAsset(versionId, { type: "drive", url: externalHref(link), label: link });
+        const complaint = assetLinkError(link);
+        if (complaint) { toast.error(complaint); return; }
+        // The type follows the host rather than being hardcoded to drive — a Canva
+        // rework was being filed as a Drive link, which made the list read wrong.
+        const type = /(^|\.)canva\.(com|site)$/.test(new URL(externalHref(link)).hostname) ? "canva" : "drive";
+        actions.replaceAsset(versionId, { type, url: externalHref(link), label: link });
         toast("Asset replaced — returned to review");
         setUrl("");
         setOpen(false);
@@ -669,13 +734,17 @@ function VersionsTab({ idea, versions, readOnly = false, pendingLinks, setPendin
 }
 
 function ProductionTab({ idea, versions, ownerWorkspace = false, pendingLinks, setPendingLinks }) {
-  const { db, actions, actingUser } = useWorkspace();
+  const { db, actions, actingUser, today } = useWorkspace();
   const isCoa = canAssignProduction(actingUser);
   const producers = db.users.filter((u) => u.active && u.roles.some((r) => ["Designer", "Editor"].includes(r)));
   const reviewers = db.users.filter((u) => u.active && u.roles.some((r) => ["CS", "Founder/Admin", "COA", "Short-form Lead"].includes(r)));
   const [owner, setOwner] = useState(idea.productionOwnerId || "");
   const [deadline, setDeadline] = useState(idea.deadline || "");
   const [reviewer, setReviewer] = useState(idea.reviewerId || "");
+  // HPN is same-day work. A date picker on a news idea is noise — everyone already
+  // knows the day, what they need to agree is the hour. BO keeps the date.
+  const sameDay = idea.stream === "HPN";
+  const [deadlineTime, setDeadlineTime] = useState((idea.deadlineTime || "").slice(0, 5));
 
   return (
     <div>
@@ -690,8 +759,14 @@ function ProductionTab({ idea, versions, ownerWorkspace = false, pendingLinks, s
             </Select>
           </div>
           <div>
-            <label className="text-[10px] uppercase tracking-wide text-stone-400">Deadline</label>
-            <Input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} disabled={!isCoa} className="h-9 mt-1" data-testid="assign-deadline" />
+            <label className="text-[10px] uppercase tracking-wide text-stone-400">
+              {sameDay ? "Due by (today, IST)" : "Deadline"}
+            </label>
+            {sameDay ? (
+              <Input type="time" value={deadlineTime} onChange={(e) => setDeadlineTime(e.target.value)} disabled={!isCoa} className="h-9 mt-1" data-testid="assign-deadline-time" />
+            ) : (
+              <Input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} disabled={!isCoa} className="h-9 mt-1" data-testid="assign-deadline" />
+            )}
           </div>
           <div>
             <label className="text-[10px] uppercase tracking-wide text-stone-400">Reviewer</label>
@@ -701,11 +776,17 @@ function ProductionTab({ idea, versions, ownerWorkspace = false, pendingLinks, s
             </Select>
           </div>
         </div>
-        {isCoa && <Button size="sm" className="mt-3 h-8" data-testid="save-assignment-btn" onClick={() => { actions.assignProduction([idea.id], owner, deadline, reviewer); toast.success("Assignment saved — all versions keep one owner"); }}><Icons.Save className="h-3.5 w-3.5 mr-1" /> Save assignment</Button>}
+        {isCoa && <Button size="sm" className="mt-3 h-8" data-testid="save-assignment-btn" onClick={() => {
+          // An HPN time is stored against today, so the deadline still answers "which
+          // day" for everything that reads it — the time is the part people argue over.
+          actions.assignProduction([idea.id], owner, sameDay ? (deadline || today) : deadline, reviewer, sameDay ? deadlineTime : null);
+          toast.success("Assignment saved — all versions keep one owner");
+        }}><Icons.Save className="h-3.5 w-3.5 mr-1" /> Save assignment</Button>}
         <div className="mt-3 text-xs text-stone-500 flex flex-wrap gap-4">
           {idea.productionOwnerId && <span>Owner: <b>{userById(db, idea.productionOwnerId)?.name}</b></span>}
           {idea.reviewerId && <span>Reviewer: <b>{userById(db, idea.reviewerId)?.name}</b></span>}
-          {idea.deadline && <span>Due: <b>{fmtDate(idea.deadline)}</b></span>}
+          {sameDay && idea.deadlineTime && <span>Due by: <b>{idea.deadlineTime.slice(0, 5)} IST today</b></span>}
+          {!sameDay && idea.deadline && <span>Due: <b>{fmtDate(idea.deadline)}</b></span>}
           {idea.previousOwners?.length ? <span className="text-stone-400">Prev owners retained: {idea.previousOwners.length}</span> : null}
         </div>
       </Section>

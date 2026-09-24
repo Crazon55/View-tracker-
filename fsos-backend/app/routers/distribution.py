@@ -74,7 +74,16 @@ async def live_placement(version_id: str) -> dict | None:
 
 
 async def _conflict(version: dict, date: str) -> bool:
-    """True when another version of the same idea is already live on that calendar day."""
+    """True when another version of the same idea is already live on that calendar day.
+
+    BO only. The rule exists so a follower who sees two of our pages does not get the
+    same evergreen post twice in a day. HPN is news: when something happens it goes out
+    across the pages that cover it, that day, and holding one back to tomorrow means
+    publishing it after it stopped being true. Same idea, different reason for existing.
+    """
+    idea = await db.select_one("ideas", {"id": f"eq.{version['idea_id']}", "select": "stream"})
+    if (idea or {}).get("stream") == "HPN":
+        return False
     same_day = await db.select("placements", {
         "date": f"eq.{date}", "state": "neq.cancelled", "select": "version_id"})
     others = [p["version_id"] for p in same_day if p["version_id"] != version["id"]]
