@@ -2,9 +2,14 @@
 //
 // This has bitten three times in one day. A component gets used without being imported,
 // the production build succeeds, and the page renders blank the moment it mounts —
-// Users & Roles did exactly that, live. The build doesn't catch it: this project is on
-// ESLint 9 with no flat config, so react-app's `no-undef` isn't running, and nothing
-// else looks.
+// Users & Roles did exactly that, live.
+//
+// The rule that should catch it is `react/jsx-no-undef`, and eslint-config-react-app
+// does set it to "error". It still does not fire: putting `<TotallyUndefinedThing />`
+// in a page and running `craco build` prints "Compiled successfully". Other rules from
+// the same config do run — `react-hooks/exhaustive-deps` fails the build — so the react
+// plugin's rules specifically are being dropped somewhere in CRA 5 on ESLint 9. Worth
+// untangling one day; not worth blocking on while blank pages reach people.
 //
 // So this walks the source and checks that every <Capitalised> tag is imported,
 // declared, or a known global. It's a text scan rather than a real parser, which is

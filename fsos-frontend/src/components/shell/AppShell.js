@@ -97,13 +97,13 @@ function GlobalSearch() {
 }
 
 function TopBar() {
-  const { db, actions, actingUser, gateUser, today } = useWorkspace();
+  const { db, actions, realUser, gateUser, today } = useWorkspace();
   const { openCreate, streamFilter, setStreamFilter, openIdea } = useUI();
   const navigate = useNavigate();
   // Notifications without a userId are team-wide; the rest target one person.
-  const mine = db.notifications.filter((n) => !n.userId || n.userId === actingUser.id);
+  const mine = db.notifications.filter((n) => !n.userId || n.userId === realUser.id);
   // 6-day overdue alerts go only to the configured tracker assignee (computed live, never stored).
-  const overdue = db.sixDay.config.assigneeId === actingUser.id ? sixDayOverdue(db, today) : [];
+  const overdue = db.sixDay.config.assigneeId === realUser.id ? sixDayOverdue(db, today) : [];
   const unread = mine.filter((n) => !n.read).length + overdue.length;
   const openNotification = (n) => {
     actions.markNotificationRead(n.id);
@@ -175,43 +175,43 @@ function TopBar() {
 }
 
 function AccountMenu() {
-  const { db, actingUser, access, preview, setPreview, canPreview } = useWorkspace();
+  const { db, realUser, access, preview, setPreview, canPreview } = useWorkspace();
   const { setStreamFilter } = useUI();
   const navigate = useNavigate();
 
   const startPreview = (next, label) => {
     setPreview(next);
     const as = next.kind === "person"
-      ? db.users.find((u) => u.id === next.id) || actingUser
-      : { ...actingUser, roles: [next.role] };
+      ? db.users.find((u) => u.id === next.id) || realUser
+      : { ...realUser, roles: [next.role] };
     setStreamFilter(streamFilterForUser(as));
-    navigate(homePathForUser(as, resolveAccess(db, actingUser, next)));
+    navigate(homePathForUser(as, resolveAccess(db, realUser, next)));
     toast.info(`Previewing as ${label}`, { description: "You're still signed in as yourself." });
   };
 
   const stopPreview = () => {
     setPreview(null);
-    setStreamFilter(streamFilterForUser(actingUser));
-    navigate(homePathForUser(actingUser, access));
+    setStreamFilter(streamFilterForUser(realUser));
+    navigate(homePathForUser(realUser, access));
   };
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button data-testid="account-menu" className="flex items-center gap-2 rounded-md border border-stone-200 bg-white pl-1 pr-2 py-1 hover:border-stone-300 transition-colors">
-          <Avatar user={actingUser} size={26} />
+          <Avatar user={realUser} size={26} />
           <span className="text-left leading-tight">
-            <span className="block text-xs font-medium text-stone-900">{actingUser.name}</span>
-            <span className="block text-[10px] text-stone-500">{actingUser.roles[0] || "Pending access"}</span>
+            <span className="block text-xs font-medium text-stone-900">{realUser.name}</span>
+            <span className="block text-[10px] text-stone-500">{realUser.roles[0] || "Pending access"}</span>
           </span>
           <Icons.ChevronDown className="h-3.5 w-3.5 text-stone-400" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuLabel className="pb-1">
-          <span className="block text-xs font-medium text-stone-900">{actingUser.name}</span>
-          <span className="block text-[10px] font-normal text-stone-500">{actingUser.email}</span>
-          <span className="block text-[10px] font-normal text-stone-500">{actingUser.roles.join(" · ") || "Pending access"}</span>
+          <span className="block text-xs font-medium text-stone-900">{realUser.name}</span>
+          <span className="block text-[10px] font-normal text-stone-500">{realUser.email}</span>
+          <span className="block text-[10px] font-normal text-stone-500">{realUser.roles.join(" · ") || "Pending access"}</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
 
@@ -256,12 +256,12 @@ function RoleGate() {
 
 // New joiners (no role yet) and people with every area switched off land here.
 function PendingAccess({ noAreas }) {
-  const { actingUser } = useWorkspace();
+  const { realUser } = useWorkspace();
   return (
     <div className="grid min-h-full place-items-center p-6" data-testid="pending-access">
       <div className="max-w-md space-y-4 text-center">
         <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-amber-100 text-amber-800"><Icons.Hourglass className="h-5 w-5" /></div>
-        <h1 className="font-serif text-3xl text-stone-900">Welcome, {actingUser.name.split(" ")[0]}</h1>
+        <h1 className="font-serif text-3xl text-stone-900">Welcome, {realUser.name.split(" ")[0]}</h1>
         <p className="text-sm leading-relaxed text-stone-600">
           {noAreas
             ? <>Your roles don't currently open any area of FSOS. An admin can grant access in <b>Users &amp; Roles</b>.</>
@@ -274,7 +274,7 @@ function PendingAccess({ noAreas }) {
 }
 
 function PreviewBanner() {
-  const { preview, setPreview, previewLabel, actingUser } = useWorkspace();
+  const { preview, setPreview, previewLabel, realUser } = useWorkspace();
   const navigate = useNavigate();
   if (!preview) return null;
   return (
@@ -283,7 +283,7 @@ function PreviewBanner() {
       <span>
         Previewing as <b>{previewLabel}</b>
         {preview.kind === "person" && <span className="text-amber-800/70"> (their own access, overrides included)</span>}
-        <span className="text-amber-800/70"> · signed in as {actingUser.name}</span>
+        <span className="text-amber-800/70"> · signed in as {realUser.name}</span>
       </span>
       {preview.kind === "role" && (
         <select value={preview.role} onChange={(e) => setPreview({ kind: "role", role: e.target.value })} className="h-7 rounded-md border border-amber-300 bg-white/70 px-2 text-xs">

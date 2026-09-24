@@ -70,7 +70,7 @@ function diffFrom(base, matrix) {
 }
 
 function PeopleAccess({ editable }) {
-  const { db, actions, actingUser } = useWorkspace();
+  const { db, actions, realUser } = useWorkspace();
   const { canPreview, setPreview } = useAccess();
   const [roleDraft, setRoleDraft] = useState({});
   const [matrixDraft, setMatrixDraft] = useState({});
@@ -98,12 +98,12 @@ function PeopleAccess({ editable }) {
       .filter((u) => !q || u.name.toLowerCase().includes(q.toLowerCase()) || u.roles.join(" ").toLowerCase().includes(q.toLowerCase()))
       .map((u) => ({
         ...u,
-        canDelete: deleteInfo ? !!deleteInfo[u.id]?.canDelete : u.id !== actingUser.id,
+        canDelete: deleteInfo ? !!deleteInfo[u.id]?.canDelete : u.id !== realUser.id,
         deleteDetaches: deleteInfo?.[u.id]?.deleteDetaches || null,
       }));
     // pending people first, then active, then deactivated
     return [...list].sort((a, b) => (a.roles.length ? 1 : 0) - (b.roles.length ? 1 : 0) || (a.active ? 0 : 1) - (b.active ? 0 : 1));
-  }, [db.users, q, deleteInfo, actingUser]);
+  }, [db.users, q, deleteInfo, realUser]);
 
   const rolesFor = (u) => roleDraft[u.id] ?? u.roles;
   const baseFor = (u) => resolvePersonAccess(rolesFor(u), null, db.access.roles);
@@ -127,7 +127,7 @@ function PeopleAccess({ editable }) {
     const roles = rolesFor(u);
     if (!roles.length) { toast.error("Select at least one role", { description: "To take someone's access away entirely, use the bin and choose \"Only remove access\"." }); return; }
     const matrix = matrixFor(u);
-    if (u.id === actingUser.id && !roles.includes(LOCKED_ROLE) && matrix.users_roles !== "edit") {
+    if (u.id === realUser.id && !roles.includes(LOCKED_ROLE) && matrix.users_roles !== "edit") {
       toast.error("That would lock you out of Users & Roles", { description: "Keep Edit on Users & Roles for yourself, or ask another admin." });
       return;
     }
@@ -163,7 +163,7 @@ function PeopleAccess({ editable }) {
                   <div>
                     <div className="flex items-center gap-2 text-sm font-semibold text-stone-900">
                       {u.name}
-                      {u.id === actingUser.id && <span className="text-[10px] font-normal text-stone-400">(you)</span>}
+                      {u.id === realUser.id && <span className="text-[10px] font-normal text-stone-400">(you)</span>}
                       {!u.active && <span className="rounded bg-stone-100 px-1.5 text-[10px] font-normal text-stone-500">deactivated</span>}
                     </div>
                     <div className="text-[11px] text-stone-500">{edit} edit · {view} view{custom && <span className="ml-1.5 text-amber-700">· custom access</span>}{(u.streams || []).length > 0 && ` · ${u.streams.join(" + ")}`}</div>
@@ -182,14 +182,14 @@ function PeopleAccess({ editable }) {
                       Edit access <Icons.ChevronDown className={cn("ml-1 h-3 w-3 transition-transform", open === `${u.id}:access` && "rotate-180")} />
                     </Button>
                     <Button size="sm" className="h-8 bg-stone-900 text-xs" disabled={!dirty(u)} onClick={() => save(u)} data-testid={`ur-save-${u.id}`}>Save</Button>
-                    {canPreview && u.roles.length > 0 && u.id !== actingUser.id && (
+                    {canPreview && u.roles.length > 0 && u.id !== realUser.id && (
                       <button
                         title={`See FSOS as ${u.name} sees it`}
                         onClick={() => { setPreview({ kind: "person", id: u.id }); toast(`Previewing as ${u.name}`, { description: "Their roles and any personal overrides, exactly as they'd see it." }); }}
                         className="grid h-8 w-8 place-items-center rounded-md border border-stone-200 text-stone-400 hover:text-stone-900"
                         data-testid={`ur-preview-${u.id}`}><Icons.Eye className="h-3.5 w-3.5" /></button>
                     )}
-                    <button title="Remove from the team" onClick={() => setRemoving(u)} disabled={u.id === actingUser.id}
+                    <button title="Remove from the team" onClick={() => setRemoving(u)} disabled={u.id === realUser.id}
                       className="grid h-8 w-8 place-items-center rounded-md border border-stone-200 text-stone-400 hover:text-rose-600 disabled:opacity-30" data-testid={`ur-remove-${u.id}`}><Icons.Trash2 className="h-3.5 w-3.5" /></button>
                   </>)}
                   {!editable && (

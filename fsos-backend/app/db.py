@@ -40,6 +40,30 @@ async def select(table: str, params: dict | None = None) -> list[dict]:
     return await _request("GET", f"/{table}", params=params) or []
 
 
+async def latest(table: str, column: str) -> tuple[str | None, int]:
+    """The newest value of `column` and the table's row count, in one round trip.
+
+    PostgREST puts the total in Content-Range when asked to count, so ordering by the
+    timestamp and taking one row answers both "when did this last change" and "how many
+    are there" together. The count is what makes a deletion visible: removing a row
+    moves no timestamp, and without it a delete would go unnoticed until the next full
+    reload. Used only by /api/pulse.
+    """
+    try:
+        r = await _client.get(
+            f"/{table}",
+            params={"select": column, "order": f"{column}.desc", "limit": 1},
+            headers={"Prefer": "count=exact"},
+        )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Database unreachable: {exc}") from exc
+    if r.status_code >= 400:
+        raise HTTPException(status_code=502, detail=r.text)
+    rows = r.json() or []
+    total = r.headers.get("content-range", "/0").split("/")[-1]
+    return (rows[0][column] if rows else None), (int(total) if total.isdigit() else 0)
+
+
 async def select_one(table: str, params: dict | None = None) -> dict | None:
     rows = await select(table, {**(params or {}), "limit": 1})
     return rows[0] if rows else None

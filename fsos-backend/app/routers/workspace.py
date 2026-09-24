@@ -137,6 +137,40 @@ async def _access() -> dict:
     }
 
 
+# What a second person changing something actually touches. Ordered by how often it
+# moves, so the common case is first in the digest and easy to read in a log.
+PULSE_TABLES = [
+    ("versions", "updated_at"),        # copy, links, review status
+    ("comments", "created_at"),        # change requests and replies
+    ("notifications", "created_at"),
+    ("ideas", "updated_at"),
+    ("placements", "updated_at"),
+    ("publications", "published_at"),
+]
+
+
+@router.get("/pulse")
+async def pulse(caller: Caller = Depends(current_caller)):
+    """Has anything changed? Cheap enough to ask every few seconds.
+
+    The browser holds the whole workspace and re-fetches it to see other people's work.
+    That call is ~220KB, which is fine once a minute and wasteful every three seconds —
+    but a minute is far too long for two people working on the same version, where one
+    requests changes and the other sits looking at a screen that doesn't know yet.
+
+    So this is the probe: one small row per table that collaboration touches, and the
+    browser only pulls the full workspace when the answer differs from last time. Six
+    parallel queries, a few hundred bytes back.
+
+    It deliberately says nothing about *what* changed. Working that out per caller would
+    cost more than the reload it saves, and the reload already knows.
+    """
+    if not caller.roles:
+        raise HTTPException(status_code=403, detail="Your account is waiting for a role.")
+    results = await asyncio.gather(*[db.latest(t, c) for t, c in PULSE_TABLES])
+    return {"digest": "|".join(f"{ts or '-'}:{n}" for ts, n in results)}
+
+
 @router.get("/workspace")
 async def get_workspace(caller: Caller = Depends(current_caller)):
     """Everything the signed-in person is allowed to see, in the shape the UI holds."""

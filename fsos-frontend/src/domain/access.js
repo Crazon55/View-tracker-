@@ -115,6 +115,26 @@ export function resolveAccess(db, user, preview) {
   return resolvePersonAccess(user?.roles, access.people?.[user?.id], access.roles);
 }
 
+/**
+ * Who the UI should behave as: the previewed identity, or the real one.
+ *
+ * Every permission check must run against this rather than the signed-in person. An
+ * admin previewing a designer was still shown Approve and Publish, because the area
+ * matrix switched to the designer while the role checks went on reading the admin —
+ * so the preview showed the union of two peoples powers instead of the designers.
+ *
+ * A *person* preview takes their roles as they are. A *role* preview keeps the real
+ * person but gives them that one role, so it answers "what would a new Editor see"
+ * rather than inventing a teammate.
+ */
+export function effectiveUser(realUser, preview, users) {
+  if (!preview || !realUser) return realUser;
+  if (preview.kind === "person") {
+    return (users || []).find((u) => u.id === preview.id) || realUser;
+  }
+  return { ...realUser, roles: [preview.role] };
+}
+
 /** True when the user has no usable role yet (Admin must assign one). */
 export function isAwaitingAccess(user) {
   return !user?.roles?.length;

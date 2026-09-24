@@ -67,14 +67,20 @@ export default function IdeaCard({ ideaId, mode, initialTab, onClose, onOpenIdea
   const [highlightAnchor, setHighlightAnchor] = useState(null);
   const [pendingLinks, setPendingLinks] = useState({});
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const producerView = (actingUser && isAssignedProducerView(actingUser)) || mode === "owner";
+  // Two different things used to share one flag. `ownerWorkspace` is the focused "my
+  // work" view on the Production page, which deliberately shows one tab. `producerRole`
+  // is a Designer or Editor opening a card anywhere: they need to see the whole story —
+  // who is reviewing, when it goes out, how the last one did — and change nothing
+  // outside Production & Review.
+  const producerRole = !!actingUser && isAssignedProducerView(actingUser);
+  const producerView = mode === "owner";
 
   useEffect(() => {
-    setTab(producerView ? "production" : (initialTab || "brief"));
+    setTab(producerView || producerRole ? "production" : (initialTab || "brief"));
     setHighlightAnchor(null);
     setPendingLinks({});
     setConfirmDelete(false);
-  }, [ideaId, producerView, initialTab]);
+  }, [ideaId, producerView, producerRole, initialTab]);
 
   // How much real history deleting this would take with it.
   const publishedCount = useMemo(() => {
@@ -206,10 +212,10 @@ export default function IdeaCard({ ideaId, mode, initialTab, onClose, onOpenIdea
             ) : (
               <>
                 <TabsContent value="brief" className="mt-0"><BriefTab idea={idea} highlight={highlightAnchor} /></TabsContent>
-                <TabsContent value="versions" className="mt-0"><VersionsTab idea={idea} versions={versions} pendingLinks={pendingLinks} setPendingLinks={setPendingLinks} /></TabsContent>
+                <TabsContent value="versions" className="mt-0"><VersionsTab idea={idea} versions={versions} readOnly={producerRole} pendingLinks={pendingLinks} setPendingLinks={setPendingLinks} /></TabsContent>
                 <TabsContent value="production" className="mt-0"><ProductionTab idea={idea} versions={versions} pendingLinks={pendingLinks} setPendingLinks={setPendingLinks} /></TabsContent>
                 <TabsContent value="distribution" className="mt-0"><DistributionTab idea={idea} versions={versions} /></TabsContent>
-                <TabsContent value="performance" className="mt-0"><PerformanceTab idea={idea} versions={versions} /></TabsContent>
+                <TabsContent value="performance" className="mt-0"><PerformanceTab idea={idea} versions={versions} readOnly={producerRole} /></TabsContent>
                 <TabsContent value="activity" className="mt-0"><ActivityTab idea={idea} comments={comments} onJump={jumpTo} /></TabsContent>
               </>
             )}
@@ -389,16 +395,16 @@ function BriefTab({ idea, highlight }) {
   );
 }
 
-function VersionRow({ idea, v, ownerWorkspace = false, pendingLinks = {}, setPendingLinks }) {
+function VersionRow({ idea, v, ownerWorkspace = false, readOnly = false, pendingLinks = {}, setPendingLinks }) {
   const { db, actions, actingUser } = useWorkspace();
   const ip = ipById(db, v.ipId);
   const pub = publicationOf(db, v.id);
   const pending = pendingLinks[v.id] || { type: "canva", url: "" };
   const linkType = pending.type || "canva";
   const linkUrl = pending.url || "";
-  const canReview = actingUser.id === idea.reviewerId || isAdmin(actingUser) || actingUser.roles.includes("CS") || actingUser.roles.includes("Short-form Lead");
-  const canSubmit = canSubmitProduction(actingUser, idea, ownerWorkspace);
-  const canEditCopy = canSubmit || actingUser.roles.some((r) => ["CS", "Short-form Lead"].includes(r));
+  const canReview = !readOnly && (actingUser.id === idea.reviewerId || isAdmin(actingUser) || actingUser.roles.includes("CS") || actingUser.roles.includes("Short-form Lead"));
+  const canSubmit = !readOnly && canSubmitProduction(actingUser, idea, ownerWorkspace);
+  const canEditCopy = !readOnly && (canSubmit || actingUser.roles.some((r) => ["CS", "Short-form Lead"].includes(r)));
   const versionFeedback = db.comments.filter((c) => c.versionId === v.id);
   const readyToSubmit = hasDeliverable(v) || !!linkUrl.trim();
   const setPending = (patch) => {
@@ -474,7 +480,12 @@ function VersionRow({ idea, v, ownerWorkspace = false, pendingLinks = {}, setPen
             ))}
             {!v.assetLinks.length && !linkUrl.trim() && <span className="text-[11px] text-stone-400">No links yet — paste a Canva or Drive URL.</span>}
           </div>
-          {canSubmit && (
+          {/* One deliverable, not a pile of them. Three Canva links on a version and
+              nobody can tell which one the reviewer is meant to open, so the add row is
+              only here while there is nothing to open. A wrong URL is fixed with Edit,
+              and a rework after changes were requested goes through Replace, which
+              swaps the file rather than adding a second one to guess between. */}
+          {canSubmit && !v.assetLinks.length && (
             <div className="mt-2 flex items-center gap-2">
               <Select value={linkType} onValueChange={(type) => setPending({ type })}>
                 <SelectTrigger className="h-7 w-24 text-xs"><SelectValue /></SelectTrigger>
@@ -647,10 +658,11 @@ function ReplaceAssetBtn({ versionId, status }) {
   );
 }
 
-function VersionsTab({ idea, versions, pendingLinks, setPendingLinks }) {
+function VersionsTab({ idea, versions, readOnly = false, pendingLinks, setPendingLinks }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      {versions.map((v) => <VersionRow key={v.id} idea={idea} v={v} pendingLinks={pendingLinks} setPendingLinks={setPendingLinks} />)}
+      {readOnly && <p className="col-span-full text-[11px] text-stone-400">The copy and files are edited in Production &amp; Review.</p>}
+      {versions.map((v) => <VersionRow key={v.id} idea={idea} v={v} readOnly={readOnly} pendingLinks={pendingLinks} setPendingLinks={setPendingLinks} />)}
       {!versions.length && <p className="text-sm text-stone-500">No page versions yet. Add destinations in Production & Review.</p>}
     </div>
   );
@@ -749,16 +761,20 @@ function PublishBtn({ versionId }) {
   return <Button size="sm" className="h-7 text-xs ml-auto bg-stone-900" data-testid={`publish-${versionId}`} onClick={async () => { try { const r = await actions.confirmPublication(versionId, "https://instagram.com/reel/" + Math.random().toString(36).slice(2, 8), nowIso()); if (r.dupUrl) toast.warning("URL already used — consider collaboration linkage"); else toast.success("Publication confirmed — 24h capture task created"); } catch (e) { /* the store already showed the error */ } }}><Icons.Upload className="h-3 w-3 mr-1" /> Confirm publication</Button>;
 }
 
-function PerformanceTab({ idea, versions }) {
+function PerformanceTab({ idea, versions, readOnly = false }) {
   return (
     <div className="space-y-3">
-      <p className="text-xs text-stone-500">Paste ~24h views for each published page. Missing stays missing until you save a number (zero is a real value).</p>
-      {versions.map((v) => <PerfVersionRow key={v.id} idea={idea} v={v} />)}
+      <p className="text-xs text-stone-500">
+        {readOnly
+          ? "Captured ~24h views for each published page. Missing means nobody has recorded a number yet — it is not zero."
+          : "Paste ~24h views for each published page. Missing stays missing until you save a number (zero is a real value)."}
+      </p>
+      {versions.map((v) => <PerfVersionRow key={v.id} idea={idea} v={v} readOnly={readOnly} />)}
     </div>
   );
 }
 
-function PerfVersionRow({ idea, v }) {
+function PerfVersionRow({ idea, v, readOnly = false }) {
   const { db, actions } = useWorkspace();
   const ip = ipById(db, v.ipId);
   const pub = publicationOf(db, v.id);
@@ -784,17 +800,21 @@ function PerfVersionRow({ idea, v }) {
           <span className="text-[11px] text-stone-400">target {t ? t.toLocaleString() : "—"}</span>
           <PerfBadge tier={tier} />
           <div className="ml-auto flex items-center gap-1.5">
-            <Input
-              type="number"
-              min="0"
-              value={val}
-              onChange={(e) => setVal(e.target.value)}
-              placeholder="Add views…"
-              className="h-8 w-28 text-xs"
-              data-testid={`idea-perf-views-${v.id}`}
-              onKeyDown={(e) => { if (e.key === "Enter") save(); }}
-            />
-            <Button size="sm" className="h-8 text-xs bg-stone-900" data-testid={`idea-perf-save-${v.id}`} onClick={save}>Save views</Button>
+            {!readOnly && (
+              <>
+                <Input
+                  type="number"
+                  min="0"
+                  value={val}
+                  onChange={(e) => setVal(e.target.value)}
+                  placeholder="Add views…"
+                  className="h-8 w-28 text-xs"
+                  data-testid={`idea-perf-views-${v.id}`}
+                  onKeyDown={(e) => { if (e.key === "Enter") save(); }}
+                />
+                <Button size="sm" className="h-8 text-xs bg-stone-900" data-testid={`idea-perf-save-${v.id}`} onClick={save}>Save views</Button>
+              </>
+            )}
           </div>
         </>
       )}

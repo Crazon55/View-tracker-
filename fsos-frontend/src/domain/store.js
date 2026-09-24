@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { api, usingDevLogin } from "@/lib/api";
 import { isSignedIn } from "@/lib/session";
 import { armChime, chime } from "@/lib/chime";
-import { resolveAccess } from "./access";
+import { resolveAccess, effectiveUser } from "./access";
 
 const WorkspaceContext = createContext(null);
 const PREVIEW_KEY = "fsos_role_preview";
@@ -61,6 +61,10 @@ export function WorkspaceProvider({ children }) {
     } catch (e) { /* private browsing — preview just won't persist */ }
   }, []);
 
+  // The last pulse digest we acted on. Null means "no baseline" — the next probe takes
+  // one rather than treating the first answer it sees as a change.
+  const lastDigest = useRef(null);
+
   /** Pull the whole workspace. This is exactly what a browser refresh does. */
   const reload = useCallback(async () => {
     // Several actions can finish at once; one reload is enough for all of them.
@@ -73,6 +77,10 @@ export function WorkspaceProvider({ children }) {
       try {
         const next = await api.get("/api/workspace");
         setDb(next);
+        // We are now current by definition, so drop the pulse baseline: the next probe
+        // records where things stand instead of reloading again for a change we just
+        // fetched. Without this, every one of your own saves cost two workspace calls.
+        lastDigest.current = null;
         setStatus("ready");
         setError(null);
         return next;
@@ -137,6 +145,9 @@ export function WorkspaceProvider({ children }) {
     // tabs to save requests, which meant someone working in another window never heard
     // the chime — and being told you've been assigned something is the entire point of
     // it. One workspace call a minute per open tab is a price worth paying.
+    //
+    // This is now the backstop rather than the main route: the pulse below carries the
+    // collaborative cases within seconds, and this catches whatever it does not watch.
     const timer = setInterval(() => reload(), 60000);
     const onFocus = () => reload();
     window.addEventListener("focus", onFocus);
@@ -146,6 +157,42 @@ export function WorkspaceProvider({ children }) {
       document.removeEventListener("visibilitychange", onFocus);
       clearInterval(timer);
     };
+  }, [reload]);
+
+  /**
+   * Ask "has anything changed?" often, and pull the workspace only when it has.
+   *
+   * Two people work the same version constantly — one requests changes, the other is
+   * looking at the screen that does not know yet. A minute of that is unusable, but the
+   * workspace call is ~220KB and pulling it every few seconds for everyone is waste,
+   * nearly all of it fetching a workspace identical to the one already on screen.
+   *
+   * So the probe is 220 bytes: the newest timestamp and row count for each table that
+   * collaboration touches. Same answer as last time and nothing happens. Different and
+   * we reload in full. Three seconds is under the time it takes to look up from typing.
+   *
+   * A failed probe is ignored on purpose — a blip should not clear the screen, and the
+   * minute-interval reload is still there underneath.
+   */
+  useEffect(() => {
+    let stopped = false;
+    const probe = async () => {
+      if (!isSignedIn() && !usingDevLogin) return;
+      try {
+        const { digest } = await api.get("/api/pulse");
+        if (stopped || !digest) return;
+        if (lastDigest.current === null) {
+          lastDigest.current = digest;     // first look, or just reloaded: set the mark
+          return;
+        }
+        if (digest !== lastDigest.current) {
+          lastDigest.current = digest;
+          reload();
+        }
+      } catch (e) { /* offline, or waiting for a role — the slow reload covers it */ }
+    };
+    const timer = setInterval(probe, 3000);
+    return () => { stopped = true; clearInterval(timer); };
   }, [reload]);
 
   /**
@@ -205,14 +252,28 @@ export function WorkspaceProvider({ children }) {
     [activePreview, db, actingUser, ownAccess],
   );
 
-  /** Whose nav, streams and route gating to use while previewing. */
-  const gateUser = useMemo(() => {
-    if (!activePreview || !actingUser) return actingUser;
-    if (activePreview.kind === "person") {
-      return (db?.users || []).find((u) => u.id === activePreview.id) || actingUser;
-    }
-    return { ...actingUser, roles: [activePreview.role] };
-  }, [activePreview, actingUser, db]);
+  /**
+   * Who the UI should behave as.
+   *
+   * `realUser` is always the person signed in. This is who they are *pretending* to be,
+   * and it is what every permission check must use — an admin previewing a designer was
+   * still being offered Approve and Publish, because the area matrix switched to the
+   * designer while the role checks went on reading the admin. The two identities were
+   * being mixed, so the preview showed a union of both peoples powers rather than the
+   * designers.
+   *
+   * Exposed as `actingUser` so that capability checks get this by default and the few
+   * places that genuinely mean "me" — your avatar, your notifications, the "(you)" in
+   * Users & Roles — have to reach for `realUser` deliberately. Getting that pair the
+   * wrong way round is only cosmetic; the other way round hands out powers.
+   *
+   * This is a UI simulation. The server still authorises the real caller, so preview
+   * shows what someone else would see rather than dropping your own access.
+   */
+  const gateUser = useMemo(
+    () => effectiveUser(actingUser, activePreview, db?.users),
+    [activePreview, actingUser, db],
+  );
 
   /** What to call the thing being previewed, for the banner. */
   const previewLabel = useMemo(() => {
@@ -680,7 +741,10 @@ export function WorkspaceProvider({ children }) {
   }), [db, patch, reload, reloadSoon, run, mergeIdea]);
 
   const value = useMemo(() => ({
-    db, actions, actingUser, gateUser, today: db?.meta?.anchor, access,
+    db, actions, today: db?.meta?.anchor, access,
+    // `actingUser` is the previewed identity when previewing, and the signed-in person
+    // otherwise. `realUser` is always the latter. See the gateUser comment above.
+    actingUser: gateUser, realUser: actingUser, gateUser,
     preview: activePreview, setPreview, previewLabel, canPreview,
     status, error, busy, reload, identity,
   }), [db, actions, actingUser, gateUser, access, activePreview, setPreview, previewLabel,
