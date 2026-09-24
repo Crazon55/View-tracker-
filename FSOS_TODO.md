@@ -180,17 +180,21 @@ it's why the app feels slow — no amount of code removes it. Measured 23 Sept:
 Supabase can't move a project, so this is a new project plus a copy. 811 rows; the copy
 itself takes seconds. No application code changes — only keys and URLs.
 
-- [ ] 🧑 **New project in `ap-south-1` (Mumbai)**, Supabase → New project. Note its ref, anon key, service key and database password.
-- [ ] 🧑 Run the three files in `supabase/migrations/` on it, in filename order, via SQL Editor.
-- [ ] 🧑 Put the new project in `fsos-backend/.env` **as the target**, leaving the current values alone for now:
+**Done 24 Sept. The new project is `qezjmcrzyqptfbaaaidm` (Mumbai); the old one is
+`huyylvmlwpphuolpckxw` (Seoul), kept as the rollback.** Queries went from ~250ms to
+~85ms measured directly, and the app is noticeably quick.
+
+- [x] 🧑 **New project in `ap-south-1` (Mumbai)**, Supabase → New project.
+- [x] 🧑 Ran the migrations on it, in filename order, via SQL Editor.
+- [x] 🧑 Put the new project in `fsos-backend/.env` as the target, leaving the current values alone for now:
       `FSOS_TARGET_URL=https://<new-ref>.supabase.co` and `FSOS_TARGET_SERVICE_KEY=<new service key>`
-- [ ] 🤖 `python supabase/migrate_region.py --check` — counts on both sides, changes nothing.
-- [ ] 🤖 `python supabase/migrate_region.py` — copies and then verifies every table matches.
-- [ ] 🧑 **Google sign-in on the new project**: Authentication → Providers → Google, same client ID and secret. Then add the new callback in Google Cloud: `https://<new-ref>.supabase.co/auth/v1/callback` — **add, don't replace**, or the old project stops working and you lose the rollback.
-- [ ] 🧑 Authentication → URL Configuration on the new project: Site URL `https://thefrontseatmedia.com`, redirect URLs `https://thefrontseatmedia.com/**` and `http://localhost:3000/**`.
-- [ ] 🧑 Point the app at it: swap `FSOS_SUPABASE_URL`/`FSOS_SUPABASE_SERVICE_KEY`/`FSOS_SUPABASE_ANON_KEY` in `fsos-backend/.env`, and `REACT_APP_SUPABASE_URL`/`REACT_APP_SUPABASE_ANON_KEY` in `fsos-frontend/.env.local`, on the server. Then `./deploy-fsos-pm2.sh --force-build` (the frontend bakes the URL in, so it must rebuild).
-- [ ] 🧑 Sign in and check: 6-Day history, Growth, people and roles all present. Time a page load — it should be roughly a third of what it was.
-- [ ] 🧑 Once it's been fine for a day, delete the Seoul project. Until then it is the rollback: swap the env values back and redeploy.
+- [x] 🤖 `python supabase/migrate_region.py --check` — counts on both sides, changes nothing.
+- [x] 🤖 `python supabase/migrate_region.py` — 811 rows copied, every table verified equal; role signatures, active IP count, top 6-Day entry and follower totals all matched. Copies and then verifies every table matches.
+- [x] 🧑 **Google sign-in on the new project**: Authentication → Providers → Google, same client ID and secret. Then add the new callback in Google Cloud: `https://<new-ref>.supabase.co/auth/v1/callback` — **add, don't replace**, or the old project stops working and you lose the rollback.
+- [x] 🧑 Authentication → URL Configuration on the new project: Site URL `https://thefrontseatmedia.com`, redirect URLs `https://thefrontseatmedia.com/**` and `http://localhost:3000/**`.
+- [x] 🧑 Pointed the app at it: swap `FSOS_SUPABASE_URL`/`FSOS_SUPABASE_SERVICE_KEY`/`FSOS_SUPABASE_ANON_KEY` in `fsos-backend/.env`, and `REACT_APP_SUPABASE_URL`/`REACT_APP_SUPABASE_ANON_KEY` in `fsos-frontend/.env.local`, on the server. Then `./deploy-fsos-pm2.sh --force-build` (the frontend bakes the URL in, so it must rebuild).
+- [x] 🧑 Signed in and checked: 6-Day history, Growth, people and roles all present. Time a page load — it should be roughly a third of what it was.
+- [ ] 🧑 **Once it's been fine for a day, delete the Seoul project.** That also retires its service key and the database password, both of which ended up in a chat transcript. Until then it is the rollback: Until then it is the rollback: swap the env values back and redeploy.
 
 **Everyone signs in again.** `auth.users` is per-project, so the copy deliberately clears
 `people.auth_user_id`; the first Google sign-in on the new project re-links each person
