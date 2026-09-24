@@ -131,7 +131,7 @@ export default function IdeaCard({ ideaId, mode, initialTab, onClose, onOpenIdea
               {idea.destinations.map((ipId) => <IPBadge key={ipId} ip={ipById(db, ipId)} />)}
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-[11px] text-stone-500">{progress.ready}/{progress.total} ready · {progress.published} live</span>
+              <span className="text-[11px] text-stone-500">{progress.done}/{progress.total} ready · {progress.published} live</span>
               {canSubmitProduction(actingUser, idea, producerView) && ["in_production", "changes_requested"].includes(state) && (
                 <Button size="sm" className="h-8" data-testid="submit-idea-review-btn" onClick={() => {
                   if (submitIdeaIfReady(actions, idea, versions, pendingLinks)) setPendingLinks({});
@@ -249,10 +249,107 @@ function CommentAnchorBtn({ idea, anchor }) {
   );
 }
 
+/**
+ * Where this idea actually stands, on the tab people open first.
+ *
+ * The detail lives in Production, Distribution and Performance, one tab each — fine
+ * when you're doing that job, useless when someone asks "is the Zerodha one out yet?"
+ * and you have to visit three tabs per destination to answer. This is one line per
+ * page: who made it, who checks it, when it goes out, where it went, how it did.
+ */
+function BriefSummary({ idea }) {
+  const { db, today } = useWorkspace();
+  const versions = versionsOf(db, idea.id);
+  const owner = userById(db, idea.productionOwnerId);
+  const reviewer = userById(db, idea.reviewerId);
+  const overdue = idea.deadline && idea.deadline < today && versions.some((v) => !publicationOf(db, v.id));
+
+  return (
+    <Section title="Status">
+      <div className="mb-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
+        <span className="inline-flex items-center gap-1.5">
+          <Icons.PenTool className="h-3.5 w-3.5 text-stone-400" />
+          <span className="text-stone-500">Owner</span>
+          {owner
+            ? <span className="inline-flex items-center gap-1.5"><Avatar user={owner} size={18} /><b className="text-stone-800">{owner.name}</b></span>
+            : <span className="text-amber-700">Unassigned</span>}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <Icons.Eye className="h-3.5 w-3.5 text-stone-400" />
+          <span className="text-stone-500">Reviewer</span>
+          {reviewer
+            ? <span className="inline-flex items-center gap-1.5"><Avatar user={reviewer} size={18} /><b className="text-stone-800">{reviewer.name}</b></span>
+            : <span className="text-amber-700">Unassigned</span>}
+        </span>
+        {idea.deadline && (
+          <span className="inline-flex items-center gap-1.5">
+            <Icons.CalendarClock className="h-3.5 w-3.5 text-stone-400" />
+            <span className="text-stone-500">Due</span>
+            <b className={cn(overdue ? "text-[#C0512F]" : "text-stone-800")}>{fmtDate(idea.deadline)}</b>
+            {overdue && <span className="text-[10px] text-[#C0512F]">overdue</span>}
+          </span>
+        )}
+      </div>
+
+      <div className="overflow-hidden rounded-md border border-stone-200" data-testid="brief-summary">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-[#F5F2EC] text-left text-[10px] uppercase tracking-wide text-stone-500">
+              <th className="px-2.5 py-1.5 font-medium">Page</th>
+              <th className="px-2.5 py-1.5 font-medium">Production</th>
+              <th className="px-2.5 py-1.5 font-medium">Scheduled</th>
+              <th className="px-2.5 py-1.5 font-medium">Live</th>
+              <th className="px-2.5 py-1.5 font-medium">~24h views</th>
+            </tr>
+          </thead>
+          <tbody>
+            {versions.map((v) => {
+              const ip = ipById(db, v.ipId);
+              const pl = activePlacementOf(db, v.id);
+              const pub = publicationOf(db, v.id);
+              const snap = pub && snapshotOf(db, pub.id);
+              const target = targetFor(db, v.ipId, idea.format);
+              // Missing is not zero: a published page with no capture yet is blank, not "0".
+              const tier = snap && snap.views != null ? classify(snap.views, target, db.settings.thresholds) : "unrated";
+              return (
+                <tr key={v.id} className="border-t border-stone-100" data-testid={`brief-row-${v.id}`}>
+                  <td className="px-2.5 py-1.5"><IPBadge ip={ip} /></td>
+                  <td className="px-2.5 py-1.5">{pub ? <StatusBadge state="published" /> : <VersionBadge status={v.reviewStatus} />}</td>
+                  <td className="px-2.5 py-1.5 text-stone-700">
+                    {pl ? <>{fmtDate(pl.date)}{pl.time && <span className="ml-1 font-mono text-[10px] text-stone-400">{pl.time} IST</span>}</> : <span className="text-stone-300">not placed</span>}
+                  </td>
+                  <td className="px-2.5 py-1.5">
+                    {pub
+                      ? <a href={externalHref(pub.url)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-700 hover:underline"><Icons.ExternalLink className="h-3 w-3" /> open</a>
+                      : <span className="text-stone-300">—</span>}
+                  </td>
+                  <td className="px-2.5 py-1.5">
+                    {!pub ? <span className="text-stone-300">—</span>
+                      : snap?.views == null ? <span className="text-amber-700">missing</span>
+                        : (
+                          <span className="inline-flex items-center gap-1.5">
+                            <b className="text-stone-900">{snap.views.toLocaleString()}</b>
+                            {target ? <span className="text-[10px] text-stone-400">/ {target.toLocaleString()}</span> : null}
+                            <PerfBadge tier={tier} />
+                          </span>
+                        )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Section>
+  );
+}
+
 function BriefTab({ idea, highlight }) {
   const { db, actions } = useWorkspace();
   return (
     <div>
+      <BriefSummary idea={idea} />
+
       <Section title="Sources">
         <div className="space-y-2">
           {idea.sources.map((s) => (

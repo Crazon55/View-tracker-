@@ -57,6 +57,11 @@ export function ideaProgress(db, idea) {
     if (publicationOf(db, v.id)) counts.published += 1;
     else counts[v.reviewStatus] = (counts[v.reviewStatus] || 0) + 1;
   });
+  // The status fields above are mutually exclusive — a published version stops being
+  // counted as "ready", which is right for deriving state but wrong for a progress
+  // readout: an idea with both pages live was showing "0/2 ready", as if nothing had
+  // been done. `done` is the number finished, and published certainly is finished.
+  counts.done = counts.ready + counts.published;
   return counts;
 }
 

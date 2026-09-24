@@ -90,7 +90,7 @@ export default function IdeaList({ stream }) {
                     {owner ? <><Avatar user={owner} size={22} /><span className="text-xs text-stone-600">{owner.name.split(" ")[0]}</span></> : <span className="text-[11px] text-stone-400">Unassigned</span>}
                   </div>
                   <ProgressBar prog={prog} />
-                  <div className="text-[10px] text-stone-400 mt-1">{prog.ready}/{prog.total} ready · {prog.published} live</div>
+                  <div className="text-[10px] text-stone-400 mt-1">{prog.done}/{prog.total} ready · {prog.published} live</div>
                 </div>
               </div>
             </button>
