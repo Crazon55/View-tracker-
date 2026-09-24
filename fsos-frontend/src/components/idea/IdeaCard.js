@@ -431,8 +431,8 @@ function VersionRow({ idea, v, ownerWorkspace = false, pendingLinks = {}, setPen
           {v.reviewStatus === "changes_requested" && canReview && (
             <RequestChangesBtn versionId={v.id} />
           )}
-          {v.reviewStatus === "ready" && canSubmit && (
-            <ReplaceAssetBtn versionId={v.id} />
+          {["ready", "changes_requested"].includes(v.reviewStatus) && canSubmit && (v.assetLinks || []).length > 0 && (
+            <ReplaceAssetBtn versionId={v.id} status={v.reviewStatus} />
           )}
         </div>
       )}
@@ -530,11 +530,11 @@ function RequestChangesBtn({ versionId }) {
   );
 }
 
-function ReplaceAssetBtn({ versionId }) {
+function ReplaceAssetBtn({ versionId, status }) {
   const { actions } = useWorkspace();
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState("");
-  if (!open) return <Button size="sm" variant="outline" className="h-7 text-xs" data-testid={`replace-asset-${versionId}`} onClick={() => setOpen(true)}><Icons.RefreshCw className="h-3 w-3 mr-1" /> Replace approved asset</Button>;
+  if (!open) return <Button size="sm" variant="outline" className="h-7 text-xs" data-testid={`replace-asset-${versionId}`} onClick={() => setOpen(true)}><Icons.RefreshCw className="h-3 w-3 mr-1" /> {status === "changes_requested" ? "Submit the reworked file" : "Replace approved asset"}</Button>;
   return (
     <div className="flex items-center gap-2 w-full">
       <Input autoFocus value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Paste the new Canva or Drive link…" className="h-7 text-xs" data-testid={`replace-asset-url-${versionId}`} />

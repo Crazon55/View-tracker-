@@ -3,6 +3,7 @@ import { NavLink, Outlet, Navigate, useLocation, useNavigate } from "react-route
 import * as Icons from "lucide-react";
 import { useWorkspace } from "../../domain/store";
 import { signOut } from "../../lib/session";
+import { chime } from "../../lib/chime";
 import { useUI } from "../idea/IdeaModalProvider";
 import { searchIdeas, notificationOpenTarget } from "../../domain/selectors";
 import { canAccessPath, canCreateIdea, homePathForUser, navItemsForUser, streamFilterForUser } from "../../domain/roles";
@@ -138,7 +139,18 @@ function TopBar() {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-80">
           <DropdownMenuLabel className="flex items-center justify-between">In-app notifications
-            <button className="text-[11px] text-stone-500 hover:text-stone-900" onClick={() => actions.markNotificationsRead()}>Mark all read</button>
+            <span className="flex items-center gap-2">
+              <button
+                className="text-[11px] text-stone-500 hover:text-stone-900"
+                data-testid="test-chime"
+                title="Play the sound you'll hear when work is assigned to you"
+                onSelect={(e) => e.preventDefault()}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); chime(); }}
+              >
+                Test sound
+              </button>
+              <button className="text-[11px] text-stone-500 hover:text-stone-900" onClick={() => actions.markNotificationsRead()}>Mark all read</button>
+            </span>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           {overdue.map((c) => (

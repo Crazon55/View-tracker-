@@ -198,16 +198,35 @@ async def replace_asset(version_id: str, body: Replace, caller: Caller = Depends
     """Replacing an approved asset sends it back to review — approval was of the old file."""
     require(caller.access, "production", "edit")
     v = await get_version(version_id)
-    patch = {"revisions": (v.get("revisions") or []) + [
-        {"id": f"rev-{uuid4().hex[:8]}", "at": events.now_iso(),
-         "by": caller.id, "note": "Asset replaced — returned to review"}]}
+    superseded = v.get("asset_links") or []
+    note = "Asset replaced — returned to review"
+    patch = {}
+
     if body.link and body.link.url.strip():
-        links = v.get("asset_links") or []
-        links.append({"id": f"lnk-{uuid4().hex[:8]}",
-                      "type": body.link.type, "url": body.link.url, "label": body.link.label or ""})
-        patch["asset_links"] = links
-    if v.get("review_status") == "ready":
+        # Replace, not append. It appended before, which left a reviewer looking at two
+        # links with nothing to say which one to open. The old ones aren't lost — they
+        # go into the revision history, which is what that history is for.
+        patch["asset_links"] = [{
+            "id": f"lnk-{uuid4().hex[:8]}", "type": body.link.type,
+            "url": body.link.url, "label": body.link.label or "",
+        }]
+        if superseded:
+            note = f"Replaced {len(superseded)} link{'' if len(superseded) == 1 else 's'} — returned to review"
+
+    patch["revisions"] = (v.get("revisions") or []) + [{
+        "id": f"rev-{uuid4().hex[:8]}", "at": events.now_iso(), "by": caller.id,
+        "note": note,
+        "replaced": [{"type": l.get("type"), "url": l.get("url")} for l in superseded],
+    }]
+    # An approved asset going back for review is the point; a rejected one becoming
+    # workable again matters just as much, or it sits in changes_requested forever.
+    if v.get("review_status") in ("ready", "changes_requested"):
         patch["review_status"] = "awaiting_review"
     await db.update("versions", {"id": f"eq.{version_id}"}, patch)
-    await events.log(v["idea_id"], "asset_replaced", "Approved asset replaced → back to review", caller.id)
+    await events.log(v["idea_id"], "asset_replaced", note, caller.id)
+
+    idea = await get_idea(v["idea_id"])
+    if idea.get("reviewer_id") and idea["reviewer_id"] != caller.id:
+        await events.notify(idea["reviewer_id"], "review_request",
+                            f"New version to review: {idea['title']}", idea_id=idea["id"])
     return await idea_payload(v["idea_id"])
