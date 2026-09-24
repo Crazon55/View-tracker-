@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { toast } from "sonner";
 import { cn } from "../lib/utils";
 import { CategorySettings, BatchSettings } from "../components/settings/Taxonomy";
+import { CadenceDialog, CadenceSummary, CadenceChips } from "../components/settings/Cadence";
 
 const TABS = [["ips", "IPs"], ["people", "People & roles"], ["cats", "Categories"], ["batches", "Batches"], ["rules", "Approvals & rules"]];
 
@@ -36,15 +37,55 @@ export default function Settings() {
   );
 }
 
+const IP_FILTERS = [["active", "Active"], ["paused", "Paused"], ["all", "All"]];
+
 function IPSettings() {
   const { db, actions } = useWorkspace();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", code: "", hex: "#2563EB", posts: 0, reels: 0 });
+  const [q, setQ] = useState("");
+  // Most of the 48 pages are parked. Opening Settings on all of them buries the handful
+  // anyone is actually running, so the default is the ones that are live.
+  const [filter, setFilter] = useState("active");
+  const [cadenceFor, setCadenceFor] = useState(null);
+
+  const needle = q.trim().toLowerCase();
+  const shown = db.ips.filter((ip) => {
+    if (filter === "active" && !ip.active) return false;
+    if (filter === "paused" && ip.active) return false;
+    if (!needle) return true;
+    return [ip.name, ip.code, ip.handle].some((f) => String(f || "").toLowerCase().includes(needle));
+  });
+  const activeCount = db.ips.filter((i) => i.active).length;
+
   return (
     <div>
-      <div className="flex justify-end mb-3"><Button size="sm" data-testid="add-ip-btn" onClick={() => { setForm({ name: "", code: "", hex: "#2563EB", posts: 0, reels: 0 }); setOpen(true); }} className="bg-stone-900"><Icons.Plus className="h-4 w-4 mr-1" /> Add IP</Button></div>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="relative">
+          <Icons.Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} data-testid="ip-search"
+            placeholder="Search pages…" className="h-9 w-64 pl-8 text-sm" />
+          {q && <button onClick={() => setQ("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700"><Icons.X className="h-3.5 w-3.5" /></button>}
+        </div>
+        <div className="inline-flex rounded-md border border-stone-200 bg-stone-50 p-0.5">
+          {IP_FILTERS.map(([v, l]) => (
+            <button key={v} data-testid={`ip-filter-${v}`} onClick={() => setFilter(v)}
+              className={cn("rounded px-3 py-1.5 text-xs font-medium transition-colors",
+                filter === v ? "bg-white text-stone-900 shadow-sm" : "text-stone-500 hover:text-stone-800")}>
+              {l}{v === "active" ? ` (${activeCount})` : v === "all" ? ` (${db.ips.length})` : ""}
+            </button>
+          ))}
+        </div>
+        <span className="text-[11px] text-stone-400">{shown.length} shown</span>
+        <Button size="sm" data-testid="add-ip-btn" className="ml-auto bg-stone-900" onClick={() => { setForm({ name: "", code: "", hex: "#2563EB", posts: 0, reels: 0 }); setOpen(true); }}><Icons.Plus className="h-4 w-4 mr-1" /> Add IP</Button>
+      </div>
+      {shown.length === 0 && (
+        <p className="rounded-lg border border-dashed border-stone-300 p-6 text-center text-xs text-stone-400" data-testid="ip-none">
+          {needle ? `No page matches “${q}”.` : filter === "paused" ? "No paused pages." : "No active pages."}
+        </p>
+      )}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        {db.ips.map((ip) => (
+        {shown.map((ip) => (
           <div key={ip.id} className={cn("rounded-lg border bg-white p-4", ip.active ? "border-[#E6E1D8]" : "border-amber-300 bg-amber-50/30")} data-testid={`ip-setting-${ip.id}`}>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2"><span className="h-6 w-6 rounded-md" style={{ background: ip.hex }} /><div><div className="text-sm font-medium text-stone-900">{ip.name}</div><div className="font-mono text-[10px] text-stone-500">{ip.code}</div></div></div>
@@ -60,10 +101,20 @@ function IPSettings() {
             </div>
             <TrackerFields ip={ip} onChange={(patch) => actions.updateIP(ip.id, patch)} />
             {ip.perfTarget?.note && <p className="mt-2 text-[10px] text-stone-400">{ip.perfTarget.note}</p>}
-            {ip.menu?.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{ip.menu.slice(0, 6).map((m, i) => <span key={i} className="rounded bg-stone-100 px-1.5 py-0.5 text-[9px] text-stone-500">{m}</span>)}</div>}
+            <div className="mt-3 flex items-center justify-between gap-2 border-t border-stone-100 pt-2">
+              <CadenceSummary ip={ip} />
+              <button onClick={() => setCadenceFor(ip.id)} data-testid={`ip-cadence-${ip.id}`}
+                className="inline-flex items-center gap-1 text-[10px] text-blue-700 hover:underline">
+                <Icons.ListOrdered className="h-3 w-3" /> Cadence
+              </button>
+            </div>
+            <CadenceChips ip={ip} />
           </div>
         ))}
       </div>
+      {cadenceFor && (
+        <CadenceDialog ip={db.ips.find((i) => i.id === cadenceFor)} open onClose={() => setCadenceFor(null)} />
+      )}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent data-testid="add-ip-dialog">
           <DialogHeader><DialogTitle className="font-serif text-lg">Add IP</DialogTitle></DialogHeader>

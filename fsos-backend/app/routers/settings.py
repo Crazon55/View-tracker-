@@ -60,8 +60,11 @@ class IPPatch(BaseModel):
     group: str | None = None
     stage: int | None = None
     floors: dict | None = None
+    # The posting cadence. `ranges` is {posts: [min, max], reels: [min, max]} for the
+    # IPs that run a band rather than a fixed number; `menu` is the slot plan, one entry
+    # per post or reel that goes out in a day — see components/settings/Cadence.js.
     ranges: dict | None = None
-    menu: list[str] | None = None
+    menu: list[dict] | None = None
     boTarget: dict | None = None
     perfTarget: dict | None = None
     spacingMinutes: int | None = None
