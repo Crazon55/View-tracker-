@@ -343,6 +343,19 @@ async def update_batch(batch_id: str, patch: BatchPatch, caller: Caller = Depend
     return shape.to_batch(batch, [i["id"] for i in ideas])
 
 
+@batches_router.delete("/{batch_id}")
+async def delete_batch(batch_id: str, caller: Caller = Depends(current_caller)):
+    """Remove a batch. The ideas in it survive — the schema sets their batch_id to null
+    on delete, because a batch is a way of grouping work, not the work itself."""
+    batch = await db.select_one("batches", {"id": f"eq.{batch_id}", "select": "*"})
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    require(caller.access, area_for(batch.get("stream") or "BO"), "edit")
+    freed = await db.select("ideas", {"batch_id": f"eq.{batch_id}", "select": "id"})
+    await db.delete("batches", {"id": f"eq.{batch_id}"})
+    return {"ok": True, "deleted": batch_id, "ideasFreed": len(freed)}
+
+
 @batches_router.post("/{batch_id}/approve")
 async def approve_batch(batch_id: str, caller: Caller = Depends(current_caller)):
     """Approve every pending idea in the batch in one go — the BO review ritual."""
@@ -362,9 +375,18 @@ async def approve_batch(batch_id: str, caller: Caller = Depends(current_caller))
 
 # ───────────────────────── categories ─────────────────────────
 
+FORMAT_GROUPS = ("Reel", "Post")
+
+
+def format_group_of(fmt: str) -> str:
+    """Which category bucket a format belongs to. Carousel and Static are both posts."""
+    return "Reel" if fmt == "Reel" else "Post"
+
+
 class NewCategory(BaseModel):
     name: str
     stream: str
+    formatGroup: str = "Post"
 
 
 @categories_router.post("")
@@ -372,11 +394,15 @@ async def create_category(body: NewCategory, caller: Caller = Depends(current_ca
     require(caller.access, "settings", "edit")
     if body.stream not in STREAMS:
         raise HTTPException(status_code=400, detail=f"Unknown stream: {body.stream}")
+    if body.formatGroup not in FORMAT_GROUPS:
+        raise HTTPException(status_code=400, detail=f"Format must be Reel or Post, got: {body.formatGroup}")
     name = body.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="A category needs a name.")
-    return shape.to_category(await db.insert("categories", {"name": name, "stream": body.stream},
-                                            upsert_on="name,stream"))
+    return shape.to_category(await db.insert(
+        "categories",
+        {"name": name, "stream": body.stream, "format_group": body.formatGroup},
+        upsert_on="name,stream,format_group"))
 
 
 @categories_router.delete("/{category_id}")

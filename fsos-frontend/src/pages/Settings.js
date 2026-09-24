@@ -14,8 +14,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import { toast } from "sonner";
 import { cn } from "../lib/utils";
+import { CategorySettings, BatchSettings } from "../components/settings/Taxonomy";
 
-const TABS = [["ips", "IPs"], ["people", "People & roles"], ["cats", "Categories"], ["rules", "Approvals & rules"]];
+const TABS = [["ips", "IPs"], ["people", "People & roles"], ["cats", "Categories"], ["batches", "Batches"], ["rules", "Approvals & rules"]];
 
 export default function Settings() {
   const [tab, setTab] = useState("ips");
@@ -29,6 +30,7 @@ export default function Settings() {
       {tab === "ips" && <IPSettings />}
       {tab === "people" && <PeopleSettings />}
       {tab === "cats" && <CategorySettings />}
+      {tab === "batches" && <BatchSettings />}
       {tab === "rules" && <RulesSettings />}
     </div>
   );
@@ -116,25 +118,6 @@ function PeopleSettings() {
           <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button data-testid="user-save" onClick={() => { if (!form.name) { toast.error("Name required"); return; } actions.addUser({ name: form.name, roles: form.roles, streams: form.streams, skills: form.skills.split(",").map((s) => s.trim()).filter(Boolean) }); toast.success("Teammate added — assignable immediately"); setOpen(false); }} className="bg-stone-900">Add</Button></DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-function CategorySettings() {
-  const { db, actions } = useWorkspace();
-  const [name, setName] = useState("");
-  const [stream, setStream] = useState("BO");
-  return (
-    <div className="max-w-xl">
-      <div className="flex items-end gap-2 mb-4">
-        <div className="flex-1"><label className="text-xs text-stone-600">New category</label><Input value={name} onChange={(e) => setName(e.target.value)} data-testid="cat-name" className="mt-1" /></div>
-        <Select value={stream} onValueChange={setStream}><SelectTrigger className="w-28"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="BO">BO</SelectItem><SelectItem value="HPN">HPN</SelectItem></SelectContent></Select>
-        <Button data-testid="cat-add" onClick={() => { if (!name) return; actions.addCategory({ name, stream }); setName(""); toast.success("Category added"); }} className="bg-stone-900">Add</Button>
-      </div>
-      <p className="text-[11px] text-stone-400 mb-2">Formats map to cadence counting — Reel → Reels; Carousel & Static → Posts.</p>
-      <div className="space-y-1.5">{db.categories.map((c) => (
-        <div key={c.id} className="flex items-center justify-between rounded-md border border-stone-200 bg-white px-3 py-2 text-sm" data-testid={`cat-${c.id}`}><span>{c.name}</span><span className="text-[11px] rounded-full border px-2 py-0.5 text-stone-500">{c.stream}</span></div>
-      ))}</div>
     </div>
   );
 }

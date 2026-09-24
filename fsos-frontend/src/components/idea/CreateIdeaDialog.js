@@ -25,7 +25,12 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
     if (open) { setTitle(prefill?.title || ""); setFormat("Reel"); setCategory(""); setDests([]); setIpHooks({}); setSrcUrl(prefill?.sourceUrl || ""); setSrcStart(""); setSrcEnd(""); setBatchId(""); }
   }, [open, stream, prefill]);
 
-  const cats = db.categories;
+  // Only the categories for this stream and this content type. It used to offer every
+  // category in the system, so a BO reel could be filed under an HPN carousel heading.
+  const formatGroup = format === "Reel" ? "Reel" : "Post";
+  const cats = db.categories.filter(
+    (c) => c.stream === stream && (c.formatGroup || "Post") === formatGroup,
+  );
   const isVideoSource = format === "Reel";
   const activeIps = db.ips.filter((i) => i.active);
   const selectedIps = dests.map((id) => activeIps.find((i) => i.id === id) || db.ips.find((i) => i.id === id)).filter(Boolean);
@@ -38,6 +43,10 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
 
   const [saving, setSaving] = useState(false);
   const inFlight = useRef(false);
+
+  useEffect(() => {
+    if (category && !cats.some((c) => c.name === category)) setCategory("");
+  }, [stream, format]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const submit = async () => {
     if (inFlight.current) return;
@@ -95,7 +104,7 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
               <label className="text-xs font-medium text-stone-600">Editorial category</label>
               <Select value={category} onValueChange={setCategory}>
                 <SelectTrigger className="mt-1" data-testid="create-category"><SelectValue placeholder="Select category" /></SelectTrigger>
-                <SelectContent>{cats.map((c) => <SelectItem key={c.id} value={c.name}>{c.name} · {c.stream}</SelectItem>)}</SelectContent>
+                <SelectContent>{cats.map((c) => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
           </div>
@@ -162,7 +171,7 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
               <label className="text-xs font-medium text-stone-600">Add to batch (optional)</label>
               <Select value={batchId} onValueChange={setBatchId}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder="No batch" /></SelectTrigger>
-                <SelectContent>{db.batches.filter((b) => b.stream === "BO").map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+                <SelectContent>{db.batches.filter((b) => b.stream === stream).map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
           )}

@@ -263,6 +263,16 @@ export function WorkspaceProvider({ children }) {
       return made;
     },
 
+    /** The ideas in it survive — batch_id goes null, they just stop being grouped. */
+    async deleteBatch(id) {
+      await run(() => api.del(`/api/batches/${id}`));
+      patch((d) => {
+        d.batches = d.batches.filter((b) => b.id !== id);
+        d.ideas = d.ideas.map((i) => (i.batchId === id ? { ...i, batchId: null } : i));
+        return d;
+      });
+    },
+
     // ── versions ─────────────────────────────────────────────────────────────
     async updateVersion(versionId, p) {
       const v = await run(() => api.patch(`/api/versions/${versionId}`, p));
@@ -448,10 +458,15 @@ export function WorkspaceProvider({ children }) {
       return ip;
     },
 
-    async addCategory(c) {
-      const made = await run(() => api.post("/api/categories", c));
+    async addCategory({ name, stream, formatGroup = "Post" }) {
+      const made = await run(() => api.post("/api/categories", { name, stream, formatGroup }));
       patch((d) => { d.categories = upsert(d.categories, made); return d; });
       return made;
+    },
+
+    async deleteCategory(id) {
+      await run(() => api.del(`/api/categories/${id}`));
+      patch((d) => { d.categories = d.categories.filter((c) => c.id !== id); return d; });
     },
 
     async updateSettings(p) {
