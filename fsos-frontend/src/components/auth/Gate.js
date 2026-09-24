@@ -3,9 +3,10 @@
 // The distinction that matters is between "we don't know who you are" and "we know
 // exactly who you are and you haven't been given a role yet". The second isn't an
 // error, and shouldn't read like one — it's the first thing a new joiner sees.
-import React from "react";
+import React, { useState } from "react";
 import { signOut } from "@/lib/session";
 import { Button } from "@/components/ui/button";
+import Doom from "./Doom";
 import * as Icons from "lucide-react";
 
 export function Loading() {
@@ -40,9 +41,10 @@ export function PendingAccess({ email }) {
 
 export function LoadFailed({ error, onRetry }) {
   const offline = error?.status === 0;
+  const [playing, setPlaying] = useState(false);
   return (
-    <div className="min-h-screen flex items-center justify-center bg-stone-50 px-4">
-      <div className="w-full max-w-md text-center">
+    <div className="min-h-screen flex items-center justify-center bg-stone-50 px-4 py-10">
+      <div className={playing ? "w-full max-w-3xl text-center" : "w-full max-w-md text-center"}>
         <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-red-100">
           <Icons.AlertTriangle className="h-5 w-5 text-red-700" />
         </div>
@@ -60,6 +62,28 @@ export function LoadFailed({ error, onRetry }) {
           <Button onClick={onRetry}>Try again</Button>
           <Button variant="outline" onClick={signOut}>Sign out</Button>
         </div>
+
+        {/* The message above is the point of this screen, so this stays a quiet offer
+            rather than taking it over. It only mounts when someone asks for it. */}
+        {!playing ? (
+          <button
+            data-testid="doom-start"
+            onClick={() => setPlaying(true)}
+            className="mt-8 text-[11px] text-stone-400 underline decoration-dotted underline-offset-4 hover:text-stone-600"
+          >
+            While you wait…
+          </button>
+        ) : (
+          <>
+            <Doom onExit={() => setPlaying(false)} />
+            <button
+              onClick={() => setPlaying(false)}
+              className="mt-3 text-[11px] text-stone-400 underline decoration-dotted underline-offset-4 hover:text-stone-600"
+            >
+              Back to the error
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
