@@ -13,6 +13,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
+import { SavedField } from "../common/SavedField";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { toast } from "sonner";
 import { cn, externalHref } from "../../lib/utils";
@@ -250,7 +251,6 @@ function CommentAnchorBtn({ idea, anchor }) {
 
 function BriefTab({ idea, highlight }) {
   const { db, actions } = useWorkspace();
-  const slides = idea.brief.slides || [];
   return (
     <div>
       <Section title="Sources">
@@ -276,24 +276,9 @@ function BriefTab({ idea, highlight }) {
         </Section>
       )}
 
-      {idea.format === "Carousel" && (
-        <Section title={`Carousel slides (${slides.length})`} right={
-          <Button size="sm" variant="outline" className="h-7 text-xs" data-testid="add-slide-btn" onClick={() => actions.updateIdea(idea.id, { brief: { ...idea.brief, slides: [...slides, { id: "sl-" + Math.random().toString(36).slice(2, 7), body: "" }] } })}><Icons.Plus className="h-3 w-3 mr-1" /> Add slide</Button>
-        }>
-          <div className="space-y-2">
-            {slides.map((sl, idx) => (
-              <div key={sl.id} className={cn("rounded-md border p-2", highlight?.type === "slide" && highlight?.slideId === sl.id ? "border-[#C0512F] bg-orange-50/40" : "border-stone-200")}>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-[10px] text-stone-400 w-8">S{idx + 1}</span>
-                  <Input value={sl.body} onChange={(e) => { const ns = slides.map((x) => x.id === sl.id ? { ...x, body: e.target.value } : x); actions.updateIdea(idea.id, { brief: { ...idea.brief, slides: ns } }); }} className="h-8 text-sm" />
-                  <button title="Move up" disabled={idx === 0} onClick={() => { const ns = [...slides]; [ns[idx - 1], ns[idx]] = [ns[idx], ns[idx - 1]]; actions.updateIdea(idea.id, { brief: { ...idea.brief, slides: ns } }); }} className="text-stone-400 hover:text-stone-700 disabled:opacity-30"><Icons.ArrowUp className="h-3.5 w-3.5" /></button>
-                  <button title="Remove" onClick={() => actions.updateIdea(idea.id, { brief: { ...idea.brief, slides: slides.filter((x) => x.id !== sl.id) } })} className="text-stone-400 hover:text-rose-600"><Icons.Trash2 className="h-3.5 w-3.5" /></button>
-                  <CommentAnchorBtn idea={idea} anchor={{ type: "slide", slideId: sl.id }} />
-                </div>
-              </div>
-            ))}
-          </div>
-          {idea.brief.visualHook && <p className="mt-3 text-xs text-stone-500"><span className="font-semibold">Visual hook:</span> {idea.brief.visualHook}</p>}
+      {idea.format === "Carousel" && idea.brief.visualHook && (
+        <Section title="Visual hook">
+          <p className="text-xs text-stone-600">{idea.brief.visualHook}</p>
         </Section>
       )}
 
@@ -348,37 +333,41 @@ function VersionRow({ idea, v, ownerWorkspace = false, pendingLinks = {}, setPen
       <div className="space-y-2 text-sm">
         <div>
           <label className="text-[10px] uppercase tracking-wide text-stone-400">Hook variation</label>
-          <Input value={v.hookOverride} placeholder={`Hook for ${ip?.code || "this page"}…`} onChange={(e) => updateVersion(actions, v.id, { hookOverride: e.target.value })} disabled={!canEditCopy} className="h-8 text-sm mt-0.5" />
+          <SavedField value={v.hookOverride} placeholder={`Hook for ${ip?.code || "this page"}…`} onSave={(text) => updateVersion(actions, v.id, { hookOverride: text })} disabled={!canEditCopy} className="h-8 text-sm mt-0.5" />
         </div>
         {idea.format === "Reel" && (
           <div>
             <label className="text-[10px] uppercase tracking-wide text-stone-400">Sub hook</label>
-            <Input
+            <SavedField
               data-testid={`sub-hook-${v.id}`}
               value={v.subHook || ""}
               placeholder="Follow-up line after the opening hook…"
-              onChange={(e) => updateVersion(actions, v.id, { subHook: e.target.value })}
+              onSave={(text) => updateVersion(actions, v.id, { subHook: text })}
               disabled={!canEditCopy}
               className="h-8 text-sm mt-0.5"
             />
           </div>
         )}
-        {idea.stream === "BO" && (idea.format === "Carousel" || idea.format === "Static") && idea.approval.state === "approved" && (
+        {/* Body text is where the copy lives now that the slide-by-slide editor is
+            gone, so it can't stay behind BO-and-approved — an HPN carousel, or a BO one
+            still waiting on approval, would have nowhere to put it. */}
+        {(idea.format === "Carousel" || idea.format === "Static") && (
           <div>
             <label className="text-[10px] uppercase tracking-wide text-stone-400">Body text</label>
-            <Textarea
+            <SavedField
+              multiline
               data-testid={`body-text-${v.id}`}
               value={v.bodyText || ""}
-              placeholder={idea.format === "Static" ? "Body copy for this page…" : "Slide-by-slide copy for this page…"}
-              onChange={(e) => updateVersion(actions, v.id, { bodyText: e.target.value })}
+              placeholder={idea.format === "Static" ? "Body copy for this page…" : "All the slides, in order — paste the whole thing…"}
+              onSave={(text) => updateVersion(actions, v.id, { bodyText: text })}
               disabled={!canEditCopy}
-              className="text-sm mt-0.5 min-h-[72px]"
+              className="text-sm mt-0.5 min-h-[140px]"
             />
           </div>
         )}
         <div>
           <label className="text-[10px] uppercase tracking-wide text-stone-400">Caption</label>
-          <Textarea value={v.caption} onChange={(e) => updateVersion(actions, v.id, { caption: e.target.value })} disabled={!canEditCopy} className="text-xs mt-0.5 min-h-[48px]" />
+          <SavedField multiline value={v.caption} onSave={(text) => updateVersion(actions, v.id, { caption: text })} disabled={!canEditCopy} className="text-xs mt-0.5 min-h-[48px]" />
         </div>
         <div>
           <label className="text-[10px] uppercase tracking-wide text-stone-400">Deliverable links</label>
@@ -723,7 +712,7 @@ function ActivityTab({ idea, comments, onJump }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <Section title={`Comments (${comments.length})`}>
-        {!comments.length && <p className="text-xs text-stone-400">No comments yet. Anchor comments to slides, music notes or assets from the Brief and Versions tabs.</p>}
+        {!comments.length && <p className="text-xs text-stone-400">No comments yet. Anchor comments to the brief, music notes or assets from the Brief and Versions tabs.</p>}
         <div className="space-y-3">
           {comments.map((c) => (
             <div key={c.id} className={cn("rounded-md border p-2.5", c.resolved ? "border-stone-200 bg-stone-50 opacity-70" : "border-stone-200")} data-testid={`comment-${c.id}`}>

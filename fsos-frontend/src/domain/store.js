@@ -13,6 +13,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import { toast } from "sonner";
 import { api, usingDevLogin } from "@/lib/api";
 import { isSignedIn } from "@/lib/session";
+import { armChime, chime } from "@/lib/chime";
 import { resolveAccess } from "./access";
 
 const WorkspaceContext = createContext(null);
@@ -94,7 +95,30 @@ export function WorkspaceProvider({ children }) {
     return p;
   }, []);
 
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => { reload(); armChime(); }, [reload]);
+
+  /**
+   * Make a noise when something new is addressed to you.
+   *
+   * People have FSOS open in a background tab all day; a silent badge doesn't tell
+   * anyone they've been assigned work. So: a short chime on a notification that is
+   * genuinely new, unread, and either yours or team-wide.
+   *
+   * The first load is skipped deliberately. Otherwise opening the app would replay
+   * every unread notification at once, which teaches people to mute it.
+   */
+  const heardNotifications = useRef(null);
+  useEffect(() => {
+    const mine = (db?.notifications || []).filter((n) => !n.read);
+    const ids = new Set(mine.map((n) => n.id));
+    if (heardNotifications.current === null) {
+      heardNotifications.current = ids;      // first load: note what's there, stay quiet
+      return;
+    }
+    const fresh = mine.some((n) => !heardNotifications.current.has(n.id));
+    heardNotifications.current = ids;
+    if (fresh) chime();
+  }, [db?.notifications]);
 
   /**
    * Pick up what other people have done.
@@ -109,15 +133,17 @@ export function WorkspaceProvider({ children }) {
    * window nobody is looking at.
    */
   useEffect(() => {
-    const refresh = () => {
-      if (document.visibilityState === "visible" && !document.hidden) reload();
-    };
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", refresh);
-    const timer = setInterval(refresh, 60000);
+    // Deliberately also while the tab is hidden. An earlier version skipped hidden
+    // tabs to save requests, which meant someone working in another window never heard
+    // the chime — and being told you've been assigned something is the entire point of
+    // it. One workspace call a minute per open tab is a price worth paying.
+    const timer = setInterval(() => reload(), 60000);
+    const onFocus = () => reload();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
     return () => {
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
       clearInterval(timer);
     };
   }, [reload]);
