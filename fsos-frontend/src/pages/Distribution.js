@@ -14,6 +14,7 @@ import { Checkbox } from "../components/ui/checkbox";
 import { toast } from "sonner";
 import { cn, externalHref } from "../lib/utils";
 import { isAdmin } from "../domain/roles";
+import MonthCalendar from "../components/distribution/MonthCalendar";
 import BulkPlacement from "../components/distribution/BulkPlacement";
 import ReplacementDialog from "../components/distribution/ReplacementDialog";
 
@@ -390,10 +391,36 @@ function NetworkCalendar() {
   const [start, setStart] = useState(today);
   const [sel, setSel] = useState(null); // {ipId, date}
   const [displace, setDisplace] = useState(null); // {boVersionId, ipId, date}
+  // The month reads like a calendar; the ten-day grid is denser per IP. Both answer
+  // real questions, so neither replaces the other.
+  const [shape, setShape] = useState("month");
   const days = Array.from({ length: 10 }, (_, i) => addDays(start, i));
 
+  const shapeToggle = (
+    <div className="mb-3 inline-flex rounded-md border border-stone-200 bg-stone-50 p-0.5">
+      {[["month", "Month"], ["grid", "By IP"]].map(([v, l]) => (
+        <button key={v} data-testid={`cal-shape-${v}`} onClick={() => setShape(v)}
+          className={cn("rounded px-3 py-1 text-xs font-medium transition-colors",
+            shape === v ? "bg-white text-stone-900 shadow-sm" : "text-stone-500 hover:text-stone-800")}>{l}</button>
+      ))}
+    </div>
+  );
+
+  if (shape === "month") {
+    return (
+      <div>
+        {shapeToggle}
+        <MonthCalendar onPlace={setSel} onDisplace={setDisplace} />
+        {sel && <BankDrawer sel={sel} onClose={() => setSel(null)} />}
+        <ReplacementDialog open={!!displace} onClose={() => setDisplace(null)} boVersionId={displace?.boVersionId} ipId={displace?.ipId} date={displace?.date} />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex gap-4">
+    <div>
+      {shapeToggle}
+      <div className="flex gap-4">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-3">
           <Button size="sm" variant="outline" className="h-8" onClick={() => setStart(addDays(start, -10))}><Icons.ChevronLeft className="h-4 w-4" /></Button>
@@ -448,6 +475,7 @@ function NetworkCalendar() {
       </div>
       {sel && <BankDrawer sel={sel} onClose={() => setSel(null)} />}
       <ReplacementDialog open={!!displace} onClose={() => setDisplace(null)} boVersionId={displace?.boVersionId} ipId={displace?.ipId} date={displace?.date} />
+      </div>
     </div>
   );
 }
