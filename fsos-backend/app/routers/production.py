@@ -143,6 +143,41 @@ def require_assignment(idea: dict) -> None:
         )
 
 
+class BulkLink(BaseModel):
+    type: str = "canva"
+    url: str
+    label: str | None = None
+
+
+@router.post("/ideas/{idea_id}/links")
+async def add_link_to_every_page(idea_id: str, body: BulkLink, caller: Caller = Depends(current_caller)):
+    """One deliverable, onto every page that has not got one.
+
+    Most of the time the same Canva file is the deliverable for all six destinations, and
+    people were pasting the identical URL into six boxes. One call instead, and one
+    reload rather than six.
+
+    Pages that already have a link are left alone rather than overwritten. Someone may
+    have done a bespoke version for one page, and quietly replacing their work to satisfy
+    "apply to all" would be the worse surprise; the count comes back so the UI can say
+    what actually happened.
+    """
+    require(caller.access, "production", "edit")
+    await get_idea(idea_id)
+    require_asset_link(body.url)
+
+    link = Link(type=body.type, url=body.url, label=body.label)
+    versions = await db.select("versions", {"idea_id": f"eq.{idea_id}", "select": "*"})
+    applied = 0
+    for v in versions:
+        if v.get("asset_links"):
+            continue
+        await _attach(v, link, caller.id)
+        applied += 1
+
+    return {"applied": applied, "skipped": len(versions) - applied, **(await idea_payload(idea_id))}
+
+
 @router.post("/versions/{version_id}/submit")
 async def submit_version(version_id: str, body: Submit, caller: Caller = Depends(current_caller)):
     """Send one version to its reviewer. Nothing goes to review without an asset."""

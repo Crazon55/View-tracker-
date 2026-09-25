@@ -377,6 +377,11 @@ export function WorkspaceProvider({ children }) {
       return v;
     },
 
+    /** One deliverable onto every page of an idea that has not got one. */
+    async addLinkToEveryPage(ideaId, link) {
+      return mergeIdea(await run(() => api.post(`/api/production/ideas/${ideaId}/links`, link)));
+    },
+
     async addVersionLink(versionId, link) {
       const v = await run(() => api.post(`/api/versions/${versionId}/links`, link));
       patch((d) => { d.versions = upsert(d.versions, v); return d; });

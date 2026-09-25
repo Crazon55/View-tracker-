@@ -14,6 +14,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
+import { Switch } from "../ui/switch";
 import { SavedField } from "../common/SavedField";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { toast } from "sonner";
@@ -55,6 +56,9 @@ export default function IdeaCard({ ideaId, mode, initialTab, onClose, onOpenIdea
   const [tab, setTab] = useState("brief");
   const [highlightAnchor, setHighlightAnchor] = useState(null);
   const [pendingLinks, setPendingLinks] = useState({});
+  // Off by default: sharing one file across every page is common but not automatic,
+  // and silently fanning a link out would be the worse surprise.
+  const [linkAll, setLinkAll] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   // Two different things used to share one flag. `ownerWorkspace` is the focused "my
   // work" view on the Production page, which deliberately shows one tab. `producerRole`
@@ -68,6 +72,7 @@ export default function IdeaCard({ ideaId, mode, initialTab, onClose, onOpenIdea
     setTab(producerView || producerRole ? "production" : (initialTab || "brief"));
     setHighlightAnchor(null);
     setPendingLinks({});
+    setLinkAll(false);
     setConfirmDelete(false);
   }, [ideaId, producerView, producerRole, initialTab]);
 
@@ -215,13 +220,13 @@ export default function IdeaCard({ ideaId, mode, initialTab, onClose, onOpenIdea
           <div className="flex-1 overflow-auto fsos-scroll p-6 bg-[#FAF8F5]">
             {producerView ? (
               <TabsContent value="production" className="mt-0" data-testid="idea-owner-workspace">
-                <ProductionTab idea={idea} versions={versions} ownerWorkspace pendingLinks={pendingLinks} setPendingLinks={setPendingLinks} />
+                <ProductionTab idea={idea} versions={versions} ownerWorkspace pendingLinks={pendingLinks} setPendingLinks={setPendingLinks} linkAll={linkAll} setLinkAll={setLinkAll} />
               </TabsContent>
             ) : (
               <>
                 <TabsContent value="brief" className="mt-0"><BriefTab idea={idea} highlight={highlightAnchor} /></TabsContent>
                 <TabsContent value="versions" className="mt-0"><VersionsTab idea={idea} versions={versions} readOnly={producerRole} pendingLinks={pendingLinks} setPendingLinks={setPendingLinks} /></TabsContent>
-                <TabsContent value="production" className="mt-0"><ProductionTab idea={idea} versions={versions} pendingLinks={pendingLinks} setPendingLinks={setPendingLinks} /></TabsContent>
+                <TabsContent value="production" className="mt-0"><ProductionTab idea={idea} versions={versions} pendingLinks={pendingLinks} setPendingLinks={setPendingLinks} linkAll={linkAll} setLinkAll={setLinkAll} /></TabsContent>
                 <TabsContent value="distribution" className="mt-0"><DistributionTab idea={idea} versions={versions} /></TabsContent>
                 <TabsContent value="performance" className="mt-0"><PerformanceTab idea={idea} versions={versions} readOnly={producerRole} /></TabsContent>
                 <TabsContent value="activity" className="mt-0"><ActivityTab idea={idea} comments={comments} onJump={jumpTo} /></TabsContent>
@@ -480,7 +485,7 @@ function BriefTab({ idea, highlight }) {
   );
 }
 
-function VersionRow({ idea, v, ownerWorkspace = false, readOnly = false, pendingLinks = {}, setPendingLinks }) {
+function VersionRow({ idea, v, ownerWorkspace = false, readOnly = false, linkAll = false, pendingLinks = {}, setPendingLinks }) {
   const { db, actions, actingUser } = useWorkspace();
   const ip = ipById(db, v.ipId);
   const pub = publicationOf(db, v.id);
@@ -513,7 +518,20 @@ function VersionRow({ idea, v, ownerWorkspace = false, readOnly = false, pending
     // and finds out the thing they pasted an hour ago was never going to open.
     const complaint = assetLinkError(url);
     if (complaint) { toast.error(complaint); return false; }
-    actions.addVersionLink(v.id, { type: linkType, url: externalHref(url), label: url });
+    const link = { type: linkType, url: externalHref(url), label: url };
+    if (linkAll) {
+      // One call for the whole idea, rather than one per page: the server knows which
+      // pages are still empty, and this is one reload instead of six.
+      actions.addLinkToEveryPage(idea.id, link).then((res) => {
+        if (!res) return;
+        toast.success(res.skipped
+          ? `Added to ${res.applied} page${res.applied === 1 ? "" : "s"} — ${res.skipped} already had a link`
+          : `Added to all ${res.applied} pages`);
+      });
+    } else {
+      actions.addVersionLink(v.id, link);
+      toast.success("Link added");
+    }
     setPending(null);
     return true;
   };
@@ -589,13 +607,12 @@ function VersionRow({ idea, v, ownerWorkspace = false, readOnly = false, pending
                 placeholder={linkType === "canva" ? "Paste Canva link…" : "Paste Drive link…"}
                 className="h-7 text-xs flex-1"
                 data-testid={`link-url-${v.id}`}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (commitLink()) toast.success("Link added"); } }}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitLink(); } }}
               />
               <Button size="sm" variant="outline" className="h-7 text-xs" data-testid={`add-link-${v.id}`} onClick={() => {
-                // commitLink says what is wrong — an empty box and a link to nowhere
-                // deserve different sentences.
-                if (!commitLink()) { if (!linkUrl.trim()) toast.error("Paste the Canva or Drive link."); return; }
-                toast.success("Link added");
+                // commitLink reports both outcomes — an empty box and a link to nowhere
+                // deserve different sentences, and "added to all 6 pages" is not "added".
+                if (!commitLink() && !linkUrl.trim()) toast.error("Paste the Canva or Drive link.");
               }}><Icons.Plus className="h-3 w-3 mr-1" /> Add</Button>
             </div>
           )}
@@ -771,7 +788,7 @@ function VersionsTab({ idea, versions, readOnly = false, pendingLinks, setPendin
   );
 }
 
-function ProductionTab({ idea, versions, ownerWorkspace = false, pendingLinks, setPendingLinks }) {
+function ProductionTab({ idea, versions, ownerWorkspace = false, pendingLinks, setPendingLinks, linkAll, setLinkAll }) {
   const { db, actions, actingUser, today } = useWorkspace();
   const isCoa = canAssignProduction(actingUser);
   const producers = db.users.filter((u) => u.active && u.roles.some((r) => ["Designer", "Editor"].includes(r)));
@@ -837,8 +854,19 @@ function ProductionTab({ idea, versions, ownerWorkspace = false, pendingLinks, s
         </Section>
       )}
 
+      {versions.length > 1 && (
+        <label className="mb-3 inline-flex cursor-pointer items-center gap-2 text-xs text-stone-600" data-testid="link-all-toggle">
+          <Switch checked={!!linkAll} onCheckedChange={setLinkAll} />
+          Same file on every page
+          <span className="text-[10px] text-stone-400">
+            {linkAll
+              ? "Adding a link fills every page that has not got one."
+              : "Links are added to one page at a time."}
+          </span>
+        </label>
+      )}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {versions.map((v) => <VersionRow key={v.id} idea={idea} v={v} ownerWorkspace={ownerWorkspace} pendingLinks={pendingLinks} setPendingLinks={setPendingLinks} />)}
+        {versions.map((v) => <VersionRow key={v.id} idea={idea} v={v} ownerWorkspace={ownerWorkspace} linkAll={linkAll} pendingLinks={pendingLinks} setPendingLinks={setPendingLinks} />)}
       </div>
     </div>
   );
