@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { toast } from "sonner";
 import { cn, externalHref } from "../../lib/utils";
 import { assetLinkError } from "../../lib/links";
+import { hasDeliverable, submittableWithLinks, submitBlocker, pendingLinkPayload } from "../../domain/submit";
 import { isAdmin, canEditProduction, canAssignProduction } from "../../domain/roles";
 
 function canApprove(user, stream, settings) {
@@ -35,37 +36,6 @@ function isAssignedProducerView(user) {
 function canSubmitProduction(user, idea, ownerWorkspace = false) {
   return canEditProduction(user, idea, ownerWorkspace);
 }
-function hasDeliverable(v) {
-  return Array.isArray(v.assetLinks) && v.assetLinks.length > 0;
-}
-function pendingLinkPayload(versionId, pending) {
-  const url = (pending?.[versionId]?.url || "").trim();
-  if (!url) return null;
-  return { versionId, type: pending[versionId].type || "canva", url: externalHref(url), label: url };
-}
-function submittableWithLinks(versions, pending = {}) {
-  return versions.filter((v) => {
-    if (!["not_started", "in_production", "changes_requested"].includes(v.reviewStatus)) return false;
-    return hasDeliverable(v) || !!(pending[v.id]?.url || "").trim();
-  });
-}
-const NO_DELIVERABLE_MSG = "Add a Canva or Drive link first — the reviewer needs a deliverable to review.";
-const NO_OWNER_MSG = "Assign a production owner first — a review has to have someone to send changes back to.";
-
-/**
- * Why this idea cannot go to review yet, or null.
- *
- * Review is a conversation between two named people: the reviewer asks for changes and
- * the owner makes them. With nobody assigned it put a version in the reviewer's queue
- * with no one behind it, and the first anyone noticed was that the changes never came.
- * The backend refuses it too; this is so the button says why instead of failing on click.
- */
-function submitBlocker(idea, versions, pending = {}) {
-  if (!idea?.productionOwnerId) return NO_OWNER_MSG;
-  if (!submittableWithLinks(versions, pending).length) return NO_DELIVERABLE_MSG;
-  return null;
-}
-
 function submitIdeaIfReady(actions, idea, versions, pending = {}) {
   const blocked = submitBlocker(idea, versions, pending);
   if (blocked) {
@@ -168,8 +138,10 @@ export default function IdeaCard({ ideaId, mode, initialTab, onClose, onOpenIdea
                   <Icons.Send className="h-4 w-4 mr-1" /> Submit for review
                 </Button>
               )}
-              {canSubmitProduction(actingUser, idea, producerView) && ["in_production", "changes_requested"].includes(state) && !idea.productionOwnerId && (
-                <span className="text-[11px] text-amber-700" data-testid="submit-needs-owner">Unassigned — set an owner in Production &amp; Review.</span>
+              {canSubmitProduction(actingUser, idea, producerView) && ["in_production", "changes_requested"].includes(state) && (!idea.productionOwnerId || !idea.reviewerId) && (
+                <span className="text-[11px] text-amber-700" data-testid="submit-needs-owner">
+                  {!idea.productionOwnerId && !idea.reviewerId ? "Unassigned" : !idea.productionOwnerId ? "No owner" : "No reviewer"} — finish the assignment in Production &amp; Review.
+                </span>
               )}
               {needsIdeaApproval(idea) && ["pending", "rejected"].includes(idea.approval.state) && !idea.bypassUsed && canApprove(actingUser, idea.stream, db.settings) && (
                 <Button size="sm" data-testid="approve-idea-btn" onClick={() => { actions.approveIdea(idea.id); toast.success("Idea approved"); }} className="h-8 bg-emerald-700 hover:bg-emerald-800">
@@ -521,7 +493,7 @@ function VersionRow({ idea, v, ownerWorkspace = false, readOnly = false, pending
   const versionFeedback = db.comments.filter((c) => c.versionId === v.id);
   // Same two conditions as the idea-level button: somebody owns it, and there is
   // something to look at.
-  const assigned = !!idea.productionOwnerId;
+  const assigned = !!idea.productionOwnerId && !!idea.reviewerId;
   const readyToSubmit = assigned && (hasDeliverable(v) || !!linkUrl.trim());
   const setPending = (patch) => {
     if (!setPendingLinks) return;
@@ -652,7 +624,7 @@ function VersionRow({ idea, v, ownerWorkspace = false, readOnly = false, pending
           {["not_started", "in_production", "changes_requested"].includes(v.reviewStatus) && canSubmit && !readyToSubmit && (
             <span className="text-[11px] text-amber-700" data-testid={`submit-blocked-${v.id}`}>
               {!assigned
-                ? "Assign a production owner before submitting — changes have to go back to someone."
+                ? `Assign ${!idea.productionOwnerId && !idea.reviewerId ? "an owner and a reviewer" : !idea.productionOwnerId ? "a production owner" : "a reviewer"} before submitting — a review needs someone to do it and someone to send changes back to.`
                 : "Add a Canva or Drive link before submitting — nothing to review without a deliverable."}
             </span>
           )}

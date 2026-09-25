@@ -118,19 +118,28 @@ async def assign(body: Assignment, caller: Caller = Depends(current_caller)):
     return {"ideas": [await idea_payload(i) for i in touched]}
 
 
-def require_owner(idea: dict) -> None:
-    """Nothing goes to review until somebody owns it.
+def require_assignment(idea: dict) -> None:
+    """Nothing goes to review until both names are on it.
 
     Review is a conversation between two named people: the reviewer asks for changes and
-    the owner makes them. Submitting an unassigned idea put a version in the reviewer's
-    queue with nobody to send it back to — the request had no one behind it, and the
-    first anyone noticed was when the changes never came.
+    the owner makes them. Either one missing breaks it in its own way. With no owner the
+    request has nobody behind it and the changes never come. With no reviewer the version
+    moves to awaiting_review and notifies nobody — it sits in a queue addressed to no one,
+    which looks like progress and isn't.
+
+    The deadline is deliberately not required: not knowing when something is due is a
+    real state, and blocking on it would only teach people to type a date they do not mean.
     """
+    missing = []
     if not idea.get("production_owner_id"):
+        missing.append("a production owner")
+    if not idea.get("reviewer_id"):
+        missing.append("a reviewer")
+    if missing:
         raise HTTPException(
             status_code=400,
-            detail="Assign a production owner before submitting for review — "
-                   "changes have to go back to someone.",
+            detail=f"Assign {' and '.join(missing)} before submitting for review — "
+                   "a review needs someone to do it and someone to send changes back to.",
         )
 
 
@@ -139,7 +148,7 @@ async def submit_version(version_id: str, body: Submit, caller: Caller = Depends
     """Send one version to its reviewer. Nothing goes to review without an asset."""
     require(caller.access, "production", "edit")
     v = await get_version(version_id)
-    require_owner(await get_idea(v["idea_id"]))
+    require_assignment(await get_idea(v["idea_id"]))
     if body.extraLink:
         v = await _attach(v, body.extraLink, caller.id)
     if not (v.get("asset_links") or []):
@@ -157,7 +166,7 @@ async def submit_version(version_id: str, body: Submit, caller: Caller = Depends
 async def submit_idea(idea_id: str, body: SubmitIdea, caller: Caller = Depends(current_caller)):
     """Submit every version of an idea that has work on it — the usual case."""
     require(caller.access, "production", "edit")
-    require_owner(await get_idea(idea_id))
+    require_assignment(await get_idea(idea_id))
     for link in body.extraLinks:
         if link.versionId:
             await _attach(await get_version(link.versionId), link, caller.id)
