@@ -13,7 +13,7 @@ export function StreamBadge({ stream, className }) {
   );
 }
 
-/** P0 / P1 / P2. Titled with the full instruction, so hovering explains it. */
+/** Urgent / Important / Average, titled with the full instruction so hovering explains it. */
 export function PriorityBadge({ priority, className }) {
   const p = PRIORITIES[priority] || PRIORITIES[DEFAULT_PRIORITY];
   return (

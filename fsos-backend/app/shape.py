@@ -140,7 +140,7 @@ def to_idea(r: dict) -> dict:
         "batchId": r.get("batch_id"),
         "deadline": r.get("deadline"),
         "deadlineTime": r.get("deadline_time"),
-        "priority": r.get("priority") or "P1",
+        "priority": r.get("priority") or "IMPORTANT",
         "bypassUsed": r.get("bypass_used"),
         "dropped": r.get("dropped") or [],
     }

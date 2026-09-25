@@ -86,14 +86,15 @@ class Destinations(BaseModel):
     ipIds: list[str]
 
 
-# How urgent the work is, for whoever picks it up. P1 is what ordinary assigned work
-# is; P0 and P2 are a decision someone took.
-PRIORITIES = ("P0", "P1", "P2")
+# How urgent the work is, for whoever picks it up. IMPORTANT is what ordinary assigned
+# work is; URGENT and AVERAGE are a decision someone took.
+PRIORITIES = ("URGENT", "IMPORTANT", "AVERAGE")
+DEFAULT_PRIORITY = "IMPORTANT"
 
 
 def _priority(value: str | None) -> str:
     if value is None:
-        return "P1"
+        return DEFAULT_PRIORITY
     if value not in PRIORITIES:
         raise HTTPException(status_code=400, detail=f"Priority must be one of {', '.join(PRIORITIES)}.")
     return value
@@ -128,7 +129,7 @@ async def create_idea(body: NewIdea, caller: Caller = Depends(current_caller)):
     # the column. That keeps the one flow the whole app depends on working against a
     # database where the priority migration has not been run yet.
     priority = _priority(body.priority)
-    if priority != "P1":
+    if priority != DEFAULT_PRIORITY:
         row["priority"] = priority
 
     idea = None

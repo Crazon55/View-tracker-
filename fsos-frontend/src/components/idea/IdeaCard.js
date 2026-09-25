@@ -238,7 +238,7 @@ export default function IdeaCard({ ideaId, mode, initialTab, onClose, onOpenIdea
  * The priority, and a way to change it for people who own the stream.
  *
  * Read-only for everyone else rather than hidden: a producer needs to see that their
- * work is P0 far more than they need to be able to set it.
+ * work is Urgent far more than they need to be able to set it.
  */
 function PriorityPicker({ idea, canSet }) {
   const { actions } = useWorkspace();
