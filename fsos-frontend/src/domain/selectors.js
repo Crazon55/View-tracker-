@@ -49,6 +49,30 @@ export const activePlacementOf = (db, versionId) => db.placements.find((p) => p.
 export const publicationOf = (db, versionId) => db.publications.find((p) => p.versionIds.includes(versionId));
 export const snapshotOf = (db, publicationId) => db.snapshots.find((s) => s.publicationId === publicationId);
 
+/**
+ * Category names worth offering as a filter, for a given stream and format.
+ *
+ * Categories are per stream and per format — "Fact static" only exists as a BO Static —
+ * so offering all of them everywhere means most choices return nothing and the filter
+ * teaches people not to trust it. Deduped by name, because the same name can exist in
+ * both streams (A-roll is both a BO reel and an HPN one) and `idea.category` is only a
+ * name, with no stream behind it.
+ */
+export function categoryOptions(db, streams, format = "all") {
+  const wanted = new Set(streams);
+  const names = new Set(
+    (db.categories || [])
+      .filter((c) => wanted.has(c.stream) && (format === "all" || c.format === format))
+      .map((c) => c.name),
+  );
+  return [...names].sort((a, b) => a.localeCompare(b));
+}
+
+/** True when `format` can hold a category of that name — used to drop a stale filter. */
+export function formatHasCategory(db, name, format) {
+  return (db.categories || []).some((c) => c.name === name && c.format === format);
+}
+
 // ---- idea progress + derived state ----
 export function ideaProgress(db, idea) {
   const vs = versionsOf(db, idea.id);

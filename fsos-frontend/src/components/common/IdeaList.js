@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import * as Icons from "lucide-react";
 import { useWorkspace } from "../../domain/store";
 import { useUI } from "../idea/IdeaModalProvider";
-import { versionsOf, ideaById, ipById, userById, ideaDerivedState, ideaProgress , visibleIps } from "../../domain/selectors";
+import { versionsOf, ideaById, ipById, userById, ideaDerivedState, ideaProgress, visibleIps, categoryOptions, formatHasCategory } from "../../domain/selectors";
 import { IDEA_STATES, FORMATS } from "../../domain/constants";
 import { StreamBadge, StatusBadge, FormatBadge, IPBadge, PriorityBadge, Avatar } from "./badges";
 import { Input } from "../ui/input";
@@ -14,6 +14,7 @@ export default function IdeaList({ stream }) {
   const { db } = useWorkspace();
   const { openIdea, streamFilter } = useUI();
   const [format, setFormat] = useState("all");
+  const [cat, setCat] = useState("all");
   const [ipf, setIpf] = useState("all");
   const [status, setStatus] = useState("all");
   const [owner, setOwner] = useState("all");
@@ -27,15 +28,31 @@ export default function IdeaList({ stream }) {
         // keep published in stream lists too, but they naturally show
       }
       if (format !== "all" && i.format !== format) return false;
+      if (cat !== "all" && i.category !== cat) return false;
       if (ipf !== "all" && !i.destinations.includes(ipf)) return false;
       if (owner !== "all" && i.productionOwnerId !== owner) return false;
       if (status !== "all" && ideaDerivedState(db, i) !== status) return false;
       if (q && !i.title.toLowerCase().includes(q.toLowerCase()) && !i.code.toLowerCase().includes(q.toLowerCase())) return false;
       return true;
     }).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-  }, [db, stream, streamFilter, format, ipf, status, owner, q]);
+  }, [db, stream, streamFilter, format, cat, ipf, status, owner, q]);
 
-  const activeFilters = [format !== "all" && ["Format", format, () => setFormat("all")], ipf !== "all" && ["IP", ipById(db, ipf)?.code, () => setIpf("all")], status !== "all" && ["Status", IDEA_STATES[status]?.label, () => setStatus("all")], owner !== "all" && ["Owner", userById(db, owner)?.name, () => setOwner("all")]].filter(Boolean);
+  const catOptions = useMemo(() => {
+    const streams = stream ? [stream] : streamFilter === "All" ? ["BO", "HPN"] : [streamFilter];
+    return categoryOptions(db, streams, format);
+  }, [db, stream, streamFilter, format]);
+
+  // Picking a format that cannot contain the chosen category would leave a filter set
+  // that can only ever return nothing, which reads as "there is no work" rather than
+  // "these two do not go together".
+  const changeFormat = (next) => {
+    setFormat(next);
+    if (cat !== "all" && next !== "all" && !formatHasCategory(db, cat, next)) {
+      setCat("all");
+    }
+  };
+
+  const activeFilters = [format !== "all" && ["Format", format, () => setFormat("all")], cat !== "all" && ["Category", cat, () => setCat("all")], ipf !== "all" && ["IP", ipById(db, ipf)?.code, () => setIpf("all")], status !== "all" && ["Status", IDEA_STATES[status]?.label, () => setStatus("all")], owner !== "all" && ["Owner", userById(db, owner)?.name, () => setOwner("all")]].filter(Boolean);
 
   return (
     <div>
@@ -45,7 +62,8 @@ export default function IdeaList({ stream }) {
           <Icons.Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-stone-400" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter ideas…" className="pl-8 h-9 w-56 bg-white" data-testid="idealist-search" />
         </div>
-        <FilterSelect value={format} onChange={setFormat} placeholder="Format" testid="filter-format" options={[["all", "All formats"], ...FORMATS.map((f) => [f, f])]} />
+        <FilterSelect value={format} onChange={changeFormat} placeholder="Format" testid="filter-format" options={[["all", "All formats"], ...FORMATS.map((f) => [f, f])]} />
+        <FilterSelect value={cat} onChange={setCat} placeholder="Category" testid="filter-category" options={[["all", "All categories"], ...catOptions.map((c) => [c, c])]} />
         <FilterSelect value={ipf} onChange={setIpf} placeholder="IP" testid="filter-ip" options={[["all", "All IPs"], ...visibleIps(db).map((i) => [i.id, i.code])]} />
         <FilterSelect value={status} onChange={setStatus} placeholder="Status" testid="filter-status" options={[["all", "All statuses"], ...Object.entries(IDEA_STATES).map(([k, v]) => [k, v.label])]} />
         <FilterSelect value={owner} onChange={setOwner} placeholder="Owner" testid="filter-owner" options={[["all", "All owners"], ...db.users.filter((u) => u.roles.some((r) => ["Designer", "Editor"].includes(r))).map((u) => [u.id, u.name])]} />
@@ -56,7 +74,7 @@ export default function IdeaList({ stream }) {
                 {k}: {v} <Icons.X className="h-3 w-3" />
               </button>
             ))}
-            <Button variant="ghost" size="sm" className="h-6 text-[11px] text-stone-500" onClick={() => { setFormat("all"); setIpf("all"); setStatus("all"); setOwner("all"); }}>Clear all</Button>
+            <Button variant="ghost" size="sm" className="h-6 text-[11px] text-stone-500" onClick={() => { setFormat("all"); setCat("all"); setIpf("all"); setStatus("all"); setOwner("all"); }}>Clear all</Button>
           </div>
         )}
         <span className="ml-auto text-xs text-stone-400">{ideas.length} ideas</span>
@@ -78,6 +96,7 @@ export default function IdeaList({ stream }) {
                     <PriorityBadge priority={idea.priority} />
                     <StreamBadge stream={idea.stream} />
                     <FormatBadge format={idea.format} />
+                    {idea.category && <span className="truncate text-[10px] text-stone-500">{idea.category}</span>}
                     <StatusBadge state={state} />
                     {idea.bypassUsed && idea.stream === "BO" && <span className="text-[10px] text-orange-700 inline-flex items-center gap-0.5"><Icons.Zap className="h-3 w-3" />bypass</span>}
                   </div>
