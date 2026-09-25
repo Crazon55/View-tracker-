@@ -118,11 +118,28 @@ async def assign(body: Assignment, caller: Caller = Depends(current_caller)):
     return {"ideas": [await idea_payload(i) for i in touched]}
 
 
+def require_owner(idea: dict) -> None:
+    """Nothing goes to review until somebody owns it.
+
+    Review is a conversation between two named people: the reviewer asks for changes and
+    the owner makes them. Submitting an unassigned idea put a version in the reviewer's
+    queue with nobody to send it back to — the request had no one behind it, and the
+    first anyone noticed was when the changes never came.
+    """
+    if not idea.get("production_owner_id"):
+        raise HTTPException(
+            status_code=400,
+            detail="Assign a production owner before submitting for review — "
+                   "changes have to go back to someone.",
+        )
+
+
 @router.post("/versions/{version_id}/submit")
 async def submit_version(version_id: str, body: Submit, caller: Caller = Depends(current_caller)):
     """Send one version to its reviewer. Nothing goes to review without an asset."""
     require(caller.access, "production", "edit")
     v = await get_version(version_id)
+    require_owner(await get_idea(v["idea_id"]))
     if body.extraLink:
         v = await _attach(v, body.extraLink, caller.id)
     if not (v.get("asset_links") or []):
@@ -140,7 +157,7 @@ async def submit_version(version_id: str, body: Submit, caller: Caller = Depends
 async def submit_idea(idea_id: str, body: SubmitIdea, caller: Caller = Depends(current_caller)):
     """Submit every version of an idea that has work on it — the usual case."""
     require(caller.access, "production", "edit")
-    await get_idea(idea_id)
+    require_owner(await get_idea(idea_id))
     for link in body.extraLinks:
         if link.versionId:
             await _attach(await get_version(link.versionId), link, caller.id)

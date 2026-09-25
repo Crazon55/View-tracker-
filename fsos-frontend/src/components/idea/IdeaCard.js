@@ -50,9 +50,26 @@ function submittableWithLinks(versions, pending = {}) {
   });
 }
 const NO_DELIVERABLE_MSG = "Add a Canva or Drive link first — the reviewer needs a deliverable to review.";
+const NO_OWNER_MSG = "Assign a production owner first — a review has to have someone to send changes back to.";
+
+/**
+ * Why this idea cannot go to review yet, or null.
+ *
+ * Review is a conversation between two named people: the reviewer asks for changes and
+ * the owner makes them. With nobody assigned it put a version in the reviewer's queue
+ * with no one behind it, and the first anyone noticed was that the changes never came.
+ * The backend refuses it too; this is so the button says why instead of failing on click.
+ */
+function submitBlocker(idea, versions, pending = {}) {
+  if (!idea?.productionOwnerId) return NO_OWNER_MSG;
+  if (!submittableWithLinks(versions, pending).length) return NO_DELIVERABLE_MSG;
+  return null;
+}
+
 function submitIdeaIfReady(actions, idea, versions, pending = {}) {
-  if (!submittableWithLinks(versions, pending).length) {
-    toast.error(NO_DELIVERABLE_MSG);
+  const blocked = submitBlocker(idea, versions, pending);
+  if (blocked) {
+    toast.error(blocked);
     return false;
   }
   const extras = versions.map((v) => pendingLinkPayload(v.id, pending)).filter(Boolean);
@@ -142,11 +159,17 @@ export default function IdeaCard({ ideaId, mode, initialTab, onClose, onOpenIdea
             <div className="flex items-center gap-3">
               <span className="text-[11px] text-stone-500">{progress.done}/{progress.total} ready · {progress.published} live</span>
               {canSubmitProduction(actingUser, idea, producerView) && ["in_production", "changes_requested"].includes(state) && (
-                <Button size="sm" className="h-8" data-testid="submit-idea-review-btn" onClick={() => {
-                  if (submitIdeaIfReady(actions, idea, versions, pendingLinks)) setPendingLinks({});
-                }}>
+                <Button size="sm" className="h-8" data-testid="submit-idea-review-btn"
+                  disabled={!!submitBlocker(idea, versions, pendingLinks)}
+                  title={submitBlocker(idea, versions, pendingLinks) || "Send every version with a deliverable to the reviewer"}
+                  onClick={() => {
+                    if (submitIdeaIfReady(actions, idea, versions, pendingLinks)) setPendingLinks({});
+                  }}>
                   <Icons.Send className="h-4 w-4 mr-1" /> Submit for review
                 </Button>
+              )}
+              {canSubmitProduction(actingUser, idea, producerView) && ["in_production", "changes_requested"].includes(state) && !idea.productionOwnerId && (
+                <span className="text-[11px] text-amber-700" data-testid="submit-needs-owner">Unassigned — set an owner in Production &amp; Review.</span>
               )}
               {needsIdeaApproval(idea) && ["pending", "rejected"].includes(idea.approval.state) && !idea.bypassUsed && canApprove(actingUser, idea.stream, db.settings) && (
                 <Button size="sm" data-testid="approve-idea-btn" onClick={() => { actions.approveIdea(idea.id); toast.success("Idea approved"); }} className="h-8 bg-emerald-700 hover:bg-emerald-800">
@@ -496,7 +519,10 @@ function VersionRow({ idea, v, ownerWorkspace = false, readOnly = false, pending
   const canSubmit = !readOnly && canSubmitProduction(actingUser, idea, ownerWorkspace);
   const canEditCopy = !readOnly && (canSubmit || actingUser.roles.some((r) => ["CS", "Short-form Lead"].includes(r)));
   const versionFeedback = db.comments.filter((c) => c.versionId === v.id);
-  const readyToSubmit = hasDeliverable(v) || !!linkUrl.trim();
+  // Same two conditions as the idea-level button: somebody owns it, and there is
+  // something to look at.
+  const assigned = !!idea.productionOwnerId;
+  const readyToSubmit = assigned && (hasDeliverable(v) || !!linkUrl.trim());
   const setPending = (patch) => {
     if (!setPendingLinks) return;
     setPendingLinks((p) => {
@@ -624,7 +650,11 @@ function VersionRow({ idea, v, ownerWorkspace = false, readOnly = false, pending
             }}><Icons.Send className="h-3 w-3 mr-1" /> Submit for review</Button>
           )}
           {["not_started", "in_production", "changes_requested"].includes(v.reviewStatus) && canSubmit && !readyToSubmit && (
-            <span className="text-[11px] text-amber-700" data-testid={`submit-blocked-${v.id}`}>Add a Canva or Drive link before submitting — nothing to review without a deliverable.</span>
+            <span className="text-[11px] text-amber-700" data-testid={`submit-blocked-${v.id}`}>
+              {!assigned
+                ? "Assign a production owner before submitting — changes have to go back to someone."
+                : "Add a Canva or Drive link before submitting — nothing to review without a deliverable."}
+            </span>
           )}
           {v.reviewStatus === "awaiting_review" && canReview && (
             <>
