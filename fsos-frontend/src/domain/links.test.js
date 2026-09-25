@@ -12,6 +12,14 @@ describe("accepts the real thing", () => {
     "canva.com/design/x",                       // pasted without the scheme
     "https://drive.google.com/file/d/abc/view",
     "https://docs.google.com/document/d/x/edit",
+    // The share button hands out canva.link, and the first version of this refused it.
+    "https://canva.link/nxdwbla4udgt924",
+    "canva.link/nxdwbla4udgt924",
+    "https://www.canva.com/design/DAHUxf1azvk/XVSJE1rueOZKztdN2_XB8A/edit",
+    "https://canva.site/my-published-thing",
+    "https://sheets.google.com/x",
+    "https://slides.google.com/x",
+    "https://drive.usercontent.google.com/download?id=abc",
   ])("%s", (url) => {
     expect(isAssetLink(url)).toBe(true);
     expect(assetLinkError(url)).toBeNull();

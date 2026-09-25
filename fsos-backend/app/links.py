@@ -16,12 +16,28 @@ from urllib.parse import urlparse
 
 from fastapi import HTTPException
 
-# Suffix match, so app.canva.com and www.canva.com pass with the bare domains.
+# Suffix match on a dot boundary, so app.canva.com passes and canva.com.evil.net does
+# not. Keep this list in step with fsos-frontend/src/lib/links.js — domains.test.js
+# fails if the two drift.
+#
+# Both services hand out more than one domain and people paste whichever one they were
+# given. canva.link in particular is what the Canva share button copies, so the first
+# version of this refused the most common way of sharing a design.
 ALLOWED_HOSTS = (
+    # Canva: editor and workspace URLs, the share-button short link, published sites,
+    # and the separate Chinese domain.
     "canva.com",
+    "canva.link",
     "canva.site",
+    "canva.cn",
+    # Google Drive and the editors that live on it. Sheets and Slides redirect to
+    # docs.google.com but are real hostnames people paste, and usercontent is what a
+    # direct file link looks like.
     "drive.google.com",
     "docs.google.com",
+    "sheets.google.com",
+    "slides.google.com",
+    "drive.usercontent.google.com",
 )
 
 LABEL = "a Canva or Google Drive link"
