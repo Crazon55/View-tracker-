@@ -1,5 +1,5 @@
 import React from "react";
-import { STREAM_META, IDEA_STATES, VSTATUS_BADGE, VSTATUS, PERF_TIER } from "../../domain/constants";
+import { STREAM_META, IDEA_STATES, VSTATUS_BADGE, VSTATUS, PERF_TIER, PRIORITIES, DEFAULT_PRIORITY } from "../../domain/constants";
 import { cn } from "../../lib/utils";
 
 export function StreamBadge({ stream, className }) {
@@ -9,6 +9,20 @@ export function StreamBadge({ stream, className }) {
     <span data-testid={`stream-badge-${stream}`} className={cn("inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold", m.badge, className)}>
       <span className={cn("h-1.5 w-1.5 rounded-full", m.dot)} />
       {m.short}
+    </span>
+  );
+}
+
+/** P0 / P1 / P2. Titled with the full instruction, so hovering explains it. */
+export function PriorityBadge({ priority, className }) {
+  const p = PRIORITIES[priority] || PRIORITIES[DEFAULT_PRIORITY];
+  return (
+    <span
+      title={p.blurb}
+      data-testid={`priority-badge-${priority || DEFAULT_PRIORITY}`}
+      className={cn("inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold", p.badge, className)}
+    >
+      {p.label}
     </span>
   );
 }

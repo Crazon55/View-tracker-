@@ -65,6 +65,7 @@ class NewIdea(BaseModel):
     destinations: list[str] = Field(default_factory=list)
     versionHooks: dict[str, dict] = Field(default_factory=dict)
     batchId: str | None = None
+    priority: str | None = None
 
 
 class IdeaPatch(BaseModel):
@@ -78,10 +79,24 @@ class IdeaPatch(BaseModel):
     batchId: str | None = None
     reviewerId: str | None = None
     dropped: list | None = None
+    priority: str | None = None
 
 
 class Destinations(BaseModel):
     ipIds: list[str]
+
+
+# How urgent the work is, for whoever picks it up. P1 is what ordinary assigned work
+# is; P0 and P2 are a decision someone took.
+PRIORITIES = ("P0", "P1", "P2")
+
+
+def _priority(value: str | None) -> str:
+    if value is None:
+        return "P1"
+    if value not in PRIORITIES:
+        raise HTTPException(status_code=400, detail=f"Priority must be one of {', '.join(PRIORITIES)}.")
+    return value
 
 
 @router.post("")
@@ -109,6 +124,12 @@ async def create_idea(body: NewIdea, caller: Caller = Depends(current_caller)):
         "approval_state": "not_required" if body.stream == "HPN" else "pending",
         "batch_id": body.batchId,
     }
+    # Only sent when it is not the default, so creating an ordinary idea never mentions
+    # the column. That keeps the one flow the whole app depends on working against a
+    # database where the priority migration has not been run yet.
+    priority = _priority(body.priority)
+    if priority != "P1":
+        row["priority"] = priority
 
     idea = None
     for _ in range(5):
@@ -147,7 +168,12 @@ async def create_idea(body: NewIdea, caller: Caller = Depends(current_caller)):
 async def update_idea(idea_id: str, patch: IdeaPatch, caller: Caller = Depends(current_caller)):
     idea = await get_idea(idea_id)
     require(caller.access, area_for(idea["stream"]), "edit")
-    cols = shape.from_idea(patch.model_dump(exclude_unset=True))
+    body = patch.model_dump(exclude_unset=True)
+    # The column has a check constraint, so a bad value would come back as a database
+    # error. Refusing it here says which values are allowed.
+    if "priority" in body:
+        body["priority"] = _priority(body["priority"])
+    cols = shape.from_idea(body)
     if cols:
         await db.update("ideas", {"id": f"eq.{idea_id}"}, cols)
     return await idea_payload(idea_id)

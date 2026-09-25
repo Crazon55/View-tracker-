@@ -18,6 +18,51 @@ export const VSTATUS = {
   ready: "Ready",
 };
 
+/**
+ * How urgent an idea is for whoever is producing it.
+ *
+ * A deadline says when something is due; it does not say what to drop. Two things due
+ * Friday can be very different amounts of "now", and that difference was living in
+ * whoever remembered to say it out loud. `rank` is what "My work" sorts on — P0 first.
+ *
+ * The wording is aimed at the person picking the work up, not at the person setting it,
+ * which is why each one says what to do rather than how bad it would be.
+ */
+export const PRIORITIES = {
+  P0: {
+    label: "P0",
+    short: "Drop everything",
+    blurb: "Put everything else down — this is the only thing you are on until it ships.",
+    rank: 0,
+    badge: "bg-rose-600 text-white border-rose-700",
+    chip: "bg-rose-50 text-rose-700 border-rose-300",
+  },
+  P1: {
+    label: "P1",
+    short: "Move on it",
+    blurb: "Important. Get it moving quickly, ahead of anything sitting at P2.",
+    rank: 1,
+    badge: "bg-amber-500 text-white border-amber-600",
+    chip: "bg-amber-50 text-amber-800 border-amber-300",
+  },
+  P2: {
+    label: "P2",
+    short: "When you are clear",
+    blurb: "Pick this up once your P0 and P1 work is clear. No rush on it before then.",
+    rank: 2,
+    badge: "bg-stone-200 text-stone-700 border-stone-300",
+    chip: "bg-stone-100 text-stone-600 border-stone-300",
+  },
+};
+
+export const PRIORITY_KEYS = Object.keys(PRIORITIES);
+export const DEFAULT_PRIORITY = "P1";
+
+/** Sort rank for an idea, tolerating a row written before priority existed. */
+export function priorityRank(idea) {
+  return PRIORITIES[idea?.priority]?.rank ?? PRIORITIES[DEFAULT_PRIORITY].rank;
+}
+
 // Idea-level derived states used as filters
 export const IDEA_STATES = {
   draft: { label: "Draft", badge: "bg-stone-100 text-stone-700 border-stone-300" },

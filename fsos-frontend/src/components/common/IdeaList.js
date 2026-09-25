@@ -4,7 +4,7 @@ import { useWorkspace } from "../../domain/store";
 import { useUI } from "../idea/IdeaModalProvider";
 import { versionsOf, ideaById, ipById, userById, ideaDerivedState, ideaProgress , visibleIps } from "../../domain/selectors";
 import { IDEA_STATES, FORMATS } from "../../domain/constants";
-import { StreamBadge, StatusBadge, FormatBadge, IPBadge, Avatar } from "./badges";
+import { StreamBadge, StatusBadge, FormatBadge, IPBadge, PriorityBadge, Avatar } from "./badges";
 import { Input } from "../ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Button } from "../ui/button";
@@ -75,6 +75,7 @@ export default function IdeaList({ stream }) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="font-mono text-[10px] text-stone-400">{idea.code}</span>
+                    <PriorityBadge priority={idea.priority} />
                     <StreamBadge stream={idea.stream} />
                     <FormatBadge format={idea.format} />
                     <StatusBadge state={state} />

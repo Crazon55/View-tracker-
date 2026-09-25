@@ -328,6 +328,11 @@ export function WorkspaceProvider({ children }) {
       return mergeIdea(await run(() => api.put(`/api/ideas/${ideaId}/destinations`, { ipIds })));
     },
 
+    async setPriority(ideaId, priority) {
+      mergeIdea(await run(() => api.patch(`/api/ideas/${ideaId}`, { priority })));
+      reloadSoon();
+    },
+
     async rejectIdea(ideaId, reason) {
       mergeIdea(await run(() => api.post(`/api/ideas/${ideaId}/reject`, { reason })));
       reloadSoon();

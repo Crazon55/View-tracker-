@@ -108,7 +108,7 @@ IDEA_COLS = {
     "productionOwnerId": "production_owner_id", "previousOwners": "previous_owners",
     "reviewerId": "reviewer_id", "batchId": "batch_id", "deadline": "deadline",
     "deadlineTime": "deadline_time",
-    "bypassUsed": "bypass_used", "dropped": "dropped",
+    "bypassUsed": "bypass_used", "dropped": "dropped", "priority": "priority",
 }
 
 
@@ -140,6 +140,7 @@ def to_idea(r: dict) -> dict:
         "batchId": r.get("batch_id"),
         "deadline": r.get("deadline"),
         "deadlineTime": r.get("deadline_time"),
+        "priority": r.get("priority") or "P1",
         "bypassUsed": r.get("bypass_used"),
         "dropped": r.get("dropped") or [],
     }

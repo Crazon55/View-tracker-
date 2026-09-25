@@ -1,4 +1,4 @@
-import { formatCounts } from "./constants";
+import { priorityRank, formatCounts } from "./constants";
 import { addDays, diffDays } from "./dates";
 
 // ---- lookups ----
@@ -272,7 +272,17 @@ export function yesterdayCohort(db, stream = "All") {
 
 // ---- My Work ----
 export function myWork(db, userId) {
-  return db.ideas.filter((i) => i.productionOwnerId === userId).map((idea) => ({ idea, progress: ideaProgress(db, idea) }));
+  return db.ideas
+    .filter((i) => i.productionOwnerId === userId)
+    .slice()
+    // Priority first, because that is the whole point of having it: the list has to
+    // answer "what do I do next" without anyone reading every row. Deadline breaks the
+    // tie, and the id after that so the order does not shuffle between refreshes.
+    .sort((a, b) =>
+      priorityRank(a) - priorityRank(b)
+      || String(a.deadline || "9999-12-31").localeCompare(String(b.deadline || "9999-12-31"))
+      || String(a.id).localeCompare(String(b.id)))
+    .map((idea) => ({ idea, progress: ideaProgress(db, idea) }));
 }
 
 // unassigned approved ideas / overdue / awaiting review (production issues)

@@ -2,8 +2,9 @@ import React, { useState, useMemo, useEffect } from "react";
 import * as Icons from "lucide-react";
 import { useWorkspace, useAccess } from "../../domain/store";
 import { versionsOf, ideaById, ipById, userById, ideaDerivedState, ideaProgress, activePlacementOf, publicationOf, snapshotOf, targetFor, classify, needsIdeaApproval } from "../../domain/selectors";
-import { StreamBadge, StatusBadge, FormatBadge, IPBadge, VersionBadge, PerfBadge, Avatar } from "../common/badges";
+import { StreamBadge, StatusBadge, FormatBadge, IPBadge, VersionBadge, PerfBadge, PriorityBadge, Avatar } from "../common/badges";
 import { nowIso, istDateTimeLabel, fmtDate } from "../../domain/dates";
+import { PRIORITIES, PRIORITY_KEYS, DEFAULT_PRIORITY } from "../../domain/constants";
 import { Dialog, DialogContent, DialogTitle } from "../ui/dialog";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
@@ -118,6 +119,7 @@ export default function IdeaCard({ ideaId, mode, initialTab, onClose, onOpenIdea
                 <StreamBadge stream={idea.stream} />
                 <FormatBadge format={idea.format} />
                 <StatusBadge state={state} />
+                <PriorityPicker idea={idea} canSet={canEdit(idea.stream === "BO" ? "bo_studio" : "hpn_desk")} />
                 {idea.bypassUsed && needsIdeaApproval(idea) && <span className="inline-flex items-center gap-1 rounded-md border border-orange-300 bg-orange-50 px-1.5 py-0.5 text-[10px] font-medium text-orange-800"><Icons.Zap className="h-3 w-3" /> Pre-approval bypass</span>}
               </div>
               <h2 className="font-serif text-2xl text-stone-900 leading-snug pr-8">{idea.title}</h2>
@@ -234,6 +236,40 @@ export default function IdeaCard({ ideaId, mode, initialTab, onClose, onOpenIdea
         </Tabs>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * The priority, and a way to change it for people who own the stream.
+ *
+ * Read-only for everyone else rather than hidden: a producer needs to see that their
+ * work is P0 far more than they need to be able to set it.
+ */
+function PriorityPicker({ idea, canSet }) {
+  const { actions } = useWorkspace();
+  const current = idea.priority || DEFAULT_PRIORITY;
+  if (!canSet) return <PriorityBadge priority={current} />;
+  return (
+    <Select
+      value={current}
+      onValueChange={(next) => {
+        if (next === current) return;
+        actions.setPriority(idea.id, next);
+        toast.success(`Priority set to ${next} — ${PRIORITIES[next].short.toLowerCase()}`);
+      }}
+    >
+      <SelectTrigger className="h-6 w-auto gap-1 border-none bg-transparent p-0 shadow-none focus:ring-0" data-testid="idea-priority-select">
+        <PriorityBadge priority={current} />
+      </SelectTrigger>
+      <SelectContent>
+        {PRIORITY_KEYS.map((k) => (
+          <SelectItem key={k} value={k}>
+            <span className="font-semibold">{k}</span>
+            <span className="ml-2 text-stone-500">{PRIORITIES[k].short}</span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 

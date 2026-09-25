@@ -3,7 +3,7 @@ import * as Icons from "lucide-react";
 import { useWorkspace } from "../domain/store";
 import { useUI } from "../components/idea/IdeaModalProvider";
 import { PageHeader } from "../components/common/PageHeader";
-import { StreamBadge, StatusBadge, FormatBadge, IPBadge, VersionBadge, Avatar } from "../components/common/badges";
+import { StreamBadge, StatusBadge, FormatBadge, IPBadge, VersionBadge, PriorityBadge, Avatar } from "../components/common/badges";
 import { versionsOf, ideaById, ipById, userById, ideaDerivedState, ideaProgress, myWork, productionIssues, needsIdeaApproval } from "../domain/selectors";
 import { fmtDate } from "../domain/dates";
 import { Button } from "../components/ui/button";
@@ -209,7 +209,7 @@ function MyWork() {
             <div key={idea.id} className="rounded-lg border border-[#E6E1D8] bg-white p-3.5 hover:border-stone-400 transition-colors" data-testid={`mywork-${idea.id}`}>
               <div className="flex items-start justify-between gap-3">
                 <button type="button" onClick={() => openIdea(idea.id, { mode: "owner", tab: "production" })} className="min-w-0 flex-1 text-left">
-                  <div className="flex items-center gap-2 mb-1"><StreamBadge stream={idea.stream} /><FormatBadge format={idea.format} /><StatusBadge state={state} />{overdue && <span className="text-[10px] text-rose-600 font-medium">OVERDUE</span>}</div>
+                  <div className="flex items-center gap-2 mb-1"><PriorityBadge priority={idea.priority} /><StreamBadge stream={idea.stream} /><FormatBadge format={idea.format} /><StatusBadge state={state} />{overdue && <span className="text-[10px] text-rose-600 font-medium">OVERDUE</span>}</div>
                   <span className="font-medium text-stone-900 hover:underline">{idea.title}</span>
                   <p className="mt-1 text-xs text-stone-500 line-clamp-1">{db.versions.find((v) => v.ideaId === idea.id && v.hookOverride)?.hookOverride || idea.brief?.sharedHook}</p>
                   {feedback.length > 0 && (
@@ -226,7 +226,7 @@ function MyWork() {
                 </button>
                 <div className="text-right shrink-0">
                   <div className="text-xs text-stone-500 mb-1">{idea.deadline ? `Due ${fmtDate(idea.deadline)}` : "No deadline"}</div>
-                  <div className="text-[11px] text-stone-400 mb-2">{progress.ready}/{progress.total} ready</div>
+                  <div className="text-[11px] text-stone-400 mb-2">{progress.done}/{progress.total} ready</div>
                   {["in_production", "changes_requested"].includes(state) && (
                     <Button size="sm" className="h-7 text-xs" data-testid={`mywork-submit-${idea.id}`} onClick={(e) => {
                       e.stopPropagation();

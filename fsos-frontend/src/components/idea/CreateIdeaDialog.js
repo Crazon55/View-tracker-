@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useWorkspace } from "../../domain/store";
-import { FORMATS } from "../../domain/constants";
+import { FORMATS, PRIORITIES, PRIORITY_KEYS, DEFAULT_PRIORITY } from "../../domain/constants";
 import { StreamBadge, IPBadge } from "../common/badges";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
 import { Button } from "../ui/button";
@@ -20,9 +20,10 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
   const [srcStart, setSrcStart] = useState("");
   const [srcEnd, setSrcEnd] = useState("");
   const [batchId, setBatchId] = useState("");
+  const [priority, setPriority] = useState(DEFAULT_PRIORITY);
 
   useEffect(() => {
-    if (open) { setTitle(prefill?.title || ""); setFormat("Reel"); setCategory(""); setDests([]); setIpHooks({}); setSrcUrl(prefill?.sourceUrl || ""); setSrcStart(""); setSrcEnd(""); setBatchId(""); }
+    if (open) { setTitle(prefill?.title || ""); setFormat("Reel"); setCategory(""); setDests([]); setIpHooks({}); setSrcUrl(prefill?.sourceUrl || ""); setSrcStart(""); setSrcEnd(""); setBatchId(""); setPriority(DEFAULT_PRIORITY); }
   }, [open, stream, prefill]);
 
   // Only the categories for this stream and this exact format. It used to offer every
@@ -67,7 +68,7 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
     setSaving(true);
     let id;
     try {
-      id = await actions.addIdea({ stream, title, format, category: category || cats[0]?.name, brief, destinations: dests, sources, batchId: batchId || null, versionHooks });
+      id = await actions.addIdea({ stream, title, format, category: category || cats[0]?.name, brief, destinations: dests, sources, batchId: batchId || null, priority, versionHooks });
     } catch (e) {
       /* the store already showed the error */
       return;
@@ -164,6 +165,22 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
               </div>
             </div>
           )}
+
+          <div>
+            <label className="text-xs font-medium text-stone-600">Priority</label>
+            <Select value={priority} onValueChange={setPriority}>
+              <SelectTrigger className="mt-1" data-testid="create-priority"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {PRIORITY_KEYS.map((k) => (
+                  <SelectItem key={k} value={k}>
+                    <span className="font-semibold">{k}</span>
+                    <span className="ml-2 text-stone-500">{PRIORITIES[k].short}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-[10px] text-stone-400">{PRIORITIES[priority].blurb}</p>
+          </div>
 
           {stream === "BO" && (
             <div>
