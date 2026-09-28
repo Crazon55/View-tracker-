@@ -127,6 +127,10 @@ async def place(body: Place, caller: Caller = Depends(current_caller)):
     """Place or move a version. Returns `conflict` instead of placing when the
     repetition rule bites and the caller hasn't asked to override it."""
     require(caller.access, "distribution", "edit")
+    # Otherwise an empty date reaches Postgres and comes back as "invalid input syntax
+    # for type date", which tells the person nothing.
+    if not body.date.strip():
+        raise HTTPException(status_code=400, detail="Pick a date — to take a page off the calendar, unallocate it.")
     v = await get_version(body.versionId)
     conflict = None
     if not body.exception and await _conflict(v, body.date):

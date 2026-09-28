@@ -15,25 +15,27 @@
 
 alter table ideas alter column priority drop default;
 
+-- The old P0/P1/P2 check has to go BEFORE the values are renamed: it is also called
+-- ideas_priority_check, and with it still in place the update to IMPORTANT is refused.
+do $$
+declare c text;
+begin
+  for c in
+    select conname from pg_constraint
+     where conrelid = 'ideas'::regclass
+       and contype = 'c'
+       and pg_get_constraintdef(oid) ilike '%priority%'
+  loop
+    execute format('alter table ideas drop constraint %I', c);
+  end loop;
+end $$;
+
 update ideas set priority = case priority
   when 'P0' then 'URGENT'
   when 'P1' then 'IMPORTANT'
   when 'P2' then 'AVERAGE'
   else priority
 end;
-
-do $$
-declare c text;
-begin
-  select conname into c
-    from pg_constraint
-   where conrelid = 'ideas'::regclass
-     and contype = 'c'
-     and pg_get_constraintdef(oid) ilike '%priority%';
-  if c is not null then
-    execute format('alter table ideas drop constraint %I', c);
-  end if;
-end $$;
 
 alter table ideas
   alter column priority set default 'IMPORTANT',

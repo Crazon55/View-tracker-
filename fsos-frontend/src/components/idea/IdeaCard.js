@@ -485,6 +485,27 @@ function BriefTab({ idea, highlight }) {
   );
 }
 
+// One call for the whole idea, rather than one per page: the server knows which pages
+// are still empty, and this is one reload instead of six.
+function addToEveryPage(actions, ideaId, link) {
+  return actions.addLinkToEveryPage(ideaId, link).then((res) => {
+    if (!res) return;
+    toast.success(res.skipped
+      ? `Added to ${res.applied} page${res.applied === 1 ? "" : "s"} — ${res.skipped} already had a link`
+      : `Added to all ${res.applied} pages`);
+  });
+}
+
+// The type follows the host, the same as Replace — a pasted Drive link shouldn't be
+// filed as Canva just because Canva is what the dropdown happened to say.
+function linkTypeOf(url, fallback = "canva") {
+  try {
+    return /(^|\.)canva\.(com|site)$/.test(new URL(externalHref(url)).hostname) ? "canva" : "drive";
+  } catch (e) {
+    return fallback;
+  }
+}
+
 function VersionRow({ idea, v, ownerWorkspace = false, readOnly = false, linkAll = false, pendingLinks = {}, setPendingLinks }) {
   const { db, actions, actingUser } = useWorkspace();
   const ip = ipById(db, v.ipId);
@@ -511,23 +532,16 @@ function VersionRow({ idea, v, ownerWorkspace = false, readOnly = false, linkAll
       return { ...p, [v.id]: { type: "canva", url: "", ...p[v.id], ...patch } };
     });
   };
-  const commitLink = () => {
-    const url = linkUrl.trim();
+  const commitLink = (raw = linkUrl, type = linkType) => {
+    const url = raw.trim();
     if (!url) return false;
     // Checked here rather than only on save, so nobody gets to the end of their work
     // and finds out the thing they pasted an hour ago was never going to open.
     const complaint = assetLinkError(url);
     if (complaint) { toast.error(complaint); return false; }
-    const link = { type: linkType, url: externalHref(url), label: url };
+    const link = { type, url: externalHref(url), label: url };
     if (linkAll) {
-      // One call for the whole idea, rather than one per page: the server knows which
-      // pages are still empty, and this is one reload instead of six.
-      actions.addLinkToEveryPage(idea.id, link).then((res) => {
-        if (!res) return;
-        toast.success(res.skipped
-          ? `Added to ${res.applied} page${res.applied === 1 ? "" : "s"} — ${res.skipped} already had a link`
-          : `Added to all ${res.applied} pages`);
-      });
+      addToEveryPage(actions, idea.id, link);
     } else {
       actions.addVersionLink(v.id, link);
       toast.success("Link added");
@@ -608,6 +622,16 @@ function VersionRow({ idea, v, ownerWorkspace = false, readOnly = false, linkAll
                 className="h-7 text-xs flex-1"
                 data-testid={`link-url-${v.id}`}
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitLink(); } }}
+                onPaste={(e) => {
+                  // With "same file on every page" on, a paste is the whole action — the
+                  // link lands on every empty page without a trip to the Add button. A bad
+                  // paste stays in the box so it can be fixed.
+                  if (!linkAll || linkUrl.trim()) return;
+                  const text = e.clipboardData.getData("text").trim();
+                  if (!text) return;
+                  e.preventDefault();
+                  if (!commitLink(text, linkTypeOf(text, linkType))) setPending({ url: text });
+                }}
               />
               <Button size="sm" variant="outline" className="h-7 text-xs" data-testid={`add-link-${v.id}`} onClick={() => {
                 // commitLink reports both outcomes — an empty box and a link to nowhere
@@ -768,7 +792,7 @@ function ReplaceAssetBtn({ versionId, status }) {
         if (complaint) { toast.error(complaint); return; }
         // The type follows the host rather than being hardcoded to drive — a Canva
         // rework was being filed as a Drive link, which made the list read wrong.
-        const type = /(^|\.)canva\.(com|site)$/.test(new URL(externalHref(link)).hostname) ? "canva" : "drive";
+        const type = linkTypeOf(link, "drive");
         actions.replaceAsset(versionId, { type, url: externalHref(link), label: link });
         toast("Asset replaced — returned to review");
         setUrl("");
@@ -800,6 +824,33 @@ function ProductionTab({ idea, versions, ownerWorkspace = false, pendingLinks, s
   // knows the day, what they need to agree is the hour. BO keeps the date.
   const sameDay = idea.stream === "HPN";
   const [deadlineTime, setDeadlineTime] = useState((idea.deadlineTime || "").slice(0, 5));
+
+  // Turning the switch on after a link is already there should do what it says, not
+  // wait for the next paste. The link can be one typed into a box but not yet added, or
+  // one already saved on a page. If the pages disagree there is no telling which one
+  // was meant, so nothing is copied.
+  const toggleLinkAll = (on) => {
+    setLinkAll(on);
+    if (!on) return;
+    const typed = versions
+      .map((v) => pendingLinks?.[v.id])
+      .filter((p) => p?.url?.trim())
+      .map((p) => ({ raw: p.url.trim(), type: p.type || "canva" }));
+    const saved = versions
+      .filter((v) => v.assetLinks.length)
+      .map((v) => ({ raw: v.assetLinks[0].url, type: v.assetLinks[0].type, label: v.assetLinks[0].label }));
+    const found = [...typed, ...saved];
+    if (!found.length || !versions.some((v) => !v.assetLinks.length)) return;
+    if (new Set(found.map((l) => externalHref(l.raw))).size > 1) {
+      toast("The pages have different links, so none was copied. Paste the shared one to fill the empty pages.");
+      return;
+    }
+    const src = found[0];
+    const complaint = assetLinkError(src.raw);
+    if (complaint) { toast.error(complaint); return; }
+    addToEveryPage(actions, idea.id, { type: src.type, url: externalHref(src.raw), label: src.label || src.raw });
+    if (typed.length) setPendingLinks?.({});
+  };
 
   return (
     <div>
@@ -856,11 +907,11 @@ function ProductionTab({ idea, versions, ownerWorkspace = false, pendingLinks, s
 
       {versions.length > 1 && (
         <label className="mb-3 inline-flex cursor-pointer items-center gap-2 text-xs text-stone-600" data-testid="link-all-toggle">
-          <Switch checked={!!linkAll} onCheckedChange={setLinkAll} />
+          <Switch checked={!!linkAll} onCheckedChange={toggleLinkAll} />
           Same file on every page
           <span className="text-[10px] text-stone-400">
             {linkAll
-              ? "Adding a link fills every page that has not got one."
+              ? "Pasting a link fills every page that has not got one."
               : "Links are added to one page at a time."}
           </span>
         </label>
@@ -888,7 +939,21 @@ function DistributionTab({ idea, versions }) {
             {pub ? <StatusBadge state="published" /> : <VersionBadge status={v.reviewStatus} />}
             <div className="flex items-center gap-2 text-sm">
               <Icons.Calendar className="h-3.5 w-3.5 text-stone-400" />
-              <Input type="date" value={pl?.date || ""} disabled={!isCoc || !!pub} onChange={async (e) => { try { const c = await actions.placeVersion(v.id, e.target.value); if (c === "same_day_repetition") toast.warning("Same idea already placed on another IP that date — needs authorised exception"); else toast.success("Placed"); } catch (err) { /* the store already showed the error */ } }} className="h-8 w-40 text-sm" />
+              <Input type="date" value={pl?.date || ""} disabled={!isCoc || !!pub} onChange={async (e) => {
+                const date = e.target.value;
+                try {
+                  // The picker's Clear button sends an empty date. That means "take it off
+                  // the calendar", not "place it on no day" — which the database refuses.
+                  if (!date) {
+                    if (!pl) return;
+                    await actions.unallocateVersion(v.id, "Date cleared");
+                    toast.success("Removed from the calendar");
+                    return;
+                  }
+                  const c = await actions.placeVersion(v.id, date);
+                  if (c === "same_day_repetition") toast.warning("Same idea already placed on another IP that date — needs authorised exception"); else toast.success("Placed");
+                } catch (err) { /* the store already showed the error */ }
+              }} className="h-8 w-40 text-sm" />
               {pl?.time && <span className="font-mono text-[11px] text-stone-500">{pl.time} IST</span>}
               {pl && <span className="text-[10px] rounded px-1.5 py-0.5 border border-stone-200 text-stone-500">{pl.state}</span>}
             </div>
