@@ -58,9 +58,15 @@ export const PRIORITIES = {
 export const PRIORITY_KEYS = Object.keys(PRIORITIES);
 export const DEFAULT_PRIORITY = "IMPORTANT";
 
+/** BO is evergreen and waits its turn, so it starts at Average; HPN is news and
+ *  starts at Important. Only a starting point — whatever someone picks is kept. */
+export function defaultPriorityFor(stream) {
+  return stream === "BO" ? "AVERAGE" : DEFAULT_PRIORITY;
+}
+
 /** Sort rank for an idea, tolerating a row written before priority existed. */
 export function priorityRank(idea) {
-  return PRIORITIES[idea?.priority]?.rank ?? PRIORITIES[DEFAULT_PRIORITY].rank;
+  return PRIORITIES[idea?.priority]?.rank ?? PRIORITIES[defaultPriorityFor(idea?.stream)].rank;
 }
 
 // Idea-level derived states used as filters

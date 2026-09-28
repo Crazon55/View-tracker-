@@ -298,6 +298,9 @@ export function WorkspaceProvider({ children }) {
         destinations: payload.destinations || [],
         versionHooks: payload.versionHooks || {},
         batchId: payload.batchId || null,
+        // Was never sent, so every new idea came back as the database default no
+        // matter what was picked in the dialog.
+        priority: payload.priority || null,
       }));
       mergeIdea(res);
       reloadSoon();     // activity, notifications and the batch's idea list catch up

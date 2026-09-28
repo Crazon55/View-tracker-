@@ -92,9 +92,15 @@ PRIORITIES = ("URGENT", "IMPORTANT", "AVERAGE")
 DEFAULT_PRIORITY = "IMPORTANT"
 
 
-def _priority(value: str | None) -> str:
+def default_priority(stream: str | None) -> str:
+    """BO is evergreen and waits its turn, so it starts at AVERAGE; HPN starts at
+    IMPORTANT. Only the starting point — a picked priority always wins."""
+    return "AVERAGE" if stream == "BO" else DEFAULT_PRIORITY
+
+
+def _priority(value: str | None, stream: str | None = None) -> str:
     if value is None:
-        return DEFAULT_PRIORITY
+        return default_priority(stream)
     if value not in PRIORITIES:
         raise HTTPException(status_code=400, detail=f"Priority must be one of {', '.join(PRIORITIES)}.")
     return value
@@ -125,12 +131,9 @@ async def create_idea(body: NewIdea, caller: Caller = Depends(current_caller)):
         "approval_state": "not_required" if body.stream == "HPN" else "pending",
         "batch_id": body.batchId,
     }
-    # Only sent when it is not the default, so creating an ordinary idea never mentions
-    # the column. That keeps the one flow the whole app depends on working against a
-    # database where the priority migration has not been run yet.
-    priority = _priority(body.priority)
-    if priority != DEFAULT_PRIORITY:
-        row["priority"] = priority
+    # Always written. It used to be left out when it matched the column default, which
+    # meant the database, not the person creating the idea, decided what it was.
+    row["priority"] = _priority(body.priority, body.stream)
 
     idea = None
     for _ in range(5):
@@ -173,7 +176,7 @@ async def update_idea(idea_id: str, patch: IdeaPatch, caller: Caller = Depends(c
     # The column has a check constraint, so a bad value would come back as a database
     # error. Refusing it here says which values are allowed.
     if "priority" in body:
-        body["priority"] = _priority(body["priority"])
+        body["priority"] = _priority(body["priority"], idea["stream"])
     cols = shape.from_idea(body)
     if cols:
         await db.update("ideas", {"id": f"eq.{idea_id}"}, cols)

@@ -35,10 +35,13 @@ test("no deadline sorts after one that has a date, not before", () => {
   expect(myWork(db, "u-1").map((x) => x.idea.id)).toEqual(["dated", "none"]);
 });
 
-test("an idea written before priority existed is treated as the default", () => {
-  const db = dbWith([idea("old", undefined), idea("low", "AVERAGE"), idea("top", "URGENT")]);
-  expect(priorityRank({ priority: undefined })).toBe(PRIORITIES[DEFAULT_PRIORITY].rank);
-  expect(myWork(db, "u-1").map((x) => x.idea.id)).toEqual(["top", "old", "low"]);
+test("an idea written before priority existed is treated as its stream's default", () => {
+  // BO starts at Average, HPN at Important.
+  expect(priorityRank({ priority: undefined, stream: "BO" })).toBe(PRIORITIES.AVERAGE.rank);
+  expect(priorityRank({ priority: undefined, stream: "HPN" })).toBe(PRIORITIES[DEFAULT_PRIORITY].rank);
+  const oldHpn = { ...idea("oldHpn", undefined), stream: "HPN" };
+  const db = dbWith([idea("oldBo", undefined), oldHpn, idea("top", "URGENT")]);
+  expect(myWork(db, "u-1").map((x) => x.idea.id)).toEqual(["top", "oldHpn", "oldBo"]);
 });
 
 test("only the named person's work comes back", () => {

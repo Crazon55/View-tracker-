@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useWorkspace } from "../../domain/store";
-import { FORMATS, PRIORITIES, PRIORITY_KEYS, DEFAULT_PRIORITY } from "../../domain/constants";
+import { FORMATS, PRIORITIES, PRIORITY_KEYS, defaultPriorityFor } from "../../domain/constants";
 import { StreamBadge, IPBadge } from "../common/badges";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
 import { Button } from "../ui/button";
@@ -20,10 +20,10 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
   const [srcStart, setSrcStart] = useState("");
   const [srcEnd, setSrcEnd] = useState("");
   const [batchId, setBatchId] = useState("");
-  const [priority, setPriority] = useState(DEFAULT_PRIORITY);
+  const [priority, setPriority] = useState(defaultPriorityFor(stream));
 
   useEffect(() => {
-    if (open) { setTitle(prefill?.title || ""); setFormat("Reel"); setCategory(""); setDests([]); setIpHooks({}); setSrcUrl(prefill?.sourceUrl || ""); setSrcStart(""); setSrcEnd(""); setBatchId(""); setPriority(DEFAULT_PRIORITY); }
+    if (open) { setTitle(prefill?.title || ""); setFormat("Reel"); setCategory(""); setDests([]); setIpHooks({}); setSrcUrl(prefill?.sourceUrl || ""); setSrcStart(""); setSrcEnd(""); setBatchId(""); setPriority(defaultPriorityFor(stream)); }
   }, [open, stream, prefill]);
 
   // Only the categories for this stream and this exact format. It used to offer every

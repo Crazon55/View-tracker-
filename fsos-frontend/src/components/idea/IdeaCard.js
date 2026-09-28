@@ -4,7 +4,7 @@ import { useWorkspace, useAccess } from "../../domain/store";
 import { versionsOf, ideaById, ipById, userById, ideaDerivedState, ideaProgress, activePlacementOf, publicationOf, snapshotOf, targetFor, classify, needsIdeaApproval } from "../../domain/selectors";
 import { StreamBadge, StatusBadge, FormatBadge, IPBadge, VersionBadge, PerfBadge, PriorityBadge, Avatar } from "../common/badges";
 import { nowIso, istDateTimeLabel, fmtDate } from "../../domain/dates";
-import { PRIORITIES, PRIORITY_KEYS, DEFAULT_PRIORITY } from "../../domain/constants";
+import { PRIORITIES, PRIORITY_KEYS, defaultPriorityFor } from "../../domain/constants";
 import { Dialog, DialogContent, DialogTitle } from "../ui/dialog";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
@@ -116,7 +116,7 @@ export default function IdeaCard({ ideaId, mode, initialTab, onClose, onOpenIdea
               </div>
               <h2 className="font-serif text-2xl text-stone-900 leading-snug pr-8">{idea.title}</h2>
               <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-stone-500">
-                <span className="inline-flex items-center gap-1"><Icons.Tag className="h-3 w-3" /> {idea.category}</span>
+                <CategoryPicker idea={idea} canSet={canEdit(idea.stream === "BO" ? "bo_studio" : "hpn_desk")} />
                 <span className="inline-flex items-center gap-1"><Icons.User className="h-3 w-3" /> Added by {creator?.name}</span>
                 <span className="inline-flex items-center gap-1"><Icons.Clock className="h-3 w-3" /> {istDateTimeLabel(idea.createdAt)}</span>
                 {batch && <span className="inline-flex items-center gap-1"><Icons.Layers className="h-3 w-3" /> {batch.name}</span>}
@@ -247,7 +247,7 @@ export default function IdeaCard({ ideaId, mode, initialTab, onClose, onOpenIdea
  */
 function PriorityPicker({ idea, canSet }) {
   const { actions } = useWorkspace();
-  const current = idea.priority || DEFAULT_PRIORITY;
+  const current = idea.priority || defaultPriorityFor(idea.stream);
   if (!canSet) return <PriorityBadge priority={current} />;
   return (
     <Select
@@ -268,6 +268,45 @@ function PriorityPicker({ idea, canSet }) {
             <span className="ml-2 text-stone-500">{PRIORITIES[k].short}</span>
           </SelectItem>
         ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+/**
+ * The category, changeable after the idea exists. A Static filed as "Fact static" by
+ * mistake has to be movable to "Statement" without deleting and re-creating the idea.
+ * Offers the same list the create dialog does: this stream, this format.
+ */
+function CategoryPicker({ idea, canSet }) {
+  const { db, actions } = useWorkspace();
+  const cats = db.categories.filter(
+    (c) => c.stream === idea.stream && (c.format || "Carousel") === idea.format,
+  );
+  const names = cats.map((c) => c.name);
+  // A category that has since been renamed or retired still shows, so the current
+  // value never silently reads as blank.
+  if (idea.category && !names.includes(idea.category)) names.unshift(idea.category);
+  const label = (
+    <span className="inline-flex items-center gap-1"><Icons.Tag className="h-3 w-3" /> {idea.category || "No category"}</span>
+  );
+  if (!canSet || !names.length) return label;
+  return (
+    <Select
+      value={idea.category || ""}
+      onValueChange={async (next) => {
+        if (next === idea.category) return;
+        try {
+          await actions.updateIdea(idea.id, { category: next });
+          toast.success(`Category changed to ${next}`);
+        } catch (e) { /* the store already showed the error */ }
+      }}
+    >
+      <SelectTrigger className="h-auto w-auto gap-1 border-none bg-transparent p-0 text-xs text-stone-500 shadow-none hover:text-stone-800 focus:ring-0" data-testid="idea-category-select">
+        {label}
+      </SelectTrigger>
+      <SelectContent>
+        {names.map((n) => <SelectItem key={n} value={n}>{n}</SelectItem>)}
       </SelectContent>
     </Select>
   );
