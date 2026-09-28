@@ -431,6 +431,11 @@ export function WorkspaceProvider({ children }) {
       reloadSoon();
     },
 
+    async unapproveVersion(versionId) {
+      mergeIdea(await run(() => api.post(`/api/production/versions/${versionId}/unapprove`)));
+      reloadSoon();
+    },
+
     async requestChanges(versionId, note) {
       mergeIdea(await run(() => api.post(`/api/production/versions/${versionId}/request-changes`, { note })));
       reloadSoon();

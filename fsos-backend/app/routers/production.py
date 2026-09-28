@@ -14,7 +14,7 @@ from .. import db, events, shape
 from ..access import require
 from ..links import require_asset_link
 from ..auth import Caller, current_caller
-from .ideas import get_idea, get_version, idea_payload
+from .ideas import get_idea, get_version, idea_payload, ip_code
 
 router = APIRouter(prefix="/api/production", tags=["production"])
 
@@ -242,6 +242,21 @@ async def approve_version(version_id: str, caller: Caller = Depends(current_call
     if idea.get("production_owner_id") and idea["production_owner_id"] != caller.id:
         await events.notify(idea["production_owner_id"], "version_approved",
                             f"Approved: {idea['title']}", idea_id=idea["id"])
+    return await idea_payload(v["idea_id"])
+
+
+@router.post("/versions/{version_id}/unapprove")
+async def unapprove_version(version_id: str, caller: Caller = Depends(current_caller)):
+    """Undo an approval given by mistake. The page goes back to Awaiting review, with
+    its file untouched — nothing about the work changed, only the verdict. Its calendar
+    slot is left alone too: placement is separate from approval."""
+    require(caller.access, "production", "edit")
+    v = await get_version(version_id)
+    if v.get("review_status") != "ready":
+        raise HTTPException(status_code=400, detail="Only an approved (Ready) page can be unapproved.")
+    await db.update("versions", {"id": f"eq.{version_id}"}, {"review_status": "awaiting_review"})
+    await events.log(v["idea_id"], "version_unapproved",
+                     f"Approval withdrawn on {await ip_code(v['ip_id'])} — back to Awaiting review", caller.id)
     return await idea_payload(v["idea_id"])
 
 

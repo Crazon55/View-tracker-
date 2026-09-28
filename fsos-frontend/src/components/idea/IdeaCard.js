@@ -717,6 +717,16 @@ function VersionRow({ idea, v, ownerWorkspace = false, readOnly = false, linkAll
           {v.reviewStatus === "changes_requested" && canReview && (
             <RequestChangesBtn versionId={v.id} />
           )}
+          {/* For an approval given by mistake. Only this page moves; the others keep
+              their verdicts. */}
+          {v.reviewStatus === "ready" && canReview && (
+            <Button size="sm" variant="outline" className="h-7 text-xs" data-testid={`unapprove-version-${v.id}`} onClick={async () => {
+              try {
+                await actions.unapproveVersion(v.id);
+                toast("Approval withdrawn — back to Awaiting review");
+              } catch (e) { /* the store already showed the error */ }
+            }}><Icons.Undo2 className="h-3 w-3 mr-1" /> Unapprove</Button>
+          )}
           {["ready", "changes_requested"].includes(v.reviewStatus) && canSubmit && (v.assetLinks || []).length > 0 && (
             <ReplaceAssetBtn versionId={v.id} status={v.reviewStatus} />
           )}
