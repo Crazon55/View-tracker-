@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { NavLink, Outlet, Navigate, useLocation, useNavigate } from "react-router-dom";
 import * as Icons from "lucide-react";
 import { useWorkspace } from "../../domain/store";
@@ -12,6 +12,29 @@ import { NAV } from "../../domain/constants";
 import { sixDayOverdue } from "../../domain/toolSelectors";
 import { Avatar } from "../common/badges";
 import ThemeToggle from "./ThemeToggle";
+
+// Loaded only when someone picks up the hammer — nobody else pays for it.
+const SmashMode = lazy(() => import("../fun/SmashMode"));
+
+function SmashButton() {
+  const [on, setOn] = useState(false);
+  const exit = useCallback(() => setOn(false), []);
+  return (
+    <>
+      <button
+        type="button"
+        data-testid="smash-btn"
+        onClick={() => setOn(true)}
+        title="Smash mode — wreck this page for fun (nothing is saved)"
+        aria-label="Smash mode"
+        className="relative rounded-md p-2 text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition-colors"
+      >
+        <Icons.Hammer className="h-4 w-4" />
+      </button>
+      {on && <Suspense fallback={null}><SmashMode onExit={exit} /></Suspense>}
+    </>
+  );
+}
 import { cn } from "../../lib/utils";
 import { toast } from "sonner";
 import {
@@ -170,6 +193,7 @@ function TopBar() {
         </DropdownMenuContent>
       </DropdownMenu>
 
+      <SmashButton />
       <ThemeToggle />
       <AccountMenu />
     </header>
