@@ -77,7 +77,7 @@ export default function SixDayTracker() {
         </div>
       )}
 
-      <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-[#E6E1D8] bg-white px-3 py-2">
+      <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-line bg-white px-3 py-2">
         <button onClick={() => shift(-1)} className="rounded-md p-1.5 hover:bg-stone-100" aria-label="Previous month" data-testid="six-day-prev"><Icons.ChevronLeft className="h-4 w-4" /></button>
         <h2 className="w-36 text-center font-serif text-base text-stone-900" data-testid="six-day-month">{monthLabel(month)}</h2>
         <button onClick={() => shift(1)} className="rounded-md p-1.5 hover:bg-stone-100" aria-label="Next month" data-testid="six-day-next"><Icons.ChevronRight className="h-4 w-4" /></button>
@@ -129,7 +129,7 @@ function Pill({ on, onClick, children, testid }) {
   return (
     <button type="button" onClick={onClick} data-testid={testid} aria-pressed={on}
       className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors",
-        on ? "border-stone-800 bg-stone-900 text-white" : "border-stone-200 bg-white text-stone-600 hover:border-stone-300")}>
+        on ? "border-stone-800 bg-stone-900 text-stone-50" : "border-stone-200 bg-white text-stone-600 hover:border-stone-300")}>
       {children}
     </button>
   );
@@ -153,7 +153,7 @@ function CycleCard({ cycle, month, ips, ipIds, canEdit, expanded, onToggle }) {
   const openIp = ips.find((i) => i.id === openId);
 
   return (
-    <div className="relative overflow-hidden rounded-lg border border-[#E6E1D8] bg-white" data-testid={`cycle-${cycle.cycle}`}>
+    <div className="relative overflow-hidden rounded-lg border border-line bg-white" data-testid={`cycle-${cycle.cycle}`}>
       <div className={cn("absolute left-0 top-0 bottom-0 w-[3px]", tone.bar)} />
       <button onClick={onToggle} className="flex w-full items-center justify-between py-4 pl-6 pr-5 text-left hover:bg-stone-50/70" data-testid={`cycle-toggle-${cycle.cycle}`}>
         <div className="flex items-center gap-3">
@@ -205,7 +205,7 @@ function IPChip({ ip, cycle, month, selected, onSelect }) {
   return (
     <button type="button" onClick={onSelect} data-testid={`ip-chip-${cycle.cycle}-${ip.id}`}
       className={cn("flex items-center gap-2.5 rounded-md border px-3 py-2 text-left transition-colors",
-        selected ? "border-stone-800 bg-[#F5F2EC]" : "border-stone-200 bg-white hover:border-stone-300")}>
+        selected ? "border-stone-800 bg-panel" : "border-stone-200 bg-white hover:border-stone-300")}>
       <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", hasData ? "bg-emerald-500" : "bg-stone-300")} />
       <span className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ background: ip.hex }} />
       <span className="min-w-0 flex-1">
@@ -275,7 +275,7 @@ function IPDetailSheet({ ip, cycle, month, canEdit, onClose }) {
   };
 
   return (
-    <div className="rounded-lg border border-stone-300 bg-[#FAF8F5]" data-testid="ip-detail-sheet">
+    <div className="rounded-lg border border-stone-300 bg-canvas" data-testid="ip-detail-sheet">
       <div className="flex items-center justify-between border-b border-stone-200 px-4 py-2.5">
         <div className="flex items-center gap-2"><IPBadge ip={ip} showName /><span className="text-xs text-stone-500">@{handle}</span></div>
         <div className="flex items-center gap-3">
@@ -398,7 +398,7 @@ function ReconcileView({ month, summaries, canEdit }) {
         <StatCard label="Drift" tone={totalActual === 0 ? "default" : drift > 0 ? "good" : drift < 0 ? "bad" : "default"}
           value={totalActual > 0 ? `${drift > 0 ? "+" : ""}${fmtCompact(drift)}` : "—"} sub="dashboard vs cycles" />
       </div>
-      <div className="flex items-center justify-between gap-3 rounded-lg border border-[#E6E1D8] bg-white px-4 py-3">
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-line bg-white px-4 py-3">
         <div>
           <h3 className="text-sm font-semibold text-stone-900">Monthly reconciliation</h3>
           <p className="mt-0.5 text-xs text-stone-500">Enter actual IG dashboard totals per IP. Drift shows how far cycle logging was off.</p>
@@ -415,7 +415,7 @@ function ReconcileView({ month, summaries, canEdit }) {
                   const d = driftOf(s);
                   return (
                     <button key={s.ip.id} onClick={() => setOpenId(openId === s.ip.id ? null : s.ip.id)} data-testid={`reconcile-chip-${s.ip.id}`}
-                      className={cn("flex items-center gap-2.5 rounded-md border px-3 py-2 text-left", openId === s.ip.id ? "border-stone-800 bg-[#F5F2EC]" : "border-stone-200 bg-white hover:border-stone-300")}>
+                      className={cn("flex items-center gap-2.5 rounded-md border px-3 py-2 text-left", openId === s.ip.id ? "border-stone-800 bg-panel" : "border-stone-200 bg-white hover:border-stone-300")}>
                       <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", d != null ? "bg-violet-500" : "bg-stone-300")} />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[13px] font-medium text-stone-900">{s.ip.name}</span>
@@ -429,7 +429,7 @@ function ReconcileView({ month, summaries, canEdit }) {
                 })}
               </div>
               {open && (
-                <div className="grid grid-cols-1 gap-3 rounded-lg border border-stone-300 bg-[#FAF8F5] p-4 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-3 rounded-lg border border-stone-300 bg-canvas p-4 sm:grid-cols-3">
                   <div><p className="text-[9px] uppercase text-stone-400 font-mono">Cycle sum</p><p className="font-serif text-lg text-stone-900 tabular-nums">{fmtCompact(open.cycleViewsSum)}</p></div>
                   <div>
                     <p className="text-[9px] uppercase text-stone-400 font-mono">IG dashboard</p>

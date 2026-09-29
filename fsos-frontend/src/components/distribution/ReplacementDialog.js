@@ -100,7 +100,7 @@ export default function ReplacementDialog({ open, onClose, boVersionId, ipId, da
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button data-testid="repl-confirm" onClick={confirm} className="bg-[#C0512F] hover:bg-[#a84325]">Confirm displacement</Button>
+          <Button data-testid="repl-confirm" onClick={confirm} className="bg-[#C0512F] text-white hover:bg-[#a84325]">Confirm displacement</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

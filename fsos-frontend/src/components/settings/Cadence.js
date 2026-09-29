@@ -131,7 +131,7 @@ export function CadenceDialog({ ip, open, onClose }) {
           {KINDS.map(([kind, label]) => {
             const key = kind === "post" ? "posts" : "reels";
             return (
-              <div key={kind} className="rounded-lg border border-[#E6E1D8] p-3">
+              <div key={kind} className="rounded-lg border border-line p-3">
                 <div className="flex flex-wrap items-end gap-3">
                   <div>
                     <label className="text-[10px] uppercase tracking-wide text-stone-400">{label} floor / day</label>

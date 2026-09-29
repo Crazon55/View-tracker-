@@ -11,6 +11,7 @@ import { resolveAccess, isAwaitingAccess, PREVIEW_ROLES } from "../../domain/acc
 import { NAV } from "../../domain/constants";
 import { sixDayOverdue } from "../../domain/toolSelectors";
 import { Avatar } from "../common/badges";
+import ThemeToggle from "./ThemeToggle";
 import { cn } from "../../lib/utils";
 import { toast } from "sonner";
 import {
@@ -25,7 +26,7 @@ function NavItem({ n, badge }) {
   if (n.external) {
     return (
       <a href={n.path} target="_blank" rel="noopener noreferrer" data-testid={`nav-${n.id}`}
-        className={cn(base, "text-stone-600 hover:bg-[#EFEBE4]/60 hover:text-stone-900")}>
+        className={cn(base, "text-stone-600 hover:bg-panel-2/60 hover:text-stone-900")}>
         <Icon className="h-4 w-4" />{n.label}<Icons.ArrowUpRight className="ml-auto h-3.5 w-3.5 text-stone-400" />
       </a>
     );
@@ -33,7 +34,7 @@ function NavItem({ n, badge }) {
   return (
     <NavLink to={n.path} end={n.path === "/"} data-testid={`nav-${n.id}`}
       className={({ isActive }) => cn(base,
-        isActive ? "bg-[#EFEBE4] text-stone-900 font-medium border-l-[3px] border-stone-800 pl-[9px]" : "text-stone-600 hover:bg-[#EFEBE4]/60 hover:text-stone-900"
+        isActive ? "bg-panel-2 text-stone-900 font-medium border-l-[3px] border-stone-800 pl-[9px]" : "text-stone-600 hover:bg-panel-2/60 hover:text-stone-900"
       )}>
       <Icon className="h-4 w-4" />
       {n.label}
@@ -47,9 +48,9 @@ function Sidebar() {
   const items = navItemsForUser(gateUser, access);
   const sections = [...new Set(items.map((n) => n.section))];
   return (
-    <aside className="w-60 shrink-0 border-r border-[#E6E1D8] bg-[#F5F2EC] flex flex-col" data-testid="sidebar">
-      <div className="h-14 flex items-center gap-2 px-5 border-b border-[#E6E1D8]">
-        <div className="h-7 w-7 rounded-md bg-stone-900 text-white grid place-items-center font-serif text-sm">F</div>
+    <aside className="w-60 shrink-0 border-r border-line bg-panel flex flex-col" data-testid="sidebar">
+      <div className="h-14 flex items-center gap-2 px-5 border-b border-line">
+        <div className="h-7 w-7 rounded-md bg-stone-900 text-stone-50 grid place-items-center font-serif text-sm">F</div>
         <div className="leading-tight">
           <div className="font-serif text-base text-stone-900">FSOS</div>
           <div className="text-[10px] uppercase tracking-wider text-stone-500 font-mono">Frontseat OS</div>
@@ -63,7 +64,7 @@ function Sidebar() {
           </div>
         ))}
       </nav>
-      <div className="p-3 border-t border-[#E6E1D8]">
+      <div className="p-3 border-t border-line">
         <NavLink to="/help" data-testid="nav-help" className="flex items-center gap-2 text-xs text-stone-500 hover:text-stone-900 transition-colors">
           <Icons.HelpCircle className="h-3.5 w-3.5" /> Walkthrough & Help
         </NavLink>
@@ -112,7 +113,7 @@ function TopBar() {
   };
 
   return (
-    <header className="h-14 shrink-0 border-b border-[#E6E1D8] bg-white/90 backdrop-blur-md flex items-center gap-4 px-4 sticky top-0 z-40">
+    <header className="h-14 shrink-0 border-b border-line bg-white/90 backdrop-blur-md flex items-center gap-4 px-4 sticky top-0 z-40">
       <GlobalSearch />
       <div className="inline-flex rounded-md border border-stone-200 bg-stone-50 p-0.5">
         {["All", "BO", "HPN"].map((s) => (
@@ -169,6 +170,7 @@ function TopBar() {
         </DropdownMenuContent>
       </DropdownMenu>
 
+      <ThemeToggle />
       <AccountMenu />
     </header>
   );
@@ -313,7 +315,7 @@ function usePageTitle() {
 export default function AppShell() {
   usePageTitle();
   return (
-    <div className="flex h-screen overflow-hidden bg-[#FAF8F5]">
+    <div className="flex h-screen overflow-hidden bg-canvas">
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0">
         <PreviewBanner />

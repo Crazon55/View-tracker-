@@ -28,7 +28,7 @@ export default function BOStudio() {
           const ready = b.ideaIds.reduce((s, id) => { const idea = db.ideas.find((i) => i.id === id); return s + (idea ? ideaProgress(db, idea).ready : 0); }, 0);
           const total = b.ideaIds.reduce((s, id) => { const idea = db.ideas.find((i) => i.id === id); return s + (idea ? ideaProgress(db, idea).total : 0); }, 0);
           return (
-            <div key={b.id} className="rounded-lg border border-[#E6E1D8] bg-white p-3" data-testid={`batch-card-${b.id}`}>
+            <div key={b.id} className="rounded-lg border border-line bg-white p-3" data-testid={`batch-card-${b.id}`}>
               <div className="flex items-center gap-1.5 text-[11px] text-stone-500"><Icons.Layers className="h-3.5 w-3.5" /> Batch</div>
               <div className="font-medium text-sm text-stone-900 mt-0.5 leading-tight">{b.name}</div>
               <div className="mt-2 flex items-center justify-between text-xs text-stone-500">

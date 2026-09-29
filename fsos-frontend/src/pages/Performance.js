@@ -41,7 +41,7 @@ function Capture() {
   const done = tasks.filter((t) => t.done);
 
   const Group = ({ title, items, tone }) => (
-    <div className="rounded-lg border border-[#E6E1D8] bg-white p-4">
+    <div className="rounded-lg border border-line bg-white p-4">
       <div className="flex items-center justify-between mb-2"><h3 className="text-sm font-semibold text-stone-900">{title}</h3><span className={cn("text-xs rounded-full px-2 py-0.5", tone)}>{items.length}</span></div>
       <div className="space-y-2 max-h-[60vh] overflow-auto fsos-scroll">
         {items.map((t) => <CaptureRow key={t.pub.id} t={t} openIdea={openIdea} record={actions.recordSnapshot} />)}
@@ -91,7 +91,7 @@ function IdeasPerf() {
       {publishedIdeas.map((idea) => {
         const versions = db.versions.filter((v) => v.ideaId === idea.id);
         return (
-          <div key={idea.id} className="rounded-lg border border-[#E6E1D8] bg-white p-3" data-testid={`perf-idea-${idea.id}`}>
+          <div key={idea.id} className="rounded-lg border border-line bg-white p-3" data-testid={`perf-idea-${idea.id}`}>
             <div className="flex items-center gap-2 mb-2"><StreamBadge stream={idea.stream} /><FormatBadge format={idea.format} /><button onClick={() => openIdea(idea.id)} className="text-sm text-stone-900 hover:underline">{idea.title}</button></div>
             <div className="flex flex-wrap gap-2">
               {versions.map((v) => { const pub = publicationOf(db, v.id); const snap = pub && snapshotOf(db, pub.id); const t = targetFor(db, v.ipId, idea.format); const tier = snap && snap.views != null ? classify(snap.views, t, db.settings.thresholds) : "unrated"; const base = recentBaseline(db, v.ipId, idea.format, pub?.id, db.settings.baselineSample);
@@ -134,7 +134,7 @@ function IPCycles() {
         <div className="ml-auto text-[11px] text-stone-500">{c.pubs} publications · {c.measured} measured · {c.due} due · {c.missing} missing</div>
       </div>
       <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-2.5 mb-3 text-[11px] text-amber-800 flex items-center gap-2"><Icons.Info className="h-3.5 w-3.5" /> Demo definition: group each publication by its actual publication date, then aggregate manually-captured ~24h views. These are publication cohorts — not views gained during the calendar days and not account reach.</div>
-      <div className="rounded-lg border border-[#E6E1D8] bg-white overflow-hidden">
+      <div className="rounded-lg border border-line bg-white overflow-hidden">
         <table className="w-full text-xs" data-testid="cycle-table">
           <thead><tr className="text-stone-400 border-b border-stone-200"><th className="text-left py-2 pl-3">IP</th><th className="text-center">Publications</th><th className="text-center">Measured</th><th className="text-center">Missing</th><th className="text-center">Sum views</th><th className="text-center">Mean</th></tr></thead>
           <tbody>{per.map((r) => (

@@ -103,7 +103,7 @@ export default function IdeaCard({ ideaId, mode, initialTab, onClose, onOpenIdea
       <DialogContent hideClose className="max-w-6xl w-[95vw] h-[90vh] p-0 gap-0 overflow-hidden flex flex-col" data-testid="idea-card-modal">
         <DialogTitle className="sr-only">{idea.title}</DialogTitle>
         {/* Header */}
-        <div className="border-b border-stone-200 px-6 py-4 bg-[#FAF8F5]">
+        <div className="border-b border-stone-200 px-6 py-4 bg-canvas">
           <div className="flex items-start gap-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
@@ -149,7 +149,7 @@ export default function IdeaCard({ ideaId, mode, initialTab, onClose, onOpenIdea
                 </span>
               )}
               {needsIdeaApproval(idea) && ["pending", "rejected"].includes(idea.approval.state) && !idea.bypassUsed && canApprove(actingUser, idea.stream, db.settings) && (
-                <Button size="sm" data-testid="approve-idea-btn" onClick={() => { actions.approveIdea(idea.id); toast.success("Idea approved"); }} className="h-8 bg-emerald-700 hover:bg-emerald-800">
+                <Button size="sm" data-testid="approve-idea-btn" onClick={() => { actions.approveIdea(idea.id); toast.success("Idea approved"); }} className="h-8 bg-emerald-700 text-white hover:bg-emerald-800">
                   <Icons.Check className="h-4 w-4 mr-1" /> {idea.approval.state === "rejected" ? "Approve anyway" : "Approve idea"}
                 </Button>
               )}
@@ -191,7 +191,7 @@ export default function IdeaCard({ ideaId, mode, initialTab, onClose, onOpenIdea
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
               <AlertDialogAction
-                className="bg-[#C0512F] hover:bg-[#a84325]"
+                className="bg-[#C0512F] text-white hover:bg-[#a84325]"
                 data-testid="confirm-delete-idea"
                 onClick={async () => {
                   setConfirmDelete(false);
@@ -217,7 +217,7 @@ export default function IdeaCard({ ideaId, mode, initialTab, onClose, onOpenIdea
             </TabsList>
           </div>
 
-          <div className="flex-1 overflow-auto fsos-scroll p-6 bg-[#FAF8F5]">
+          <div className="flex-1 overflow-auto fsos-scroll p-6 bg-canvas">
             {producerView ? (
               <TabsContent value="production" className="mt-0" data-testid="idea-owner-workspace">
                 <ProductionTab idea={idea} versions={versions} ownerWorkspace pendingLinks={pendingLinks} setPendingLinks={setPendingLinks} linkAll={linkAll} setLinkAll={setLinkAll} />
@@ -287,8 +287,10 @@ function CategoryPicker({ idea, canSet }) {
   // A category that has since been renamed or retired still shows, so the current
   // value never silently reads as blank.
   if (idea.category && !names.includes(idea.category)) names.unshift(idea.category);
+  // A div, not a span: the select trigger line-clamps a span child, which knocks the
+  // icon and the name onto separate lines.
   const label = (
-    <span className="inline-flex items-center gap-1"><Icons.Tag className="h-3 w-3" /> {idea.category || "No category"}</span>
+    <div className="inline-flex items-center gap-1 whitespace-nowrap"><Icons.Tag className="h-3 w-3" /> {idea.category || "No category"}</div>
   );
   if (!canSet || !names.length) return label;
   return (
@@ -314,7 +316,7 @@ function CategoryPicker({ idea, canSet }) {
 
 function Section({ title, children, right }) {
   return (
-    <div className="rounded-lg border border-[#E6E1D8] bg-white p-4 mb-4">
+    <div className="rounded-lg border border-line bg-white p-4 mb-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-[11px] uppercase tracking-wider font-semibold text-stone-500 font-mono">{title}</h3>
         {right}
@@ -361,7 +363,7 @@ function RejectIdeaBtn({ idea }) {
         onKeyDown={(e) => { if (e.key === "Enter" && reason.trim()) send(); if (e.key === "Escape") setOpen(false); }}
       />
       <Button size="sm" data-testid="reject-idea-confirm" disabled={!reason.trim()} onClick={send}
-        className="h-8 bg-rose-700 hover:bg-rose-800">Reject</Button>
+        className="h-8 bg-rose-700 text-white hover:bg-rose-800">Reject</Button>
       <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setOpen(false)}>Cancel</Button>
     </div>
   );
@@ -429,7 +431,7 @@ function BriefSummary({ idea }) {
       <div className="overflow-hidden rounded-md border border-stone-200" data-testid="brief-summary">
         <table className="w-full text-xs">
           <thead>
-            <tr className="bg-[#F5F2EC] text-left text-[10px] uppercase tracking-wide text-stone-500">
+            <tr className="bg-panel text-left text-[10px] uppercase tracking-wide text-stone-500">
               <th className="px-2.5 py-1.5 font-medium">Page</th>
               <th className="px-2.5 py-1.5 font-medium">Production</th>
               <th className="px-2.5 py-1.5 font-medium">Scheduled</th>
@@ -590,7 +592,7 @@ function VersionRow({ idea, v, ownerWorkspace = false, readOnly = false, linkAll
   };
 
   return (
-    <div className="rounded-lg border border-[#E6E1D8] bg-white p-4" data-testid={`version-row-${v.id}`}>
+    <div className="rounded-lg border border-line bg-white p-4" data-testid={`version-row-${v.id}`}>
       <div className="flex items-center justify-between mb-2">
         <IPBadge ip={ip} showName />
         {pub ? <PerfBadge tier="unrated" className="hidden" /> : null}
@@ -710,7 +712,7 @@ function VersionRow({ idea, v, ownerWorkspace = false, readOnly = false, linkAll
           )}
           {v.reviewStatus === "awaiting_review" && canReview && (
             <>
-              <Button size="sm" className="h-7 text-xs bg-emerald-700 hover:bg-emerald-800" data-testid={`approve-version-${v.id}`} onClick={() => { actions.approveVersion(v.id); toast.success("Version approved — Ready"); }}><Icons.Check className="h-3 w-3 mr-1" /> Approve</Button>
+              <Button size="sm" className="h-7 text-xs bg-emerald-700 text-white hover:bg-emerald-800" data-testid={`approve-version-${v.id}`} onClick={() => { actions.approveVersion(v.id); toast.success("Version approved — Ready"); }}><Icons.Check className="h-3 w-3 mr-1" /> Approve</Button>
               <RequestChangesBtn versionId={v.id} />
             </>
           )}
@@ -983,7 +985,7 @@ function DistributionTab({ idea, versions }) {
         const pl = activePlacementOf(db, v.id);
         const pub = publicationOf(db, v.id);
         return (
-          <div key={v.id} className="rounded-lg border border-[#E6E1D8] bg-white p-3 flex items-center gap-4 flex-wrap" data-testid={`dist-row-${v.id}`}>
+          <div key={v.id} className="rounded-lg border border-line bg-white p-3 flex items-center gap-4 flex-wrap" data-testid={`dist-row-${v.id}`}>
             <IPBadge ip={ip} />
             {pub ? <StatusBadge state="published" /> : <VersionBadge status={v.reviewStatus} />}
             <div className="flex items-center gap-2 text-sm">
@@ -1050,7 +1052,7 @@ function PerfVersionRow({ idea, v, readOnly = false }) {
     toast.success(val === "" ? "Marked missing" : "Views recorded");
   };
   return (
-    <div className="rounded-lg border border-[#E6E1D8] bg-white p-3 flex items-center gap-4 flex-wrap" data-testid={`idea-perf-${v.id}`}>
+    <div className="rounded-lg border border-line bg-white p-3 flex items-center gap-4 flex-wrap" data-testid={`idea-perf-${v.id}`}>
       <IPBadge ip={ip} />
       {!pub && <span className="text-xs text-stone-400">Not published — remaining destination</span>}
       {pub && (

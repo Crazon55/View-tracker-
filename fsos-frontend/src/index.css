@@ -8,7 +8,7 @@ body {
         Helvetica, Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background: #faf8f5;
+    background: rgb(var(--canvas));
 }
 
 code {
@@ -44,6 +44,30 @@ code {
         --chart-5: 27 87% 67%;
         --radius: 0.5rem;
     }
+
+    /* Dark mode: the same warm neutrals, turned down. theme/palette.js does the same
+       for the Tailwind greys and colour families. */
+    .dark {
+        --background: 30 10% 8%;
+        --foreground: 38 22% 93%;
+        --card: 36 9% 11%;
+        --card-foreground: 38 22% 93%;
+        --popover: 36 9% 11%;
+        --popover-foreground: 38 22% 93%;
+        --primary: 38 22% 93%;
+        --primary-foreground: 30 10% 8%;
+        --secondary: 32 8% 16%;
+        --secondary-foreground: 38 22% 93%;
+        --muted: 32 8% 16%;
+        --muted-foreground: 35 8% 62%;
+        --accent: 32 8% 18%;
+        --accent-foreground: 38 22% 93%;
+        --destructive: 0 62% 50%;
+        --destructive-foreground: 0 0% 98%;
+        --border: 33 9% 19%;
+        --input: 33 9% 22%;
+        --ring: 38 15% 75%;
+    }
 }
 
 @layer base {
@@ -60,10 +84,16 @@ code {
 
 /* Warm scrollbars for dense panels */
 .fsos-scroll::-webkit-scrollbar { height: 10px; width: 10px; }
-.fsos-scroll::-webkit-scrollbar-thumb { background: #d1cbbf; border-radius: 8px; }
+.fsos-scroll::-webkit-scrollbar-thumb { background: rgb(var(--stone-300)); border-radius: 8px; }
 .fsos-scroll::-webkit-scrollbar-track { background: transparent; }
 
 .grain-noise {
     background-image: radial-gradient(rgba(0,0,0,0.02) 1px, transparent 1px);
     background-size: 4px 4px;
 }
+.dark .grain-noise {
+    background-image: radial-gradient(rgba(255,255,255,0.025) 1px, transparent 1px);
+}
+
+/* Native date/time pickers draw their own icons; let them follow the theme. */
+.dark input[type="date"], .dark input[type="time"] { color-scheme: dark; }

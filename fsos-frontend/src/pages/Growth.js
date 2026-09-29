@@ -9,6 +9,7 @@ import { Input } from "../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { growthRows, fmtCompact, monthLabel } from "../domain/toolSelectors";
 import { cn } from "../lib/utils";
+import { useThemeColors } from "../lib/theme";
 
 const SERIES = {
   views: { label: "Total views", color: "#1C1917" },
@@ -24,6 +25,7 @@ const STAGES = [
 ];
 
 export default function Growth() {
+  const tc = useThemeColors();
   const { db } = useWorkspace();
   const [ipFilter, setIpFilter] = useState("all");
   const [drillMonth, setDrillMonth] = useState(null);
@@ -68,7 +70,7 @@ export default function Growth() {
         </div>
       ) : (
         <div className="space-y-5">
-          <div className="rounded-lg border border-[#E6E1D8] bg-white p-5">
+          <div className="rounded-lg border border-line bg-white p-5">
             <h2 className="text-[11px] font-semibold uppercase tracking-wider text-stone-500 font-mono">Monthly views · reels · posts · followers gained</h2>
             <p className="mb-3 mt-0.5 text-xs text-stone-400">Click a month to see the IP-wise breakdown.</p>
             <div className="h-[360px]" data-testid="growth-chart">
@@ -79,14 +81,14 @@ export default function Growth() {
                     const m = e?.activePayload?.[0]?.payload?.month ?? chartData[Number(idx)]?.month;
                     if (m) setDrillMonth(m);
                   }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E7E5E4" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fill: "#78716C", fontSize: 12 }} axisLine={{ stroke: "#D6D3D1" }} tickLine={false} />
-                  <YAxis yAxisId="views" tick={{ fill: "#78716C", fontSize: 12 }} tickFormatter={fmtCompact} axisLine={false} tickLine={false} width={52} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={tc.grid} vertical={false} />
+                  <XAxis dataKey="name" tick={{ fill: tc.axis, fontSize: 12 }} axisLine={{ stroke: tc.gridStrong }} tickLine={false} />
+                  <YAxis yAxisId="views" tick={{ fill: tc.axis, fontSize: 12 }} tickFormatter={fmtCompact} axisLine={false} tickLine={false} width={52} />
                   <YAxis yAxisId="followers" orientation="right" tick={{ fill: SERIES.followers.color, fontSize: 12 }} tickFormatter={fmtCompact} axisLine={false} tickLine={false} width={48} />
-                  <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #E7E5E4", fontSize: 12 }}
+                  <Tooltip contentStyle={{ borderRadius: 8, border: `1px solid ${tc.grid}`, background: tc.tooltipBg, fontSize: 12 }}
                     formatter={(v, k) => [Number(v).toLocaleString(), SERIES[k]?.label || k]} />
                   <Legend formatter={(k) => SERIES[k]?.label || k} wrapperStyle={{ fontSize: 12 }} />
-                  <Line yAxisId="views" type="monotone" dataKey="views" stroke={SERIES.views.color} strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6, cursor: "pointer" }} />
+                  <Line yAxisId="views" type="monotone" dataKey="views" stroke={tc.ink} strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6, cursor: "pointer" }} />
                   <Line yAxisId="views" type="monotone" dataKey="reels" stroke={SERIES.reels.color} strokeWidth={2} strokeDasharray="6 3" dot={{ r: 3 }} />
                   <Line yAxisId="views" type="monotone" dataKey="posts" stroke={SERIES.posts.color} strokeWidth={2} strokeDasharray="6 3" dot={{ r: 3 }} />
                   <Line yAxisId="followers" type="monotone" dataKey="followers" stroke={SERIES.followers.color} strokeWidth={2} strokeDasharray="2 3" dot={{ r: 3 }} />
@@ -107,9 +109,10 @@ export default function Growth() {
 }
 
 function DrillDown({ month, rows, onClose }) {
+  const tc = useThemeColors();
   const data = rows.filter((r) => r.month === month).sort((a, b) => b.views - a.views).map((r) => ({ name: r.ip.name, views: r.views, color: r.ip.hex }));
   return (
-    <div className="rounded-lg border border-[#E6E1D8] bg-white p-5" data-testid="growth-drill">
+    <div className="rounded-lg border border-line bg-white p-5" data-testid="growth-drill">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-[11px] font-semibold uppercase tracking-wider text-stone-500 font-mono">{monthLabel(month)} — IP breakdown</h2>
         <button onClick={onClose} className="text-xs text-stone-500 hover:text-stone-900">Close</button>
@@ -117,11 +120,11 @@ function DrillDown({ month, rows, onClose }) {
       <div style={{ height: Math.max(220, data.length * 36) }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} layout="vertical" margin={{ top: 0, right: 20, bottom: 0, left: 10 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#E7E5E4" horizontal={false} />
-            <XAxis type="number" tick={{ fill: "#78716C", fontSize: 11 }} tickFormatter={fmtCompact} />
-            <YAxis type="category" dataKey="name" tick={{ fill: "#44403C", fontSize: 12 }} width={150} />
-            <Tooltip formatter={(v) => [`${Number(v).toLocaleString()} views`, ""]} contentStyle={{ borderRadius: 8, fontSize: 12 }} />
-            <Bar dataKey="views" fill="#44403C" radius={[0, 4, 4, 0]} />
+            <CartesianGrid strokeDasharray="3 3" stroke={tc.grid} horizontal={false} />
+            <XAxis type="number" tick={{ fill: tc.axis, fontSize: 11 }} tickFormatter={fmtCompact} />
+            <YAxis type="category" dataKey="name" tick={{ fill: tc.axisStrong, fontSize: 12 }} width={150} />
+            <Tooltip formatter={(v) => [`${Number(v).toLocaleString()} views`, ""]} contentStyle={{ borderRadius: 8, border: `1px solid ${tc.grid}`, background: tc.tooltipBg, fontSize: 12 }} />
+            <Bar dataKey="views" fill={tc.axisStrong} radius={[0, 4, 4, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -133,7 +136,7 @@ function MonthSection({ month, rows }) {
   const [open, setOpen] = useState(true);
   const total = rows.reduce((s, r) => s + r.views, 0);
   return (
-    <div className="overflow-hidden rounded-lg border border-[#E6E1D8] bg-white" data-testid={`growth-month-${month}`}>
+    <div className="overflow-hidden rounded-lg border border-line bg-white" data-testid={`growth-month-${month}`}>
       <button onClick={() => setOpen(!open)} className="flex w-full items-center justify-between px-5 py-4 hover:bg-stone-50/70">
         <div className="flex items-center gap-3">
           {open ? <Icons.ChevronDown className="h-4 w-4 text-stone-400" /> : <Icons.ChevronRight className="h-4 w-4 text-stone-400" />}

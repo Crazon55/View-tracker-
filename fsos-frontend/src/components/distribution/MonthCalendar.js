@@ -107,8 +107,8 @@ export default function MonthCalendar({ onPlace, onDisplace }) {
           </span>
         </div>
 
-        <div className="overflow-hidden rounded-lg border border-[#E6E1D8] bg-white">
-          <div className="grid grid-cols-7 border-b border-stone-200 bg-[#F5F2EC]">
+        <div className="overflow-hidden rounded-lg border border-line bg-white">
+          <div className="grid grid-cols-7 border-b border-stone-200 bg-panel">
             {DOW.map((d) => (
               <div key={d} className="px-2 py-1.5 text-center text-[10px] font-medium uppercase tracking-wide text-stone-500">{d}</div>
             ))}
@@ -169,7 +169,7 @@ export default function MonthCalendar({ onPlace, onDisplace }) {
                         onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); openIdea(idea.id); } }}
                         className={cn(
                           "flex items-center gap-1 truncate rounded px-1 py-0.5 text-[9px]",
-                          published ? "bg-stone-800 text-white"
+                          published ? "bg-stone-800 text-stone-50"
                             : version.reviewStatus === "ready" ? "bg-emerald-100 text-emerald-800"
                               : "bg-indigo-100 text-indigo-800",
                         )}
@@ -211,7 +211,7 @@ function DayPanel({ date, ips, cell, onClose, onPlace }) {
   const { openIdea } = useUI();
 
   return (
-    <aside className="w-72 shrink-0 rounded-lg border border-[#E6E1D8] bg-white p-3" data-testid="day-panel">
+    <aside className="w-72 shrink-0 rounded-lg border border-line bg-white p-3" data-testid="day-panel">
       <div className="mb-2 flex items-start justify-between">
         <div>
           <p className="text-sm font-medium text-stone-800">{fmtDate(date)}</p>
@@ -245,7 +245,7 @@ function DayPanel({ date, ips, cell, onClose, onPlace }) {
                       key={placement.id}
                       onClick={() => openIdea(idea.id)}
                       className={cn("block w-full truncate rounded px-1 py-0.5 text-left text-[10px]",
-                        published ? "bg-stone-800 text-white" : "bg-stone-100 text-stone-700")}
+                        published ? "bg-stone-800 text-stone-50" : "bg-stone-100 text-stone-700")}
                     >
                       {idea.title}
                     </button>

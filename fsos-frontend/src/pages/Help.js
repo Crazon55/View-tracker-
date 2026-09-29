@@ -23,14 +23,14 @@ export default function Help() {
   return (
     <div className="p-6 max-w-4xl">
       <PageHeader title="Walkthrough & Help" icon={Icons.HelpCircle} subtitle="A guided tour of the intended end-to-end operating system. This is a local demo — role switching demonstrates workflows, not production authentication." />
-      <div className="rounded-lg border border-[#E6E1D8] bg-white p-5 mb-4">
+      <div className="rounded-lg border border-line bg-white p-5 mb-4">
         <h2 className="font-serif text-lg text-stone-900 mb-1">What FSOS is</h2>
         <p className="text-sm text-stone-600 leading-relaxed">Every idea has a visible journey: creation → production → approval → calendar placement → publication → performance. Two streams — <b>BO (Blue Ocean)</b>, researched in batches, and <b>HPN (Happenings)</b>, fast and collaborative — share one connected system. One person sees the work relevant to them; the founder understands the whole network without inspecting every post.</p>
       </div>
       <div className="space-y-2">
         {STEPS.map(([t, d], i) => (
-          <div key={i} className="rounded-lg border border-[#E6E1D8] bg-white p-4 flex gap-3">
-            <div className="h-7 w-7 shrink-0 rounded-full bg-stone-900 text-white grid place-items-center font-mono text-xs">{i + 1}</div>
+          <div key={i} className="rounded-lg border border-line bg-white p-4 flex gap-3">
+            <div className="h-7 w-7 shrink-0 rounded-full bg-stone-900 text-stone-50 grid place-items-center font-mono text-xs">{i + 1}</div>
             <div><div className="text-sm font-medium text-stone-900">{t}</div><p className="text-xs text-stone-600 mt-0.5 leading-relaxed">{d}</p></div>
           </div>
         ))}

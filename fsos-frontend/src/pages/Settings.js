@@ -86,7 +86,7 @@ function IPSettings() {
       )}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {shown.map((ip) => (
-          <div key={ip.id} className={cn("rounded-lg border bg-white p-4", ip.active ? "border-[#E6E1D8]" : "border-amber-300 bg-amber-50/30")} data-testid={`ip-setting-${ip.id}`}>
+          <div key={ip.id} className={cn("rounded-lg border bg-white p-4", ip.active ? "border-line" : "border-amber-300 bg-amber-50/30")} data-testid={`ip-setting-${ip.id}`}>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2"><span className="h-6 w-6 rounded-md" style={{ background: ip.hex }} /><div><div className="text-sm font-medium text-stone-900">{ip.name}</div><div className="font-mono text-[10px] text-stone-500">{ip.code}</div></div></div>
               <label className="flex items-center gap-2 text-xs text-stone-500">{ip.active ? "Active" : "Paused"}<Switch checked={ip.active} onCheckedChange={(c) => { actions.updateIP(ip.id, { active: c }); toast(c ? "IP active" : "IP paused — placements preserved & flagged"); }} data-testid={`ip-active-${ip.id}`} /></label>
@@ -146,7 +146,7 @@ function PeopleSettings() {
   return (
     <div>
       <div className="flex items-center justify-between mb-3"><p className="text-[11px] text-stone-500">Page access (who sees what, view vs edit) lives in <Link to="/users-roles" className="underline hover:text-stone-900">Users &amp; Roles</Link>.</p><Button size="sm" data-testid="add-user-btn" onClick={() => { setForm({ name: "", roles: [], streams: [], skills: "" }); setOpen(true); }} className="bg-stone-900"><Icons.UserPlus className="h-4 w-4 mr-1" /> Add teammate</Button></div>
-      <div className="rounded-lg border border-[#E6E1D8] bg-white overflow-hidden">
+      <div className="rounded-lg border border-line bg-white overflow-hidden">
         <table className="w-full text-xs"><thead><tr className="text-stone-400 border-b border-stone-200"><th className="text-left py-2 pl-3">Person</th><th className="text-left">Roles</th><th className="text-left">Streams</th><th className="text-left">Skills</th><th className="text-center">Active</th></tr></thead>
           <tbody>{db.users.map((u) => (
             <tr key={u.id} className={cn("border-b border-stone-100", !u.active && "opacity-60")} data-testid={`user-setting-${u.id}`}>
@@ -179,7 +179,7 @@ function RulesSettings() {
   const approvers = db.users.filter((u) => u.roles.some((r) => ["Founder/Admin", "COA", "Short-form Lead", "CS"].includes(r)));
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 max-w-4xl">
-      <div className="rounded-lg border border-[#E6E1D8] bg-white p-4">
+      <div className="rounded-lg border border-line bg-white p-4">
         <h3 className="text-sm font-semibold text-stone-900 mb-3">Approval owners</h3>
         <div className="space-y-3">
           <div><label className="text-xs text-stone-600">Current BO approver</label>
@@ -191,7 +191,7 @@ function RulesSettings() {
           </div>
         </div>
       </div>
-      <div className="rounded-lg border border-[#E6E1D8] bg-white p-4">
+      <div className="rounded-lg border border-line bg-white p-4">
         <h3 className="text-sm font-semibold text-stone-900 mb-3">Performance classification <span className="text-[10px] font-normal text-amber-700">(demo assumption)</span></h3>
         <div className="grid grid-cols-2 gap-3">
           <NumField label="Good ≥ % of target" value={s.thresholds.good} onChange={(v) => actions.updateSettings({ thresholds: { ...s.thresholds, good: v } })} />
@@ -201,7 +201,7 @@ function RulesSettings() {
         </div>
         <p className="mt-2 text-[10px] text-stone-400">Illustrative thresholds, not agreed Frontseat policy. Without a configured target, items show Unrated.</p>
       </div>
-      <div className="rounded-lg border border-[#E6E1D8] bg-white p-4 lg:col-span-2">
+      <div className="rounded-lg border border-line bg-white p-4 lg:col-span-2">
         <h3 className="text-sm font-semibold text-stone-900 mb-2">Optional calendar spacing</h3>
         <div className="flex items-center gap-3">
           <span className="text-xs text-stone-600">Minimum gap (minutes) between same-IP posts</span>

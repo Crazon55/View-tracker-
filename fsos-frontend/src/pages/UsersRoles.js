@@ -156,7 +156,7 @@ function PeopleAccess({ editable }) {
           const custom = !!db.access.people[u.id] && !roleDraft[u.id];
           const pending = !u.roles.length;
           return (
-            <div key={u.id} className={cn("rounded-lg border bg-white px-4 py-3", pending ? "border-amber-300" : "border-[#E6E1D8]", !u.active && "opacity-60")} data-testid={`ur-person-${u.id}`}>
+            <div key={u.id} className={cn("rounded-lg border bg-white px-4 py-3", pending ? "border-amber-300" : "border-line", !u.active && "opacity-60")} data-testid={`ur-person-${u.id}`}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex min-w-[200px] items-center gap-3">
                   <Avatar user={u} size={32} />
@@ -253,7 +253,7 @@ function PeopleAccess({ editable }) {
               </Button>
             )}
             <AlertDialogAction
-              className="bg-[#C0512F] hover:bg-[#a84325]"
+              className="bg-[#C0512F] text-white hover:bg-[#a84325]"
               data-testid="ur-confirm-remove"
               onClick={async () => {
                 const who = removing;
@@ -321,7 +321,7 @@ function RoleDefaults({ editable }) {
         const locked = r === LOCKED_ROLE;
         const tuned = !!db.access.roles[r];
         return (
-          <div key={r} className="rounded-lg border border-[#E6E1D8] bg-white px-4 py-3" data-testid={`ur-role-card-${r}`}>
+          <div key={r} className="rounded-lg border border-line bg-white px-4 py-3" data-testid={`ur-role-card-${r}`}>
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold text-stone-900">{r}</div>

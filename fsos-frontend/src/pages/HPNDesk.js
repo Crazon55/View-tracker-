@@ -23,7 +23,7 @@ export default function HPNDesk() {
       <PageHeader title="HPN Desk" icon={Icons.Flame}
         subtitle="Happenings — fast, collaborative, often in-person production. Target TAT 30 min from create to live.">
         {canCreateIdea(actingUser, "HPN") && (
-          <Button data-testid="hpn-create-btn" onClick={() => openCreate("HPN")} className="bg-[#C0512F] hover:bg-[#a84325]"><Icons.Plus className="h-4 w-4 mr-1" /> New HPN idea</Button>
+          <Button data-testid="hpn-create-btn" onClick={() => openCreate("HPN")} className="bg-[#C0512F] text-white hover:bg-[#a84325]"><Icons.Plus className="h-4 w-4 mr-1" /> New HPN idea</Button>
         )}
       </PageHeader>
 
@@ -86,7 +86,7 @@ function QuickRecordDrawer({ ideaId, onClose }) {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button data-testid="quick-record-submit" className="bg-[#C0512F] hover:bg-[#a84325]" onClick={() => {
+          <Button data-testid="quick-record-submit" className="bg-[#C0512F] text-white hover:bg-[#a84325]" onClick={() => {
             const url = linkUrl.trim();
             actions.hpnQuickRecord(idea.id, { ownerId: owner, links: url ? { type: "drive", url: externalHref(url), label: url } : null, reviewerId: reviewer, outcome });
             toast.success("HPN outcome recorded");

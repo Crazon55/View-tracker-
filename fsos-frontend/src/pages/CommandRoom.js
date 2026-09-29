@@ -8,8 +8,10 @@ import { IPBadge, PerfBadge, StreamBadge } from "../components/common/badges";
 import { networkStatus, yesterdayCohort, sixDayCycles, bankSummary, bankStockDays, productionIssues, ipById } from "../domain/selectors";
 import { fmtDate, addDays } from "../domain/dates";
 import { cn } from "../lib/utils";
+import { useThemeColors } from "../lib/theme";
 
 export default function CommandRoom() {
+  const tc = useThemeColors();
   const { db, today } = useWorkspace();
   const { openIdea, streamFilter } = useUI();
   const net = networkStatus(db, today, streamFilter);
@@ -117,8 +119,8 @@ export default function CommandRoom() {
           <div className="h-40">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 6, right: 4, left: -18, bottom: 0 }}>
-                <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#8C857B" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: "#8C857B" }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
+                <XAxis dataKey="name" tick={{ fontSize: 10, fill: tc.muted }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: tc.muted }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
                 <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} formatter={(v) => [v.toLocaleString(), "mean views"]} />
                 <Bar dataKey="mean" radius={[4, 4, 0, 0]}>
                   {chartData.map((d, i) => <Cell key={i} fill={d.inProgress ? "#D1CBBF" : "#1D4ED8"} />)}
@@ -169,7 +171,7 @@ function IssueBox({ label, items, openIdea, icon: Icon }) {
 
 function Panel({ title, subtitle, icon: Icon, children, className, ...rest }) {
   return (
-    <section className={cn("rounded-lg border border-[#E6E1D8] bg-white p-4", className)} {...rest}>
+    <section className={cn("rounded-lg border border-line bg-white p-4", className)} {...rest}>
       <div className="flex items-center gap-2 mb-3">
         {Icon && <Icon className="h-4 w-4 text-stone-500" />}
         <div>

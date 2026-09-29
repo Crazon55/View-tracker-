@@ -17,6 +17,7 @@ import { isAdmin } from "../domain/roles";
 import MonthCalendar from "../components/distribution/MonthCalendar";
 import BulkPlacement from "../components/distribution/BulkPlacement";
 import ReplacementDialog from "../components/distribution/ReplacementDialog";
+import { useThemeColors } from "../lib/theme";
 
 const TABS = [["bank", "Bank"], ["calendar", "Calendar"], ["matrix", "Idea Matrix"], ["today", "Today"]];
 
@@ -84,7 +85,7 @@ function Bank() {
           const pl = activePlacementOf(db, v.id);
           const ageDays = Math.max(0, -1 * (new Date(idea.approval.at || idea.createdAt) - new Date()) / 86400000 * -1);
           return (
-            <div key={v.id} className="rounded-lg border border-[#E6E1D8] bg-white p-3 flex items-center gap-3" data-testid={`bank-row-${v.id}`}>
+            <div key={v.id} className="rounded-lg border border-line bg-white p-3 flex items-center gap-3" data-testid={`bank-row-${v.id}`}>
               <IPBadge ip={ipById(db, v.ipId)} />
               <FormatBadge format={idea.format} />
               <button onClick={() => openIdea(idea.id)} className="flex-1 text-left text-sm text-stone-800 hover:underline truncate">{idea.title}</button>
@@ -101,6 +102,7 @@ function Bank() {
 
 /* ---------------- IDEA MATRIX ---------------- */
 function IdeaMatrix() {
+  const tc = useThemeColors();
   const { db } = useWorkspace();
   const { openIdea, streamFilter } = useUI();
   const [panel, setPanel] = useState(null); // versionId
@@ -120,13 +122,13 @@ function IdeaMatrix() {
             <Legend color="bg-stone-300" label="intended, not ready" /><Legend color="bg-emerald-500" label="ready" /><Legend color="bg-blue-600" label="planned" /><Legend color="bg-stone-800" label="published" />
           </div>
         </div>
-        <div className="overflow-auto fsos-scroll rounded-lg border border-[#E6E1D8] bg-white max-h-[70vh]">
+        <div className="overflow-auto fsos-scroll rounded-lg border border-line bg-white max-h-[70vh]">
           <table className="text-xs border-collapse" data-testid="idea-matrix">
             <thead className="sticky top-0 z-20">
               <tr>
-                <th className="sticky left-0 z-30 bg-[#F5F2EC] border-b border-r border-stone-200 px-3 py-2 text-left font-medium text-stone-500 min-w-[240px]">Idea</th>
+                <th className="sticky left-0 z-30 bg-panel border-b border-r border-stone-200 px-3 py-2 text-left font-medium text-stone-500 min-w-[240px]">Idea</th>
                 {visibleIps(db).map((ip) => (
-                  <th key={ip.id} className="bg-[#F5F2EC] border-b border-stone-200 px-2 py-2 min-w-[64px]">
+                  <th key={ip.id} className="bg-panel border-b border-stone-200 px-2 py-2 min-w-[64px]">
                     <div className="flex flex-col items-center gap-1"><span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: ip.hex }} /><span className="font-mono text-[10px] text-stone-600">{ip.code}</span></div>
                   </th>
                 ))}
@@ -150,8 +152,8 @@ function IdeaMatrix() {
                     return (
                       <td key={ip.id} className="border-b border-stone-100 p-1 text-center">
                         <button data-testid={`matrix-cell-${v.id}`} onClick={() => setPanel(v.id)} className="mx-auto flex h-8 w-full max-w-[56px] items-center justify-center rounded-md border transition-colors hover:ring-2 hover:ring-stone-300"
-                          style={{ background: pub ? "#1c1917" : pl ? "#2563eb" : v.reviewStatus === "ready" ? "#10b981" : "#d6d3d1", borderColor: "transparent" }}>
-                          {pub ? <Icons.Check className="h-4 w-4 text-white" /> : pl ? <span className="text-[9px] font-medium text-white">{fmtDate(pl.date).split(" ")[0]}</span> : v.reviewStatus === "ready" ? <Icons.Box className="h-3.5 w-3.5 text-white" /> : <span className="text-[8px] text-stone-500">···</span>}
+                          style={{ background: pub ? tc.ink : pl ? "#2563eb" : v.reviewStatus === "ready" ? "#10b981" : tc.neutral, borderColor: "transparent" }}>
+                          {pub ? <Icons.Check className="h-4 w-4" style={{ color: tc.onInk }} /> : pl ? <span className="text-[9px] font-medium text-white">{fmtDate(pl.date).split(" ")[0]}</span> : v.reviewStatus === "ready" ? <Icons.Box className="h-3.5 w-3.5 text-white" /> : <span className="text-[8px] text-stone-500">···</span>}
                         </button>
                       </td>
                     );
@@ -182,7 +184,7 @@ function CellPanel({ versionId, onClose }) {
   const canDistribute = actingUser.roles.includes("COC") || isAdmin(actingUser);
   const canConfirm = !pub && pl && canDistribute;
   return (
-    <div className="w-80 shrink-0 rounded-lg border border-[#E6E1D8] bg-[#FAF8F5] p-4 max-h-[70vh] overflow-auto fsos-scroll" data-testid="matrix-side-panel">
+    <div className="w-80 shrink-0 rounded-lg border border-line bg-canvas p-4 max-h-[70vh] overflow-auto fsos-scroll" data-testid="matrix-side-panel">
       <div className="flex items-center justify-between mb-3">
         <IPBadge ip={ip} showName />
         <button onClick={onClose} className="text-stone-400 hover:text-stone-700"><Icons.X className="h-4 w-4" /></button>
@@ -301,7 +303,7 @@ function CalendarView() {
     <div>
       <div className="inline-flex rounded-md border border-stone-200 bg-white p-0.5 mb-3">
         {[["network", "Network"], ["ip", "Individual IP"]].map(([v, l]) => (
-          <button key={v} data-testid={`calendar-mode-${v}`} onClick={() => setMode(v)} className={cn("px-3 py-1 text-xs font-medium rounded transition-colors", mode === v ? "bg-stone-900 text-white" : "text-stone-500 hover:text-stone-800")}>{l}</button>
+          <button key={v} data-testid={`calendar-mode-${v}`} onClick={() => setMode(v)} className={cn("px-3 py-1 text-xs font-medium rounded transition-colors", mode === v ? "bg-stone-900 text-stone-50" : "text-stone-500 hover:text-stone-800")}>{l}</button>
         ))}
       </div>
       {mode === "network" ? <NetworkCalendar /> : <IPWeekView />}
@@ -341,7 +343,7 @@ function IPWeekView() {
           pls.forEach((p) => { const v = db.versions.find((x) => x.id === p.versionId); const idea = v && ideaById(db, v.ideaId); if (idea) { const fc = formatCounts(idea.format); planP += fc.posts; planR += fc.reels; } });
           const shortfall = planP < (ip?.floors.posts || 0) || planR < (ip?.floors.reels || 0);
           return (
-            <div key={d} className={cn("rounded-lg border bg-white p-2 min-h-[160px]", d === today ? "border-blue-300" : "border-[#E6E1D8]")} data-testid={`ipweek-day-${d}`}>
+            <div key={d} className={cn("rounded-lg border bg-white p-2 min-h-[160px]", d === today ? "border-blue-300" : "border-line")} data-testid={`ipweek-day-${d}`}>
               <div className="flex items-center justify-between mb-1.5 pb-1.5 border-b border-stone-100">
                 <div><div className="text-[10px] text-stone-400">{weekdayShort(d)}</div><div className="font-mono text-[11px] text-stone-700">{fmtDate(d)}</div></div>
                 <div className={cn("text-[9px] text-right", shortfall ? "text-amber-700" : "text-stone-400")}>{planP}P·{planR}R<div className="text-stone-300">/{ip?.floors.posts}·{ip?.floors.reels}</div></div>
@@ -359,7 +361,7 @@ function IPWeekView() {
                       <div className="flex items-center gap-1 mb-0.5"><StreamBadge stream={idea.stream} /><FormatBadge format={idea.format} />{p.time && <span className="font-mono text-[9px] text-stone-500 ml-auto">{p.time}</span>}</div>
                       <button onClick={() => openIdea(idea.id)} className="text-left text-[11px] text-stone-800 leading-tight line-clamp-2 hover:underline">{idea.title}</button>
                       <div className="mt-1 flex items-center gap-1 flex-wrap">
-                        {pub ? <span className="text-[9px] rounded px-1 py-0.5 bg-stone-800 text-white">published</span> : v.reviewStatus === "ready" ? <span className="text-[9px] rounded px-1 py-0.5 bg-emerald-100 text-emerald-800">ready</span> : <span className="text-[9px] rounded px-1 py-0.5 bg-indigo-100 text-indigo-800">pending prod</span>}
+                        {pub ? <span className="text-[9px] rounded px-1 py-0.5 bg-stone-800 text-stone-50">published</span> : v.reviewStatus === "ready" ? <span className="text-[9px] rounded px-1 py-0.5 bg-emerald-100 text-emerald-800">ready</span> : <span className="text-[9px] rounded px-1 py-0.5 bg-indigo-100 text-indigo-800">pending prod</span>}
                         {p.exceptionReason && <span className="text-[9px] rounded px-1 py-0.5 bg-amber-100 text-amber-800" title={p.exceptionReason}>exception</span>}
                         {dups.length > 0 && !p.exceptionReason && (
                           <span className="inline-flex items-center gap-0.5 text-[9px] rounded px-1 py-0.5 bg-rose-100 text-rose-800" title="Same idea also placed on another IP this date — duplication needs an authorised exception">
@@ -429,12 +431,12 @@ function NetworkCalendar() {
           <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setStart(today)}>Today</Button>
           <span className="ml-auto text-[10px] text-stone-400">Rolling 10-day network view · IST</span>
         </div>
-        <div className="overflow-auto fsos-scroll rounded-lg border border-[#E6E1D8] bg-white max-h-[68vh]">
+        <div className="overflow-auto fsos-scroll rounded-lg border border-line bg-white max-h-[68vh]">
           <table className="text-xs border-collapse" data-testid="network-calendar">
             <thead className="sticky top-0 z-20">
               <tr>
-                <th className="sticky left-0 z-30 bg-[#F5F2EC] border-b border-r border-stone-200 px-3 py-2 text-left min-w-[120px]">IP</th>
-                {days.map((d) => <th key={d} className={cn("bg-[#F5F2EC] border-b border-stone-200 px-2 py-2 min-w-[92px]", d === today && "bg-blue-50")}><div className="text-[10px] text-stone-500">{weekdayShort(d)}</div><div className="font-mono text-[11px] text-stone-700">{fmtDate(d)}</div></th>)}
+                <th className="sticky left-0 z-30 bg-panel border-b border-r border-stone-200 px-3 py-2 text-left min-w-[120px]">IP</th>
+                {days.map((d) => <th key={d} className={cn("bg-panel border-b border-stone-200 px-2 py-2 min-w-[92px]", d === today && "bg-blue-50")}><div className="text-[10px] text-stone-500">{weekdayShort(d)}</div><div className="font-mono text-[11px] text-stone-700">{fmtDate(d)}</div></th>)}
               </tr>
             </thead>
             <tbody>
@@ -459,7 +461,7 @@ function NetworkCalendar() {
                           {pls.slice(0, 3).map((p) => { const v = db.versions.find((x) => x.id === p.versionId); const idea = ideaById(db, v?.ideaId); const isPub = publicationOf(db, v?.id); const isBO = idea?.stream === "BO"; return (
                             <button key={p.id} data-testid={`cal-chip-${p.id}`}
                               onClick={(e) => { e.stopPropagation(); if (isBO && !isPub) setDisplace({ boVersionId: v.id, ipId: ip.id, date: d }); else openIdea(idea.id); }}
-                              className={cn("block w-full text-left rounded px-1 py-0.5 text-[9px] truncate transition-colors hover:ring-1 hover:ring-stone-400", isPub ? "bg-stone-800 text-white" : v?.reviewStatus === "ready" ? "bg-emerald-100 text-emerald-800" : "bg-indigo-100 text-indigo-800")} title={isBO && !isPub ? `${idea?.title} — click to displace with HPN` : idea?.title}>{idea?.title}</button>
+                              className={cn("block w-full text-left rounded px-1 py-0.5 text-[9px] truncate transition-colors hover:ring-1 hover:ring-stone-400", isPub ? "bg-stone-800 text-stone-50" : v?.reviewStatus === "ready" ? "bg-emerald-100 text-emerald-800" : "bg-indigo-100 text-indigo-800")} title={isBO && !isPub ? `${idea?.title} — click to displace with HPN` : idea?.title}>{idea?.title}</button>
                           ); })}
                           {pls.length > 3 && <div className="text-[9px] text-stone-400">+{pls.length - 3} more</div>}
                           {reservedR > 0 && <div className="text-[9px] text-amber-600">{reservedR}R HPN reserve</div>}
@@ -490,7 +492,7 @@ function BankDrawer({ sel, onClose }) {
     return matchesStream(ideaById(db, v.ideaId), streamFilter);
   }).slice(0, 4);
   return (
-    <div className="w-72 shrink-0 rounded-lg border border-[#E6E1D8] bg-[#FAF8F5] p-3 max-h-[68vh] overflow-auto fsos-scroll" data-testid="bank-drawer">
+    <div className="w-72 shrink-0 rounded-lg border border-line bg-canvas p-3 max-h-[68vh] overflow-auto fsos-scroll" data-testid="bank-drawer">
       <div className="flex items-center justify-between mb-2"><div className="text-xs font-medium text-stone-700 flex items-center gap-1.5"><IPBadge ip={ip} /> {fmtDate(sel.date)}</div><button onClick={onClose} className="text-stone-400 hover:text-stone-700"><Icons.X className="h-4 w-4" /></button></div>
       <p className="text-[10px] text-stone-400 mb-2">Eligible ready versions for this IP. Click to place. Calendar can also hold versions still in production, shown pending.</p>
       {eligible.map((v) => { const idea = ideaById(db, v.ideaId); return (
@@ -523,7 +525,7 @@ function Today() {
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-      <div className="rounded-lg border border-[#E6E1D8] bg-white p-4">
+      <div className="rounded-lg border border-line bg-white p-4">
         <h3 className="text-sm font-semibold text-stone-900 mb-3">Required vs planned vs ready vs published — {fmtDate(today)}</h3>
         <table className="w-full text-xs" data-testid="today-table">
           <thead><tr className="text-stone-400 border-b border-stone-200"><th className="text-left py-1.5">IP</th><th className="text-center">Req</th><th className="text-center">Planned</th><th className="text-center">Ready</th><th className="text-center">Published</th></tr></thead>
@@ -533,7 +535,7 @@ function Today() {
         </table>
         <p className="mt-2 text-[10px] text-stone-400">Per-format floor flags: surplus reels don't cover missing Posts. During the day we show remaining, not a failed label.</p>
       </div>
-      <div className="rounded-lg border border-[#E6E1D8] bg-white p-4">
+      <div className="rounded-lg border border-line bg-white p-4">
         <h3 className="text-sm font-semibold text-stone-900 mb-3">Execution list</h3>
         <div className="space-y-2 max-h-[60vh] overflow-auto fsos-scroll">
           {execItems.map(({ p, v }) => { const idea = ideaById(db, v.ideaId); const pub = publicationOf(db, v.id); const conflicts = sameDayConflict(db, p); return (
@@ -575,7 +577,7 @@ function ConflictRow({ placement, conflicts, today }) {
         ) : (
           <div className="mt-1.5 flex items-center gap-1.5">
             <Input value={reason} onChange={(e) => setReason(e.target.value)} className="h-7 text-xs" placeholder="Reason (recorded)" />
-            <Button size="sm" className="h-7 text-xs bg-rose-700 hover:bg-rose-800" onClick={() => { actions.authorizeException(placement.id, reason); toast.success("Exception authorised — actor & reason recorded"); setOpen(false); }}>Record</Button>
+            <Button size="sm" className="h-7 text-xs bg-rose-700 text-white hover:bg-rose-800" onClick={() => { actions.authorizeException(placement.id, reason); toast.success("Exception authorised — actor & reason recorded"); setOpen(false); }}>Record</Button>
           </div>
         )
       ) : <div className="mt-1 text-[10px] text-stone-400">Only authorised editorial users can approve exceptions; COC applies ordinary scheduling changes.</div>}
@@ -621,7 +623,7 @@ function RecordLive({ versionId }) {
 }
 
 /* ---- small ---- */
-function Stat({ label, value, note }) { return <div className="rounded-lg border border-[#E6E1D8] bg-white p-3"><div className="text-[10px] uppercase tracking-wide text-stone-400">{label}</div><div className="font-serif text-2xl text-stone-900">{value}</div>{note && <div className="text-[10px] text-stone-400">{note}</div>}</div>; }
+function Stat({ label, value, note }) { return <div className="rounded-lg border border-line bg-white p-3"><div className="text-[10px] uppercase tracking-wide text-stone-400">{label}</div><div className="font-serif text-2xl text-stone-900">{value}</div>{note && <div className="text-[10px] text-stone-400">{note}</div>}</div>; }
 function FSel({ value, onChange, options }) { return <Select value={value} onValueChange={onChange}><SelectTrigger className="h-8 w-auto min-w-[110px] bg-white text-xs"><SelectValue /></SelectTrigger><SelectContent>{options.map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent></Select>; }
 function Legend({ color, label }) { return <span className="inline-flex items-center gap-1"><span className={cn("h-2.5 w-2.5 rounded-[3px]", color)} />{label}</span>; }
 function Empty({ text }) { return <div className="rounded-lg border border-dashed border-stone-300 bg-white p-8 text-center text-sm text-stone-400">{text}</div>; }

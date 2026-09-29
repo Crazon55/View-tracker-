@@ -234,7 +234,7 @@ export default function NewsFeed() {
           <span className="mr-1 font-mono text-[10px] uppercase tracking-[.15em] text-stone-400">Topic:</span>
           {TOPICS.map((t) => (
             <button key={t.key} onClick={() => setTopic(t.key)} data-testid={`news-topic-${t.key}`}
-              className={cn("rounded-full border px-2.5 py-0.5 text-xs transition-colors", topic === t.key ? "border-stone-900 bg-stone-900 text-white" : "border-stone-200 bg-white text-stone-600 hover:border-stone-300")}>
+              className={cn("rounded-full border px-2.5 py-0.5 text-xs transition-colors", topic === t.key ? "border-stone-900 bg-stone-900 text-stone-50" : "border-stone-200 bg-white text-stone-600 hover:border-stone-300")}>
               {t.label}{t.key !== "all" && topicCounts[t.key] > 0 && <span className="ml-1 font-mono text-[10px] opacity-70">({topicCounts[t.key]})</span>}
             </button>
           ))}
@@ -250,7 +250,7 @@ export default function NewsFeed() {
       </div>
 
       {filtered.length === 0 ? (
-        <div className="rounded-lg border border-[#E6E1D8] bg-white p-12 text-center">
+        <div className="rounded-lg border border-line bg-white p-12 text-center">
           {tab === "Saved"
             ? (<><Icons.BookmarkCheck className="mx-auto mb-3 h-8 w-8 text-stone-300" /><p className="font-serif text-lg text-stone-800">No saved items</p><p className="mt-1 text-sm text-stone-500">Save any article or post to bookmark it here.</p></>)
             : (<><Icons.Newspaper className="mx-auto mb-3 h-8 w-8 text-stone-300" /><p className="font-serif text-lg text-stone-800">No items in circulation</p><p className="mt-1 text-sm text-stone-500">Nothing matches your filters.</p></>)}
@@ -296,7 +296,7 @@ function FeedCard({ item, lead, n, vote, isSaved, editable, onYes, onNo, onSave,
   const kws = matchedKeywords(item);
   const btn = "inline-flex items-center justify-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1 text-[11px] text-stone-600 transition-colors hover:border-stone-400 hover:text-stone-900";
   return (
-    <article className={cn("relative rounded-lg border bg-white p-5", lead ? "border-stone-300 md:col-span-2" : "border-[#E6E1D8]", vote === "yes" && "ring-1 ring-emerald-300")} data-testid={`news-card-${n}`}>
+    <article className={cn("relative rounded-lg border bg-white p-5", lead ? "border-stone-300 md:col-span-2" : "border-line", vote === "yes" && "ring-1 ring-emerald-300")} data-testid={`news-card-${n}`}>
       {!lead && <span className="absolute right-4 top-3 font-serif text-xs italic text-stone-300" aria-hidden>§{n}</span>}
       {topic && <p className="mb-1 font-mono text-[10px] font-semibold uppercase tracking-[.2em] text-stone-400">{TOPICS.find((t) => t.key === topic).label}</p>}
       <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-stone-500">

@@ -20,6 +20,8 @@ import SixDayTracker from "@/pages/SixDayTracker";
 import Growth from "@/pages/Growth";
 import UsersRoles from "@/pages/UsersRoles";
 import { Toaster } from "@/components/ui/sonner";
+import { ThemeProvider } from "next-themes";
+import { THEME_STORAGE_KEY } from "@/lib/theme";
 
 // Adopt any session in the URL or storage before the first render, and let the API
 // layer ask for the token. Both run once, at module load, so no request goes out
@@ -40,6 +42,10 @@ function Workspace({ children }) {
 
 function App() {
   return (
+    // Outermost, so the sign-in and loading screens follow the theme too. Light by
+    // default; the device's own dark setting is deliberately not followed — it's the
+    // person's pick in the app that counts.
+    <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} storageKey={THEME_STORAGE_KEY} disableTransitionOnChange>
     <WorkspaceProvider>
       <Workspace>
       <BrowserRouter>
@@ -65,6 +71,7 @@ function App() {
       </Workspace>
       <Toaster position="bottom-center" richColors />
     </WorkspaceProvider>
+    </ThemeProvider>
   );
 }
 

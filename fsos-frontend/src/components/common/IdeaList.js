@@ -88,7 +88,7 @@ export default function IdeaList({ stream }) {
           const owner = userById(db, idea.productionOwnerId);
           return (
             <button key={idea.id} data-testid={`idea-row-${idea.id}`} onClick={() => openIdea(idea.id)}
-              className="w-full text-left rounded-lg border border-[#E6E1D8] bg-white p-3.5 hover:border-stone-400 hover:shadow-sm transition-all">
+              className="w-full text-left rounded-lg border border-line bg-white p-3.5 hover:border-stone-400 hover:shadow-sm transition-all">
               <div className="flex items-center gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">

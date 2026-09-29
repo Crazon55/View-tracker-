@@ -138,7 +138,7 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
               <p className="text-[10px] text-stone-400 mt-0.5 mb-2">A hook field appears for each selected IP.</p>
               <div className="space-y-2.5">
                 {selectedIps.map((ip) => (
-                  <div key={ip.id} className="rounded-lg border border-[#E6E1D8] bg-[#FAF8F5] p-3" data-testid={`create-ip-hook-${ip.id}`}>
+                  <div key={ip.id} className="rounded-lg border border-line bg-canvas p-3" data-testid={`create-ip-hook-${ip.id}`}>
                     <div className="mb-2"><IPBadge ip={ip} showName /></div>
                     <label className="text-[10px] uppercase tracking-wide text-stone-400">Hook · {ip.code}</label>
                     <Input

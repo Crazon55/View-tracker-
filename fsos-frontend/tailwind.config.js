@@ -1,4 +1,6 @@
 /** @type {import('tailwindcss').Config} */
+const palette = require("./theme/palette");
+
 module.exports = {
     // `overline` is a Tailwind utility; without this an app's own eyebrow-label class draws a line above the text.
     blocklist: ["overline"],
@@ -14,7 +16,10 @@ module.exports = {
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)'
       },
+      // Light and dark come from the same class names: the greys, `bg-white` and the
+      // colour families read CSS variables that flip under `.dark` (see theme/palette.js).
       colors: {
+        ...palette.colors,
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
         card: {
@@ -56,6 +61,7 @@ module.exports = {
           '5': 'hsl(var(--chart-5))'
         }
       },
+      backgroundColor: palette.backgroundColor,
       keyframes: {
         'accordion-down': {
           from: {
@@ -80,5 +86,5 @@ module.exports = {
       }
     }
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [require("tailwindcss-animate"), palette.plugin],
 };
