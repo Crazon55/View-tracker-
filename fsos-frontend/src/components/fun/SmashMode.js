@@ -1,14 +1,13 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import * as Icons from "lucide-react";
-import html2canvas from "html2canvas";
 
 /**
  * Smash mode: a stickman with a jetpack and too many weapons, loose on the page.
  *
  * How it works
  * ------------
- * When it starts, the visible page is photographed (html2canvas) and every visible
+ * When it starts, the visible page is photographed (see snapshotPage) and every visible
  * thing on it — cards, badges, buttons, icons, and each individual letter — becomes a
  * "paper block" cut from that photo. From then on the game is one canvas laid over the
  * page: a paper background, the blocks on top, and the pieces that come off them.
@@ -124,6 +123,57 @@ function jagged(g, x, y, r, n = 22) {
     if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
   }
   g.closePath();
+}
+
+// ── photographing the page ──────────────────────────────────────────────────────
+// The browser draws the page for us: a copy of it goes into an SVG <foreignObject>
+// with the page's own stylesheets, and that SVG is drawn onto a canvas. It is the same
+// renderer as the screen, so text and layout land exactly where they are live, and it
+// takes well under a tenth of a second. (html2canvas did this in two to three.)
+//
+// The canvas it produces can't be read back pixel by pixel — the game never needs to,
+// it only ever draws it.
+async function snapshotPage(W, H, SP, root) {
+  const css = [...document.styleSheets].map((sheet) => {
+    try { return [...sheet.cssRules].map((rule) => rule.cssText).join("\n"); } catch (e) { return ""; }
+  }).join("\n");
+  const src = document.body;
+  const copy = src.cloneNode(true);
+  // Things the copy has to be told: where scroll boxes are scrolled to, and what's
+  // typed into fields (a clone only keeps the markup).
+  const live = src.querySelectorAll("*"), cloned = copy.querySelectorAll("*");
+  for (let i = 0; i < live.length && i < cloned.length; i++) {
+    const el = live[i], cl = cloned[i];
+    if (el.scrollTop || el.scrollLeft) {
+      cl.style.setProperty("overflow", "hidden", "important");
+      for (const kid of cl.children) kid.style.translate = `${-el.scrollLeft}px ${-el.scrollTop}px`;
+    }
+    if (el.tagName === "INPUT") cl.setAttribute("value", el.value);
+    if (el.tagName === "TEXTAREA") cl.textContent = el.value;
+  }
+  const ourIndex = [...src.children].indexOf(root);
+  if (ourIndex >= 0) copy.children[ourIndex].remove();
+  copy.querySelectorAll("script, noscript").forEach((n) => n.remove());
+  if (window.scrollX || window.scrollY) copy.style.translate = `${-window.scrollX}px ${-window.scrollY}px`;
+
+  // An <html> element as the wrapper, so the page's html { … } rules (line height,
+  // font) apply exactly as they do live, with the page's theme class on it.
+  const noBars = "*{scrollbar-width:none!important}*::-webkit-scrollbar{display:none!important}";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><foreignObject width="100%" height="100%">`
+    + `<html xmlns="http://www.w3.org/1999/xhtml" class="${document.documentElement.className}" style="width:${W}px;height:${H}px;overflow:hidden">`
+    + `<head><style><![CDATA[${css.replace(/]]>/g, "]] >")}${noBars}]]></style></head>`
+    + `${new XMLSerializer().serializeToString(copy)}</html></foreignObject></svg>`;
+  const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+  try {
+    const img = new Image();
+    await new Promise((ok, fail) => { img.onload = ok; img.onerror = fail; img.src = url; });
+    const shot = document.createElement("canvas");
+    shot.width = Math.round(W * SP); shot.height = Math.round(H * SP);
+    shot.getContext("2d").drawImage(img, 0, 0, shot.width, shot.height);
+    return shot;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 // ── reading the page into blocks ───────────────────────────────────────────────
@@ -282,28 +332,7 @@ export default function SmashMode({ onExit }) {
       const blocks = collectBlocks(W, H, isOurs);
       let shot;
       try {
-        // foreignObjectRendering: the browser lays out and draws the copy itself, so
-        // text lands exactly where it is on screen (html2canvas's own renderer puts it
-        // a few pixels low, which clipped letters cut from the photo).
-        shot = await html2canvas(document.body, {
-          backgroundColor: null, scale: SP, logging: false, useCORS: true, foreignObjectRendering: true,
-          x: window.scrollX, y: window.scrollY, width: W, height: H,
-          windowWidth: document.documentElement.clientWidth, windowHeight: H,
-          ignoreElements: (el) => el === root || el.tagName === "NOSCRIPT",
-          // The browser draws this copy with scripts off, which would show the page's
-          // <noscript> line and push everything down; the copy drops it.
-          // No scrollbars in the copy either: the browser draws them there unstyled, where
-          // they take room the live page doesn't give them. overflow:hidden drops the bar
-          // and keeps the content exactly where it was.
-          onclone: (doc) => {
-            doc.querySelectorAll("noscript").forEach((n) => n.remove());
-            const view = doc.defaultView;
-            for (const el of doc.body.querySelectorAll("*")) {
-              const st = view.getComputedStyle(el);
-              if (/(auto|scroll)/.test(st.overflowX + st.overflowY)) el.style.setProperty("overflow", "hidden", "important");
-            }
-          },
-        });
+        shot = await snapshotPage(W, H, SP, root);
       } catch (err) {
         if (alive) setPhase("failed");
         return;
@@ -393,6 +422,21 @@ function startGame({ ctx, W, H, dpr, SP, shot, blocks, keys, mouse, setSmashed, 
     }
   }
 
+  // Pieces that have settled on the floor are painted here once and dropped from the
+  // list, instead of being redrawn every frame for the rest of the game.
+  const rubble = document.createElement("canvas");
+  rubble.width = W * SP; rubble.height = H * SP;
+  const rb = rubble.getContext("2d");
+  rb.setTransform(SP, 0, 0, SP, 0, 0);
+  const drawPiece = (g, p) => {
+    g.save();
+    g.translate(p.x, p.y); g.rotate(p.rot);
+    g.fillStyle = "rgba(0,0,0,0.16)";
+    g.fillRect(-p.w / 2 + 1.5, -p.h / 2 + 2, p.w, p.h);
+    g.drawImage(p.img, p.sx, p.sy, p.sw, p.sh, -p.w / 2, -p.h / 2, p.w, p.h);
+    g.restore();
+  };
+
   // What the stickman touches.
   const mask = new Uint8Array(W * H);
   const fillMask = (l, t, r, b, v) => {
@@ -441,7 +485,10 @@ function startGame({ ctx, W, H, dpr, SP, shot, blocks, keys, mouse, setSmashed, 
   // ── state ──
   let pieces = [], particles = [], bullets = [], rockets = [], bombs = [], rings = [], smoke = [], flames = [], swings = [], flashes = [];
   let count = 0, shake = 0, t = 0, fireCd = 0, rpgCd = 0, rayCd = 0, weaponNow = "blaster", beam = null;
-  const bump = (n = 1) => { count += n; setSmashed(count); };
+  // The counter is React state; updating it on every break re-renders the bar dozens of
+  // times inside one explosion. Ten times a second is plenty.
+  let shown = 0, hudAt = 0;
+  const bump = (n = 1) => { count += n; };
 
   const player = { x: W / 2, y: 0, vx: 0, vy: 0, onGround: false, jumps: 0, face: 1, phase: 0, dropUntil: 0, fuel: FUEL, jetting: false, climbing: false };
   // Start standing on the first thing below the top bar in the middle of the screen.
@@ -472,11 +519,26 @@ function startGame({ ctx, W, H, dpr, SP, shot, blocks, keys, mouse, setSmashed, 
     fillMask(b.l, b.t, b.r, b.b, back ? levelOf(back) : PAPER);
     kill(b);
   };
+  // Debris textures are packed into a few shared sheets rather than one new canvas per
+  // broken letter — an explosion in a paragraph would otherwise make hundreds at once.
+  const ATLAS = 1024;
+  let sheetNow = null, ax = 0, ay = 0, rowH = 0;
   const cut = (l, t, w, h) => {
-    const c = document.createElement("canvas");
-    c.width = Math.max(1, Math.ceil(w * SP)); c.height = Math.max(1, Math.ceil(h * SP));
-    c.getContext("2d").drawImage(page, l * SP, t * SP, w * SP, h * SP, 0, 0, w * SP, h * SP);
-    return c;
+    const pw = Math.max(1, Math.ceil(w * SP)), ph = Math.max(1, Math.ceil(h * SP));
+    let img, ox = 0, oy = 0;
+    if (pw > ATLAS || ph > ATLAS) {
+      img = document.createElement("canvas"); img.width = pw; img.height = ph;
+    } else {
+      if (!sheetNow || ax + pw > ATLAS) { ax = 0; ay += rowH; rowH = 0; }
+      if (!sheetNow || ay + ph > ATLAS) {
+        sheetNow = document.createElement("canvas"); sheetNow.width = ATLAS; sheetNow.height = ATLAS;
+        ax = 0; ay = 0; rowH = 0;
+      }
+      img = sheetNow; ox = ax; oy = ay;
+      ax += pw + 1; rowH = Math.max(rowH, ph + 1);
+    }
+    img.getContext("2d").drawImage(page, l * SP, t * SP, w * SP, h * SP, ox, oy, w * SP, h * SP);
+    return { img, ox, oy };
   };
   const addPiece = (p) => {
     pieces.push(p);
@@ -486,7 +548,7 @@ function startGame({ ctx, W, H, dpr, SP, shot, blocks, keys, mouse, setSmashed, 
   const shatter = (b, hx, hy, power = 1) => {
     if (!b.alive) return;
     const w = b.r - b.l, h = b.b - b.t;
-    const img = cut(b.l, b.t, w, h);
+    const { img, ox, oy } = cut(b.l, b.t, w, h);
     const size = b.kind === "letter" ? Math.max(3, Math.min(w, h) / 2) : Math.max(6, Math.min(34, Math.sqrt(b.area / 14)));
     const nx = Math.max(1, Math.min(10, Math.round(w / size))), ny = Math.max(1, Math.min(8, Math.round(h / size)));
     const xs = [0], ys = [0];
@@ -500,7 +562,7 @@ function startGame({ ctx, W, H, dpr, SP, shot, blocks, keys, mouse, setSmashed, 
       const dx = cx - hx, dy = cy - hy, d = Math.hypot(dx, dy) || 1;
       const f = (180 + Math.random() * 320) * power;
       addPiece({
-        img, sx: px * SP, sy: py * SP, sw: pw * SP, sh: ph * SP, x: cx, y: cy, w: pw, h: ph,
+        img, sx: ox + px * SP, sy: oy + py * SP, sw: pw * SP, sh: ph * SP, x: cx, y: cy, w: pw, h: ph,
         vx: (dx / d) * f + (Math.random() - 0.5) * 140, vy: (dy / d) * f - 160 - Math.random() * 220 * power,
         rot: 0, vr: (Math.random() - 0.5) * 12, rest: false, age: 0,
       });
@@ -512,19 +574,19 @@ function startGame({ ctx, W, H, dpr, SP, shot, blocks, keys, mouse, setSmashed, 
   const knockLoose = (b, hx, hy, power) => {
     if (!b.alive) return;
     const w = b.r - b.l, h = b.b - b.t;
-    const img = cut(b.l, b.t, w, h);
+    const { img, ox, oy } = cut(b.l, b.t, w, h);
     const cx = b.l + w / 2, cy = b.t + h / 2, dx = cx - hx, dy = cy - hy, d = Math.hypot(dx, dy) || 1;
-    addPiece({ img, sx: 0, sy: 0, sw: w * SP, sh: h * SP, x: cx, y: cy, w, h, vx: (dx / d) * power, vy: (dy / d) * power - 200, rot: 0, vr: (Math.random() - 0.5) * 8, rest: false, age: 0 });
+    addPiece({ img, sx: ox, sy: oy, sw: w * SP, sh: h * SP, x: cx, y: cy, w, h, vx: (dx / d) * power, vy: (dy / d) * power - 200, rot: 0, vr: (Math.random() - 0.5) * 8, rest: false, age: 0 });
     erase(b);
     bump();
   };
   const dust = (x, y, r, n) => {
     const s = Math.max(2, r / 3);
-    const img = cut(x - r, y - r, r * 2, r * 2);
+    const { img, ox, oy } = cut(x - r, y - r, r * 2, r * 2);
     for (let i = 0; i < n; i++) {
       const px = Math.random() * (r * 2 - s), py = Math.random() * (r * 2 - s);
       const a = Math.random() * Math.PI * 2, f = 120 + Math.random() * 280;
-      addPiece({ img, sx: px * SP, sy: py * SP, sw: s * SP, sh: s * SP, x: x - r + px + s / 2, y: y - r + py + s / 2, w: s, h: s, vx: Math.cos(a) * f, vy: Math.sin(a) * f - 150, rot: 0, vr: (Math.random() - 0.5) * 16, rest: false, age: 0 });
+      addPiece({ img, sx: ox + px * SP, sy: oy + py * SP, sw: s * SP, sh: s * SP, x: x - r + px + s / 2, y: y - r + py + s / 2, w: s, h: s, vx: Math.cos(a) * f, vy: Math.sin(a) * f - 150, rot: 0, vr: (Math.random() - 0.5) * 16, rest: false, age: 0 });
     }
   };
   const sparks = (x, y, color, n) => {
@@ -606,6 +668,7 @@ function startGame({ ctx, W, H, dpr, SP, shot, blocks, keys, mouse, setSmashed, 
     sparks(x, y, "#ef4444", 30); sparks(x, y, "#f59e0b", 30); sparks(x, y, "#fde68a", 16);
     for (let i = 0; i < 14; i++) smoke.push({ x: x + (Math.random() - 0.5) * R * 0.5, y: y + (Math.random() - 0.5) * R * 0.5, r: 10 + Math.random() * 16, vy: -30 - Math.random() * 40, life: 0.9 + Math.random() * 0.5 });
     rings.push({ x, y, r: 10, max: R * 1.3, life: 0.35 });
+    rb.save(); rb.globalCompositeOperation = "destination-out"; jagged(rb, x, y, R * 0.9); rb.fill(); rb.restore();
     shake = Math.max(shake, R > 100 ? 0.35 : 0.22);
     for (const p of pieces) {
       const d = Math.hypot(p.x - x, p.y - y);
@@ -800,6 +863,14 @@ function startGame({ ctx, W, H, dpr, SP, shot, blocks, keys, mouse, setSmashed, 
         if (Math.abs(p.vy) < 60) { p.vy = 0; p.vx = 0; p.vr = 0; p.rest = true; }
       }
     }
+    // Settled on the floor for good: into the rubble layer.
+    if (pieces.some((p) => p.rest && p.y + Math.min(p.h, p.w) / 2 >= H - 2)) {
+      pieces = pieces.filter((p) => {
+        if (p.rest && p.y + Math.min(p.h, p.w) / 2 >= H - 2) { drawPiece(rb, p); return false; }
+        return true;
+      });
+    }
+    if (count !== shown && t - hudAt > 0.1) { shown = count; hudAt = t; setSmashed(count); }
     for (const q of particles) { q.vy += GRAVITY * 0.5 * dt; q.x += q.vx * dt; q.y += q.vy * dt; q.life -= dt; }
     particles = particles.filter((q) => q.life > 0);
     for (const f of flames) { f.x += f.vx * dt; f.y += f.vy * dt; f.life -= dt; }
@@ -823,15 +894,8 @@ function startGame({ ctx, W, H, dpr, SP, shot, blocks, keys, mouse, setSmashed, 
     if (shake > 0) { const k = (16 * shake) / 0.35; ctx.translate((Math.random() - 0.5) * k, (Math.random() - 0.5) * k); }
     ctx.drawImage(paper, 0, 0, W, H);
     ctx.drawImage(page, 0, 0, W, H);
-
-    for (const p of pieces) {
-      ctx.save();
-      ctx.translate(p.x, p.y); ctx.rotate(p.rot);
-      ctx.fillStyle = "rgba(0,0,0,0.16)";
-      ctx.fillRect(-p.w / 2 + 1.5, -p.h / 2 + 2, p.w, p.h);
-      ctx.drawImage(p.img, p.sx, p.sy, p.sw, p.sh, -p.w / 2, -p.h / 2, p.w, p.h);
-      ctx.restore();
-    }
+    ctx.drawImage(rubble, 0, 0, W, H);
+    for (const p of pieces) drawPiece(ctx, p);
 
     for (const m of smoke) {
       ctx.globalAlpha = Math.max(0, m.life) * 0.35;

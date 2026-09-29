@@ -65,6 +65,7 @@ function declared(code) {
   // is how a component receives another component: `({ icon: Icon })` then `<Icon />`.
   const patterns = [
     /(?:const|let|var)\s*\{([^}]*)\}\s*=/g,        // const { Panel } = …
+    /(?:const|let|var)\s*\[([^\]]*)\]\s*=/g,       // const [Game, setGame] = useState(…)
     /\(\s*\{([^}]*)\}\s*[,)]/g,                    // function f({ icon: Icon }) / ({ x }) =>
   ];
   for (const re of patterns) {

@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { NavLink, Outlet, Navigate, useLocation, useNavigate } from "react-router-dom";
 import * as Icons from "lucide-react";
 import { useWorkspace } from "../../domain/store";
@@ -13,28 +13,6 @@ import { sixDayOverdue } from "../../domain/toolSelectors";
 import { Avatar } from "../common/badges";
 import ThemeToggle from "./ThemeToggle";
 
-// Loaded only when someone picks up the hammer — nobody else pays for it.
-const SmashMode = lazy(() => import("../fun/SmashMode"));
-
-function SmashButton() {
-  const [on, setOn] = useState(false);
-  const exit = useCallback(() => setOn(false), []);
-  return (
-    <>
-      <button
-        type="button"
-        data-testid="smash-btn"
-        onClick={() => setOn(true)}
-        title="Smash mode — wreck this page for fun (nothing is saved)"
-        aria-label="Smash mode"
-        className="relative rounded-md p-2 text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition-colors"
-      >
-        <Icons.Hammer className="h-4 w-4" />
-      </button>
-      {on && <Suspense fallback={null}><SmashMode onExit={exit} /></Suspense>}
-    </>
-  );
-}
 import { cn } from "../../lib/utils";
 import { toast } from "sonner";
 import {
@@ -42,6 +20,44 @@ import {
 } from "../ui/dropdown-menu";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+
+// The game is its own chunk, fetched when someone reaches for the hammer (or once the
+// app has been idle a few seconds) — nobody who never plays pays for it. It's mounted
+// directly rather than through React.lazy, whose loading boundary holds back the
+// reveal by ~300ms; that was most of the wait after clicking.
+let smashModule = null;
+const loadSmash = () => import("../fun/SmashMode").then((m) => (smashModule = m.default));
+if (typeof window !== "undefined") {
+  const warm = () => loadSmash().catch(() => {});
+  if (window.requestIdleCallback) window.requestIdleCallback(() => setTimeout(warm, 4000));
+  else setTimeout(warm, 6000);
+}
+
+function SmashButton() {
+  const [Game, setGame] = useState(null);
+  const exit = useCallback(() => setGame(null), []);
+  const start = async () => {
+    const G = smashModule || (await loadSmash());
+    setGame(() => G);
+  };
+  return (
+    <>
+      <button
+        type="button"
+        data-testid="smash-btn"
+        onClick={start}
+        onPointerEnter={loadSmash}
+        onFocus={loadSmash}
+        title="Smash mode — wreck this page for fun (nothing is saved)"
+        aria-label="Smash mode"
+        className="relative rounded-md p-2 text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition-colors"
+      >
+        <Icons.Hammer className="h-4 w-4" />
+      </button>
+      {Game && <Game onExit={exit} />}
+    </>
+  );
+}
 
 function NavItem({ n, badge }) {
   const Icon = Icons[n.icon] || Icons.Circle;
