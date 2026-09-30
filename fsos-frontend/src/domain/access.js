@@ -77,12 +77,18 @@ export const ROLE_ACCESS_DEFAULTS = {
 // The role that can never be locked out — overrides on it are ignored for safety.
 export const LOCKED_ROLE = "Founder/Admin";
 
+// Settings is admins-only: nothing saved in Users & Roles can grant it, or take it away
+// from an admin. Kept in step with fsos-backend/app/access.py.
+export const ADMIN_ROLES = ["Founder/Admin", "COA"];
+export const hasAdminRole = (roles) => (roles || []).some((r) => ADMIN_ROLES.includes(r));
+const settingsAccess = (roles) => (hasAdminRole(roles) ? "edit" : "none");
+
 /** Effective matrix for a single role (defaults + persisted role overrides). */
 export function resolveRoleAccess(role, roleOverrides) {
   const base = ROLE_ACCESS_DEFAULTS[role] || all("none");
   if (role === LOCKED_ROLE) return base;
   const ov = roleOverrides?.[role];
-  return ov ? { ...base, ...ov } : base;
+  return { ...base, ...ov, settings: settingsAccess([role]) };
 }
 
 /** Highest level across all roles, then the per-person matrix on top. */
@@ -93,8 +99,7 @@ export function resolvePersonAccess(roles, personAccess, roleOverrides) {
     AREA_KEYS.forEach((k) => { if (RANK[m[k]] > RANK[base[k]]) base[k] = m[k]; });
   });
   if (roles?.includes(LOCKED_ROLE)) return base;
-  if (!personAccess || !Object.keys(personAccess).length) return base;
-  return { ...base, ...personAccess };
+  return { ...base, ...personAccess, settings: settingsAccess(roles) };
 }
 
 /**

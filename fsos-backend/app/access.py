@@ -12,6 +12,13 @@ AREAS = [
 LEVELS = ("none", "view", "edit")
 RANK = {"none": 0, "view": 1, "edit": 2}
 LOCKED_ROLE = "Founder/Admin"
+# Settings is admins-only: nothing saved in Users & Roles can grant it, or take it away from
+# an admin. Mirrors ADMIN_ROLES in fsos-frontend/src/domain/access.js.
+ADMIN_ROLES = ("Founder/Admin", "COA")
+
+
+def _settings_access(roles) -> str:
+    return "edit" if any(r in ADMIN_ROLES for r in roles or []) else "none"
 
 _WORKSPACE = {a: "edit" for a in ("command_room", "bo_studio", "hpn_desk", "production", "distribution", "performance")}
 
@@ -38,7 +45,7 @@ def resolve_role_access(role: str, role_overrides: dict | None = None) -> dict:
     if role == LOCKED_ROLE:
         return base
     override = (role_overrides or {}).get(role)
-    return {**base, **override} if override else base
+    return {**base, **(override or {}), "settings": _settings_access([role])}
 
 
 def resolve_person_access(roles: list[str], person_override: dict | None = None, role_overrides: dict | None = None) -> dict:
@@ -50,7 +57,7 @@ def resolve_person_access(roles: list[str], person_override: dict | None = None,
                 matrix[area] = role_matrix[area]
     if LOCKED_ROLE in (roles or []):
         return matrix
-    return {**matrix, **(person_override or {})} if person_override else matrix
+    return {**matrix, **(person_override or {}), "settings": _settings_access(roles)}
 
 
 def grants_beyond(matrix: dict, ceiling: dict, previous: dict | None = None) -> str | None:

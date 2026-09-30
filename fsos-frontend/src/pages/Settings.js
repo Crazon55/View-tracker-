@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import * as Icons from "lucide-react";
-import { useWorkspace } from "../domain/store";
+import { useWorkspace, useAccess } from "../domain/store";
 import { PageHeader } from "../components/common/PageHeader";
 import { IPBadge, Avatar } from "../components/common/badges";
 import { ROLES, STREAMS } from "../domain/constants";
@@ -21,6 +21,15 @@ const TABS = [["ips", "IPs"], ["people", "People & roles"], ["cats", "Categories
 
 export default function Settings() {
   const [tab, setTab] = useState("ips");
+  const { canEdit } = useAccess();
+  if (!canEdit("settings")) {
+    return (
+      <div className="p-6" data-testid="settings-admin-only">
+        <PageHeader title="Settings" icon={Icons.Settings} subtitle="Only admins can open Settings." />
+        <p className="text-sm text-stone-500"><Icons.Lock className="mr-1 inline h-3.5 w-3.5" />Ask an admin (Founder/Admin or COA) if something here needs changing.</p>
+      </div>
+    );
+  }
   return (
     <div className="p-6">
       <PageHeader title="Settings" icon={Icons.Settings} subtitle="Configure IPs, people, categories, approvals and rules — the core workflow stays stable; entities are configurable without code.">

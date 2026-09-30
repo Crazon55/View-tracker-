@@ -15,7 +15,7 @@ const GROUP_NOTE = {
 };
 
 export function AccessMatrix({ value, onChange, disabled, baseline, testid }) {
-  const setGroup = (group, level) => AREAS.filter((a) => a.group === group).forEach((a) => onChange(a.key, level));
+  const setGroup = (group, level) => AREAS.filter((a) => a.group === group).forEach((a) => a.key !== "settings" && onChange(a.key, level));
   return (
     <div className="grid gap-4 md:grid-cols-2" data-testid={testid}>
       {AREA_GROUP_ORDER.map((group) => {
@@ -35,6 +35,12 @@ export function AccessMatrix({ value, onChange, disabled, baseline, testid }) {
             </div>
             <div className="space-y-1">
               {areas.map((a) => {
+                if (a.key === "settings") return (
+                  <div key={a.key} className="flex items-center justify-between gap-3 text-[13px] text-stone-800" data-testid={testid && `${testid}-settings-fixed`}>
+                    <span>Settings <span className="text-[10px] text-stone-400">(admins only)</span></span>
+                    <span className="text-xs text-stone-500">{value.settings === "edit" ? "Edit" : "No access"}</span>
+                  </div>
+                );
                 const changed = baseline && baseline[a.key] !== value[a.key];
                 return (
                   <div key={a.key} className="flex items-center justify-between gap-3">
