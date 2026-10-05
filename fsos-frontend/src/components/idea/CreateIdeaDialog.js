@@ -24,12 +24,16 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
   const [priority, setPriority] = useState(defaultPriorityFor(stream));
   const [liveUrl, setLiveUrl] = useState("");
   const [canvaUrl, setCanvaUrl] = useState("");
+  const [ownerId, setOwnerId] = useState("");
+  const [reviewerId, setReviewerId] = useState("");
+  const producers = db.users.filter((u) => u.active && u.roles.some((r) => ["Designer", "Editor"].includes(r)));
+  const reviewers = db.users.filter((u) => u.active && u.roles.some((r) => ["CS", "Founder/Admin", "COA", "Short-form Lead"].includes(r)));
   // Happenings are produced and posted in one sitting: no source research, no per-page
   // hooks, no priority. They get the live Instagram link and the Canva file instead.
   const isHpn = stream === "HPN";
 
   useEffect(() => {
-    if (open) { setTitle(prefill?.title || ""); setFormat("Reel"); setCategory(""); setDests([]); setIpHooks({}); setSrcUrl(prefill?.sourceUrl || ""); setSrcStart(""); setSrcEnd(""); setBatchId(""); setPriority(defaultPriorityFor(stream)); setLiveUrl(""); setCanvaUrl(""); }
+    if (open) { setTitle(prefill?.title || ""); setFormat("Reel"); setCategory(""); setDests([]); setIpHooks({}); setSrcUrl(prefill?.sourceUrl || ""); setSrcStart(""); setSrcEnd(""); setBatchId(""); setPriority(defaultPriorityFor(stream)); setLiveUrl(""); setCanvaUrl(""); setOwnerId(""); setReviewerId(""); }
   }, [open, stream, prefill]);
 
   // Only the categories for this stream and this exact format. It used to offer every
@@ -58,6 +62,7 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
     if (inFlight.current) return;
     if (!title.trim()) { toast.error("Title is required"); return; }
     if (!dests.length) { toast.error("Select at least one destination IP"); return; }
+    if (isHpn && reviewerId && !ownerId) { toast.error("Pick an owner too — a reviewer is assigned together with the owner."); return; }
     if (isHpn && canvaUrl.trim()) {
       const err = assetLinkError(canvaUrl);
       if (err) { toast.error(err); return; }
@@ -78,7 +83,7 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
     setSaving(true);
     let id;
     try {
-      id = await actions.addIdea({ stream, title, format, category: category || cats[0]?.name, brief, destinations: dests, sources, batchId: batchId || null, priority, versionHooks, canvaUrl: isHpn ? canvaUrl : "", liveUrl: isHpn ? liveUrl : "" });
+      id = await actions.addIdea({ stream, title, format, category: category || cats[0]?.name, brief, destinations: dests, sources, batchId: batchId || null, priority, versionHooks, canvaUrl: isHpn ? canvaUrl : "", liveUrl: isHpn ? liveUrl : "", ownerId: isHpn ? ownerId : "", reviewerId: isHpn ? reviewerId : "" });
     } catch (e) {
       /* the store already showed the error */
       return;
@@ -144,6 +149,22 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
 
           {isHpn && (
             <>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-stone-600">Assigned to (owner)</label>
+                  <Select value={ownerId} onValueChange={setOwnerId}>
+                    <SelectTrigger className="mt-1" data-testid="create-owner"><SelectValue placeholder="Select owner" /></SelectTrigger>
+                    <SelectContent>{producers.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-stone-600">Reviewer</label>
+                  <Select value={reviewerId} onValueChange={setReviewerId}>
+                    <SelectTrigger className="mt-1" data-testid="create-reviewer"><SelectValue placeholder="Select reviewer" /></SelectTrigger>
+                    <SelectContent>{reviewers.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              </div>
               <div>
                 <label className="text-xs font-medium text-stone-600">Live link (Instagram)</label>
                 <Input data-testid="create-live-url" value={liveUrl} onChange={(e) => setLiveUrl(e.target.value)} placeholder="https://instagram.com/…" className="mt-1" />

@@ -310,6 +310,9 @@ export function WorkspaceProvider({ children }) {
       const canvaUrl = (payload.canvaUrl || "").trim();
       const liveUrl = (payload.liveUrl || "").trim();
       try {
+        if (payload.ownerId) {
+          await run(() => api.post("/api/production/assign", { ideaIds: [res.idea.id], ownerId: payload.ownerId, reviewerId: payload.reviewerId || null }));
+        }
         if (canvaUrl) {
           mergeIdea(await run(() => api.post(`/api/production/ideas/${res.idea.id}/links`, { type: "canva", url: canvaUrl, label: "Canva" })));
         }
