@@ -173,9 +173,9 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
                   </Select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-stone-600">Reviewer</label>
+                  <label className="text-xs font-medium text-stone-600">Added by</label>
                   <Select value={reviewerId} onValueChange={setReviewerId}>
-                    <SelectTrigger className="mt-1" data-testid="create-reviewer"><SelectValue placeholder="Select reviewer" /></SelectTrigger>
+                    <SelectTrigger className="mt-1" data-testid="create-reviewer"><SelectValue placeholder="Select person" /></SelectTrigger>
                     <SelectContent>{reviewers.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>

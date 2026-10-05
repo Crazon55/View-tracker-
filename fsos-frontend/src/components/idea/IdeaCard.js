@@ -497,7 +497,7 @@ function HpnBrief({ idea, versions }) {
       <Section title="Assigned">
         <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-sm">
           <span className="inline-flex items-center gap-2 text-stone-500">Owner {owner ? <span className="inline-flex items-center gap-1.5 text-stone-900"><Avatar user={owner} />{owner.name}</span> : <span className="text-amber-600">Unassigned</span>}</span>
-          <span className="inline-flex items-center gap-2 text-stone-500">Reviewer {reviewer ? <span className="inline-flex items-center gap-1.5 text-stone-900"><Avatar user={reviewer} />{reviewer.name}</span> : <span className="text-amber-600">Unassigned</span>}</span>
+          <span className="inline-flex items-center gap-2 text-stone-500">Added by {reviewer ? <span className="inline-flex items-center gap-1.5 text-stone-900"><Avatar user={reviewer} />{reviewer.name}</span> : <span className="text-amber-600">Unassigned</span>}</span>
         </div>
       </Section>
       <Section title="Posted on">
