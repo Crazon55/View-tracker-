@@ -22,8 +22,7 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
   const [srcEnd, setSrcEnd] = useState("");
   const [batchId, setBatchId] = useState("");
   const [priority, setPriority] = useState(defaultPriorityFor(stream));
-  const [liveUrl, setLiveUrl] = useState("");
-  const [canvaUrl, setCanvaUrl] = useState("");
+  const [perIp, setPerIp] = useState({});   // ipId -> { live, asset }, HPN only
   const [ownerId, setOwnerId] = useState("");
   const [reviewerId, setReviewerId] = useState("");
   const producers = db.users.filter((u) => u.active && u.roles.some((r) => ["Designer", "Editor"].includes(r)));
@@ -33,7 +32,7 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
   const isHpn = stream === "HPN";
 
   useEffect(() => {
-    if (open) { setTitle(prefill?.title || ""); setFormat("Reel"); setCategory(""); setDests([]); setIpHooks({}); setSrcUrl(prefill?.sourceUrl || ""); setSrcStart(""); setSrcEnd(""); setBatchId(""); setPriority(defaultPriorityFor(stream)); setLiveUrl(""); setCanvaUrl(""); setOwnerId(""); setReviewerId(""); }
+    if (open) { setTitle(prefill?.title || ""); setFormat("Reel"); setCategory(""); setDests([]); setIpHooks({}); setSrcUrl(prefill?.sourceUrl || ""); setSrcStart(""); setSrcEnd(""); setBatchId(""); setPriority(defaultPriorityFor(stream)); setPerIp({}); setOwnerId(""); setReviewerId(""); }
   }, [open, stream, prefill]);
 
   // Only the categories for this stream and this exact format. It used to offer every
@@ -46,6 +45,14 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
   const selectedIps = dests.map((id) => activeIps.find((i) => i.id === id) || db.ips.find((i) => i.id === id)).filter(Boolean);
 
   const toggle = (id) => setDests((d) => d.includes(id) ? d.filter((x) => x !== id) : [...d, id]);
+
+  const setIpLink = (id, field, value) => setPerIp((p) => ({ ...p, [id]: { ...p[id], [field]: value } }));
+  const ipById = (id) => db.ips.find((i) => i.id === id);
+  // Canva stays Canva; anything else the link check accepted is Drive.
+  const assetLinkType = (url) => {
+    try { return /(^|\.)canva\.(com|link|site|cn)$/.test(new URL(/^https?:/i.test(url) ? url : `https://${url}`).hostname) ? "canva" : "drive"; }
+    catch (e) { return "canva"; }
+  };
 
   const setIpHookField = (id, field, value) => {
     setIpHooks((h) => ({ ...h, [id]: { hook: "", subHook: "", ...h[id], [field]: value } }));
@@ -63,9 +70,12 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
     if (!title.trim()) { toast.error("Title is required"); return; }
     if (!dests.length) { toast.error("Select at least one destination IP"); return; }
     if (isHpn && reviewerId && !ownerId) { toast.error("Pick an owner too — a reviewer is assigned together with the owner."); return; }
-    if (isHpn && canvaUrl.trim()) {
-      const err = assetLinkError(canvaUrl);
-      if (err) { toast.error(err); return; }
+    if (isHpn) {
+      for (const ipId of dests) {
+        const asset = (perIp[ipId]?.asset || "").trim();
+        const err = asset && assetLinkError(asset);
+        if (err) { toast.error(`${ipById(ipId)?.code || "Page"}: ${err}`); return; }
+      }
     }
     const brief = {};
     if (format === "Carousel") brief.slides = [];
@@ -79,11 +89,16 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
         subHook: format === "Reel" ? (ipHooks[ipId]?.subHook || "").trim() : "",
       };
     });
+    const linksByIp = {};
+    dests.forEach((ipId) => {
+      const asset = (perIp[ipId]?.asset || "").trim();
+      linksByIp[ipId] = { live: (perIp[ipId]?.live || "").trim(), asset, assetType: assetLinkType(asset) };
+    });
     inFlight.current = true;
     setSaving(true);
     let id;
     try {
-      id = await actions.addIdea({ stream, title, format, category: category || cats[0]?.name, brief, destinations: dests, sources, batchId: batchId || null, priority, versionHooks, canvaUrl: isHpn ? canvaUrl : "", liveUrl: isHpn ? liveUrl : "", ownerId: isHpn ? ownerId : "", reviewerId: isHpn ? reviewerId : "" });
+      id = await actions.addIdea({ stream, title, format, category: category || cats[0]?.name, brief, destinations: dests, sources, batchId: batchId || null, priority, versionHooks, perIp: isHpn ? linksByIp : {}, ownerId: isHpn ? ownerId : "", reviewerId: isHpn ? reviewerId : "" });
     } catch (e) {
       /* the store already showed the error */
       return;
@@ -165,15 +180,23 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
                   </Select>
                 </div>
               </div>
-              <div>
-                <label className="text-xs font-medium text-stone-600">Live link (Instagram)</label>
-                <Input data-testid="create-live-url" value={liveUrl} onChange={(e) => setLiveUrl(e.target.value)} placeholder="https://instagram.com/…" className="mt-1" />
-                <p className="mt-1 text-[10px] text-stone-400">Optional — if it's already posted, paste the link and it's recorded as published.</p>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-stone-600">Canva link</label>
-                <Input data-testid="create-canva-url" value={canvaUrl} onChange={(e) => setCanvaUrl(e.target.value)} placeholder="Paste Canva link…" className="mt-1" />
-              </div>
+              {selectedIps.length > 0 && (
+                <div data-testid="create-ip-links">
+                  <label className="text-xs font-medium text-stone-600">Links per page</label>
+                  <p className="text-[10px] text-stone-400 mt-0.5 mb-2">Optional — a live Instagram link records that page as published.</p>
+                  <div className="space-y-2.5">
+                    {selectedIps.map((ip) => (
+                      <div key={ip.id} className="rounded-lg border border-line bg-canvas p-3" data-testid={`create-ip-links-${ip.id}`}>
+                        <div className="mb-2"><IPBadge ip={ip} showName /></div>
+                        <label className="text-[10px] uppercase tracking-wide text-stone-400">Live link · {ip.code}</label>
+                        <Input data-testid={`create-live-${ip.id}`} value={perIp[ip.id]?.live || ""} onChange={(e) => setIpLink(ip.id, "live", e.target.value)} placeholder="https://instagram.com/…" className="h-8 text-sm mt-0.5" />
+                        <label className="mt-2 block text-[10px] uppercase tracking-wide text-stone-400">Canva / Drive link · {ip.code}</label>
+                        <Input data-testid={`create-asset-${ip.id}`} value={perIp[ip.id]?.asset || ""} onChange={(e) => setIpLink(ip.id, "asset", e.target.value)} placeholder="Paste Canva or Drive link…" className="h-8 text-sm mt-0.5" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           )}
 

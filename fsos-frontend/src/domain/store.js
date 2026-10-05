@@ -301,31 +301,41 @@ export function WorkspaceProvider({ children }) {
         // Was never sent, so every new idea came back as the database default no
         // matter what was picked in the dialog.
         priority: payload.priority || null,
-      }));      mergeIdea(res);
+      }));
+      mergeIdea(res);
 
       // Happenings are made and posted in one sitting, so the create form can also take
-      // the Canva file and the live Instagram link. The idea already exists by now, so
-      // a failure here is reported without failing the create.
+      // each page's Canva/Drive file and live Instagram link (`payload.perIp`, keyed by
+      // IP id). The idea already exists by now, so a failure here is reported without
+      // failing the create, and one page failing doesn't stop the others.
       const versions = res.versions || [];
-      const canvaUrl = (payload.canvaUrl || "").trim();
-      const liveUrl = (payload.liveUrl || "").trim();
+      const perIp = payload.perIp || {};
+      const now = new Date().toISOString();
+      const published = {};   // live url -> publication id, so a shared post is a collab
       try {
         if (payload.ownerId) {
           await run(() => api.post("/api/production/assign", { ideaIds: [res.idea.id], ownerId: payload.ownerId, reviewerId: payload.reviewerId || null }));
         }
-        if (canvaUrl) {
-          mergeIdea(await run(() => api.post(`/api/production/ideas/${res.idea.id}/links`, { type: "canva", url: canvaUrl, label: "Canva" })));
-        }
-        if (liveUrl && versions.length) {
-          // One post across several IPs is a collaboration, not one publication each.
-          const now = new Date().toISOString();
-          const [first, ...rest] = versions;
-          const pub = await run(() => api.post("/api/distribution/publish", { versionId: first.id, url: liveUrl, publishedAt: now }));
-          for (const v of rest) {
-            await run(() => api.post(`/api/distribution/publications/${pub.publicationId}/collab`, { versionId: v.id }));
-          }
-        }
       } catch (e) { /* run() already showed what failed */ }
+      for (const v of versions) {
+        const mine = perIp[v.ipId] || {};
+        const asset = (mine.asset || "").trim();
+        const live = (mine.live || "").trim();
+        try {
+          if (asset) {
+            const updated = await run(() => api.post(`/api/versions/${v.id}/links`, { type: mine.assetType || "canva", url: asset, label: mine.assetType === "drive" ? "Drive" : "Canva" }));
+            patch((d) => { d.versions = upsert(d.versions, updated); return d; });
+          }
+          if (live) {
+            if (published[live]) {
+              await run(() => api.post(`/api/distribution/publications/${published[live]}/collab`, { versionId: v.id }));
+            } else {
+              const pub = await run(() => api.post("/api/distribution/publish", { versionId: v.id, url: live, publishedAt: now }));
+              published[live] = pub.publicationId;
+            }
+          }
+        } catch (e) { /* run() already showed what failed */ }
+      }
 
       reloadSoon();     // activity, notifications and the batch's idea list catch up
       return res.idea.id;
