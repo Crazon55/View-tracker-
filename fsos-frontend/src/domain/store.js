@@ -301,8 +301,29 @@ export function WorkspaceProvider({ children }) {
         // Was never sent, so every new idea came back as the database default no
         // matter what was picked in the dialog.
         priority: payload.priority || null,
-      }));
-      mergeIdea(res);
+      }));      mergeIdea(res);
+
+      // Happenings are made and posted in one sitting, so the create form can also take
+      // the Canva file and the live Instagram link. The idea already exists by now, so
+      // a failure here is reported without failing the create.
+      const versions = res.versions || [];
+      const canvaUrl = (payload.canvaUrl || "").trim();
+      const liveUrl = (payload.liveUrl || "").trim();
+      try {
+        if (canvaUrl) {
+          mergeIdea(await run(() => api.post(`/api/production/ideas/${res.idea.id}/links`, { type: "canva", url: canvaUrl, label: "Canva" })));
+        }
+        if (liveUrl && versions.length) {
+          // One post across several IPs is a collaboration, not one publication each.
+          const now = new Date().toISOString();
+          const [first, ...rest] = versions;
+          const pub = await run(() => api.post("/api/distribution/publish", { versionId: first.id, url: liveUrl, publishedAt: now }));
+          for (const v of rest) {
+            await run(() => api.post(`/api/distribution/publications/${pub.publicationId}/collab`, { versionId: v.id }));
+          }
+        }
+      } catch (e) { /* run() already showed what failed */ }
+
       reloadSoon();     // activity, notifications and the batch's idea list catch up
       return res.idea.id;
     },

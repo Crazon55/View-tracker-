@@ -96,7 +96,9 @@ export default function IdeaCard({ ideaId, mode, initialTab, onClose, onOpenIdea
   const jumpTo = (anchor) => { setHighlightAnchor(anchor); if (anchor?.type === "slide") setTab("brief"); else if (anchor?.type === "asset" || anchor?.versionId) setTab("versions"); };
 
   const allTabs = [["brief", "Brief"], ["versions", "Page Versions"], ["production", "Production & Review"], ["distribution", "Distribution"], ["performance", "Performance"], ["activity", "Activity"]];
-  const visibleTabs = producerView ? [["production", "Production & Review"]] : allTabs;
+  // Happenings are one sitting of work: the brief is the whole card.
+  const isHpn = idea.stream === "HPN";
+  const visibleTabs = isHpn ? [["brief", "Brief"]] : producerView ? [["production", "Production & Review"]] : allTabs;
 
   return (
     <Dialog open={!!ideaId} onOpenChange={(o) => !o && onClose()}>
@@ -208,7 +210,7 @@ export default function IdeaCard({ ideaId, mode, initialTab, onClose, onOpenIdea
         </AlertDialog>
 
         {/* Body */}
-        <Tabs value={producerView ? "production" : tab} onValueChange={setTab} className="flex-1 flex flex-col min-h-0">
+        <Tabs value={isHpn ? "brief" : producerView ? "production" : tab} onValueChange={setTab} className="flex-1 flex flex-col min-h-0">
           <div className="border-b border-stone-200 px-6 bg-white">
             <TabsList className="h-11 bg-transparent gap-1 p-0">
               {visibleTabs.map(([v, l]) => (
@@ -218,7 +220,9 @@ export default function IdeaCard({ ideaId, mode, initialTab, onClose, onOpenIdea
           </div>
 
           <div className="flex-1 overflow-auto fsos-scroll p-6 bg-canvas">
-            {producerView ? (
+            {isHpn ? (
+              <TabsContent value="brief" className="mt-0"><HpnBrief idea={idea} versions={versions} /></TabsContent>
+            ) : producerView ? (
               <TabsContent value="production" className="mt-0" data-testid="idea-owner-workspace">
                 <ProductionTab idea={idea} versions={versions} ownerWorkspace pendingLinks={pendingLinks} setPendingLinks={setPendingLinks} linkAll={linkAll} setLinkAll={setLinkAll} />
               </TabsContent>
@@ -478,6 +482,41 @@ function BriefSummary({ idea }) {
         </table>
       </div>
     </Section>
+  );
+}
+
+/** The whole Happening card: who has it, which pages it runs on, and where to find it. */
+function HpnBrief({ idea, versions }) {
+  const { db } = useWorkspace();
+  const owner = userById(db, idea.productionOwnerId);
+  const reviewer = userById(db, idea.reviewerId);
+  const linkOf = (url) => <a href={externalHref(url)} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline break-all">{url}</a>;
+  const none = <span className="text-stone-400">—</span>;
+  return (
+    <div>
+      <Section title="Assigned">
+        <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-sm">
+          <span className="inline-flex items-center gap-2 text-stone-500">Owner {owner ? <span className="inline-flex items-center gap-1.5 text-stone-900"><Avatar user={owner} />{owner.name}</span> : <span className="text-amber-600">Unassigned</span>}</span>
+          <span className="inline-flex items-center gap-2 text-stone-500">Reviewer {reviewer ? <span className="inline-flex items-center gap-1.5 text-stone-900"><Avatar user={reviewer} />{reviewer.name}</span> : <span className="text-amber-600">Unassigned</span>}</span>
+        </div>
+      </Section>
+      <Section title="Posted on">
+        <div className="divide-y divide-stone-200 text-sm">
+          {idea.destinations.map((ipId) => {
+            const v = versions.find((x) => x.ipId === ipId);
+            const pub = v ? publicationOf(db, v.id) : null;
+            const canva = v?.assetLinks?.[0];
+            return (
+              <div key={ipId} className="grid grid-cols-[180px_1fr_1fr] items-center gap-4 py-2.5" data-testid={`hpn-brief-${ipId}`}>
+                <IPBadge ip={ipById(db, ipId)} />
+                <div><div className="text-[10px] uppercase tracking-wide text-stone-400">Live link</div>{pub?.url ? linkOf(pub.url) : none}</div>
+                <div><div className="text-[10px] uppercase tracking-wide text-stone-400">Canva link</div>{canva?.url ? linkOf(canva.url) : none}</div>
+              </div>
+            );
+          })}
+        </div>
+      </Section>
+    </div>
   );
 }
 

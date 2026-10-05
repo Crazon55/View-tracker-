@@ -8,6 +8,7 @@ import { Input } from "../ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { toast } from "sonner";
 import { cn } from "../../lib/utils";
+import { assetLinkError } from "../../lib/links";
 
 export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, onCreated }) {
   const { db, actions } = useWorkspace();
@@ -21,9 +22,14 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
   const [srcEnd, setSrcEnd] = useState("");
   const [batchId, setBatchId] = useState("");
   const [priority, setPriority] = useState(defaultPriorityFor(stream));
+  const [liveUrl, setLiveUrl] = useState("");
+  const [canvaUrl, setCanvaUrl] = useState("");
+  // Happenings are produced and posted in one sitting: no source research, no per-page
+  // hooks, no priority. They get the live Instagram link and the Canva file instead.
+  const isHpn = stream === "HPN";
 
   useEffect(() => {
-    if (open) { setTitle(prefill?.title || ""); setFormat("Reel"); setCategory(""); setDests([]); setIpHooks({}); setSrcUrl(prefill?.sourceUrl || ""); setSrcStart(""); setSrcEnd(""); setBatchId(""); setPriority(defaultPriorityFor(stream)); }
+    if (open) { setTitle(prefill?.title || ""); setFormat("Reel"); setCategory(""); setDests([]); setIpHooks({}); setSrcUrl(prefill?.sourceUrl || ""); setSrcStart(""); setSrcEnd(""); setBatchId(""); setPriority(defaultPriorityFor(stream)); setLiveUrl(""); setCanvaUrl(""); }
   }, [open, stream, prefill]);
 
   // Only the categories for this stream and this exact format. It used to offer every
@@ -52,11 +58,15 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
     if (inFlight.current) return;
     if (!title.trim()) { toast.error("Title is required"); return; }
     if (!dests.length) { toast.error("Select at least one destination IP"); return; }
+    if (isHpn && canvaUrl.trim()) {
+      const err = assetLinkError(canvaUrl);
+      if (err) { toast.error(err); return; }
+    }
     const brief = {};
     if (format === "Carousel") brief.slides = [];
     if (format === "Reel") { brief.editingDirection = ""; brief.musicNotes = ""; }
     if (format === "Static") brief.bodyCopy = "";
-    const sources = srcUrl ? [{ id: "src-" + Math.random().toString(36).slice(2, 7), url: srcUrl, label: "Source", start: isVideoSource ? srcStart : "", end: isVideoSource ? srcEnd : "" }] : [];
+    const sources = !isHpn && srcUrl ? [{ id: "src-" + Math.random().toString(36).slice(2, 7), url: srcUrl, label: "Source", start: isVideoSource ? srcStart : "", end: isVideoSource ? srcEnd : "" }] : [];
     const versionHooks = {};
     dests.forEach((ipId) => {
       versionHooks[ipId] = {
@@ -68,7 +78,7 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
     setSaving(true);
     let id;
     try {
-      id = await actions.addIdea({ stream, title, format, category: category || cats[0]?.name, brief, destinations: dests, sources, batchId: batchId || null, priority, versionHooks });
+      id = await actions.addIdea({ stream, title, format, category: category || cats[0]?.name, brief, destinations: dests, sources, batchId: batchId || null, priority, versionHooks, canvaUrl: isHpn ? canvaUrl : "", liveUrl: isHpn ? liveUrl : "" });
     } catch (e) {
       /* the store already showed the error */
       return;
@@ -108,7 +118,7 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
               </Select>
             </div>
           </div>
-          <div>
+          {!isHpn && <div>
             <label className="text-xs font-medium text-stone-600">Source link</label>
             <div className="mt-1 flex gap-2">
               <Input value={srcUrl} onChange={(e) => setSrcUrl(e.target.value)} placeholder="YouTube / article URL" className="flex-1" />
@@ -118,7 +128,7 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
               </>}
             </div>
             {isVideoSource && <p className="mt-1 text-[10px] text-stone-400">Timestamps optional — only relevant for video/YouTube sources.</p>}
-          </div>
+          </div>}
 
           <div>
             <label className="text-xs font-medium text-stone-600">Intended IPs (multi-select) — one owner will produce all versions</label>
@@ -132,7 +142,21 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
             </div>
           </div>
 
-          {selectedIps.length > 0 && (
+          {isHpn && (
+            <>
+              <div>
+                <label className="text-xs font-medium text-stone-600">Live link (Instagram)</label>
+                <Input data-testid="create-live-url" value={liveUrl} onChange={(e) => setLiveUrl(e.target.value)} placeholder="https://instagram.com/…" className="mt-1" />
+                <p className="mt-1 text-[10px] text-stone-400">Optional — if it's already posted, paste the link and it's recorded as published.</p>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-stone-600">Canva link</label>
+                <Input data-testid="create-canva-url" value={canvaUrl} onChange={(e) => setCanvaUrl(e.target.value)} placeholder="Paste Canva link…" className="mt-1" />
+              </div>
+            </>
+          )}
+
+          {!isHpn && selectedIps.length > 0 && (
             <div data-testid="create-ip-hooks">
               <label className="text-xs font-medium text-stone-600">Page hooks</label>
               <p className="text-[10px] text-stone-400 mt-0.5 mb-2">A hook field appears for each selected IP.</p>
@@ -166,7 +190,7 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
             </div>
           )}
 
-          <div>
+          {!isHpn && <div>
             <label className="text-xs font-medium text-stone-600">Priority</label>
             <Select value={priority} onValueChange={setPriority}>
               <SelectTrigger className="mt-1" data-testid="create-priority"><SelectValue /></SelectTrigger>
@@ -180,7 +204,7 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
               </SelectContent>
             </Select>
             <p className="mt-1 text-[10px] text-stone-400">{PRIORITIES[priority].blurb}</p>
-          </div>
+          </div>}
 
           {stream === "BO" && (
             <div>
