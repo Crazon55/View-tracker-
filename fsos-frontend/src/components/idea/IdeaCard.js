@@ -490,8 +490,9 @@ function HpnBrief({ idea, versions }) {
   const { db } = useWorkspace();
   const owner = userById(db, idea.productionOwnerId);
   const reviewer = userById(db, idea.reviewerId);
-  const linkOf = (url) => <a href={externalHref(url)} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline break-all">{url}</a>;
-  const none = <span className="text-stone-400">—</span>;
+  const { actions } = useWorkspace();
+  const { canEdit } = useAccess();
+  const editable = canEdit("hpn_desk");
   return (
     <div>
       <Section title="Assigned">
@@ -509,13 +510,79 @@ function HpnBrief({ idea, versions }) {
             return (
               <div key={ipId} className="grid grid-cols-[180px_1fr_1fr] items-center gap-4 py-2.5" data-testid={`hpn-brief-${ipId}`}>
                 <IPBadge ip={ipById(db, ipId)} />
-                <div><div className="text-[10px] uppercase tracking-wide text-stone-400">Live link</div>{pub?.url ? linkOf(pub.url) : none}</div>
-                <div><div className="text-[10px] uppercase tracking-wide text-stone-400">Canva link</div>{canva?.url ? linkOf(canva.url) : none}</div>
+                <EditableLink label="Live link" url={pub?.url} editable={editable && !!v} testId={`hpn-live-${ipId}`}
+                  note={pub && (pub.versionIds || []).length > 1 ? "Shared post — changing it updates every page on it." : null}
+                  onSave={async (next) => {
+                    if (pub) {
+                      const r = await actions.updatePublicationUrl(pub.id, next);
+                      if (r.dupUrl) toast.warning("That URL is already used on another post.");
+                    } else {
+                      await actions.confirmPublication(v.id, next, nowIso());
+                    }
+                  }} />
+                <EditableLink label="Canva / Drive link" url={canva?.url} editable={editable && !!v} testId={`hpn-asset-${ipId}`} validate={assetLinkError}
+                  onSave={async (next) => {
+                    const type = linkTypeOf(next);
+                    if (canva) await actions.updateVersionLink(v.id, canva.id, { url: next, type, label: type === "canva" ? "Canva" : "Drive" });
+                    else await actions.addVersionLink(v.id, { type, url: next, label: type === "canva" ? "Canva" : "Drive" });
+                  }} />
               </div>
             );
           })}
         </div>
       </Section>
+    </div>
+  );
+}
+
+/**
+ * One link with a pencil beside it. Shows "Add link" when there is none, so a link that
+ * was forgotten at create time can be filled in later from the same place.
+ */
+function EditableLink({ label, url, editable, onSave, validate, note, testId }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(url || "");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { if (!editing) setValue(url || ""); }, [url, editing]);
+
+  const save = async () => {
+    const next = value.trim();
+    if (!next) { toast.error("Paste the link."); return; }
+    if (next === (url || "")) { setEditing(false); return; }
+    const err = validate ? validate(next) : null;
+    if (err) { toast.error(err); return; }
+    setSaving(true);
+    try { await onSave(next); setEditing(false); toast.success(`${label} saved`); }
+    catch (e) { /* the store already showed the error */ }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="min-w-0" data-testid={testId}>
+      <div className="text-[10px] uppercase tracking-wide text-stone-400">{label}</div>
+      {editing ? (
+        <div className="mt-0.5">
+          <div className="flex items-center gap-1.5">
+            <Input autoFocus value={value} onChange={(e) => setValue(e.target.value)} className="h-7 text-xs"
+              onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }} />
+            <Button size="sm" className="h-7 text-xs shrink-0" disabled={saving} onClick={save}>{saving ? "Saving…" : "Save"}</Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs shrink-0" onClick={() => setEditing(false)}>Cancel</Button>
+          </div>
+          {note && <p className="mt-1 text-[10px] text-amber-700">{note}</p>}
+        </div>
+      ) : (
+        <div className="flex items-start gap-1.5">
+          {url
+            ? <a href={externalHref(url)} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline break-all text-sm">{url}</a>
+            : <span className="text-stone-400 text-sm">—</span>}
+          {editable && (
+            <button type="button" title={url ? "Edit link" : "Add link"} data-testid={`${testId}-edit`} onClick={() => setEditing(true)}
+              className="shrink-0 rounded p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-800">
+              {url ? <Icons.Pencil className="h-3.5 w-3.5" /> : <span className="text-xs text-blue-700">Add link</span>}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

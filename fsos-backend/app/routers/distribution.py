@@ -68,6 +68,10 @@ class Collab(BaseModel):
     versionId: str
 
 
+class PublicationPatch(BaseModel):
+    url: str
+
+
 async def live_placement(version_id: str) -> dict | None:
     return await db.select_one("placements", {
         "version_id": f"eq.{version_id}", "state": "neq.cancelled", "select": "*"})
@@ -276,6 +280,29 @@ async def publish(body: Publish, caller: Caller = Depends(current_caller)):
 
     await events.log(v["idea_id"], "published", f"Published to {await ip_code(v['ip_id'])}", caller.id)
     return {"dupUrl": dup, "publicationId": pub["id"]}
+
+
+@router.patch("/publications/{publication_id}")
+async def update_publication(publication_id: str, body: PublicationPatch, caller: Caller = Depends(current_caller)):
+    """Correct the live link of something already recorded as published.
+
+    Someone pastes the wrong post, or forgets and fills it in later; the publication,
+    its snapshots and its 24-hour window stay exactly as they were. Only the URL moves.
+    """
+    require(caller.access, "distribution", "edit")
+    url = body.url.strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="Paste the live link.")
+    pub = await db.select_one("publications", {"id": f"eq.{publication_id}", "select": "*"})
+    if not pub:
+        raise HTTPException(status_code=404, detail="Publication not found")
+    dup = await db.select_one("publications", {"url": f"eq.{url}", "id": f"neq.{publication_id}", "select": "id"})
+    await db.update("publications", {"id": f"eq.{publication_id}"}, {"url": url})
+    pv = await db.select_one("publication_versions", {"publication_id": f"eq.{publication_id}", "select": "version_id"})
+    if pv:
+        v = await get_version(pv["version_id"])
+        await events.log(v["idea_id"], "live_link_edited", "Live link updated", caller.id)
+    return {"dupUrl": bool(dup), "publicationId": publication_id}
 
 
 @router.post("/publications/{publication_id}/collab")

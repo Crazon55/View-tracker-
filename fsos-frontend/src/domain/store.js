@@ -569,6 +569,14 @@ export function WorkspaceProvider({ children }) {
       return { dupUrl: !!res.dupUrl };
     },
 
+    /** Fix the live link of a post already recorded as published. */
+    async updatePublicationUrl(publicationId, url) {
+      const r = await run(() => api.patch(`/api/distribution/publications/${publicationId}`, { url }));
+      patch((d) => { d.publications = d.publications.map((p) => (p.id === publicationId ? { ...p, url } : p)); return d; });
+      reloadSoon();
+      return r;
+    },
+
     async linkCollaboration(publicationId, versionId) {
       await run(() => api.post(`/api/distribution/publications/${publicationId}/collab`, { versionId }));
       reloadSoon();
