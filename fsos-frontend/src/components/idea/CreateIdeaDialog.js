@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { toast } from "sonner";
 import { cn } from "../../lib/utils";
 import { assetLinkError } from "../../lib/links";
+import { istDateStr } from "../../domain/dates";
 
 export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, onCreated }) {
   const { db, actions } = useWorkspace();
@@ -23,6 +24,9 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
   const [batchId, setBatchId] = useState("");
   const [priority, setPriority] = useState(defaultPriorityFor(stream));
   const [perIp, setPerIp] = useState({});   // ipId -> { live, asset }, HPN only
+  // The day this idea counts toward. Ideas made late are often added the next morning,
+  // so today is only the default.
+  const [ideaDate, setIdeaDate] = useState(istDateStr());
   const [ownerId, setOwnerId] = useState("");
   const [reviewerId, setReviewerId] = useState("");
   const producers = db.users.filter((u) => u.active && u.roles.some((r) => ["Designer", "Editor"].includes(r)));
@@ -32,7 +36,7 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
   const isHpn = stream === "HPN";
 
   useEffect(() => {
-    if (open) { setTitle(prefill?.title || ""); setFormat("Reel"); setCategory(""); setDests([]); setIpHooks({}); setSrcUrl(prefill?.sourceUrl || ""); setSrcStart(""); setSrcEnd(""); setBatchId(""); setPriority(defaultPriorityFor(stream)); setPerIp({}); setOwnerId(""); setReviewerId(""); }
+    if (open) { setTitle(prefill?.title || ""); setFormat("Reel"); setCategory(""); setDests([]); setIpHooks({}); setSrcUrl(prefill?.sourceUrl || ""); setSrcStart(""); setSrcEnd(""); setBatchId(""); setPriority(defaultPriorityFor(stream)); setPerIp({}); setIdeaDate(istDateStr()); setOwnerId(""); setReviewerId(""); }
   }, [open, stream, prefill]);
 
   // Only the categories for this stream and this exact format. It used to offer every
@@ -69,6 +73,8 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
     if (inFlight.current) return;
     if (!title.trim()) { toast.error("Title is required"); return; }
     if (!dests.length) { toast.error("Select at least one destination IP"); return; }
+    if (isHpn && !ideaDate) { toast.error("Pick the date this idea belongs to."); return; }
+    if (isHpn && ideaDate > istDateStr()) { toast.error("An idea can't be dated in the future."); return; }
     if (isHpn && reviewerId && !ownerId) { toast.error("Pick an owner too — a reviewer is assigned together with the owner."); return; }
     if (isHpn) {
       for (const ipId of dests) {
@@ -98,7 +104,7 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
     setSaving(true);
     let id;
     try {
-      id = await actions.addIdea({ stream, title, format, category: category || cats[0]?.name, brief, destinations: dests, sources, batchId: batchId || null, priority, versionHooks, perIp: isHpn ? linksByIp : {}, ownerId: isHpn ? ownerId : "", reviewerId: isHpn ? reviewerId : "" });
+      id = await actions.addIdea({ stream, title, format, category: category || cats[0]?.name, brief, destinations: dests, sources, batchId: batchId || null, priority, versionHooks, perIp: isHpn ? linksByIp : {}, createdOn: isHpn ? ideaDate : null, ownerId: isHpn ? ownerId : "", reviewerId: isHpn ? reviewerId : "" });
     } catch (e) {
       /* the store already showed the error */
       return;
@@ -138,6 +144,14 @@ export default function CreateIdeaDialog({ open, onOpenChange, stream, prefill, 
               </Select>
             </div>
           </div>
+          {isHpn && (
+            <div>
+              <label className="text-xs font-medium text-stone-600">Idea date</label>
+              <Input type="date" data-testid="create-idea-date" value={ideaDate} max={istDateStr()} onChange={(e) => setIdeaDate(e.target.value)} className="mt-1 w-48" />
+              <p className="mt-1 text-[10px] text-stone-400">Defaults to today. Made it last night and adding it now? Pick that day so it counts there.</p>
+            </div>
+          )}
+
           {!isHpn && <div>
             <label className="text-xs font-medium text-stone-600">Source link</label>
             <div className="mt-1 flex gap-2">

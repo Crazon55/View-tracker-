@@ -5,6 +5,7 @@ destination creates a version, and every version carries its own hook, caption a
 assets. The two streams are gated separately: BO work needs BO Studio, HPN needs HPN Desk.
 """
 import asyncio
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -19,6 +20,11 @@ router = APIRouter(prefix="/api/ideas", tags=["ideas"])
 versions_router = APIRouter(prefix="/api/versions", tags=["versions"])
 batches_router = APIRouter(prefix="/api/batches", tags=["batches"])
 categories_router = APIRouter(prefix="/api/categories", tags=["categories"])
+
+IST = timezone(timedelta(hours=5, minutes=30))
+# How far back an idea may be dated. Covers "made it last night, added it this morning"
+# and a long weekend, without turning the field into a way to rewrite history.
+MAX_BACKDATE_DAYS = 14
 
 FORMATS = ("Reel", "Carousel", "Static")
 STREAMS = ("BO", "HPN")
@@ -66,6 +72,32 @@ class NewIdea(BaseModel):
     versionHooks: dict[str, dict] = Field(default_factory=dict)
     batchId: str | None = None
     priority: str | None = None
+    # IST calendar date (YYYY-MM-DD) the idea belongs to, when that isn't today: ideas
+    # made after 6pm are often only added the next morning, and would otherwise count
+    # toward the wrong day.
+    createdOn: str | None = None
+
+
+def created_at_for(created_on: str | None) -> str | None:
+    """The timestamp to store for a chosen idea date, or None to let the database use now().
+
+    Today (or no date) keeps the real creation time. An earlier day is stored at 23:59 IST
+    on that day: it counts toward that day and sorts after everything genuinely made on it.
+    """
+    if not created_on:
+        return None
+    try:
+        day = datetime.strptime(created_on.strip(), "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="That date isn't valid.")
+    today = datetime.now(IST).date()
+    if day > today:
+        raise HTTPException(status_code=400, detail="An idea can't be dated in the future.")
+    if day == today:
+        return None
+    if (today - day).days > MAX_BACKDATE_DAYS:
+        raise HTTPException(status_code=400, detail=f"Ideas can be dated at most {MAX_BACKDATE_DAYS} days back.")
+    return datetime(day.year, day.month, day.day, 23, 59, tzinfo=IST).isoformat()
 
 
 class IdeaPatch(BaseModel):
@@ -134,6 +166,9 @@ async def create_idea(body: NewIdea, caller: Caller = Depends(current_caller)):
     # Always written. It used to be left out when it matched the column default, which
     # meant the database, not the person creating the idea, decided what it was.
     row["priority"] = _priority(body.priority, body.stream)
+    created_at = created_at_for(body.createdOn)
+    if created_at:
+        row["created_at"] = created_at
 
     idea = None
     for _ in range(5):

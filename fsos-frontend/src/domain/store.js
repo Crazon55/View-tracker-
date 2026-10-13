@@ -301,6 +301,7 @@ export function WorkspaceProvider({ children }) {
         // Was never sent, so every new idea came back as the database default no
         // matter what was picked in the dialog.
         priority: payload.priority || null,
+        createdOn: payload.createdOn || null,
       }));
       mergeIdea(res);
 
