@@ -25,6 +25,14 @@ DEV_LOGIN = (os.getenv("FSOS_DEV_LOGIN") or "").strip().lower() == "true"
 # the route entirely.
 INGEST_TOKEN = (os.getenv("FSOS_NEWS_INGEST_TOKEN") or "").strip()
 
+# Apify, for scraping the views/likes of posts that are live. The token is a secret and
+# lives only in .env. Unset, the "Scrape views" button reports that it isn't set up
+# rather than failing obscurely. The actor ids are Apify's own Instagram Reel Scraper
+# and Instagram Post Scraper; override them if the team moves to a different actor.
+APIFY_TOKEN = (os.getenv("FSOS_APIFY_TOKEN") or "").strip()
+APIFY_REEL_ACTOR = (os.getenv("FSOS_APIFY_REEL_ACTOR") or "xMc5Ga1oCONPmWJIa").strip()
+APIFY_POST_ACTOR = (os.getenv("FSOS_APIFY_POST_ACTOR") or "nH2AHrwxeTRJoN5hX").strip()
+
 if not SUPABASE_URL or not SERVICE_KEY:
     raise RuntimeError("FSOS_SUPABASE_URL and FSOS_SUPABASE_SERVICE_KEY must be set in fsos-backend/.env")
 

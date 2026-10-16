@@ -493,6 +493,21 @@ function HpnBrief({ idea, versions }) {
   const { actions } = useWorkspace();
   const { canEdit } = useAccess();
   const editable = canEdit("hpn_desk");
+  // A reel is measured in views; a carousel or static in likes.
+  const metric = idea.format === "Reel" ? "Views" : "Likes";
+  const [scraping, setScraping] = useState(false);
+  const hasLive = versions.some((v) => publicationOf(db, v.id));
+  const scrape = async () => {
+    setScraping(true);
+    try {
+      const res = await actions.scrapeIdea(idea.id);
+      const ok = res.results.filter((r) => r.ok).length;
+      const failed = res.results.filter((r) => !r.ok);
+      if (ok) toast.success(`${metric} updated for ${ok} page${ok === 1 ? "" : "s"}`);
+      if (failed.length) toast.warning(`${failed.length} couldn't be read — ${failed[0].reason}`);
+    } catch (e) { /* the store already showed the error */ }
+    finally { setScraping(false); }
+  };
   return (
     <div>
       <Section title="Assigned">
@@ -501,14 +516,20 @@ function HpnBrief({ idea, versions }) {
           <span className="inline-flex items-center gap-2 text-stone-500">Added by {reviewer ? <span className="inline-flex items-center gap-1.5 text-stone-900"><Avatar user={reviewer} />{reviewer.name}</span> : <span className="text-amber-600">Unassigned</span>}</span>
         </div>
       </Section>
-      <Section title="Posted on">
+      <Section title="Posted on" right={canEdit("performance") && (
+        <Button size="sm" variant="outline" className="h-7 text-xs" data-testid="hpn-scrape-btn" disabled={scraping || !hasLive}
+          title={hasLive ? `Fetch the live ${metric.toLowerCase()} from Instagram` : "Add a live link first"} onClick={scrape}>
+          <Icons.RefreshCw className={cn("h-3.5 w-3.5 mr-1", scraping && "animate-spin")} /> {scraping ? "Scraping…" : `Scrape ${metric.toLowerCase()}`}
+        </Button>
+      )}>
         <div className="divide-y divide-stone-200 text-sm">
           {idea.destinations.map((ipId) => {
             const v = versions.find((x) => x.ipId === ipId);
             const pub = v ? publicationOf(db, v.id) : null;
             const canva = v?.assetLinks?.[0];
+            const snap = pub ? snapshotOf(db, pub.id) : null;
             return (
-              <div key={ipId} className="grid grid-cols-[180px_1fr_1fr] items-center gap-4 py-2.5" data-testid={`hpn-brief-${ipId}`}>
+              <div key={ipId} className="grid grid-cols-[180px_1fr_1fr_90px] items-center gap-4 py-2.5" data-testid={`hpn-brief-${ipId}`}>
                 <IPBadge ip={ipById(db, ipId)} />
                 <EditableLink label="Live link" url={pub?.url} editable={editable && !!v} testId={`hpn-live-${ipId}`}
                   note={pub && (pub.versionIds || []).length > 1 ? "Shared post — changing it updates every page on it." : null}
@@ -526,6 +547,12 @@ function HpnBrief({ idea, versions }) {
                     if (canva) await actions.updateVersionLink(v.id, canva.id, { url: next, type, label: type === "canva" ? "Canva" : "Drive" });
                     else await actions.addVersionLink(v.id, { type, url: next, label: type === "canva" ? "Canva" : "Drive" });
                   }} />
+                <div data-testid={`hpn-metric-${ipId}`}>
+                  <div className="text-[10px] uppercase tracking-wide text-stone-400">{metric}</div>
+                  {snap?.views != null
+                    ? <div className="text-sm font-semibold text-stone-900" title={snap.measuredAt ? `Captured ${istDateTimeLabel(snap.measuredAt)}` : undefined}>{snap.views.toLocaleString()}</div>
+                    : <span className="text-stone-400 text-sm">—</span>}
+                </div>
               </div>
             );
           })}

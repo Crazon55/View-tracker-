@@ -578,6 +578,19 @@ export function WorkspaceProvider({ children }) {
       return r;
     },
 
+    /** Ask Instagram (via Apify) for the live numbers of an idea's published pages. */
+    async scrapeIdea(ideaId) {
+      const res = await run(() => api.post(`/api/performance/ideas/${ideaId}/scrape`));
+      patch((d) => {
+        for (const s of res.snapshots || []) {
+          const i = d.snapshots.findIndex((x) => x.publicationId === s.publicationId);
+          if (i >= 0) d.snapshots[i] = s; else d.snapshots.push(s);
+        }
+        return d;
+      });
+      return res;
+    },
+
     async linkCollaboration(publicationId, versionId) {
       await run(() => api.post(`/api/distribution/publications/${publicationId}/collab`, { versionId }));
       reloadSoon();
