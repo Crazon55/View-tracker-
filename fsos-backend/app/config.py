@@ -37,6 +37,17 @@ APIFY_POST_ACTOR = (os.getenv("FSOS_APIFY_POST_ACTOR") or "nH2AHrwxeTRJoN5hX").s
 # app cannot sign in, so this is its only guard. Unset disables the route.
 CALENDAR_TOKEN = (os.getenv("FSOS_CALENDAR_TOKEN") or "").strip()
 
+# Email for the 6-Day invites (POST /api/calendar/send-six-day-invite). Plain SMTP, so it works with a
+# Google Workspace account (smtp.gmail.com + an app password) or any mail service. Secrets live only in
+# .env. Without these set, the route reports that email is not set up instead of failing.
+SMTP_HOST = (os.getenv("FSOS_SMTP_HOST") or "").strip()
+SMTP_PORT = int(os.getenv("FSOS_SMTP_PORT") or 587)
+SMTP_USER = (os.getenv("FSOS_SMTP_USER") or "").strip()
+SMTP_PASSWORD = os.getenv("FSOS_SMTP_PASSWORD") or ""
+SMTP_FROM = (os.getenv("FSOS_SMTP_FROM") or SMTP_USER).strip()
+SIX_DAY_INVITE_TO = (os.getenv("FSOS_SIX_DAY_INVITE_TO") or "").strip()
+APP_URL = (os.getenv("FSOS_APP_URL") or "https://thefrontseatmedia.com").rstrip("/")
+
 if not SUPABASE_URL or not SERVICE_KEY:
     raise RuntimeError("FSOS_SUPABASE_URL and FSOS_SUPABASE_SERVICE_KEY must be set in fsos-backend/.env")
 

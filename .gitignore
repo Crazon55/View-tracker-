@@ -13,3 +13,6 @@ Thumbs.db
 
 # Records the commit whose frontend build is currently in /var/www/fsos.
 .fsos-last-build
+
+# Which 6-Day invites the server has already emailed
+fsos-backend/.six-day-invites-sent.json
