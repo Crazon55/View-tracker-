@@ -33,6 +33,10 @@ APIFY_TOKEN = (os.getenv("FSOS_APIFY_TOKEN") or "").strip()
 APIFY_REEL_ACTOR = (os.getenv("FSOS_APIFY_REEL_ACTOR") or "xMc5Ga1oCONPmWJIa").strip()
 APIFY_POST_ACTOR = (os.getenv("FSOS_APIFY_POST_ACTOR") or "nH2AHrwxeTRJoN5hX").strip()
 
+# Secret in the URL of the 6-Day calendar feed (GET /api/calendar/six-day.ics?token=…). A calendar
+# app cannot sign in, so this is its only guard. Unset disables the route.
+CALENDAR_TOKEN = (os.getenv("FSOS_CALENDAR_TOKEN") or "").strip()
+
 if not SUPABASE_URL or not SERVICE_KEY:
     raise RuntimeError("FSOS_SUPABASE_URL and FSOS_SUPABASE_SERVICE_KEY must be set in fsos-backend/.env")
 

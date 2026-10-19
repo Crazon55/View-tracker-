@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import db
 from .auth import Caller, current_caller
 from .config import CORS_ORIGINS, DEV_LOGIN, SUPABASE_URL
-from .routers import collab, distribution, ideas, news, people, performance, production, settings, tools, workspace
+from .routers import calendar, collab, distribution, ideas, news, people, performance, production, settings, tools, workspace
 
 app = FastAPI(title="FSOS API", version="0.1.0")
 
@@ -32,6 +32,7 @@ for _r in (
     settings.router, settings.settings_router,
     tools.router, tools.growth_router,
     news.router,
+    calendar.router,
 ):
     app.include_router(_r)
 
