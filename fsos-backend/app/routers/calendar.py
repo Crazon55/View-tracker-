@@ -50,7 +50,7 @@ def build_feed(today: date) -> str:
                 f"SUMMARY:Add 6-Day views: cycle {cycle} ({day:%b %Y})",
                 f"DESCRIPTION:Cycle {cycle} ends today. Add each IP's views in the FSOS 6-Day Tracker.",
                 "TRANSP:TRANSPARENT",
-                "BEGIN:VALARM", "ACTION:DISPLAY", "TRIGGER:PT9H", "DESCRIPTION:Add 6-Day views", "END:VALARM",
+                "BEGIN:VALARM", "ACTION:DISPLAY", "TRIGGER:PT11H", "DESCRIPTION:Add 6-Day views", "END:VALARM",
                 "END:VEVENT",
             ]
     lines.append("END:VCALENDAR")
